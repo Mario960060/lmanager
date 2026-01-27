@@ -1170,7 +1170,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               className="border p-1 w-24 bg-gray-800 text-white"
                               value={
                                 breakdown.pricePerHour !== undefined && breakdown.pricePerHour !== null
-                                  ? Number(breakdown.pricePerHour).toFixed(2)
+                                  ? breakdown.pricePerHour
                                   : ''
                               }
                               onChange={e => {
@@ -1229,7 +1229,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               type="number"
                               step="0.01"
                               className="border p-1 w-20 bg-gray-800 text-white"
-                              value={mat.pricePerUnit !== undefined && mat.pricePerUnit !== null ? Number(mat.pricePerUnit).toFixed(2) : ''}
+                              value={mat.pricePerUnit !== undefined && mat.pricePerUnit !== null ? mat.pricePerUnit : ''}
                               onChange={e => {
                                 const updated = [...editInvoice.main_tasks];
                                 updated[idx].results.materials[mIdx].pricePerUnit = Number(e.target.value);
@@ -1294,7 +1294,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                         type="number"
                         step="0.01"
                         className="border p-1 w-24 bg-gray-700 text-white"
-                        value={task.pricePerUnit !== undefined && task.pricePerUnit !== null ? Number(task.pricePerUnit).toFixed(2) : ''}
+                        value={task.pricePerUnit !== undefined && task.pricePerUnit !== null ? task.pricePerUnit : ''}
                         onChange={e => {
                           const updated = [...editInvoice.minor_tasks];
                           updated[idx].pricePerUnit = Number(e.target.value);
@@ -1364,7 +1364,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                       type="number"
                       step="0.01"
                       className="border p-1 w-20 bg-gray-700 text-white"
-                      value={mat.pricePerUnit !== undefined && mat.pricePerUnit !== null ? Number(mat.pricePerUnit).toFixed(2) : ''}
+                      value={mat.pricePerUnit !== undefined && mat.pricePerUnit !== null ? mat.pricePerUnit : ''}
                       onChange={e => {
                         const updated = [...editInvoice.extra_materials];
                         updated[idx].pricePerUnit = Number(e.target.value);
