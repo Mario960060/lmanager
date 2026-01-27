@@ -248,7 +248,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
                 key={material.id}
                 className="grid grid-cols-[minmax(100px,1fr)_38px_48px_44px] gap-2 py-2.5 px-3 items-center border-b border-gray-100 last:border-0 text-sm"
               >
-                <div className="min-w-0 truncate font-medium text-gray-900" title={material.name}>
+                <div className="min-w-0 font-medium text-gray-900 text-xs break-words" title={material.name}>
                   {material.name}
                 </div>
                 <div className="text-gray-600 text-xs text-center truncate">{material.unit}</div>
