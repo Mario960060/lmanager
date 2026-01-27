@@ -525,8 +525,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
     await supabase
       .from('invoices')
       .update({ additional_costs: JSON.stringify(additionalCosts) })
-      .eq('id', invoice.id)
-      .eq('company_id', companyId);
+      .eq('id', invoice.id);
   };
 
   useEffect(() => {
