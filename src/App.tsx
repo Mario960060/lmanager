@@ -22,6 +22,7 @@ import UserProfile from './pages/UserProfile';
 import { useAuthStore } from './lib/store';
 import ProjectCreating from './projectmanagement/ProjectCreating';
 import UserHoursPage from './components/UserHoursModal';
+import CompanySetupWizard from './pages/CompanySetupWizard';
 
 const queryClient = new QueryClient();
 
@@ -41,6 +42,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/no-team" element={<NoTeamPage />} />
           <Route path="/create-team" element={<CreateTeamPage />} />
+          <Route path="/company-setup" element={<CompanySetupWizard />} />
           <Route element={<AuthGuard><Layout /></AuthGuard>}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/projects" element={<Projects />} />
