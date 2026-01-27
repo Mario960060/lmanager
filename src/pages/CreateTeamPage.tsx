@@ -74,6 +74,23 @@ const CreateTeamPage = () => {
         return;
       }
 
+      // Check if company with this name already exists
+      const { data: existingCompanies, error: checkError } = await supabase
+        .from('companies')
+        .select('id')
+        .ilike('name', teamName.trim())
+        .limit(1);
+
+      if (checkError) {
+        throw new Error('Failed to check company name: ' + checkError.message);
+      }
+
+      if (existingCompanies && existingCompanies.length > 0) {
+        setError(`A company with the name "${teamName}" already exists. Please choose a different name.`);
+        setIsLoading(false);
+        return;
+      }
+
       // Create company
       const { data: company, error: companyError } = await supabase
         .from('companies')
