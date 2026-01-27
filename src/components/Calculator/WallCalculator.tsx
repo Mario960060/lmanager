@@ -499,6 +499,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     const { cementProportion, sandProportion } = getMortarMixRatioProportion(mortarMixRatio);
 
     const brickHeight = 0.06; // Brick height in meters
+    const brickLength = 0.215; // Brick length in meters (21.5 cm)
     const mortarThickness = 0.01; // Mortar thickness in meters
     const totalRowHeight = brickHeight + mortarThickness;
 
@@ -524,7 +525,8 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       case 'brick':
         // Calculate rows and round up
         const brickRows = Math.ceil(h / (brickHeight + mortarThickness));
-        const bricksPerRow = Math.ceil(l * 60); // 60 bricks per m of width
+        // Bricks per row: total wall length / (brick length + mortar thickness)
+        const bricksPerRow = Math.ceil(l / (brickLength + mortarThickness));
         units = brickRows * bricksPerRow;
         mortarVolume = area * 0.02; // 0.02m³ mortar per m²
         break;
@@ -532,7 +534,8 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       case 'block7':
         // Calculate rows and round up
         const blockRows = Math.ceil(h / (blockHeight + mortarThickness));
-        const blocksPerRow = Math.ceil(l * Math.sqrt(blocksPerSquareMeter)); // blocks per meter width
+        // Blocks per row: total wall length / (block length + mortar thickness)
+        const blocksPerRow = Math.ceil(l / (blockLength + mortarThickness));
         units = blockRows * blocksPerRow;
         mortarVolume = area * 0.015; // 0.015m³ mortar per m²
         break;
