@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, ChevronRight, ChevronLeft, AlertCircle, CheckCircle2 } from 'lucide-react';
-import SetupDigging from './ProjectManagement/Setup/SetupDigging';
-import SetupMaterialUsage from './ProjectManagement/Setup/SetupMaterialUsage';
-import SetupEquipment from './ProjectManagement/Setup/SetupEquipment';
-import SetupMaterials from './ProjectManagement/Setup/SetupMaterials';
-import SetupTasks from './ProjectManagement/Setup/SetupTasks';
+import SetupDiggingContent from './ProjectManagement/Setup/SetupDiggingContent';
+import SetupMaterialUsageContent from './ProjectManagement/Setup/SetupMaterialUsageContent';
+import SetupEquipmentContent from './ProjectManagement/Setup/SetupEquipmentContent';
+import SetupMaterialsContent from './ProjectManagement/Setup/SetupMaterialsContent';
+import SetupTasksContent from './ProjectManagement/Setup/SetupTasksContent';
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -88,15 +88,15 @@ const CompanySetupWizard: React.FC = () => {
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
-        return <SetupDigging onClose={() => handleClose(true)} />;
+        return <SetupDiggingContent onClose={() => handleClose(true)} />;
       case 2:
-        return <SetupMaterialUsage onClose={() => handleClose(true)} />;
+        return <SetupMaterialUsageContent onClose={() => handleClose(true)} />;
       case 3:
-        return <SetupEquipment onClose={() => handleClose(true)} />;
+        return <SetupEquipmentContent onClose={() => handleClose(true)} />;
       case 4:
-        return <SetupMaterials onClose={() => handleClose(true)} />;
+        return <SetupMaterialsContent onClose={() => handleClose(true)} />;
       case 5:
-        return <SetupTasks onClose={() => handleClose(true)} />;
+        return <SetupTasksContent onClose={() => handleClose(true)} />;
       default:
         return null;
     }
