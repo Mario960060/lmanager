@@ -134,8 +134,10 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Content - scrollable container with everything */}
         <div className="overflow-y-auto flex flex-col flex-1">
+        {/* Header and Content together - scrollable as one */}
+        <div className="overflow-y-auto flex flex-col flex-1">
           {/* Header */}
-          <div className="border-b flex-shrink-0">
+          <div className="border-b">
             {/* First row - Tasks title and close button */}
             <div className="p-4 flex justify-between items-center">
               <div className="flex items-center">
@@ -157,8 +159,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
             </div>
           </div>
 
-          {/* Main content - scrollable */}
-          <div className="p-6 flex-1 overflow-y-auto flex flex-col">
+          {/* Main content */}
+          <div className="p-6">
           {/* Updated Add Task Form with Name and Description side by side */}
           <form onSubmit={handleAddTask} className="mb-4">
             {/* Name and Description in one row */}
