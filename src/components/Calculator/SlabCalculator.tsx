@@ -959,7 +959,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
           task: 'final leveling (type 1)',
           hours: effectiveAreaM2 * finalLevelingTypeOneTask.estimated_hours,
           amount: effectiveAreaM2,
-          unit: 'square meters'
+          unit: 'square meters',
+          event_task_id: finalLevelingTypeOneTask.id
         });
       }
 
@@ -976,7 +977,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
             task: 'mixing mortar',
             hours: numberOfBatches * mixingMortarTask.estimated_hours,
             amount: numberOfBatches,
-            unit: 'batch'
+            unit: 'batch',
+            event_task_id: mixingMortarTask.id
           });
         }
       }
