@@ -41,7 +41,6 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
         .from('invoices')
         .select('*')
         .eq('project_id', selectedProjectId)
-        .eq('company_id', companyId)
         .single()
         .then(async ({ data }) => {
           if (data) {
@@ -545,7 +544,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+      onClick={handleClose}
+    >
       <div
         className="bg-white p-4 md:p-8 rounded-lg w-full relative flex flex-col overflow-y-auto"
         style={{ 
@@ -554,6 +556,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
           width: '100%',
           maxWidth: '1100px'
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         <button
           className="absolute top-2 right-2 bg-white text-black text-3xl font-bold rounded-full w-10 h-10 md:w-12 md:h-12 flex items-center justify-center shadow-lg hover:bg-gray-200 transition"
@@ -1033,7 +1036,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
         </div>
       </div>
       {editMode && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setEditMode(false)}
+        >
           <div
             className="bg-gray-800 p-4 md:p-6 rounded-lg w-full relative overflow-y-auto"
             style={{ 
@@ -1042,6 +1048,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
               width: '100%',
               maxWidth: '1100px'
             }}
+            onClick={(e) => e.stopPropagation()}
           >
             <button
               className="absolute top-2 right-2 bg-white text-black text-3xl font-bold rounded-full w-10 h-10 md:w-12 md:h-12 flex items-center justify-center shadow-lg hover:bg-gray-200 transition"
