@@ -276,6 +276,25 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     enabled: !!companyId
   });
 
+  // Fetch brick/block mortar mix ratio
+  const { data: brickBlockMortarMixRatioConfig } = useQuery<{ id: string; mortar_mix_ratio: string } | null>({
+    queryKey: ['mortarMixRatio', 'brick', companyId],
+    queryFn: async () => {
+      if (!companyId) return null;
+
+      const { data, error } = await supabase
+        .from('mortar_mix_ratios')
+        .select('id, mortar_mix_ratio')
+        .eq('company_id', companyId)
+        .eq('type', 'brick')
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "not found"
+      return data;
+    },
+    enabled: !!companyId
+  });
+
   // Get the material IDs from the config
   const materialIds = materialUsageConfig?.map(config => config.material_id) || [];
 
@@ -360,6 +379,16 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     const totalTransportTime = trips * timePerTrip;
     const normalizedTransportTime = (totalTransportTime * 30) / transportDistanceMeters;
     return { trips, totalTransportTime, normalizedTransportTime };
+  };
+
+  // Helper function to parse mortar mix ratio and get cement proportion
+  const getMortarMixRatioProportion = (mixRatio: string | undefined = '1:4'): { cementProportion: number; sandProportion: number } => {
+    const ratio = mixRatio || '1:4';
+    const [cementPart, sandPart] = ratio.split(':').map(Number);
+    const totalParts = cementPart + sandPart;
+    const cementProportion = cementPart / totalParts;
+    const sandProportion = sandPart / totalParts;
+    return { cementProportion, sandProportion };
   };
 
   // Helper function to calculate foundation results
@@ -461,11 +490,13 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     let units = 0;
     let mortarVolume = 0;
 
-    // Constants for mortar components (general purpose ratio)
+    // Constants for mortar components
     const cementDensity = 1500; // kg/m³
-    const cementRatio = 0.2; // 1 part cement (20% of volume)
-    const sandRatio = 0.8; // 4 parts sand (80% of volume)
     const sandDensity = 1600; // kg/m³
+    
+    // Get configurable mortar mix ratio
+    const mortarMixRatio = brickBlockMortarMixRatioConfig?.mortar_mix_ratio || '1:4';
+    const { cementProportion, sandProportion } = getMortarMixRatioProportion(mortarMixRatio);
 
     const brickHeight = 0.06; // Brick height in meters
     const mortarThickness = 0.01; // Mortar thickness in meters
@@ -702,8 +733,8 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     }
 
     // Calculate cement and sand quantities
-    const cementVolume = mortarVolume * cementRatio;
-    const sandVolume = mortarVolume * sandRatio;
+    const cementVolume = mortarVolume * cementProportion;
+    const sandVolume = mortarVolume * sandProportion;
     
     // Convert cement volume to bags (1 bag = 25kg)
     const cementWeight = cementVolume * cementDensity;
