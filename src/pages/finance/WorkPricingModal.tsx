@@ -609,298 +609,314 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
           {selectedProjectId && invoice ? (
             <div>
               <h3 className="text-lg font-semibold mb-2">Work Pricing Preview</h3>
-            {/* Main Tasks Summary */}
-            <div className="mb-6">
-              <div className="font-bold text-lg mb-2">Main tasks summary:</div>
-              {(invoice.main_tasks || []).map((task: any, idx: number) => {
-                // Calculate total price for materials in this main task
-                const materialsTotal = (task.results?.materials || []).reduce(
-                  (sum: number, mat: any) => sum + (Number(mat.quantity) * Number(mat.pricePerUnit) || 0),
-                  0
-                );
-                return (
-                  <div key={idx} className="mb-4">
-                    <div className="font-semibold">{task.name}</div>
-                    {/* Main Task Description */}
-                    {task.description && (
-                      <div className="ml-2 mb-2 text-gray-600 text-sm italic">{task.description}</div>
-                    )}
-                    {/* Task Breakdown */}
-                    {task.results?.taskBreakdown && task.results.taskBreakdown.length > 0 && (
-                      <div className="ml-4 mt-1">
-                        <div className="font-medium">Tasks breakdown:</div>
-                        <ul className="list-disc ml-6">
-                          {task.results.taskBreakdown.map((breakdown: any, bIdx: number) => {
-                            // Calculate price for this breakdown (hours * pricePerHour)
-                            const hours = Number(breakdown.hours) || 0;
-                            const pricePerHour = Number(breakdown.pricePerHour) || 0;
-                            const breakdownPrice = (hours * pricePerHour).toFixed(2);
+              {/* Main Tasks Summary */}
+              <div className="mb-6">
+                <div className="font-bold text-lg mb-2">Main tasks summary:</div>
+                {(invoice.main_tasks || []).map((task: any, idx: number) => {
+                  // Calculate total price for materials in this main task
+                  const materialsTotal = (task.results?.materials || []).reduce(
+                    (sum: number, mat: any) => sum + (Number(mat.quantity) * Number(mat.pricePerUnit) || 0),
+                    0
+                  );
+                  return (
+                    <div key={idx} className="mb-4">
+                      <div className="font-semibold">{task.name}</div>
+                      {/* Main Task Description */}
+                      {task.description && (
+                        <div className="ml-2 mb-2 text-gray-600 text-sm italic">{task.description}</div>
+                      )}
+                      {/* Task Breakdown */}
+                      {task.results?.taskBreakdown && task.results.taskBreakdown.length > 0 && (
+                        <div className="ml-4 mt-1">
+                          <div className="font-medium">Tasks breakdown:</div>
+                          <ul className="list-disc ml-6">
+                            {task.results.taskBreakdown.map((breakdown: any, bIdx: number) => {
+                              // Calculate price for this breakdown (hours * pricePerHour)
+                              const hours = Number(breakdown.hours) || 0;
+                              const pricePerHour = Number(breakdown.pricePerHour) || 0;
+                              const breakdownPrice = (hours * pricePerHour).toFixed(2);
 
-                            return (
-                              <li key={bIdx}>
-                                {breakdown.name || breakdown.task} — 
-                                {typeof breakdown.amount === 'number'
-                                  ? ` ${Number.isInteger(breakdown.amount) ? breakdown.amount : breakdown.amount.toFixed(1)}`
-                                  : ` ${breakdown.amount}`
-                                } {breakdown.unit}
-                                {showHours === 'all' && (
-                                  <>
-                                    {' — '}
-                                    {typeof breakdown.hours === 'number'
-                                      ? ` ${Number(breakdown.hours).toFixed(2)}`
-                                      : ` ${breakdown.hours}`
-                                    } hrs
-                                  </>
-                                )}
-                                {showPrices === 'all' && typeof breakdown.pricePerHour === 'number' && !isNaN(breakdown.pricePerHour) ? (
-                                  <>
-                                    {' — '}£{breakdownPrice}
-                                  </>
-                                ) : null}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    )}
-                    {/* Materials */}
-                    {task.results?.materials && task.results.materials.length > 0 && (
-                      <div className="ml-4 mt-2">
-                        <div className="font-medium">Material required:</div>
-                        <ul className="ml-6">
-                          {task.results.materials.map((mat: any, mIdx: number) => {
-                            const roundedQty = Math.ceil(Number(mat.quantity) || 0);
-                            return (
-                              <li key={mIdx}>
-                                {mat.name} — 
-                                {` ${roundedQty}`} {mat.unit || ''}
-                                {/* Only show per-material price if showPrices === 'all' */}
-                                {showPrices === 'all' && (
-                                  <>
-                                    {' — '}
-                                    £{(roundedQty * Number(mat.pricePerUnit) || 0).toFixed(2)} ( £{Number(mat.pricePerUnit).toFixed(2)} per unit )
-                                  </>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                        {/* Show total price if showPrices is 'all' or 'totals' */}
-                        {(showPrices === 'all' || showPrices === 'totals') && (
-                          <div className="ml-2 mt-1 font-semibold text-green-300">
-                            Total task price: £{
-                              (task.results.materials || []).reduce(
-                                (sum: number, mat: any) => sum + (Math.ceil(Number(mat.quantity) || 0) * Number(mat.pricePerUnit) || 0),
-                                0
-                              ).toFixed(2)
-                            }
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {/* Thicker line between main tasks */}
-                    {idx < (invoice.main_tasks.length - 1) && (
-                      <hr className="my-6 border-t-4 border-gray-500" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                              return (
+                                <li key={bIdx}>
+                                  {breakdown.name || breakdown.task} — 
+                                  {typeof breakdown.amount === 'number'
+                                    ? ` ${Number.isInteger(breakdown.amount) ? breakdown.amount : breakdown.amount.toFixed(1)}`
+                                    : ` ${breakdown.amount}`
+                                  } {breakdown.unit}
+                                  {showHours === 'all' && (
+                                    <>
+                                      {' — '}
+                                      {typeof breakdown.hours === 'number'
+                                        ? ` ${Number(breakdown.hours).toFixed(2)}`
+                                        : ` ${breakdown.hours}`
+                                      } hrs
+                                    </>
+                                  )}
+                                  {showPrices === 'all' && typeof breakdown.pricePerHour === 'number' && !isNaN(breakdown.pricePerHour) ? (
+                                    <>
+                                      {' — '}£{breakdownPrice}
+                                    </>
+                                  ) : null}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
+                      {/* Materials */}
+                      {task.results?.materials && task.results.materials.length > 0 && (
+                        <div className="ml-4 mt-2">
+                          <div className="font-medium">Material required:</div>
+                          <ul className="ml-6">
+                            {task.results.materials.map((mat: any, mIdx: number) => {
+                              const roundedQty = Math.ceil(Number(mat.quantity) || 0);
+                              return (
+                                <li key={mIdx}>
+                                  {mat.name} — 
+                                  {` ${roundedQty}`} {mat.unit || ''}
+                                  {/* Only show per-material price if showPrices === 'all' */}
+                                  {showPrices === 'all' && (
+                                    <>
+                                      {' — '}
+                                      £{(roundedQty * Number(mat.pricePerUnit) || 0).toFixed(2)} ( £{Number(mat.pricePerUnit).toFixed(2)} per unit )
+                                    </>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                          {/* Show total price if showPrices is 'all' or 'totals' */}
+                          {(showPrices === 'all' || showPrices === 'totals') && (
+                            <div className="ml-2 mt-1 font-semibold text-green-300">
+                              Total task price: £{
+                                (task.results.materials || []).reduce(
+                                  (sum: number, mat: any) => sum + (Math.ceil(Number(mat.quantity) || 0) * Number(mat.pricePerUnit) || 0),
+                                  0
+                                ).toFixed(2)
+                              }
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {/* Thicker line between main tasks */}
+                      {idx < (invoice.main_tasks.length - 1) && (
+                        <hr className="my-6 border-t-4 border-gray-500" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
 
-            {/* Minor Tasks Summary */}
-            {invoice.minor_tasks && invoice.minor_tasks.length > 0 && (
-              <>
-                <hr className="my-6 border-t-4 border-gray-500" />
-                <div className="font-bold text-lg mb-2">Minor tasks summary:</div>
-                <ul className="ml-6 mb-4">
-                  {invoice.minor_tasks.map((task: any, idx: number) => (
-                    <li key={idx}>
-                      <div>
-                        <span>
-                          {task.name} (
-                            {typeof task.quantity === 'number'
-                              ? Number.isInteger(task.quantity) ? task.quantity : task.quantity.toFixed(1)
-                              : task.quantity
-                            } {task.unit}
-                          )
+              {/* Minor Tasks Summary */}
+              {invoice.minor_tasks && invoice.minor_tasks.length > 0 && (
+                <>
+                  <hr className="my-6 border-t-4 border-gray-500" />
+                  <div className="font-bold text-lg mb-2">Minor tasks summary:</div>
+                  <ul className="ml-6 mb-4">
+                    {invoice.minor_tasks.map((task: any, idx: number) => (
+                      <li key={idx}>
+                        <div>
+                          <span>
+                            {task.name} (
+                              {typeof task.quantity === 'number'
+                                ? Number.isInteger(task.quantity) ? task.quantity : task.quantity.toFixed(1)
+                                : task.quantity
+                              } {task.unit}
+                            )
+                            {showPrices === 'all' && (
+                              <>
+                                {' — '}
+                                £{(Number(task.quantity) * Number(task.pricePerUnit) || 0).toFixed(2)} ( £{Number(task.pricePerUnit).toFixed(2)} per unit )
+                              </>
+                            )}
+                          </span>
+                          {/* Minor Task Description */}
+                          {task.description && (
+                            <div className="ml-2 text-gray-500 text-xs italic">{task.description}</div>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  {showPrices === 'all' || showPrices === 'totals' && (
+                    <div className="ml-4 mt-1 font-semibold text-green-300">
+                      Total minor tasks price: £{
+                        (invoice.minor_tasks || []).reduce(
+                          (sum: number, task: any) =>
+                            sum +
+                            (typeof task.quantity === 'number' && typeof task.pricePerUnit === 'number'
+                              ? task.quantity * task.pricePerUnit
+                              : 0),
+                          0
+                        ).toFixed(2)
+                      }
+                    </div>
+                  )}
+                  
+                </>
+              )}
+
+              {/* Extra Materials */}
+              {invoice.extra_materials && invoice.extra_materials.length > 0 && (
+                <>
+                  <hr className="my-6 border-t-4 border-gray-500" />
+                  <div className="font-bold text-lg mb-2">Extra materials:</div>
+                  <ul className="ml-6 mb-4">
+                    {invoice.extra_materials.map((mat: any, idx: number) => {
+                      const roundedQty = Math.ceil(Number(mat.quantity) || 0);
+                      return (
+                        <li key={idx}>
+                          {mat.name} — 
+                          {` ${roundedQty}`} {mat.unit || ''}
                           {showPrices === 'all' && (
                             <>
                               {' — '}
-                              £{(Number(task.quantity) * Number(task.pricePerUnit) || 0).toFixed(2)} ( £{Number(task.pricePerUnit).toFixed(2)} per unit )
+                              £{(roundedQty * Number(mat.pricePerUnit) || 0).toFixed(2)} ( £{Number(mat.pricePerUnit).toFixed(2)} per unit )
                             </>
                           )}
-                        </span>
-                        {/* Minor Task Description */}
-                        {task.description && (
-                          <div className="ml-2 text-gray-500 text-xs italic">{task.description}</div>
-                        )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {showPrices === 'all' || showPrices === 'totals' && (
+                    <div className="ml-4 mt-1 font-semibold text-green-300">
+                      Total extra materials price: £{
+                        (invoice.extra_materials || []).reduce(
+                          (sum: number, mat: any) => sum + (Math.ceil(Number(mat.quantity) || 0) * Number(mat.pricePerUnit) || 0),
+                          0
+                        ).toFixed(2)
+                      }
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Additional Costs Section */}
+              <div className="mt-8 mb-8">
+                <div className="font-bold text-lg mb-2">Additional Costs</div>
+                <ul className="mb-4">
+                  {additionalCosts.map((cost, idx) => (
+                    <li key={idx} className="flex items-center gap-2 mb-2">
+                      <div className="flex flex-col">
+                        <input
+                          className="border p-1 w-48 bg-gray-800 text-white"
+                          value={cost.name}
+                          onChange={e => {
+                            const updated = [...additionalCosts];
+                            updated[idx].name = e.target.value;
+                            setAdditionalCosts(updated);
+                          }}
+                          placeholder="Cost name"
+                        />
+                        <span className="text-xs text-gray-400 ml-1">Name</span>
                       </div>
+                      <div className="flex flex-col">
+                        <input
+                          type="number"
+                          className="border p-1 w-24"
+                          value={cost.pricePerUnit}
+                          onChange={e => {
+                            const updated = [...additionalCosts];
+                            updated[idx].pricePerUnit = Number(e.target.value);
+                            setAdditionalCosts(updated);
+                          }}
+                          placeholder="Price per unit"
+                        />
+                        <span className="text-xs text-gray-400 ml-1">Price per unit (£)</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <input
+                          type="number"
+                          className="border p-1 w-20"
+                          value={cost.quantity}
+                          onChange={e => {
+                            const updated = [...additionalCosts];
+                            updated[idx].quantity = Number(e.target.value);
+                            setAdditionalCosts(updated);
+                          }}
+                          placeholder="Quantity"
+                        />
+                        <span className="text-xs text-gray-400 ml-1">Amount</span>
+                      </div>
+                      <span className="font-semibold text-green-500 ml-2">
+                        £{(cost.pricePerUnit * cost.quantity).toFixed(2)}
+                      </span>
+                      <button
+                        className="ml-2 px-2 py-1 bg-red-500 text-white rounded hover:bg-red-700"
+                        onClick={() => {
+                          setAdditionalCosts(additionalCosts.filter((_, i) => i !== idx));
+                        }}
+                      >
+                        Delete
+                      </button>
                     </li>
                   ))}
                 </ul>
-                {showPrices === 'all' || showPrices === 'totals' && (
-                  <div className="ml-4 mt-1 font-semibold text-green-300">
-                    Total minor tasks price: £{
-                      (invoice.minor_tasks || []).reduce(
-                        (sum: number, task: any) =>
-                          sum +
-                          (typeof task.quantity === 'number' && typeof task.pricePerUnit === 'number'
-                            ? task.quantity * task.pricePerUnit
-                            : 0),
-                        0
-                      ).toFixed(2)
-                    }
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Extra Materials */}
-            {invoice.extra_materials && invoice.extra_materials.length > 0 && (
-              <>
-                <hr className="my-6 border-t-4 border-gray-500" />
-                <div className="font-bold text-lg mb-2">Extra materials:</div>
-                <ul className="ml-6 mb-4">
-                  {invoice.extra_materials.map((mat: any, idx: number) => {
-                    const roundedQty = Math.ceil(Number(mat.quantity) || 0);
-                    return (
-                      <li key={idx}>
-                        {mat.name} — 
-                        {` ${roundedQty}`} {mat.unit || ''}
-                        {showPrices === 'all' && (
-                          <>
-                            {' — '}
-                            £{(roundedQty * Number(mat.pricePerUnit) || 0).toFixed(2)} ( £{Number(mat.pricePerUnit).toFixed(2)} per unit )
-                          </>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-                {showPrices === 'all' || showPrices === 'totals' && (
-                  <div className="ml-4 mt-1 font-semibold text-green-300">
-                    Total extra materials price: £{
-                      (invoice.extra_materials || []).reduce(
-                        (sum: number, mat: any) => sum + (Math.ceil(Number(mat.quantity) || 0) * Number(mat.pricePerUnit) || 0),
-                        0
-                      ).toFixed(2)
-                    }
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* Additional Costs Section */}
-            <div className="mt-8 mb-8">
-              <div className="font-bold text-lg mb-2">Additional Costs</div>
-              <ul className="mb-4">
-                {additionalCosts.map((cost, idx) => (
-                  <li key={idx} className="flex items-center gap-2 mb-2">
-                    <div className="flex flex-col">
-                      <input
-                        className="border p-1 w-48 bg-gray-800 text-white"
-                        value={cost.name}
-                        onChange={e => {
-                          const updated = [...additionalCosts];
-                          updated[idx].name = e.target.value;
-                          setAdditionalCosts(updated);
-                        }}
-                        placeholder="Cost name"
-                      />
-                      <span className="text-xs text-gray-400 ml-1">Name</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <input
-                        type="number"
-                        className="border p-1 w-24"
-                        value={cost.pricePerUnit}
-                        onChange={e => {
-                          const updated = [...additionalCosts];
-                          updated[idx].pricePerUnit = Number(e.target.value);
-                          setAdditionalCosts(updated);
-                        }}
-                        placeholder="Price per unit"
-                      />
-                      <span className="text-xs text-gray-400 ml-1">Price per unit (£)</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <input
-                        type="number"
-                        className="border p-1 w-20"
-                        value={cost.quantity}
-                        onChange={e => {
-                          const updated = [...additionalCosts];
-                          updated[idx].quantity = Number(e.target.value);
-                          setAdditionalCosts(updated);
-                        }}
-                        placeholder="Quantity"
-                      />
-                      <span className="text-xs text-gray-400 ml-1">Amount</span>
-                    </div>
-                    <span className="font-semibold text-green-500 ml-2">
-                      £{(cost.pricePerUnit * cost.quantity).toFixed(2)}
-                    </span>
-                    <button
-                      className="ml-2 px-2 py-1 bg-red-500 text-white rounded hover:bg-red-700"
-                      onClick={() => {
-                        setAdditionalCosts(additionalCosts.filter((_, i) => i !== idx));
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              <button
-                className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-700"
-                onClick={() => setAdditionalCosts([...additionalCosts, { name: '', pricePerUnit: 0, quantity: 1 }])}
-              >
-                Add Additional Cost
-              </button>
-              {/* Show total of additional costs */}
-              <div className="font-bold mt-4">
-                Additional costs total: <span className="text-green-500">
-                  £{additionalCosts.reduce((sum, c) => sum + c.pricePerUnit * c.quantity, 0).toFixed(2)}
-                </span>
-              </div>
-            </div>
-
-            {/* In total section */}
-            <div className="mb-4">
-              <div className="font-bold text-lg mb-2">In total:</div>
-              {/* Total hours */}
-              {showHours === 'all' && invoice.totals.totalHours && (
-                <div className="mb-2">
-                  <span className="font-medium">Total hours needed:</span> {Math.ceil(invoice.totals.totalHours)} hrs
+                <button
+                  className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-700"
+                  onClick={() => setAdditionalCosts([...additionalCosts, { name: '', pricePerUnit: 0, quantity: 1 }])}
+                >
+                  Add Additional Cost
+                </button>
+                {/* Show total of additional costs */}
+                <div className="font-bold mt-4">
+                  Additional costs total: <span className="text-green-500">
+                    £{additionalCosts.reduce((sum, c) => sum + c.pricePerUnit * c.quantity, 0).toFixed(2)}
+                  </span>
                 </div>
-              )}
-              {/* All materials summed up */}
-              {(() => {
-                // Gather all main tasks with their total price
-                const mainTasksWithTotal = (invoice.main_tasks || []).map((task: any) => {
-                  const total = (task.results?.materials || []).reduce(
-                    (sum: number, mat: any) => sum + (Math.ceil(Number(mat.quantity) || 0) * Number(mat.pricePerUnit) || 0),
-                    0
-                  );
-                  return {
-                    name: task.name,
-                    totalPrice: total,
-                  };
-                });
+              </div>
 
-                // Gather all minor tasks with their total price
-                const minorTasksWithTotal = (invoice.minor_tasks || []).map((task: any) => {
-                  const total = (Number(task.quantity) * Number(task.pricePerUnit) || 0);
-                  return {
-                    name: task.name,
-                    totalPrice: total,
-                  };
-                });
+              {/* In total section */}
+              <div className="mb-4">
+                <div className="font-bold text-lg mb-2">In total:</div>
+                {/* Total hours */}
+                {showHours === 'all' && invoice.totals.totalHours && (
+                  <div className="mb-2">
+                    <span className="font-medium">Total hours needed:</span> {Math.ceil(invoice.totals.totalHours)} hrs
+                  </div>
+                )}
+                {/* All materials summed up */}
+                {(() => {
+                  // Gather all main tasks with their total price
+                  const mainTasksWithTotal = (invoice.main_tasks || []).map((task: any) => {
+                    const total = (task.results?.materials || []).reduce(
+                      (sum: number, mat: any) => sum + (Math.ceil(Number(mat.quantity) || 0) * Number(mat.pricePerUnit) || 0),
+                      0
+                    );
+                    return {
+                      name: task.name,
+                      totalPrice: total,
+                    };
+                  });
 
-                // Gather all materials from main tasks and extra materials
-                const materialMap: Record<string, { name: string; quantity: number; unit?: string; pricePerUnit?: number; totalPrice?: number }> = {};
-                (invoice.main_tasks || []).forEach((task: any) => {
-                  (task.results?.materials || []).forEach((mat: any) => {
+                  // Gather all minor tasks with their total price
+                  const minorTasksWithTotal = (invoice.minor_tasks || []).map((task: any) => {
+                    const total = (Number(task.quantity) * Number(task.pricePerUnit) || 0);
+                    return {
+                      name: task.name,
+                      totalPrice: total,
+                    };
+                  });
+
+                  // Gather all materials from main tasks and extra materials
+                  const materialMap: Record<string, { name: string; quantity: number; unit?: string; pricePerUnit?: number; totalPrice?: number }> = {};
+                  (invoice.main_tasks || []).forEach((task: any) => {
+                    (task.results?.materials || []).forEach((mat: any) => {
+                      const key = `${mat.name}_${mat.unit || ''}`;
+                      if (!materialMap[key]) {
+                        materialMap[key] = {
+                          name: mat.name,
+                          quantity: 0,
+                          unit: mat.unit,
+                          pricePerUnit: mat.pricePerUnit,
+                          totalPrice: 0,
+                        };
+                      }
+                      materialMap[key].quantity += Number(mat.quantity) || 0;
+                      materialMap[key].totalPrice += (Math.ceil(Number(mat.quantity) || 0) * Number(mat.pricePerUnit) || 0);
+                    });
+                  });
+                  (invoice.extra_materials || []).forEach((mat: any) => {
                     const key = `${mat.name}_${mat.unit || ''}`;
                     if (!materialMap[key]) {
                       materialMap[key] = {
@@ -914,104 +930,89 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                     materialMap[key].quantity += Number(mat.quantity) || 0;
                     materialMap[key].totalPrice += (Math.ceil(Number(mat.quantity) || 0) * Number(mat.pricePerUnit) || 0);
                   });
-                });
-                (invoice.extra_materials || []).forEach((mat: any) => {
-                  const key = `${mat.name}_${mat.unit || ''}`;
-                  if (!materialMap[key]) {
-                    materialMap[key] = {
-                      name: mat.name,
-                      quantity: 0,
-                      unit: mat.unit,
-                      pricePerUnit: mat.pricePerUnit,
-                      totalPrice: 0,
-                    };
-                  }
-                  materialMap[key].quantity += Number(mat.quantity) || 0;
-                  materialMap[key].totalPrice += (Math.ceil(Number(mat.quantity) || 0) * Number(mat.pricePerUnit) || 0);
-                });
-                const allMaterials = Object.values(materialMap);
+                  const allMaterials = Object.values(materialMap);
 
-                // Calculate grand total
-                const mainTasksTotal = mainTasksWithTotal.reduce((sum, t) => sum + t.totalPrice, 0);
-                const minorTasksTotal = minorTasksWithTotal.reduce((sum, t) => sum + t.totalPrice, 0);
-                const materialsTotal = allMaterials.reduce((sum, m) => sum + (m.totalPrice || 0), 0);
-                const additionalCostsTotal = additionalCosts.reduce((sum, c) => sum + c.pricePerUnit * c.quantity, 0);
-                const grandTotal = mainTasksTotal + minorTasksTotal + materialsTotal + additionalCostsTotal;
+                  // Calculate grand total
+                  const mainTasksTotal = mainTasksWithTotal.reduce((sum, t) => sum + t.totalPrice, 0);
+                  const minorTasksTotal = minorTasksWithTotal.reduce((sum, t) => sum + t.totalPrice, 0);
+                  const materialsTotal = allMaterials.reduce((sum, m) => sum + (m.totalPrice || 0), 0);
+                  const additionalCostsTotal = additionalCosts.reduce((sum, c) => sum + c.pricePerUnit * c.quantity, 0);
+                  const grandTotal = mainTasksTotal + minorTasksTotal + materialsTotal + additionalCostsTotal;
 
-                return (
-                  <div>
-                    {/* Main tasks with only total price */}
-                    <div className="font-medium mb-1">Main tasks total prices:</div>
-                    <ul className="ml-6 mb-2">
-                      {mainTasksWithTotal.map((task, idx) => (
-                        <li key={idx}>
-                          {task.name} — <span className="font-semibold text-green-400">£{task.totalPrice.toFixed(2)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    {/* Minor tasks with only total price */}
-                    {minorTasksWithTotal.length > 0 && (
-                      <>
-                        <div className="font-medium mt-4 mb-1">Minor tasks total prices:</div>
-                        <ul className="ml-6 mb-2">
-                          {minorTasksWithTotal.map((task, idx) => (
-                            <li key={idx}>
-                              {task.name} — <span className="font-semibold text-green-400">£{task.totalPrice.toFixed(2)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-                    {/* All materials required */}
-                    {allMaterials.length > 0 && (
-                      <>
-                        <div className="font-medium mt-4 mb-1">All materials required:</div>
-                        <ul className="ml-6 mb-2">
-                          {allMaterials.map((mat, idx) => {
-                            const roundedQty = Math.ceil(Number(mat.quantity) || 0);
-                            return (
+                  return (
+                    <div>
+                      {/* Main tasks with only total price */}
+                      <div className="font-medium mb-1">Main tasks total prices:</div>
+                      <ul className="ml-6 mb-2">
+                        {mainTasksWithTotal.map((task, idx) => (
+                          <li key={idx}>
+                            {task.name} — <span className="font-semibold text-green-400">£{task.totalPrice.toFixed(2)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      {/* Minor tasks with only total price */}
+                      {minorTasksWithTotal.length > 0 && (
+                        <>
+                          <div className="font-medium mt-4 mb-1">Minor tasks total prices:</div>
+                          <ul className="ml-6 mb-2">
+                            {minorTasksWithTotal.map((task, idx) => (
                               <li key={idx}>
-                                {mat.name} — 
-                                {` ${roundedQty}`} {mat.unit || ''}
-                                {showPrices !== 'none' && (
-                                  <>
-                                    {' — '}
-                                    <span className="font-semibold text-green-400">
-                                      £{(mat.totalPrice || 0).toFixed(2)}
-                                    </span>
-                                  </>
-                                )}
+                                {task.name} — <span className="font-semibold text-green-400">£{task.totalPrice.toFixed(2)}</span>
                               </li>
-                            );
-                          })}
-                        </ul>
-                      </>
-                    )}
-                    {/* Additional Costs Results (just the results, not the input section) */}
-                    {additionalCosts.length > 0 && (
-                      <>
-                        <div className="font-medium mt-4 mb-1">Additional costs:</div>
-                        <ul className="ml-6 mb-2">
-                          {additionalCosts.map((cost, idx) => (
-                            <li key={idx}>
-                              {cost.name || <span className="italic text-gray-400">Unnamed</span>} — {cost.quantity} × £{cost.pricePerUnit.toFixed(2)} = <span className="font-semibold text-green-400">£{(cost.pricePerUnit * cost.quantity).toFixed(2)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                        <div className="ml-6 font-semibold text-green-400">
-                          Total additional costs: £{additionalCosts.reduce((sum, c) => sum + c.pricePerUnit * c.quantity, 0).toFixed(2)}
-                        </div>
-                      </>
-                    )}
-                    {/* Grand total */}
-                    <div className="font-bold mt-6 text-lg">
-                      Total costs: <span className="text-green-500">£{grandTotal.toFixed(2)}</span>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                      {/* All materials required */}
+                      {allMaterials.length > 0 && (
+                        <>
+                          <div className="font-medium mt-4 mb-1">All materials required:</div>
+                          <ul className="ml-6 mb-2">
+                            {allMaterials.map((mat, idx) => {
+                              const roundedQty = Math.ceil(Number(mat.quantity) || 0);
+                              return (
+                                <li key={idx}>
+                                  {mat.name} — 
+                                  {` ${roundedQty}`} {mat.unit || ''}
+                                  {showPrices !== 'none' && (
+                                    <>
+                                      {' — '}
+                                      <span className="font-semibold text-green-400">
+                                        £{(mat.totalPrice || 0).toFixed(2)}
+                                      </span>
+                                    </>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </>
+                      )}
+                      {/* Additional Costs Results (just the results, not the input section) */}
+                      {additionalCosts.length > 0 && (
+                        <>
+                          <div className="font-medium mt-4 mb-1">Additional costs:</div>
+                          <ul className="ml-6 mb-2">
+                            {additionalCosts.map((cost, idx) => (
+                              <li key={idx}>
+                                {cost.name || <span className="italic text-gray-400">Unnamed</span>} — {cost.quantity} × £{cost.pricePerUnit.toFixed(2)} = <span className="font-semibold text-green-400">£{(cost.pricePerUnit * cost.quantity).toFixed(2)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          <div className="ml-6 font-semibold text-green-400">
+                            Total additional costs: £{additionalCosts.reduce((sum, c) => sum + c.pricePerUnit * c.quantity, 0).toFixed(2)}
+                          </div>
+                        </>
+                      )}
+                      {/* Grand total */}
+                      <div className="font-bold mt-6 text-lg">
+                        Total costs: <span className="text-green-500">£{grandTotal.toFixed(2)}</span>
+                      </div>
                     </div>
-                  </div>
-                );
-              })()}
+                  );
+                })()}
+              </div>
             </div>
-          </div>
           ) : selectedProjectId ? (
             <div className="text-gray-500">No work pricing found for this project.</div>
           ) : (
