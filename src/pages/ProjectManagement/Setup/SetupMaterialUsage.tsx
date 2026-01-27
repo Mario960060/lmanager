@@ -155,7 +155,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
 
   const handleSave = () => {
     // Prepare the data to be saved (array of { calculator_id, material_id })
-    const configToSave: MaterialUsageConfig[] = [];
+    const configToSave: (MaterialUsageConfig | Omit<MaterialUsageConfig, 'company_id'> & { company_id?: string })[] = [];
     
     // Add sand selections for each calculator
     Object.keys(sandSelections).forEach((calculatorId: string) => {
@@ -163,7 +163,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
         calculator_id: calculatorId,
         material_id: sandSelections[calculatorId],
         company_id: companyId || undefined
-      });
+      } as any);
     });
     
     // Add mortar mix ratio as a separate config record
@@ -171,9 +171,9 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
       calculator_id: 'slab_mortar_mix_ratio',
       material_id: mortarMixRatioSelection, // Mortar ratio is stored in material_id
       company_id: companyId || undefined
-    });
+    } as any);
     
-    saveConfigMutation.mutate(configToSave);
+    saveConfigMutation.mutate(configToSave as MaterialUsageConfig[]);
   };
 
   if (!companyId) {
