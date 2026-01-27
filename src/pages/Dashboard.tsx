@@ -46,12 +46,14 @@ const Dashboard = () => {
       const { data, error } = await supabase
         .from('calendar_materials')
         .select(`
-          id,
-          material_id,
-          event_id,
-          quantity,
-          notes,
-          date
+          *,
+          events (
+            id,
+            title
+          ),
+          profiles (
+            full_name
+          )
         `)
         .eq('company_id', companyId)
         .in('date', [format(today, 'yyyy-MM-dd'), format(tomorrow, 'yyyy-MM-dd')])
@@ -334,7 +336,7 @@ const Dashboard = () => {
                             <div key={material.id} className="bg-white p-2 rounded-md text-sm">
                               <div className="flex justify-between">
                                 <span className="font-medium">
-                                  {material.material_id} - {material.quantity}
+                                  {material.material} - {material.quantity} {material.unit}
                                 </span>
                                 {material.notes && (
                                   <span className="text-red-600 text-xs">
