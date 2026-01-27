@@ -233,6 +233,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
                 <col style={{width: '33%'}} />
                 <col style={{width: '16.5%'}} />
                 <col style={{width: '16.5%'}} />
+                <col style={{width: 'auto'}} />
               </colgroup>
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
