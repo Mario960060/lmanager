@@ -33,6 +33,8 @@ const Calendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedStatus, setSelectedStatus] = useState<Event['status'] | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
+  const [materialDate, setMaterialDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const companyId = useAuthStore(state => state.getCompanyId());
@@ -165,11 +167,11 @@ const Calendar = () => {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
         <button
-          onClick={() => navigate('/events/new')}
+          onClick={() => setShowAddMaterialModal(true)}
           className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-5 h-5 mr-2" />
-          Add Event
+          Add Material & Equipment
         </button>
       </div>
 
@@ -378,6 +380,43 @@ const Calendar = () => {
           </div>
         </div>
       </div>
+
+      {/* Add Material & Equipment Modal */}
+      {showAddMaterialModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+            <h2 className="text-xl font-semibold">Add Material & Equipment</h2>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Date (default: tomorrow)
+              </label>
+              <input
+                type="date"
+                value={materialDate}
+                onChange={(e) => setMaterialDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                onClick={() => setShowAddMaterialModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedDate(parseISO(materialDate));
+                  setShowAddMaterialModal(false);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Go to Day
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Day Details Modal */}
       {selectedDate && (
