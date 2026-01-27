@@ -497,21 +497,19 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose }) => {
     onSearchChange: (value: string) => void;
   }) => (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Icon className="w-6 h-6 text-gray-600" />
-          <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
-        </div>
-        <div className="relative w-64">
-          <input
-            type="text"
-            value={searchValue}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder={`Search ${title.toLowerCase()}...`}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
-          />
-          <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-        </div>
+      <div className="flex items-center space-x-2">
+        <Icon className="w-6 h-6 text-gray-600" />
+        <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+      </div>
+      <div className="relative w-64">
+        <input
+          type="text"
+          value={searchValue}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder={`Search ${title.toLowerCase()}...`}
+          className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+        />
+        <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
       </div>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {items.map((item) => (
@@ -522,9 +520,6 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose }) => {
             <div className="flex justify-between items-start">
               <div className="flex-1">
                 <h3 className="font-bold text-xl text-gray-900">{item.name}</h3>
-                {item.description && (
-                  <p className="text-gray-600 mt-2">{item.description}</p>
-                )}
                 <div className="mt-2 space-y-2">
                   <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(item.status, item)}`}>
                     {item.broken_quantity >= item.quantity
