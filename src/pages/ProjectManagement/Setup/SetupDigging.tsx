@@ -20,6 +20,7 @@ interface DiggingEquipment {
 
 interface SetupDiggingProps {
   onClose: () => void;
+  wizardMode?: boolean;
 }
 
 // Define predefined sizes for excavators and dumpers/barrows
@@ -47,7 +48,7 @@ const dumperBarrowSizes = [
   { value: 10, label: '10 (+)' },
 ];
 
-const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose }) => {
+const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false }) => {
   const queryClient = useQueryClient();
   const [equipmentSearch, setEquipmentSearch] = useState('');
   const [newEquipment, setNewEquipment] = useState({ 
@@ -306,33 +307,8 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose }) => {
     });
   };
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="p-4 border-b flex justify-between items-center">
-          <div className="flex items-center">
-            <Truck className="w-5 h-5 text-gray-700 mr-2" />
-            <h2 className="text-lg font-semibold">Excavators & Barrows/Dumpers</h2>
-          </div>
-          <div className="flex items-center">
-            <button 
-              onClick={() => setShowTaskCreator(true)}
-              className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 mr-4 text-sm font-medium"
-            >
-              Create Tasks
-            </button>
-            <button 
-              onClick={onClose}
-              className="p-1 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 overflow-y-auto">
+  const contentMarkup = (
+    <>
           <div className="bg-gray-100 p-3 rounded-lg mb-3 text-sm">
             <p className="text-red-600">
               Equipment Name and Description will be shown in Equipment. Create here ONLY Excavators and Carriers (wheel barrow, petrol barrows and dumpers) and make sure u click create tasks button on the top after adding any equipment
@@ -565,6 +541,51 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose }) => {
         {showTaskCreator && (
           <MachineryTaskCreator onClose={() => setShowTaskCreator(false)} />
         )}
+    </>
+  );
+
+  if (wizardMode) {
+    return (
+      <div className="p-6 overflow-y-auto h-full">
+        <div className="bg-gray-100 p-3 rounded-lg mb-3 text-sm">
+          <p className="text-red-600">
+            Equipment Name and Description will be shown in Equipment. Create here ONLY Excavators and Carriers (wheel barrow, petrol barrows and dumpers) and make sure u click create tasks button on the top after adding any equipment
+          </p>
+        </div>
+        {contentMarkup}
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="p-4 border-b flex justify-between items-center">
+          <div className="flex items-center">
+            <Truck className="w-5 h-5 text-gray-700 mr-2" />
+            <h2 className="text-lg font-semibold">Excavators & Barrows/Dumpers</h2>
+          </div>
+          <div className="flex items-center">
+            <button 
+              onClick={() => setShowTaskCreator(true)}
+              className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 mr-4 text-sm font-medium"
+            >
+              Create Tasks
+            </button>
+            <button 
+              onClick={onClose}
+              className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto">
+          {contentMarkup}
+        </div>
       </div>
     </div>
   );
