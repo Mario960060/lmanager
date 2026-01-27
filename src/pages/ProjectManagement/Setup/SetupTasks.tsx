@@ -331,6 +331,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
             )}
           </div>
         </div>
+        </div>
       </div>
     </div>
   );
