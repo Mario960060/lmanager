@@ -103,7 +103,11 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
           event_id,
           quantity,
           notes,
-          date
+          date,
+          materials (
+            id,
+            title
+          )
         `)
         .eq('company_id', companyId)
         .eq('date', format(date, 'yyyy-MM-dd'));
@@ -302,7 +306,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
                           <div className="flex items-center">
                             <div className="ml-3">
                               <p className="text-sm font-medium text-gray-900">
-                                {allMaterials[material.material_id] || material.material_id} - {material.quantity}
+                                {material.materials?.title || material.material_id} - {material.quantity}
                               </p>
                               {material.notes && (
                                 <p className="text-sm text-gray-500">{material.notes}</p>
