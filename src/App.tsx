@@ -18,6 +18,7 @@ import AuthGuard from './components/AuthGuard';
 import ProjectManagement from './pages/ProjectManagement';
 import ProjectPerformance from './pages/ProjectManagement/ProjectPerformance';
 import SetupPage from './pages/ProjectManagement/SetupPage';
+import CompanyPanel from './pages/CompanyPanel';
 import UserProfile from './pages/UserProfile';
 import { useAuthStore } from './lib/store';
 import ProjectCreating from './projectmanagement/ProjectCreating';
@@ -57,6 +58,7 @@ function App() {
             <Route path="/project-management/create" element={<ProjectCreating />} />
             <Route path="/project-performance" element={<ProjectPerformance />} />
             <Route path="/setup" element={<SetupPage />} />
+            <Route path="/company-panel" element={<CompanyPanel />} />
             <Route path="/user-profile" element={<UserProfile />} />
             <Route path="/user-hours" element={<UserHoursPage />} />
           </Route>
