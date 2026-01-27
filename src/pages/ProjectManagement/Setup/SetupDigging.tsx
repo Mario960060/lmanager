@@ -536,7 +536,6 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
               <p className="text-center text-gray-500 py-4 text-sm">No equipment found</p>
             )}
           </div>
-        </div>
 
         {showTaskCreator && (
           <MachineryTaskCreator onClose={() => setShowTaskCreator(false)} />
