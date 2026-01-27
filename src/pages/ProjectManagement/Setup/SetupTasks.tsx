@@ -153,10 +153,10 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
 
         {/* Content */}
         <div className="p-6 overflow-y-auto">
-          {/* Updated Add Task Form with optimized layout */}
-          <form onSubmit={handleAddTask} className="mb-4 space-y-3">
-            {/* First line - Name and Description side by side */}
-            <div className="grid grid-cols-3 gap-3 items-start">
+          {/* Updated Add Task Form with Name and Description side by side */}
+          <form onSubmit={handleAddTask} className="mb-4">
+            {/* Name and Description in one row */}
+            <div className="grid gap-3 items-start mb-3" style={{gridTemplateColumns: '3fr 5fr'}}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Task Name</label>
                 <input
@@ -168,20 +168,20 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
                 />
               </div>
               
-              <div className="col-span-2">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                 <textarea
                   placeholder="Enter task description"
                   value={newTask.description}
                   onChange={(e) => setNewTask({...newTask, description: e.target.value})}
                   className="w-full p-2 border rounded text-sm resize-none"
-                  rows={3}
+                  rows={2}
                 />
               </div>
             </div>
             
-            {/* Second line - Unit and Estimated Hours */}
-            <div className="grid grid-cols-2 gap-3">
+            {/* Unit and Estimated Hours */}
+            <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
                 <input
