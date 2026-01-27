@@ -245,16 +245,17 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     enabled: !!companyId
   });
 
-  // Fetch mortar mix ratio config from dedicated table
+  // Fetch mortar mix ratio config from universal table
   const { data: mortarMixRatioConfig } = useQuery<{ id: string; mortar_mix_ratio: string } | null>({
-    queryKey: ['mortarMixRatio', companyId],
+    queryKey: ['mortarMixRatio', 'slab', companyId],
     queryFn: async () => {
       if (!companyId) return null;
 
       const { data, error } = await supabase
-        .from('slab_mortar_mix_ratios')
+        .from('mortar_mix_ratios')
         .select('id, mortar_mix_ratio')
         .eq('company_id', companyId)
+        .eq('type', 'slab')
         .single();
 
       if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "not found"
