@@ -158,7 +158,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
           </div>
 
           {/* Main content - scrollable */}
-          <div className="p-6 flex-1 overflow-hidden flex flex-col">
+          <div className="p-6 flex-1 overflow-y-auto flex flex-col">
           {/* Updated Add Task Form with Name and Description side by side */}
           <form onSubmit={handleAddTask} className="mb-4">
             {/* Name and Description in one row */}
@@ -229,8 +229,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
           </div>
           
-          {/* Tasks List with taller height */}
-          <div className="h-64 overflow-y-auto border rounded">
+          {/* Tasks List */}
+          <div className="border rounded">
             <table className="min-w-full divide-y divide-gray-200" style={{tableLayout: 'fixed'}}>
               <colgroup>
                 <col style={{width: '33%'}} />
