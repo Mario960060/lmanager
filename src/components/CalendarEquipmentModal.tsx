@@ -89,7 +89,8 @@ const CalendarEquipmentModal: React.FC<CalendarEquipmentModalProps> = ({ eventId
           user_id: user?.id,
           date: formattedDate,
           quantity: parseInt(quantity),
-          notes: notes || null
+          notes: notes || null,
+          company_id: companyId
         });
 
       if (error) throw error;
