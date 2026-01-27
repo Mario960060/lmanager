@@ -156,7 +156,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
           {/* Updated Add Task Form with Name and Description side by side */}
           <form onSubmit={handleAddTask} className="mb-4">
             {/* Name and Description in one row */}
-            <div className="grid gap-3 items-start mb-3" style={{gridTemplateColumns: '3fr 5fr'}}>
+            <div className="grid gap-3 items-start mb-3" style={{gridTemplateColumns: '33% 33% 16.5% 16.5%'}}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Task Name</label>
                 <input
@@ -178,10 +178,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
                   rows={2}
                 />
               </div>
-            </div>
-            
-            {/* Unit and Estimated Hours */}
-            <div className="grid grid-cols-2 gap-3 mb-3">
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
                 <input
@@ -192,6 +189,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
                   className="w-full p-2 border rounded text-sm"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Hours</label>
                 <input
