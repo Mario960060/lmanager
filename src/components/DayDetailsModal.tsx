@@ -164,7 +164,8 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
           event_id: eventId,
           content,
           date: format(date, 'yyyy-MM-dd'),
-          user_id: user?.id
+          user_id: user?.id,
+          company_id: companyId
         });
 
       if (error) throw error;
