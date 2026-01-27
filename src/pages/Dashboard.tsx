@@ -489,6 +489,43 @@ const Dashboard = () => {
           })} 
         />
       </div>
+
+      {/* Order Material & Equipment Modal */}
+      {showAddMaterialModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+            <h2 className="text-xl font-semibold">Order Required Material & Equipment</h2>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Date (default: tomorrow)
+              </label>
+              <input
+                type="date"
+                value={materialDate}
+                onChange={(e) => setMaterialDate(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+              />
+            </div>
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                onClick={() => setShowAddMaterialModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  navigate(`/calendar?date=${materialDate}`);
+                  setShowAddMaterialModal(false);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Go to Day
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
