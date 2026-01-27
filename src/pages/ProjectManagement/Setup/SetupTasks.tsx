@@ -157,10 +157,10 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
             </div>
           </div>
 
-          {/* Main content */}
-          <div className="p-6 flex flex-col flex-1 min-h-0">
+          {/* Main content - scrollable */}
+          <div className="p-6 flex-1 overflow-y-auto flex flex-col">
           {/* Updated Add Task Form with Name and Description side by side */}
-          <form onSubmit={handleAddTask} className="mb-4 flex-shrink-0">
+          <form onSubmit={handleAddTask} className="mb-4">
             {/* Name and Description in one row */}
             <div className="grid items-start mb-3" style={{gridTemplateColumns: '33% 33% 16.5% 16.5%', gap: '0.75rem'}}>
               <div>
@@ -229,9 +229,9 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
           </div>
           
-          {/* Tasks List - scrollable */}
-          <div className="border rounded flex-1 overflow-y-auto">
-            <table className="min-w-full divide-y divide-gray-200 w-full" style={{tableLayout: 'fixed'}}>
+          {/* Tasks List */}
+          <div className="border rounded">
+            <table className="min-w-full divide-y divide-gray-200" style={{tableLayout: 'fixed'}}>
               <colgroup>
                 <col style={{width: '33%'}} />
                 <col style={{width: '33%'}} />
@@ -239,7 +239,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
                 <col style={{width: '16.5%'}} />
                 <col style={{width: 'auto'}} />
               </colgroup>
-              <thead className="bg-gray-50 sticky top-0">
+              <thead className="bg-gray-50">
                 <tr>
                   <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                   <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
