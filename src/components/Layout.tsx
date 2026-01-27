@@ -61,14 +61,14 @@ const Layout = () => {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Projects', href: '/projects', icon: FolderOpenDot },
+    { name: 'Calculator', href: '/calculator', icon: Calculator },
     { name: 'Task Requirements', href: '/tasks', icon: CheckSquare },
     { name: 'Calendar', href: '/calendar', icon: Calendar },
-    { name: 'Calculator', href: '/calculator', icon: Calculator },
     ...(isAdmin ? [
-      { name: 'Finance', href: '/finance', icon: DollarSign },
       { name: 'Project Management', href: '/project-management', icon: Settings },
       { name: 'Setup', href: '/setup', icon: Wrench },
-      { name: 'Company Panel', href: '/company-panel', icon: Building2 }
+      { name: 'Company Panel', href: '/company-panel', icon: Building2 },
+      { name: 'Finance', href: '/finance', icon: DollarSign }
     ] : [])
   ];
 
