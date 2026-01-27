@@ -29,7 +29,8 @@ const calculators = [
 
 const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
   const [sandSelections, setSandSelections] = useState<Record<string, string>>({});
-  const [mortarMixRatioSelection, setMortarMixRatioSelection] = useState<string>('1:4');
+  const [slabMortarMixRatioSelection, setSlabMortarMixRatioSelection] = useState<string>('1:4');
+  const [brickBlockMortarMixRatioSelection, setBrickBlockMortarMixRatioSelection] = useState<string>('1:4');
   const [initialLoad, setInitialLoad] = useState(true);
   const companyId = useAuthStore(state => state.getCompanyId());
   const queryClient = useQueryClient();
@@ -71,20 +72,25 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
     enabled: !!companyId
   });
 
-  // Fetch existing mortar mix ratio
-  const { data: mortarMixRatioData } = useQuery<{ id: string; mortar_mix_ratio: string } | null>({
-    queryKey: ['mortarMixRatio', companyId],
+  // Fetch existing mortar mix ratios
+  const { data: mortarMixRatios = {} } = useQuery<{ [key: string]: { id: string; mortar_mix_ratio: string } }>({
+    queryKey: ['mortarMixRatios', companyId],
     queryFn: async () => {
-      if (!companyId) return null;
+      if (!companyId) return {};
       
       const { data, error } = await supabase
-        .from('slab_mortar_mix_ratios')
-        .select('id, mortar_mix_ratio')
-        .eq('company_id', companyId)
-        .single();
+        .from('mortar_mix_ratios')
+        .select('id, type, mortar_mix_ratio')
+        .eq('company_id', companyId);
 
-      if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "not found"
-      return data;
+      if (error && error.code !== 'PGRST116') throw error;
+      
+      // Transform to object by type: { slab: {...}, brick: {...}, blocks: {...} }
+      const ratiosByType: { [key: string]: { id: string; mortar_mix_ratio: string } } = {};
+      (data || []).forEach((item: any) => {
+        ratiosByType[item.type] = { id: item.id, mortar_mix_ratio: item.mortar_mix_ratio };
+      });
+      return ratiosByType;
     },
     enabled: !!companyId
   });
@@ -113,14 +119,17 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
       
       setSandSelections(initialSelections);
       
-      // Load mortar mix ratio from dedicated table
-      if (mortarMixRatioData?.mortar_mix_ratio) {
-        setMortarMixRatioSelection(mortarMixRatioData.mortar_mix_ratio);
+      // Load mortar mix ratios from table
+      if (mortarMixRatios.slab?.mortar_mix_ratio) {
+        setSlabMortarMixRatioSelection(mortarMixRatios.slab.mortar_mix_ratio);
+      }
+      if (mortarMixRatios.brick?.mortar_mix_ratio) {
+        setBrickBlockMortarMixRatioSelection(mortarMixRatios.brick.mortar_mix_ratio);
       }
       
       setInitialLoad(false);
     }
-  }, [isLoadingMaterials, isLoadingConfigs, companyId, initialLoad, sandMaterialOptions.length, existingConfigs.length, mortarMixRatioData]);
+  }, [isLoadingMaterials, isLoadingConfigs, companyId, initialLoad, sandMaterialOptions.length, existingConfigs.length, mortarMixRatios]);
 
   const handleSandChange = (calculatorId: string, materialId: string) => {
     setSandSelections((prev: Record<string, string>) => ({
@@ -169,43 +178,51 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
     }
   });
 
-  const saveMortarMixRatioMutation = useMutation<void, Error, string>({
-    mutationFn: async (ratio: string) => {
+  const saveMortarMixRatioMutation = useMutation<void, Error, { type: string; ratio: string }[]>({
+    mutationFn: async (ratios: { type: string; ratio: string }[]) => {
       if (!companyId) {
         throw new Error('Company ID is required');
       }
 
-      // Try to update existing record, if not exists insert new
-      const { data: existingRatio } = await supabase
-        .from('slab_mortar_mix_ratios')
-        .select('id')
-        .eq('company_id', companyId)
-        .single();
+      // For each type (slab, brick, blocks), upsert the ratio
+      for (const item of ratios) {
+        const { data: existingRatio } = await supabase
+          .from('mortar_mix_ratios')
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('type', item.type)
+          .single();
 
-      if (existingRatio) {
-        // Update existing
-        const { error } = await supabase
-          .from('slab_mortar_mix_ratios')
-          .update({ mortar_mix_ratio: ratio })
-          .eq('company_id', companyId);
+        if (existingRatio) {
+          // Update existing
+          const { error } = await supabase
+            .from('mortar_mix_ratios')
+            .update({ mortar_mix_ratio: item.ratio })
+            .eq('company_id', companyId)
+            .eq('type', item.type);
 
-        if (error) throw error;
-      } else {
-        // Insert new
-        const { error } = await supabase
-          .from('slab_mortar_mix_ratios')
-          .insert([{ company_id: companyId, mortar_mix_ratio: ratio }]);
+          if (error) throw error;
+        } else {
+          // Insert new
+          const { error } = await supabase
+            .from('mortar_mix_ratios')
+            .insert([{ 
+              company_id: companyId, 
+              type: item.type,
+              mortar_mix_ratio: item.ratio 
+            }]);
 
-        if (error) throw error;
+          if (error) throw error;
+        }
       }
     },
     onSuccess: () => {
-      console.log('Mortar mix ratio saved successfully!');
+      console.log('Mortar mix ratios saved successfully!');
       // Invalidate the query to refetch
-      queryClient.invalidateQueries({ queryKey: ['mortarMixRatio', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['mortarMixRatios', companyId] });
     },
     onError: (error: Error) => {
-      console.error('Failed to save mortar mix ratio:', error);
+      console.error('Failed to save mortar mix ratios:', error);
     }
   });
 
@@ -225,8 +242,11 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
     // Save material configs first
     saveConfigMutation.mutate(configToSave as MaterialUsageConfig[], {
       onSuccess: () => {
-        // Then save mortar mix ratio to dedicated table
-        saveMortarMixRatioMutation.mutate(mortarMixRatioSelection);
+        // Then save both mortar mix ratios
+        saveMortarMixRatioMutation.mutate([
+          { type: 'slab', ratio: slabMortarMixRatioSelection },
+          { type: 'brick', ratio: brickBlockMortarMixRatioSelection }
+        ]);
       }
     });
   };
@@ -287,17 +307,15 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
           {/* Mortar Mix Ratio Section */}
           <div>
             <h4 className="text-lg font-medium mb-3">Mortar Mix Ratio Configuration</h4>
-            <p className="text-gray-600 mb-4">
-              Configure the cement to sand ratio for mortar in the Slab Calculator.
-            </p>
             
-            <div className="p-4 bg-gray-50 rounded-lg">
+            {/* Slab Mortar Mix Ratio */}
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
               <label className="block text-sm font-medium text-gray-700 mb-3">
                 Slab Mortar Mix Ratio (Cement:Sand)
               </label>
               <select
-                value={mortarMixRatioSelection}
-                onChange={(e: FormEvent<HTMLSelectElement>) => setMortarMixRatioSelection(e.currentTarget.value)}
+                value={slabMortarMixRatioSelection}
+                onChange={(e: FormEvent<HTMLSelectElement>) => setSlabMortarMixRatioSelection(e.currentTarget.value)}
                 className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="1:4">1:4</option>
@@ -307,7 +325,28 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
                 <option value="1:8">1:8</option>
               </select>
               <p className="text-sm text-gray-500 mt-2">
-                Current selection: {mortarMixRatioSelection}
+                Current selection: {slabMortarMixRatioSelection}
+              </p>
+            </div>
+
+            {/* Brick/Block Mortar Mix Ratio */}
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Brick/Block Mortar Mix Ratio (Cement:Sand)
+              </label>
+              <select
+                value={brickBlockMortarMixRatioSelection}
+                onChange={(e: FormEvent<HTMLSelectElement>) => setBrickBlockMortarMixRatioSelection(e.currentTarget.value)}
+                className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="1:4">1:4</option>
+                <option value="1:5">1:5</option>
+                <option value="1:6">1:6</option>
+                <option value="1:7">1:7</option>
+                <option value="1:8">1:8</option>
+              </select>
+              <p className="text-sm text-gray-500 mt-2">
+                Current selection: {brickBlockMortarMixRatioSelection}
               </p>
             </div>
           </div>
