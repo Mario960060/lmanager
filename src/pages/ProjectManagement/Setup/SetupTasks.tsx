@@ -14,9 +14,10 @@ interface Task {
 
 interface SetupTasksProps {
   onClose: () => void;
+  wizardMode?: boolean;
 }
 
-const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
+const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) => {
   const queryClient = useQueryClient();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [taskSearch, setTaskSearch] = useState('');
