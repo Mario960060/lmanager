@@ -88,15 +88,15 @@ const CompanySetupWizard: React.FC = () => {
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
-        return <SetupDiggingContent onClose={() => handleClose(true)} />;
+        return <SetupDiggingContent onClose={handleNext} />;
       case 2:
-        return <SetupMaterialUsageContent onClose={() => handleClose(true)} />;
+        return <SetupMaterialUsageContent onClose={handleNext} />;
       case 3:
-        return <SetupEquipmentContent onClose={() => handleClose(true)} />;
+        return <SetupEquipmentContent onClose={handleNext} />;
       case 4:
-        return <SetupMaterialsContent onClose={() => handleClose(true)} />;
+        return <SetupMaterialsContent onClose={handleNext} />;
       case 5:
-        return <SetupTasksContent onClose={() => handleClose(true)} />;
+        return <SetupTasksContent onClose={handleNext} />;
       default:
         return null;
     }
