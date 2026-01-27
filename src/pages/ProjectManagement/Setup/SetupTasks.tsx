@@ -227,7 +227,13 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
           
           {/* Tasks List with taller height */}
           <div className="h-64 overflow-y-auto border rounded">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full divide-y divide-gray-200" style={{tableLayout: 'fixed'}}>
+              <colgroup>
+                <col style={{width: '33%'}} />
+                <col style={{width: '33%'}} />
+                <col style={{width: '16.5%'}} />
+                <col style={{width: '16.5%'}} />
+              </colgroup>
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
