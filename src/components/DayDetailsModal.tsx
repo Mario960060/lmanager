@@ -71,6 +71,26 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
     enabled: !!companyId
   });
 
+  // Fetch all materials for lookup
+  const { data: allMaterials = {} } = useQuery({
+    queryKey: ['all_materials', companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('materials')
+        .select('id, title')
+        .eq('company_id', companyId);
+
+      if (error) throw error;
+      
+      // Create map for easy lookup
+      return data.reduce((acc: Record<string, string>, mat: any) => {
+        acc[mat.id] = mat.title;
+        return acc;
+      }, {});
+    },
+    enabled: !!companyId
+  });
+
   // Fetch calendar materials for the selected date
   const { data: materials = [] } = useQuery({
     queryKey: ['calendar_materials', date, companyId],
@@ -282,7 +302,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
                           <div className="flex items-center">
                             <div className="ml-3">
                               <p className="text-sm font-medium text-gray-900">
-                                {material.material_id} - {material.quantity} {typeof material.quantity === 'string' && material.quantity.includes('kg') ? 'kg' : 'units'}
+                                {allMaterials[material.material_id] || material.material_id} - {material.quantity}
                               </p>
                               {material.notes && (
                                 <p className="text-sm text-gray-500">{material.notes}</p>
