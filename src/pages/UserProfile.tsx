@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +20,7 @@ const UserProfile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   
   // Modal states
   const [showTaskPerformanceModal, setShowTaskPerformanceModal] = useState(false);
@@ -28,6 +29,32 @@ const UserProfile = () => {
   const [showAdditionalMaterialsModal, setShowAdditionalMaterialsModal] = useState(false);
   const [showDayNotesModal, setShowDayNotesModal] = useState(false);
   const [showCheckWeeklyHoursModal, setShowCheckWeeklyHoursModal] = useState(false);
+
+  // Fetch user's role in company
+  const { data: userRole } = useQuery({
+    queryKey: ['userRole', user?.id, profile?.company_id],
+    queryFn: async () => {
+      if (!user?.id || !profile?.company_id) return null;
+      
+      const { data, error } = await supabase
+        .from('company_members')
+        .select('role')
+        .eq('user_id', user.id)
+        .eq('company_id', profile.company_id)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching user role:', error);
+        return null;
+      }
+      return data?.role;
+    },
+    enabled: !!user?.id && !!profile?.company_id
+  });
+
+  useEffect(() => {
+    setIsAdmin(userRole === 'Admin');
+  }, [userRole]);
 
   // Update user name mutation
   const updateNameMutation = useMutation({
@@ -184,13 +211,74 @@ const UserProfile = () => {
     setShowAbandonConfirmation(true);
   };
 
-  const handleConfirmAbandon = () => {
-    abandonTeamMutation.mutate();
-  };
+  // Delete company mutation (for admins only)
+  const deleteCompanyMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id) throw new Error('User not authenticated');
+      if (!profile?.company_id) throw new Error('Not part of any company');
+      if (!isAdmin) throw new Error('Only admins can delete a company');
 
-  const handleCancelAbandon = () => {
-    setShowAbandonConfirmation(false);
-  };
+      console.log('🗑️ Starting delete company for company:', profile.company_id);
+
+      // Get session
+      const sessionPromise = supabase.auth.getSession();
+      const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('getSession timeout')), 3000)
+      );
+      
+      const { data: sessionData } = await Promise.race([sessionPromise, timeout]) as any;
+      const token = sessionData?.session?.access_token;
+
+      if (!token) throw new Error('No auth token');
+
+      // DELETE company through REST API
+      console.log('🗑️ Deleting company...');
+      const deleteResponse = await fetch(
+        `https://trtlrllpgbxwnpqzcarz.supabase.co/rest/v1/companies?id=eq.${profile.company_id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          }
+        }
+      );
+
+      console.log('🗑️ Delete response status:', deleteResponse.status);
+
+      if (!deleteResponse.ok) {
+        const errorData = await deleteResponse.json();
+        throw new Error(`Delete failed: ${JSON.stringify(errorData)}`);
+      }
+
+      console.log('✅ Successfully deleted company');
+      return true;
+    },
+    onSuccess: () => {
+      // Update the profile in the store
+      if (profile) {
+        setProfile({
+          ...profile,
+          company_id: null
+        });
+      }
+
+      setSuccess('Company has been deleted');
+      setError(null);
+      setShowAbandonConfirmation(false);
+
+      // Redirect to no-team page after 2 seconds
+      setTimeout(() => {
+        navigate('/no-team');
+      }, 2000);
+    },
+    onError: (error: any) => {
+      console.error('❌ Delete company error:', error);
+      setError(error.message || 'Failed to delete company');
+    }
+  });
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -270,11 +358,11 @@ const UserProfile = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
           <button
             onClick={handleAbandonTeamClick}
-            disabled={abandonTeamMutation.isPending}
+            disabled={isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending}
             className="px-4 py-3 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 transition-colors disabled:opacity-50 flex items-center justify-center"
           >
-            {abandonTeamMutation.isPending && <Loader2 className="h-5 w-5 mr-2 animate-spin" />}
-            {abandonTeamMutation.isPending ? 'Leaving...' : 'Abandon Team'}
+            {(isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending) && <Loader2 className="h-5 w-5 mr-2 animate-spin" />}
+            {(isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending) ? (isAdmin ? 'Deleting Company...' : 'Leaving...') : (isAdmin ? 'Delete Company' : 'Abandon Team')}
           </button>
           
           <button
@@ -418,25 +506,36 @@ const UserProfile = () => {
       {showAbandonConfirmation && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold dark:text-white mb-4">Leave Team?</h3>
+            <h3 className="text-lg font-semibold dark:text-white mb-4">
+              {isAdmin ? 'Delete Company?' : 'Leave Team?'}
+            </h3>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Are you sure you want to leave your team? This action cannot be undone.
+              {isAdmin 
+                ? 'Are you sure you want to delete your company? This will remove all members and company data. This action cannot be undone.'
+                : 'Are you sure you want to leave your team? This action cannot be undone.'
+              }
             </p>
             <div className="flex gap-3">
               <button
-                onClick={handleCancelAbandon}
-                disabled={abandonTeamMutation.isPending}
+                onClick={() => setShowAbandonConfirmation(false)}
+                disabled={isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
               >
-                No, Stay
+                No, {isAdmin ? 'Keep Company' : 'Stay'}
               </button>
               <button
-                onClick={handleConfirmAbandon}
-                disabled={abandonTeamMutation.isPending}
+                onClick={() => {
+                  if (isAdmin) {
+                    deleteCompanyMutation.mutate();
+                  } else {
+                    abandonTeamMutation.mutate();
+                  }
+                }}
+                disabled={isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending}
                 className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {abandonTeamMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Yes, Leave
+                {(isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
+                Yes, {isAdmin ? 'Delete' : 'Leave'}
               </button>
             </div>
           </div>
