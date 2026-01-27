@@ -45,15 +45,25 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
   const [selectedEventForMaterial, setSelectedEventForMaterial] = useState<string | null>(null);
   const [selectedEventForEquipment, setSelectedEventForEquipment] = useState<string | null>(null);
 
-  // Fetch notes for the selected date
+  // Fetch day notes for the selected date
   const { data: notes = [] } = useQuery({
-    queryKey: ['notes', date, companyId],
+    queryKey: ['day_notes', date, companyId],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('notes')
-        .select('*')
+        .from('day_notes')
+        .select(`
+          id,
+          event_id,
+          content,
+          date,
+          created_at,
+          user_id,
+          events (id, title),
+          profiles (id, full_name)
+        `)
         .eq('company_id', companyId)
-        .eq('date', format(date, 'yyyy-MM-dd'));
+        .eq('date', format(date, 'yyyy-MM-dd'))
+        .order('created_at', { ascending: false });
       
       if (error) throw error;
       return data;
@@ -171,7 +181,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['day_notes'] });
+      queryClient.invalidateQueries({ queryKey: ['day_notes', date, companyId] });
       setNoteContent('');
       setShowNoteForm(false);
     }
