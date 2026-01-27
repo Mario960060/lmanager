@@ -16,7 +16,8 @@ import {
   X,
   Sun,
   Moon,
-  Loader2
+  Loader2,
+  Wrench
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -66,7 +67,8 @@ const Layout = () => {
     { name: 'Calculator', href: '/calculator', icon: Calculator },
     ...(isAdmin ? [
       { name: 'Finance', href: '/finance', icon: DollarSign },
-      { name: 'Project Management', href: '/project-management', icon: Settings }
+      { name: 'Project Management', href: '/project-management', icon: Settings },
+      { name: 'Setup', href: '/setup', icon: Wrench }
     ] : [])
   ];
 
