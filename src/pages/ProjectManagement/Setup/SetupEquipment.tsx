@@ -511,17 +511,17 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose }) => {
         />
         <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
       </div>
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((item) => (
           <div
             key={item.id}
-            className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow"
+            className="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow"
           >
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <h3 className="font-bold text-xl text-gray-900">{item.name}</h3>
-                <div className="mt-2 space-y-2">
-                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(item.status, item)}`}>
+            <div className="flex justify-between items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-base text-gray-900 break-words">{item.name}</h3>
+                <div className="mt-1 space-y-1">
+                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(item.status, item)}`}>
                     {item.broken_quantity >= item.quantity
                       ? 'broken'
                       : item.quantity - (item.in_use_quantity + (item.broken_quantity || 0)) > 0
@@ -531,7 +531,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose }) => {
                           : 'free to use'
                     }
                   </span>
-                  <div className="text-sm text-gray-600">
+                  <div className="text-xs text-gray-600">
                     {item.broken_quantity > 0 && (
                       <span className="text-red-600">{item.broken_quantity} broken</span>
                     )}
@@ -547,13 +547,13 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose }) => {
                   </div>
                 </div>
               </div>
-              <div className="flex space-x-2">
+              <div className="flex space-x-1">
                 <button
                   onClick={() => handleEditClick(item)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
                   title="Edit equipment"
                 >
-                  <Pencil className="w-5 h-5 text-blue-600" />
+                  <Pencil className="w-4 h-4 text-blue-600" />
                 </button>
                 <button
                   onClick={() => {
@@ -561,10 +561,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose }) => {
                     setShowStatusModal(true);
                     setEquipmentUsage(prev => ({ ...prev, quantity: 1 }));
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
                   title="Update status"
                 >
-                  <Info className="w-5 h-5 text-gray-600" />
+                  <Info className="w-4 h-4 text-gray-600" />
                 </button>
               </div>
             </div>
