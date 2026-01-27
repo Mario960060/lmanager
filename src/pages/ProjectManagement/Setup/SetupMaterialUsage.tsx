@@ -284,27 +284,27 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
             </div>
           </div>
 
-          {/* Slab Mortar Mix Ratio Section */}
+          {/* Mortar Mix Ratio Section */}
           <div>
-            <h4 className="text-lg font-medium mb-3">Slab Mortar Mix Ratio Configuration</h4>
+            <h4 className="text-lg font-medium mb-3">Mortar Mix Ratio Configuration</h4>
             <p className="text-gray-600 mb-4">
               Configure the cement to sand ratio for mortar in the Slab Calculator.
             </p>
             
             <div className="p-4 bg-gray-50 rounded-lg">
               <label className="block text-sm font-medium text-gray-700 mb-3">
-                Mortar Mix Ratio (Cement:Sand)
+                Slab Mortar Mix Ratio (Cement:Sand)
               </label>
               <select
                 value={mortarMixRatioSelection}
                 onChange={(e: FormEvent<HTMLSelectElement>) => setMortarMixRatioSelection(e.currentTarget.value)}
                 className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="1:4">1:4 (Standard)</option>
-                <option value="1:5">1:5 (Weaker)</option>
-                <option value="1:6">1:6 (Weaker)</option>
-                <option value="1:7">1:7 (Weaker)</option>
-                <option value="1:8">1:8 (Weaker)</option>
+                <option value="1:4">1:4</option>
+                <option value="1:5">1:5</option>
+                <option value="1:6">1:6</option>
+                <option value="1:7">1:7</option>
+                <option value="1:8">1:8</option>
               </select>
               <p className="text-sm text-gray-500 mt-2">
                 Current selection: {mortarMixRatioSelection}
