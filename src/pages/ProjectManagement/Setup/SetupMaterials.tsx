@@ -142,7 +142,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
         >
           <Plus className="w-5 h-5 mr-2" />
           Add Material
-        </div>
+        </button>
 
         {/* Search Bar */}
       <div className="relative">
