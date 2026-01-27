@@ -150,7 +150,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
           {/* Second row - Warning message */}
           <div className="px-4 pb-4">
             <span className="text-sm text-red-600 font-medium">
-              Dont create here any tasks that involving digging, tape1 preparation, compacting sand loading-in sand. All of them will be created automaticly whenever u add you excavation and carrier tools in "Excavators & Dumpers/Barrows" window in setup page. Also please don't use any words "excavation" or "preparation" in names of your task.
+              Dont create here any tasks that involving digging, tape1 preparation, compacting and loading-in sand. All of them will be created automaticly whenever u add you excavation and carrier tools in "Excavators & Dumpers/Barrows" window in setup page. Also please don't use any words "excavation" or "preparation" in names of your task.
             </span>
           </div>
         </div>
