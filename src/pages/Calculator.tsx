@@ -222,7 +222,7 @@ const CalculatorPage: React.FC = () => {
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 h-full">
-        <div className="md:w-64 flex-shrink-0 space-y-4 md:sticky md:top-4 md:self-start">
+        <div className="md:w-64 flex-shrink-0 space-y-4 md:sticky md:top-4 md:self-start md:max-h-[calc(100vh-100px)] md:overflow-y-auto">
           {calculatorButtons.map((button) => (
             <div key={button.type} className="space-y-2">
               <button
