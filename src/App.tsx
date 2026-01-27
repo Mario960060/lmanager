@@ -11,7 +11,6 @@ import Finance from './pages/Finance';
 import Calculator from './pages/Calculator';
 import Calendar from './pages/Calendar';
 import EventDetails from './pages/EventDetails';
-import EventForm from './pages/EventForm';
 import Login from './pages/Login';
 import NoTeamPage from './pages/NoTeamPage';
 import CreateTeamPage from './pages/CreateTeamPage';
@@ -51,7 +50,6 @@ function App() {
             <Route path="/finance" element={<Finance />} />
             <Route path="/calculator" element={<Calculator />} />
             <Route path="/calendar" element={<Calendar />} />
-            <Route path="/events/new" element={<EventForm />} />
             <Route path="/events/:id" element={<EventDetails />} />
             <Route path="/project-management" element={<ProjectManagement />} />
             <Route path="/project-management/create" element={<ProjectCreating />} />
