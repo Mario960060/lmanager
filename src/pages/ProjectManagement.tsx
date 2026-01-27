@@ -1,19 +1,15 @@
 import React, { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
-import { Clock, BarChart2, Users, UserMinus, Trash2, FolderPlus } from 'lucide-react';
+import { Clock, BarChart2, Trash2, FolderPlus } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import WeeklyWorkerHoursModal from '../components/ProjectManagement/WeeklyWorkerHoursModal';
-import UserAuthorizationModal from '../components/ProjectManagement/UserAuthorizationModal';
-import DeleteUserModal from '../components/ProjectManagement/DeleteUserModal';
 import RemovingRecords from './ProjectManagement/RemovingRecords';
 
 const ProjectManagement = () => {
   const navigate = useNavigate();
   const { profile } = useAuthStore();
   const [showWorkerHours, setShowWorkerHours] = React.useState(false);
-  const [showUserAuthorization, setShowUserAuthorization] = React.useState(false);
-  const [showDeleteUser, setShowDeleteUser] = React.useState(false);
   const [showRemovingRecords, setShowRemovingRecords] = useState(false);
 
   // Redirect if not Admin/boss
@@ -78,39 +74,6 @@ const ProjectManagement = () => {
           </button>
         </div>
 
-        {/* User Authorization */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <Users className="w-6 h-6 text-purple-600 mr-3" />
-            <h2 className="text-xl font-semibold">User Authorization</h2>
-          </div>
-          <p className="text-gray-600 mb-4">
-            Manage user roles and access permissions.
-          </p>
-          <button
-            onClick={() => setShowUserAuthorization(true)}
-            className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors"
-          >
-            Manage Users
-          </button>
-        </div>
-
-        {/* Delete User */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <UserMinus className="w-6 h-6 text-red-600 mr-3" />
-            <h2 className="text-xl font-semibold">Delete User</h2>
-          </div>
-          <p className="text-gray-600 mb-4">
-            Remove users from the system permanently.
-          </p>
-          <button
-            onClick={() => setShowDeleteUser(true)}
-            className="w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
-          >
-            Delete User
-          </button>
-        </div>
 
         {/* Removing Records */}
         <div className="bg-white p-6 rounded-lg shadow-lg">
@@ -133,12 +96,6 @@ const ProjectManagement = () => {
       {/* Modals */}
       {showWorkerHours && (
         <WeeklyWorkerHoursModal onClose={() => setShowWorkerHours(false)} />
-      )}
-      {showUserAuthorization && (
-        <UserAuthorizationModal onClose={() => setShowUserAuthorization(false)} />
-      )}
-      {showDeleteUser && (
-        <DeleteUserModal onClose={() => setShowDeleteUser(false)} />
       )}
       {showRemovingRecords && (
         <RemovingRecords onClose={() => setShowRemovingRecords(false)} />
