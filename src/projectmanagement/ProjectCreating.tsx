@@ -113,7 +113,6 @@ const ProjectCreating = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
-  console.log('DEBUG ProjectCreating: companyId =', companyId);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({
