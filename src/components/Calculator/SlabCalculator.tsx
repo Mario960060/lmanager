@@ -31,6 +31,7 @@ interface Material {
 interface MaterialUsageConfig {
   calculator_id: string;
   material_id: string;
+  slab_mortar_mix_ratio?: string;
 }
 
 interface DiggingEquipment {
@@ -234,7 +235,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     queryFn: async () => {
       const { data, error } = await supabase
         .from('material_usage_configs')
-        .select('calculator_id, material_id')
+        .select('calculator_id, material_id, slab_mortar_mix_ratio')
         .eq('calculator_id', 'slab')
         .eq('company_id', companyId);
 
@@ -366,6 +367,16 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     const totalTransportTime = trips * timePerTrip;
     const normalizedTransportTime = (totalTransportTime * 30) / transportDistanceMeters;
     return { trips, totalTransportTime, normalizedTransportTime };
+  };
+
+  // Helper function to parse mortar mix ratio and get cement proportion
+  const getMortarMixRatioProportion = (mixRatio: string | undefined = '1:4'): { cementProportion: number; sandProportion: number } => {
+    const ratio = mixRatio || '1:4';
+    const [cementPart, sandPart] = ratio.split(':').map(Number);
+    const totalParts = cementPart + sandPart;
+    const cementProportion = cementPart / totalParts;
+    const sandProportion = sandPart / totalParts;
+    return { cementProportion, sandProportion };
   };
 
   // Define loading sand time estimates (same as preparation digger estimates)
@@ -553,10 +564,11 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       // Calculate mortar needed (area × mortar thickness)
       const mortarVolumeM3 = areaNum * mortarThicknessM;
       
-      // Break down mortar into cement and sand
-      // Standard mix ratio is 1:4 (cement:sand) by volume, but with extra materials
-      const cementVolume = mortarVolumeM3 * 0.2 * 1.3; // 1/5 of total volume + 30% extra cement
-      const sandVolume = mortarVolumeM3 * 0.8 * 1.5; // 4/5 of total volume + 50% extra sand
+      // Break down mortar into cement and sand using configurable mix ratio
+      const { cementProportion, sandProportion } = getMortarMixRatioProportion(materialUsageConfig?.[0]?.slab_mortar_mix_ratio);
+      
+      const cementVolume = mortarVolumeM3 * cementProportion * 1.3; // configured proportion + 30% extra cement
+      const sandVolume = mortarVolumeM3 * sandProportion * 1.5; // configured proportion + 50% extra sand
       // Convert sand volume to tonnes (approximately 1.6 tonnes per cubic meter)
       const sandTonnes = sandVolume * 1.6;
       
