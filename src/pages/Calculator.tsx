@@ -214,15 +214,15 @@ const CalculatorPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full w-full">
+    <div className="h-screen w-full overflow-hidden flex flex-col">
       <BackButton />
-      <div className="flex items-center mb-8">
+      <div className="flex items-center px-6 py-4">
         <CalculatorIcon className="w-8 h-8 text-gray-600 mr-3" />
         <h1 className="text-3xl font-bold text-gray-900">Construction Calculator</h1>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-6 h-full">
-        <div className="md:w-64 flex-shrink-0 space-y-4 md:sticky md:top-4 md:self-start md:max-h-[calc(100vh-100px)] md:overflow-y-auto">
+      <div className="flex flex-col md:flex-row gap-6 flex-1 overflow-hidden px-6">
+        <div className="md:w-64 flex-shrink-0 space-y-4 md:sticky md:top-4 md:self-start md:max-h-[calc(100vh-120px)] md:overflow-y-auto pr-2">
           {calculatorButtons.map((button) => (
             <div key={button.type} className="space-y-2">
               <button
