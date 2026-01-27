@@ -24,8 +24,7 @@ const calculators = [
   { id: 'wall', name: 'Wall Calculator', defaultSandName: 'Building Sand' },
   { id: 'slab', name: 'Slab Calculator', defaultSandName: 'Sharp Sand' },
   { id: 'artificial_grass', name: 'Artificial Grass Calculator', defaultSandName: 'Granite Sand' },
-  { id: 'paving', name: 'Paving Calculator', defaultSandName: 'Sharp Sand' },
-  { id: 'sleeper_wall', name: 'Sleeper Wall Calculator', defaultSandName: null }
+  { id: 'paving', name: 'Paving Calculator', defaultSandName: 'Sharp Sand' }
 ];
 
 const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
