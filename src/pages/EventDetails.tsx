@@ -2019,8 +2019,8 @@ const EventDetails = () => {
       {/* Add Equipment to Event Modal */}
       {showAddEquipmentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-96 flex flex-col">
-            <div className="flex justify-between items-center p-6 border-b">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+            <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">Add Equipment to Event</h3>
               <button
                 onClick={() => {
@@ -2035,66 +2035,78 @@ const EventDetails = () => {
             </div>
 
             {equipmentAddError && (
-              <div className="mx-6 mt-4 p-3 bg-red-50 text-red-700 rounded-md flex items-center">
+              <div className="p-3 bg-red-50 text-red-700 rounded-md flex items-center">
                 <AlertCircle className="w-5 h-5 mr-2" />
                 {equipmentAddError}
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto p-6">
-              {isAllEquipmentLoading ? (
-                <p className="text-center py-4">Loading equipment...</p>
-              ) : allEquipment.length === 0 ? (
-                <p className="text-center py-4">No equipment available</p>
-              ) : (
-                <div className="space-y-3">
-                  {allEquipment.map((equip: any) => {
-                    const availableQuantity = equip.quantity - equip.in_use_quantity;
-                    const isSelected = selectedEquipmentToAdd?.id === equip.id;
-                    
-                    return (
-                      <div
-                        key={equip.id}
-                        onClick={() => setSelectedEquipmentToAdd(equip)}
-                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                          isSelected
-                            ? 'border-blue-600 bg-blue-50'
-                            : 'border-gray-300 hover:border-gray-400'
-                        } ${availableQuantity === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <div className="flex justify-between items-start">
-                          <div className="flex-1">
-                            <h4 className="font-medium text-gray-900">{equip.name}</h4>
-                            {equip.description && (
-                              <p className="text-sm text-gray-600 mt-1">{equip.description}</p>
-                            )}
-                            <div className="text-sm text-gray-600 mt-2 space-y-1">
-                              <p>Type: <span className="capitalize font-medium">{equip.type}</span></p>
-                              <p>Available: <span className="font-medium text-green-600">{availableQuantity} / {equip.quantity}</span></p>
-                            </div>
-                          </div>
-                          {isSelected && availableQuantity > 0 && (
-                            <div className="ml-4">
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Quantity:</label>
-                              <input
-                                type="number"
-                                min="1"
-                                max={availableQuantity}
-                                value={equipmentQuantity}
-                                onChange={(e) => setEquipmentQuantity(Math.min(Math.max(1, parseInt(e.target.value) || 1), availableQuantity))}
-                                className="w-16 px-2 py-1 border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Equipment</label>
+              <select
+                value={selectedEquipmentToAdd?.id || ''}
+                onChange={(e) => {
+                  const equip = allEquipment.find(eq => eq.id === e.target.value);
+                  setSelectedEquipmentToAdd(equip || null);
+                  setEquipmentQuantity(1);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+              >
+                <option value="">Select Equipment</option>
+                {allEquipment.map((equip: any) => {
+                  const availableQuantity = equip.quantity - equip.in_use_quantity;
+                  return (
+                    <option key={equip.id} value={equip.id} disabled={availableQuantity === 0}>
+                      {equip.name}
+                      {availableQuantity > 0 ? ` (${availableQuantity} available)` : ' (not available)'}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
 
-            <div className="flex justify-end space-x-3 p-6 border-t">
+            {selectedEquipmentToAdd && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity}
+                    value={equipmentQuantity}
+                    onChange={(e) => setEquipmentQuantity(Math.min(Math.max(1, parseInt(e.target.value) || 1), selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+                  />
+                  <p className="mt-1 text-sm text-gray-600">
+                    Available: {selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity} of {selectedEquipmentToAdd.quantity}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                  <input
+                    type="date"
+                    value={event?.start_date ? event.start_date.split('T')[0] : ''}
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Event start date (automatic)</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                  <input
+                    type="date"
+                    value={event?.end_date ? event.end_date.split('T')[0] : ''}
+                    disabled
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Event end date (automatic)</p>
+                </div>
+              </>
+            )}
+
+            <div className="flex justify-end space-x-3 pt-4">
               <button
                 onClick={() => {
                   setShowAddEquipmentModal(false);
