@@ -330,6 +330,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
               <p className="text-center text-gray-500 py-4 text-sm">No tasks found</p>
             )}
           </div>
+          </div>
         </div>
       </div>
     </div>
