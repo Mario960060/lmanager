@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { format, addDays, parseISO, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
-import { Calendar as CalendarIcon, Clock, Package, AlertCircle, ChevronDown, ChevronUp, Wrench } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Package, AlertCircle, ChevronDown, ChevronUp, Wrench, Plus } from 'lucide-react';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -12,6 +12,8 @@ const Dashboard = () => {
   const today = new Date();
   const tomorrow = addDays(today, 1);
   const [expandedSections, setExpandedSections] = useState<Record<string, Record<string, boolean>>>({});
+  const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
+  const [materialDate, setMaterialDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
 
   // Fetch events for today and tomorrow
   const { data: events = [] } = useQuery({
@@ -433,15 +435,23 @@ const Dashboard = () => {
 
   return (
     <div className="container mx-auto p-6">
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-8 flex items-center justify-between md:flex-row flex-col">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
         <button
-          className="ml-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="md:ml-4 md:px-4 md:py-2 md:flex hidden bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           onClick={() => navigate('/user-hours')}
         >
           Add Hours Progress
         </button>
       </div>
+
+      {/* Mobile Button */}
+      <button
+        className="md:hidden w-full mb-6 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        onClick={() => navigate('/user-hours')}
+      >
+        Add Hours Progress
+      </button>
       
       <div className="grid md:grid-cols-2 gap-6">
         <DayView 
