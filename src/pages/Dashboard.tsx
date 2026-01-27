@@ -122,6 +122,32 @@ const Dashboard = () => {
     enabled: !!companyId
   });
 
+  // Fetch day notes
+  const { data: dayNotes = [] } = useQuery({
+    queryKey: ['dashboard_day_notes', companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('day_notes')
+        .select(`
+          id,
+          event_id,
+          content,
+          date,
+          created_at,
+          user_id,
+          events (id, title),
+          profiles (id, full_name)
+        `)
+        .eq('company_id', companyId)
+        .in('date', [format(today, 'yyyy-MM-dd'), format(tomorrow, 'yyyy-MM-dd')])
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!companyId
+  });
+
   // Fetch tasks for the events
   const { data: tasks = [] } = useQuery({
     queryKey: ['dashboard_tasks', events.map(e => e.id), companyId],
@@ -162,6 +188,10 @@ const Dashboard = () => {
 
     const dayEquipment = calendarEquipment.filter(e => 
       format(parseISO(e.date), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
+    );
+
+    const dayNotesForDate = dayNotes.filter(n => 
+      n.date === format(date, 'yyyy-MM-dd')
     );
 
     // Group materials by project
@@ -372,6 +402,30 @@ const Dashboard = () => {
               </div>
             )}
           </div>
+
+          {/* Day Notes Section */}
+          {dayNotesForDate.length > 0 && (
+            <div className="mt-6 pt-6 border-t">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Day Notes</h3>
+              <div className="space-y-3">
+                {dayNotesForDate.map(note => (
+                  <div key={note.id} className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-blue-600">
+                          {note.events?.title || 'Unknown Event'}
+                        </p>
+                        <p className="text-gray-900 mt-2">{note.content}</p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          By {note.profiles?.full_name} • {format(new Date(note.created_at), 'MMM d, h:mm a')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
