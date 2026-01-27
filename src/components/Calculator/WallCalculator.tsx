@@ -241,6 +241,25 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     enabled: !!companyId
   });
 
+  // Fetch task template for foundation excavation
+  const { data: foundationExcavationTask } = useQuery({
+    queryKey: ['foundation_excavation_task', companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('event_tasks_with_dynamic_estimates')
+        .select('id, name, unit, estimated_hours')
+        .eq('company_id', companyId)
+        .eq('name', 'foundation excavation')
+        .single();
+      if (error) {
+        console.error('Error fetching foundation excavation task:', error);
+        throw error;
+      }
+      return data;
+    },
+    enabled: !!companyId
+  });
+
   // Fetch material usage configuration for Wall Calculator
   const { data: materialUsageConfig } = useQuery<MaterialUsageConfig[]>({
     queryKey: ['materialUsageConfig', 'wall', type, companyId],
@@ -344,7 +363,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
   };
 
   // Helper function to calculate foundation results
-  const calculateFoundationResults = () => {
+  const calculateFoundationResults = (foundationExcavationTaskData?: any) => {
     if (!includeFoundation) return null;
     
     const lengthNum = parseFloat(foundationLength) || 0;
@@ -399,7 +418,8 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     const breakdown = [
       {
         task: 'Foundation Excavation',
-        hours: excavationHours
+        hours: excavationHours,
+        event_task_id: foundationExcavationTaskData?.id || null
       }
     ];
 
@@ -874,7 +894,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
 
     // Add foundation materials if included
     if (includeFoundation) {
-      const foundationData = calculateFoundationResults();
+      const foundationData = calculateFoundationResults(foundationExcavationTask);
       if (foundationData) {
         // Add foundation materials to the list
         materials.push(...foundationData.materials);
