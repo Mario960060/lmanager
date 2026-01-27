@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
-import { Package, Plus, Pencil, X, Search } from 'lucide-react';
+import { Package, Plus, Pencil, X, Search, Trash2 } from 'lucide-react';
 import { useDebounce } from '../../../hooks/useDebounce';
 
 interface Material {
@@ -20,12 +20,14 @@ interface SetupMaterialsProps {
 
 const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
+  const isAdmin = profile?.role === 'Admin' || profile?.role === 'boss';
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [materialToDelete, setMaterialToDelete] = useState<Material | null>(null);
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 300);
@@ -96,6 +98,23 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
       queryClient.invalidateQueries({ queryKey: ['materials', debouncedSearch, companyId] });
       setShowEditModal(false);
       setSelectedMaterial(null);
+    }
+  });
+
+  // Delete material mutation (admin only)
+  const deleteMaterialMutation = useMutation({
+    mutationFn: async (material: Material) => {
+      if (!isAdmin) throw new Error('Only admin can delete materials');
+      const { error } = await supabase
+        .from('materials')
+        .delete()
+        .eq('id', material.id)
+        .eq('company_id', companyId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['materials', debouncedSearch, companyId] });
+      setMaterialToDelete(null);
     }
   });
 
@@ -194,15 +213,27 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
                 <td className="px-6 py-4 whitespace-nowrap">{material.unit}</td>
                 <td className="px-6 py-4 whitespace-nowrap">{formatPrice(material.price)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-right">
-                  <button
-                    onClick={() => {
-                      setSelectedMaterial(material);
-                      setShowEditModal(true);
-                    }}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    <Pencil className="w-5 h-5" />
-                  </button>
+                  <div className="flex justify-end gap-1">
+                    <button
+                      onClick={() => {
+                        setSelectedMaterial(material);
+                        setShowEditModal(true);
+                      }}
+                      className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg"
+                      aria-label="Edit"
+                    >
+                      <Pencil className="w-5 h-5" />
+                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => setMaterialToDelete(material)}
+                        className="p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg"
+                        aria-label="Delete"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -210,7 +241,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
         </table>
       </div>
 
-      {/* Materials List - Mobile: tabelka name / unit / price / edit */}
+      {/* Materials List - Mobile: tabelka name / unit / price / edit (+ delete gdy admin) */}
       <div className="md:hidden overflow-x-auto -mx-2 px-2">
         {materials.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
@@ -218,7 +249,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
           </div>
         ) : (
           <div className="min-w-[280px] border border-gray-200 rounded-lg overflow-hidden">
-            <div className="grid grid-cols-[minmax(0,1fr)_60px_56px_44px] gap-2 py-2 px-3 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <div className={`grid gap-2 py-2 px-3 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider ${isAdmin ? 'grid-cols-[minmax(0,1fr)_60px_56px_72px]' : 'grid-cols-[minmax(0,1fr)_60px_56px_44px]'}`}>
               <div className="truncate">Name</div>
               <div>Unit</div>
               <div className="text-right">Price</div>
@@ -227,14 +258,14 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
             {materials.map((material) => (
               <div
                 key={material.id}
-                className="grid grid-cols-[minmax(0,1fr)_60px_56px_44px] gap-2 py-2.5 px-3 items-center border-b border-gray-100 last:border-0 text-sm"
+                className={`grid gap-2 py-2.5 px-3 items-center border-b border-gray-100 last:border-0 text-sm ${isAdmin ? 'grid-cols-[minmax(0,1fr)_60px_56px_72px]' : 'grid-cols-[minmax(0,1fr)_60px_56px_44px]'}`}
               >
                 <div className="min-w-0 truncate font-medium text-gray-900" title={material.name}>
                   {material.name}
                 </div>
                 <div className="text-gray-600 truncate">{material.unit}</div>
                 <div className="text-gray-900 text-right">{formatPrice(material.price)}</div>
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-0.5">
                   <button
                     onClick={() => {
                       setSelectedMaterial(material);
@@ -245,6 +276,15 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setMaterialToDelete(material)}
+                      className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
+                      aria-label="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -397,6 +437,39 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
             >
               {editMaterialMutation.isPending ? 'Saving...' : 'Save Changes'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal (admin only) */}
+      {materialToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-sm w-full p-4 shadow-xl">
+            <p className="text-gray-900 font-medium mb-4">
+              Czy na pewno chcesz usunąć ten rekord?
+            </p>
+            {materialToDelete.name && (
+              <p className="text-sm text-gray-600 mb-4 truncate" title={materialToDelete.name}>
+                „{materialToDelete.name}”
+              </p>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setMaterialToDelete(null)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Nie
+              </button>
+              <button
+                onClick={() => {
+                  deleteMaterialMutation.mutate(materialToDelete);
+                }}
+                disabled={deleteMaterialMutation.isPending}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteMaterialMutation.isPending ? 'Usuwanie…' : 'Tak'}
+              </button>
+            </div>
           </div>
         </div>
       )}
