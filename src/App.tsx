@@ -56,7 +56,7 @@ function App() {
             <Route path="/project-management" element={<ProjectManagement />} />
             <Route path="/project-management/create" element={<ProjectCreating />} />
             <Route path="/project-performance" element={<ProjectPerformance />} />
-            <Route path="/setup-page" element={<SetupPage />} />
+            <Route path="/setup" element={<SetupPage />} />
             <Route path="/user-profile" element={<UserProfile />} />
             <Route path="/user-hours" element={<UserHoursPage />} />
           </Route>
