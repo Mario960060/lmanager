@@ -31,7 +31,7 @@ interface Material {
 interface MaterialUsageConfig {
   calculator_id: string;
   material_id: string;
-  slab_mortar_mix_ratio?: string;
+  company_id?: string;
 }
 
 interface DiggingEquipment {
@@ -235,8 +235,24 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     queryFn: async () => {
       const { data, error } = await supabase
         .from('material_usage_configs')
-        .select('calculator_id, material_id, slab_mortar_mix_ratio')
+        .select('calculator_id, material_id, company_id')
         .eq('calculator_id', 'slab')
+        .eq('company_id', companyId);
+
+      if (error) throw error;
+      return data as MaterialUsageConfig[];
+    },
+    enabled: !!companyId
+  });
+
+  // Fetch mortar mix ratio config for slab calculator
+  const { data: mortarMixRatioConfig } = useQuery<MaterialUsageConfig[]>({
+    queryKey: ['materialUsageConfig', 'slab_mortar_mix_ratio', companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('material_usage_configs')
+        .select('calculator_id, material_id, company_id')
+        .eq('calculator_id', 'slab_mortar_mix_ratio')
         .eq('company_id', companyId);
 
       if (error) throw error;
@@ -565,7 +581,9 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       const mortarVolumeM3 = areaNum * mortarThicknessM;
       
       // Break down mortar into cement and sand using configurable mix ratio
-      const { cementProportion, sandProportion } = getMortarMixRatioProportion(materialUsageConfig?.[0]?.slab_mortar_mix_ratio);
+      // Mortar mix ratio is stored in material_id when calculator_id is 'slab_mortar_mix_ratio'
+      const mortarMixRatio = mortarMixRatioConfig?.[0]?.material_id || '1:4';
+      const { cementProportion, sandProportion } = getMortarMixRatioProportion(mortarMixRatio);
       
       const cementVolume = mortarVolumeM3 * cementProportion * 1.3; // configured proportion + 30% extra cement
       const sandVolume = mortarVolumeM3 * sandProportion * 1.5; // configured proportion + 50% extra sand
