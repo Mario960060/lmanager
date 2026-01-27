@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
-import { Package, Plus, Pencil, X, Search } from 'lucide-react';
+import { Package, Plus, Pencil, X, Search, Trash2 } from 'lucide-react';
 import { useDebounce } from '../../../hooks/useDebounce';
 
 interface Material {
@@ -26,6 +26,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 300);
@@ -95,6 +96,24 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['materials', debouncedSearch, companyId] });
       setShowEditModal(false);
+      setSelectedMaterial(null);
+    }
+  });
+
+  // Delete material mutation
+  const deleteMaterialMutation = useMutation({
+    mutationFn: async (material: Material) => {
+      const { error } = await supabase
+        .from('materials')
+        .delete()
+        .eq('id', material.id)
+        .eq('company_id', companyId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['materials', debouncedSearch, companyId] });
+      setShowEditModal(false);
+      setShowDeleteConfirm(false);
       setSelectedMaterial(null);
     }
   });
@@ -218,22 +237,22 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
           </div>
         ) : (
           <div className="min-w-[280px] border border-gray-200 rounded-lg overflow-hidden">
-            <div className="grid grid-cols-[minmax(0,1fr)_60px_56px_44px] gap-2 py-2 px-3 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <div className="grid grid-cols-[minmax(100px,1fr)_38px_48px_44px] gap-2 py-2 px-3 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
               <div className="truncate">Name</div>
-              <div>Unit</div>
-              <div className="text-right">Price</div>
+              <div className="text-center text-xs">Unit</div>
+              <div className="text-right text-xs">Price</div>
               <div className="w-11" />
             </div>
             {materials.map((material) => (
               <div
                 key={material.id}
-                className="grid grid-cols-[minmax(0,1fr)_60px_56px_44px] gap-2 py-2.5 px-3 items-center border-b border-gray-100 last:border-0 text-sm"
+                className="grid grid-cols-[minmax(100px,1fr)_38px_48px_44px] gap-2 py-2.5 px-3 items-center border-b border-gray-100 last:border-0 text-sm"
               >
                 <div className="min-w-0 truncate font-medium text-gray-900" title={material.name}>
                   {material.name}
                 </div>
-                <div className="text-gray-600 truncate">{material.unit}</div>
-                <div className="text-gray-900 text-right">{formatPrice(material.price)}</div>
+                <div className="text-gray-600 text-xs text-center truncate">{material.unit}</div>
+                <div className="text-gray-900 text-xs text-right">{formatPrice(material.price)}</div>
                 <div className="flex justify-end">
                   <button
                     onClick={() => {
@@ -390,13 +409,57 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
               </div>
             </div>
 
-            <button
-              onClick={handleEdit}
-              disabled={!selectedMaterial.name || !selectedMaterial.unit || editMaterialMutation.isPending}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-            >
-              {editMaterialMutation.isPending ? 'Saving...' : 'Save Changes'}
-            </button>
+            <div className="grid grid-cols-[2fr_1fr] gap-2">
+              <button
+                onClick={handleEdit}
+                disabled={!selectedMaterial.name || !selectedMaterial.unit || editMaterialMutation.isPending}
+                className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {editMaterialMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
+                title="Delete material"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Material Confirmation Modal */}
+      {showDeleteConfirm && selectedMaterial && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-sm w-full p-4 shadow-xl">
+            <p className="text-gray-900 font-medium mb-3">
+              Czy na pewno chcesz usunąć ten rekord?
+            </p>
+            {selectedMaterial.name && (
+              <p className="text-sm text-gray-600 mb-4 truncate" title={selectedMaterial.name}>
+                „{selectedMaterial.name}"
+              </p>
+            )}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Nie
+              </button>
+              <button
+                onClick={() => {
+                  if (selectedMaterial) {
+                    deleteMaterialMutation.mutate(selectedMaterial);
+                  }
+                }}
+                disabled={deleteMaterialMutation.isPending}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteMaterialMutation.isPending ? 'Usuwanie…' : 'Tak'}
+              </button>
+            </div>
           </div>
         </div>
       )}
