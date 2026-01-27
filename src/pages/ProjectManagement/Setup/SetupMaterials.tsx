@@ -15,9 +15,10 @@ interface Material {
 
 interface SetupMaterialsProps {
   onClose: () => void;
+  wizardMode?: boolean;
 }
 
-const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
+const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = false }) => {
   const queryClient = useQueryClient();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [materialSearch, setMaterialSearch] = useState('');
