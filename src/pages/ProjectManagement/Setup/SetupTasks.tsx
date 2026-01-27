@@ -153,33 +153,34 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
 
         {/* Content */}
         <div className="p-6 overflow-y-auto">
-          {/* Updated Add Task Form with vertical layout */}
+          {/* Updated Add Task Form with optimized layout */}
           <form onSubmit={handleAddTask} className="mb-4 space-y-3">
-            {/* First line - Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Task Name</label>
-              <input
-                type="text"
-                placeholder="Enter task name"
-                value={newTask.name}
-                onChange={(e) => setNewTask({...newTask, name: e.target.value})}
-                className="w-full p-2 border rounded text-sm"
-              />
+            {/* First line - Name and Description side by side */}
+            <div className="grid grid-cols-3 gap-3 items-start">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Task Name</label>
+                <input
+                  type="text"
+                  placeholder="Enter task name"
+                  value={newTask.name}
+                  onChange={(e) => setNewTask({...newTask, name: e.target.value})}
+                  className="w-full p-2 border rounded text-sm"
+                />
+              </div>
+              
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  placeholder="Enter task description"
+                  value={newTask.description}
+                  onChange={(e) => setNewTask({...newTask, description: e.target.value})}
+                  className="w-full p-2 border rounded text-sm resize-none"
+                  rows={3}
+                />
+              </div>
             </div>
             
-            {/* Second line - Description */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-              <textarea
-                placeholder="Enter task description"
-                value={newTask.description}
-                onChange={(e) => setNewTask({...newTask, description: e.target.value})}
-                className="w-full p-2 border rounded text-sm"
-                rows={2}
-              />
-            </div>
-            
-            {/* Third line - Unit and Estimated Hours */}
+            {/* Second line - Unit and Estimated Hours */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
