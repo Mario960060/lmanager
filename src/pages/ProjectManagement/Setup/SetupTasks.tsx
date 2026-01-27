@@ -132,8 +132,6 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
-        {/* Content - scrollable container with everything */}
-        <div className="overflow-y-auto flex flex-col flex-1">
         {/* Header and Content together - scrollable as one */}
         <div className="overflow-y-auto flex flex-col flex-1">
           {/* Header */}
