@@ -426,7 +426,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
 
             <div className="space-y-4">
               {notes.map(note => (
-                <div key={note.id} className="bg-gray-50 p-4 rounded-lg">
+                <div key={note.id} className="bg-gray-50 md:bg-gray-50 bg-red-50 p-4 rounded-lg">
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-sm text-gray-600">
