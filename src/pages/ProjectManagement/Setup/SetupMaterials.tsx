@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
 import { Package, Plus, Pencil, X, Search } from 'lucide-react';
-import BackButton from '../../../components/BackButton';
 import { useDebounce } from '../../../hooks/useDebounce';
 
 interface Material {
@@ -15,7 +14,11 @@ interface Material {
   created_at: string;
 }
 
-const SetupMaterials = () => {
+interface SetupMaterialsProps {
+  onClose: () => void;
+}
+
+const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
@@ -120,29 +123,28 @@ const SetupMaterials = () => {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <BackButton />
-      <div className="flex justify-between items-center md:flex-row flex-col">
-        <h1 className="text-3xl font-bold text-gray-900">Materials</h1>
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b p-6 flex justify-between items-center">
+          <h1 className="text-3xl font-bold text-gray-900">Materials</h1>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
         <button
           onClick={() => setShowAddModal(true)}
           className="md:inline-flex hidden items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-5 h-5 mr-2" />
           Add Material
-        </button>
-      </div>
+        </div>
 
-      {/* Mobile Button */}
-      <button
-        onClick={() => setShowAddModal(true)}
-        className="md:hidden w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-      >
-        <Plus className="w-5 h-5 mr-2" />
-        Add Material
-      </button>
-
-      {/* Search Bar */}
+        {/* Search Bar */}
       <div className="relative">
         <input
           ref={searchInputRef}
@@ -390,6 +392,8 @@ const SetupMaterials = () => {
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 };
