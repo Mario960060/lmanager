@@ -5,8 +5,6 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
 import Tasks from './pages/Tasks';
-import Materials from './pages/Materials';
-import Equipment from './pages/Equipment';
 import Finance from './pages/Finance';
 import Calculator from './pages/Calculator';
 import Calendar from './pages/Calendar';
@@ -48,8 +46,6 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/tasks" element={<Tasks />} />
-            <Route path="/materials" element={<Materials />} />
-            <Route path="/equipment" element={<Equipment />} />
             <Route path="/finance" element={<Finance />} />
             <Route path="/calculator" element={<Calculator />} />
             <Route path="/calendar" element={<Calendar />} />
