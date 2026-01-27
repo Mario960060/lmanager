@@ -71,6 +71,24 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
     enabled: !!companyId
   });
 
+  // Fetch existing mortar mix ratio
+  const { data: mortarMixRatioData } = useQuery<{ id: string; mortar_mix_ratio: string } | null>({
+    queryKey: ['mortarMixRatio', companyId],
+    queryFn: async () => {
+      if (!companyId) return null;
+      
+      const { data, error } = await supabase
+        .from('slab_mortar_mix_ratios')
+        .select('id, mortar_mix_ratio')
+        .eq('company_id', companyId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "not found"
+      return data;
+    },
+    enabled: !!companyId
+  });
+
   // Filter only sand materials and map name to id
   const sandMaterialOptions = useMemo(() => materials.filter((material: Material) => 
     material.name.toLowerCase().includes('sand')
@@ -95,16 +113,14 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
       
       setSandSelections(initialSelections);
       
-      // Load mortar mix ratio for slab calculator if it exists
-      // Mortar mix ratio is stored as material_id when calculator_id is 'slab_mortar_mix_ratio'
-      const mortarConfig = existingConfigs.find(config => config.calculator_id === 'slab_mortar_mix_ratio');
-      if (mortarConfig?.material_id) {
-        setMortarMixRatioSelection(mortarConfig.material_id);
+      // Load mortar mix ratio from dedicated table
+      if (mortarMixRatioData?.mortar_mix_ratio) {
+        setMortarMixRatioSelection(mortarMixRatioData.mortar_mix_ratio);
       }
       
       setInitialLoad(false);
     }
-  }, [isLoadingMaterials, isLoadingConfigs, companyId, initialLoad, sandMaterialOptions.length, existingConfigs.length]);
+  }, [isLoadingMaterials, isLoadingConfigs, companyId, initialLoad, sandMaterialOptions.length, existingConfigs.length, mortarMixRatioData]);
 
   const handleSandChange = (calculatorId: string, materialId: string) => {
     setSandSelections((prev: Record<string, string>) => ({
@@ -153,6 +169,46 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
     }
   });
 
+  const saveMortarMixRatioMutation = useMutation<void, Error, string>({
+    mutationFn: async (ratio: string) => {
+      if (!companyId) {
+        throw new Error('Company ID is required');
+      }
+
+      // Try to update existing record, if not exists insert new
+      const { data: existingRatio } = await supabase
+        .from('slab_mortar_mix_ratios')
+        .select('id')
+        .eq('company_id', companyId)
+        .single();
+
+      if (existingRatio) {
+        // Update existing
+        const { error } = await supabase
+          .from('slab_mortar_mix_ratios')
+          .update({ mortar_mix_ratio: ratio })
+          .eq('company_id', companyId);
+
+        if (error) throw error;
+      } else {
+        // Insert new
+        const { error } = await supabase
+          .from('slab_mortar_mix_ratios')
+          .insert([{ company_id: companyId, mortar_mix_ratio: ratio }]);
+
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      console.log('Mortar mix ratio saved successfully!');
+      // Invalidate the query to refetch
+      queryClient.invalidateQueries({ queryKey: ['mortarMixRatio', companyId] });
+    },
+    onError: (error: Error) => {
+      console.error('Failed to save mortar mix ratio:', error);
+    }
+  });
+
   const handleSave = () => {
     // Prepare the data to be saved (array of { calculator_id, material_id })
     const configToSave: (MaterialUsageConfig | Omit<MaterialUsageConfig, 'company_id'> & { company_id?: string })[] = [];
@@ -166,14 +222,13 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
       } as any);
     });
     
-    // Add mortar mix ratio as a separate config record
-    configToSave.push({
-      calculator_id: 'slab_mortar_mix_ratio',
-      material_id: mortarMixRatioSelection, // Mortar ratio is stored in material_id
-      company_id: companyId || undefined
-    } as any);
-    
-    saveConfigMutation.mutate(configToSave as MaterialUsageConfig[]);
+    // Save material configs first
+    saveConfigMutation.mutate(configToSave as MaterialUsageConfig[], {
+      onSuccess: () => {
+        // Then save mortar mix ratio to dedicated table
+        saveMortarMixRatioMutation.mutate(mortarMixRatioSelection);
+      }
+    });
   };
 
   if (!companyId) {
