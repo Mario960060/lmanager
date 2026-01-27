@@ -156,7 +156,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
           {/* Updated Add Task Form with Name and Description side by side */}
           <form onSubmit={handleAddTask} className="mb-4">
             {/* Name and Description in one row */}
-            <div className="grid gap-3 items-start mb-3" style={{gridTemplateColumns: '33% 33% 16.5% 16.5%'}}>
+            <div className="grid items-start mb-3" style={{gridTemplateColumns: '33% 33% 16.5% 16.5%', gap: '0.75rem'}}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Task Name</label>
                 <input
@@ -235,17 +235,17 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
               </colgroup>
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Est. Hours</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
+                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Est. Hours</th>
+                  <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredTasks.map(task => (
                   <tr key={task.id}>
-                    <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="text-sm font-medium text-gray-900">
                       {editingTaskId === task.id ? (
                         <input
                           type="text"
