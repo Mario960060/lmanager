@@ -144,6 +144,15 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
           Add Material
         </button>
 
+        {/* Add Material Button - Mobile */}
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="md:hidden w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          <Plus className="w-5 h-5 mr-2" />
+          Add Material
+        </button>
+
         {/* Search Bar */}
       <div className="relative">
         <input
@@ -157,8 +166,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
         <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none" />
       </div>
 
-      {/* Materials List */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      {/* Materials List - Desktop */}
+      <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -199,6 +208,36 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Materials List - Mobile */}
+      <div className="md:hidden space-y-2">
+        {materials.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            No materials found.
+          </div>
+        ) : (
+          materials.map((material) => (
+            <div key={material.id} className="bg-white p-3 rounded-lg shadow">
+              <div className="flex justify-between items-start gap-2 mb-1">
+                <h3 className="font-semibold text-sm text-gray-900 flex-1 break-words">{material.name}</h3>
+                <button
+                  onClick={() => {
+                    setSelectedMaterial(material);
+                    setShowEditModal(true);
+                  }}
+                  className="text-blue-600 hover:text-blue-800 flex-shrink-0"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex justify-between text-xs text-gray-600 gap-2">
+                <span className="font-medium">{material.unit}</span>
+                <span>{formatPrice(material.price)}</span>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Add Material Modal */}
