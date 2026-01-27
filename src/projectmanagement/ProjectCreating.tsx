@@ -1290,6 +1290,7 @@ const ProjectCreating = () => {
             console.log('Skipping tape 1 preparation task with zero hours');
           }
         }
+      }
 
       // Process minor tasks
       for (const minorTask of minorTasks) {
