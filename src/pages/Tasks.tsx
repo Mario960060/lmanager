@@ -213,15 +213,23 @@ const TaskRequirements = () => {
   return (
     <div className="container mx-auto p-6 space-y-6">
       <BackButton />
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center md:flex-row flex-col">
         <h1 className="text-3xl font-bold text-gray-900">Task Requirements</h1>
         <button
           onClick={() => setShowAddModal(true)}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          className="md:flex hidden bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
         >
           Add Task Requirements
         </button>
       </div>
+
+      {/* Mobile Button */}
+      <button
+        onClick={() => setShowAddModal(true)}
+        className="md:hidden w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+      >
+        Add Task Requirements
+      </button>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {tasks.map((task) => (
