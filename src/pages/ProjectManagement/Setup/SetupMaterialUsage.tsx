@@ -78,7 +78,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
 
   // Initialize sand selections with existing configs or defaults
   useEffect(() => {
-    if (!isLoadingMaterials && !isLoadingConfigs && companyId) {
+    if (!isLoadingMaterials && !isLoadingConfigs && companyId && initialLoad && sandMaterialOptions.length > 0) {
       const initialSelections: Record<string, string> = {};
       
       calculators.forEach(calc => {
@@ -96,7 +96,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
       setSandSelections(initialSelections);
       setInitialLoad(false);
     }
-  }, [isLoadingMaterials, isLoadingConfigs, sandMaterialOptions, existingConfigs, companyId]);
+  }, [isLoadingMaterials, isLoadingConfigs, companyId, initialLoad, sandMaterialOptions.length, existingConfigs.length]);
 
   const handleSandChange = (calculatorId: string, materialId: string) => {
     setSandSelections((prev: Record<string, string>) => ({
