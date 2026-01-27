@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../lib/store';
-import { Clock, BarChart2, Users, UserMinus, Settings, Trash2, FolderPlus } from 'lucide-react';
+import { Clock, BarChart2, Users, UserMinus, Trash2, FolderPlus } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import WeeklyWorkerHoursModal from '../components/ProjectManagement/WeeklyWorkerHoursModal';
 import UserAuthorizationModal from '../components/ProjectManagement/UserAuthorizationModal';
@@ -75,23 +75,6 @@ const ProjectManagement = () => {
             className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
           >
             View Performance
-          </button>
-        </div>
-
-        {/* Setup Page */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <Settings className="w-6 h-6 text-orange-600 mr-3" />
-            <h2 className="text-xl font-semibold">Setup Page</h2>
-          </div>
-          <p className="text-gray-600 mb-4">
-            Configure materials, equipment, and tasks for your company.
-          </p>
-          <button
-            onClick={() => navigate('/setup-page')}
-            className="w-full bg-orange-600 text-white py-2 px-4 rounded-lg hover:bg-orange-700 transition-colors"
-          >
-            Setup Company
           </button>
         </div>
 
