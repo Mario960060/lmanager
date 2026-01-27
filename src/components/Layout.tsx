@@ -75,7 +75,7 @@ const Layout = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <div className="h-screen bg-gray-100 dark:bg-gray-900 flex flex-col"
       {/* Mobile Header */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-50 h-16 bg-white dark:bg-gray-800 shadow-md flex items-center justify-between px-4">
         <button
@@ -194,8 +194,8 @@ const Layout = () => {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 min-w-0 bg-gray-100 dark:bg-gray-900">
-          <div className={`px-4 py-6 mt-16 lg:mt-0 lg:p-6 ${location.pathname === '/calculator' ? 'h-full' : ''}`}>
+        <main className="flex-1 min-w-0 bg-gray-100 dark:bg-gray-900 flex flex-col overflow-hidden">
+          <div className={`px-4 py-6 mt-16 lg:mt-0 lg:p-6 ${location.pathname === '/calculator' ? 'h-full overflow-hidden' : ''} flex-1 overflow-y-auto`}>
             <Outlet />
           </div>
         </main>
