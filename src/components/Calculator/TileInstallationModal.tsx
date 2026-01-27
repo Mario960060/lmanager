@@ -793,7 +793,6 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
                 </div>
                 <div>
                   <span className="text-gray-800">{carrier.size}t Carrier</span>
-                  <span className="text-sm text-gray-600 ml-2">({carrier.speed} m/h)</span>
                 </div>
               </div>
             ))}
