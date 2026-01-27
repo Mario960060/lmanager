@@ -41,6 +41,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
         .from('invoices')
         .select('*')
         .eq('project_id', selectedProjectId)
+        .eq('company_id', companyId)
         .single()
         .then(async ({ data }) => {
           if (data) {
@@ -525,7 +526,8 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
     await supabase
       .from('invoices')
       .update({ additional_costs: JSON.stringify(additionalCosts) })
-      .eq('id', invoice.id);
+      .eq('id', invoice.id)
+      .eq('company_id', companyId);
   };
 
   useEffect(() => {
