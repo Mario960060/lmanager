@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Database } from '../lib/database.types';
 import { format, parseISO } from 'date-fns';
-import { CheckCircle2, Clock, Package, AlertCircle, Wrench, Pencil, ChevronDown, ChevronUp, Folder, FolderPlus, MoreHorizontal, Edit2, Trash2, Move, ArrowUp, Edit } from 'lucide-react';
+import { CheckCircle2, Clock, Package, AlertCircle, Wrench, Pencil, ChevronDown, ChevronUp, Folder, FolderPlus, MoreHorizontal, Edit2, Trash2, Move, ArrowUp, Edit, Plus, X } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import TaskProgressModal from '../components/TaskProgressModal';
 import MaterialProgressModal from '../components/MaterialProgressModal';
@@ -82,6 +82,10 @@ const EventDetails = () => {
     y: number;
   } | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<{[key: string]: boolean}>({});
+  const [showAddEquipmentModal, setShowAddEquipmentModal] = useState(false);
+  const [selectedEquipmentToAdd, setSelectedEquipmentToAdd] = useState<any | null>(null);
+  const [equipmentQuantity, setEquipmentQuantity] = useState(1);
+  const [equipmentAddError, setEquipmentAddError] = useState<string | null>(null);
 
   // Fetch event details
   const { data: event, isLoading: isEventLoading } = useQuery({
@@ -313,6 +317,22 @@ const EventDetails = () => {
     },
   });
 
+  // Fetch all equipment for adding to event
+  const { data: allEquipment = [], isLoading: isAllEquipmentLoading } = useQuery({
+    queryKey: ['all_equipment', companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('equipment')
+        .select('*')
+        .eq('company_id', companyId)
+        .order('name');
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!companyId && showAddEquipmentModal
+  });
+
   // Fetch task folders for this event
   const { data: folders = [], isLoading: isFoldersLoading } = useQuery({
     queryKey: ['task_folders', id, companyId],
@@ -422,6 +442,80 @@ const EventDetails = () => {
     onError: (error: Error) => {
       console.error('Failed to release equipment:', error);
       setEquipmentError(error.message);
+    }
+  });
+
+  // Mutation to add equipment to event (set to in_use)
+  const addEquipmentToEventMutation = useMutation({
+    mutationFn: async ({
+      equipmentId,
+      quantity
+    }: {
+      equipmentId: string;
+      quantity: number;
+    }) => {
+      if (!event) throw new Error('Event not found');
+      
+      // Check if there's enough available quantity
+      const { data: currentEquipment } = await supabase
+        .from('equipment')
+        .select('quantity, in_use_quantity')
+        .eq('id', equipmentId)
+        .eq('company_id', companyId)
+        .single();
+
+      if (!currentEquipment) throw new Error('Equipment not found');
+
+      const availableQuantity = currentEquipment.quantity - currentEquipment.in_use_quantity;
+      if (quantity > availableQuantity) {
+        throw new Error(`Not enough available units. Available: ${availableQuantity}`);
+      }
+
+      // Create equipment usage record with event dates
+      const { error: usageError } = await supabase
+        .from('equipment_usage')
+        .insert({
+          equipment_id: equipmentId,
+          event_id: event.id,
+          start_date: event.start_date,
+          end_date: event.end_date,
+          quantity: quantity,
+          is_returned: false,
+          company_id: companyId
+        });
+
+      if (usageError) throw usageError;
+      
+      // Calculate new in_use_quantity
+      const newInUseQuantity = currentEquipment.in_use_quantity + quantity;
+      
+      // If all quantities will be in use, set status to 'in_use', otherwise keep it as 'free_to_use'
+      const newStatus = newInUseQuantity >= currentEquipment.quantity ? 'in_use' : 'free_to_use';
+      
+      // Update in_use_quantity and status
+      const { error: updateError } = await supabase
+        .from('equipment')
+        .update({ 
+          in_use_quantity: newInUseQuantity,
+          status: newStatus
+        })
+        .eq('id', equipmentId)
+        .eq('company_id', companyId);
+        
+      if (updateError) throw updateError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event_equipment', id] });
+      queryClient.invalidateQueries({ queryKey: ['all_equipment', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['equipment'] });
+      setShowAddEquipmentModal(false);
+      setSelectedEquipmentToAdd(null);
+      setEquipmentQuantity(1);
+      setEquipmentAddError(null);
+    },
+    onError: (error: Error) => {
+      console.error('Failed to add equipment:', error);
+      setEquipmentAddError(error.message);
     }
   });
 
@@ -1851,6 +1945,13 @@ const EventDetails = () => {
                 {equipmentError}
               </div>
             )}
+            <button
+              onClick={() => setShowAddEquipmentModal(true)}
+              className="mb-4 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-5 h-5 mr-2" />
+              Add Equipment to Event
+            </button>
             <div className="space-y-4">
               {isEquipmentLoading ? (
                 <p className="text-center py-4">Loading equipment...</p>
@@ -1914,6 +2015,118 @@ const EventDetails = () => {
 
       {/* Additional Features Section */}
       <AdditionalFeatures eventId={id!} />
+
+      {/* Add Equipment to Event Modal */}
+      {showAddEquipmentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-96 flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b">
+              <h3 className="text-lg font-semibold">Add Equipment to Event</h3>
+              <button
+                onClick={() => {
+                  setShowAddEquipmentModal(false);
+                  setSelectedEquipmentToAdd(null);
+                  setEquipmentAddError(null);
+                }}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {equipmentAddError && (
+              <div className="mx-6 mt-4 p-3 bg-red-50 text-red-700 rounded-md flex items-center">
+                <AlertCircle className="w-5 h-5 mr-2" />
+                {equipmentAddError}
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {isAllEquipmentLoading ? (
+                <p className="text-center py-4">Loading equipment...</p>
+              ) : allEquipment.length === 0 ? (
+                <p className="text-center py-4">No equipment available</p>
+              ) : (
+                <div className="space-y-3">
+                  {allEquipment.map((equip: any) => {
+                    const availableQuantity = equip.quantity - equip.in_use_quantity;
+                    const isSelected = selectedEquipmentToAdd?.id === equip.id;
+                    
+                    return (
+                      <div
+                        key={equip.id}
+                        onClick={() => setSelectedEquipmentToAdd(equip)}
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-blue-600 bg-blue-50'
+                            : 'border-gray-300 hover:border-gray-400'
+                        } ${availableQuantity === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900">{equip.name}</h4>
+                            {equip.description && (
+                              <p className="text-sm text-gray-600 mt-1">{equip.description}</p>
+                            )}
+                            <div className="text-sm text-gray-600 mt-2 space-y-1">
+                              <p>Type: <span className="capitalize font-medium">{equip.type}</span></p>
+                              <p>Available: <span className="font-medium text-green-600">{availableQuantity} / {equip.quantity}</span></p>
+                            </div>
+                          </div>
+                          {isSelected && availableQuantity > 0 && (
+                            <div className="ml-4">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">Quantity:</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max={availableQuantity}
+                                value={equipmentQuantity}
+                                onChange={(e) => setEquipmentQuantity(Math.min(Math.max(1, parseInt(e.target.value) || 1), availableQuantity))}
+                                className="w-16 px-2 py-1 border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end space-x-3 p-6 border-t">
+              <button
+                onClick={() => {
+                  setShowAddEquipmentModal(false);
+                  setSelectedEquipmentToAdd(null);
+                  setEquipmentAddError(null);
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (selectedEquipmentToAdd) {
+                    addEquipmentToEventMutation.mutate({
+                      equipmentId: selectedEquipmentToAdd.id,
+                      quantity: equipmentQuantity
+                    });
+                  }
+                }}
+                disabled={
+                  !selectedEquipmentToAdd ||
+                  addEquipmentToEventMutation.isPending ||
+                  selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity === 0
+                }
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {addEquipmentToEventMutation.isPending ? 'Adding...' : 'Add Equipment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {showTaskProgressModal && selectedTask && (
