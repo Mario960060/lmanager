@@ -16,8 +16,9 @@ interface Material {
 
 interface MaterialUsageConfig {
   calculator_id: string;
-  material_id: string;
+  material_id?: string;
   company_id?: string;
+  slab_mortar_mix_ratio?: string;
 }
 
 const calculators = [
@@ -29,6 +30,7 @@ const calculators = [
 
 const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
   const [sandSelections, setSandSelections] = useState<Record<string, string>>({});
+  const [mortarMixRatioSelection, setMortarMixRatioSelection] = useState<string>('1:4');
   const [initialLoad, setInitialLoad] = useState(true);
   const companyId = useAuthStore(state => state.getCompanyId());
   const queryClient = useQueryClient();
@@ -61,7 +63,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
       
       const { data, error } = await supabase
         .from('material_usage_configs')
-        .select('calculator_id, material_id, company_id')
+        .select('calculator_id, material_id, company_id, slab_mortar_mix_ratio')
         .eq('company_id', companyId);
 
       if (error) throw error;
@@ -93,6 +95,13 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
       });
       
       setSandSelections(initialSelections);
+      
+      // Load mortar mix ratio for slab calculator if it exists
+      const slabConfig = existingConfigs.find(config => config.calculator_id === 'slab');
+      if (slabConfig?.slab_mortar_mix_ratio) {
+        setMortarMixRatioSelection(slabConfig.slab_mortar_mix_ratio);
+      }
+      
       setInitialLoad(false);
     }
   }, [isLoadingMaterials, isLoadingConfigs, companyId, initialLoad, sandMaterialOptions.length, existingConfigs.length]);
@@ -145,11 +154,12 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
   });
 
   const handleSave = () => {
-    // Prepare the data to be saved (array of { calculator_id, material_id })
+    // Prepare the data to be saved (array of { calculator_id, material_id, slab_mortar_mix_ratio })
     const configToSave: MaterialUsageConfig[] = Object.keys(sandSelections).map((calculatorId: string) => ({
       calculator_id: calculatorId,
       material_id: sandSelections[calculatorId],
-      company_id: companyId || undefined
+      company_id: companyId || undefined,
+      slab_mortar_mix_ratio: calculatorId === 'slab' ? mortarMixRatioSelection : undefined
     }));
     saveConfigMutation.mutate(configToSave);
   };
@@ -204,6 +214,34 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+
+          {/* Slab Mortar Mix Ratio Section */}
+          <div>
+            <h4 className="text-lg font-medium mb-3">Slab Mortar Mix Ratio Configuration</h4>
+            <p className="text-gray-600 mb-4">
+              Configure the cement to sand ratio for mortar in the Slab Calculator.
+            </p>
+            
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Mortar Mix Ratio (Cement:Sand)
+              </label>
+              <select
+                value={mortarMixRatioSelection}
+                onChange={(e: FormEvent<HTMLSelectElement>) => setMortarMixRatioSelection(e.currentTarget.value)}
+                className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="1:4">1:4 (Standard)</option>
+                <option value="1:5">1:5 (Weaker)</option>
+                <option value="1:6">1:6 (Weaker)</option>
+                <option value="1:7">1:7 (Weaker)</option>
+                <option value="1:8">1:8 (Weaker)</option>
+              </select>
+              <p className="text-sm text-gray-500 mt-2">
+                Current selection: {mortarMixRatioSelection}
+              </p>
             </div>
           </div>
         </div>
