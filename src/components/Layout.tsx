@@ -63,8 +63,6 @@ const Layout = () => {
     { name: 'Projects', href: '/projects', icon: FolderOpenDot },
     { name: 'Task Requirements', href: '/tasks', icon: CheckSquare },
     { name: 'Calendar', href: '/calendar', icon: Calendar },
-    { name: 'Materials', href: '/materials', icon: Package },
-    { name: 'Equipment', href: '/equipment', icon: Truck },
     { name: 'Calculator', href: '/calculator', icon: Calculator },
     ...(isAdmin ? [
       { name: 'Finance', href: '/finance', icon: DollarSign },
