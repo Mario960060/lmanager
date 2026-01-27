@@ -79,6 +79,25 @@
     }
   }
 
+  /* Date picker calendar icon styling */
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    filter: invert(0);
+  }
+
+  .dark input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+
+  /* Firefox date picker styling */
+  input[type="date"] {
+    color-scheme: light;
+  }
+
+  .dark input[type="date"] {
+    color-scheme: dark;
+  }
+
   /* Dark mode styles */
   .dark body {
     @apply bg-gray-900 text-gray-100;
