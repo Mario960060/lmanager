@@ -1389,6 +1389,17 @@ const ProjectCreating = () => {
         }
       }));
 
+      // Remove results from minor tasks - materials should only be in main_tasks or extra_materials
+      const invoiceMinorTasks = minorTasks.map(task => ({
+        template_id: task.template_id,
+        name: task.name,
+        quantity: task.quantity,
+        unit: task.unit,
+        estimated_hours: task.estimated_hours,
+        description: task.description || '',
+        pricePerUnit: 0 // Will be set by user in edit mode
+      }));
+
       const { error: invoiceError } = await supabase
         .from('invoices')
         .insert({
@@ -1397,7 +1408,7 @@ const ProjectCreating = () => {
           main_tasks: invoiceMainTasks,
           main_breakdown: [],
           main_materials: [],
-          minor_tasks: minorTasks,
+          minor_tasks: invoiceMinorTasks,
           extra_materials: [],
           totals: {
             totalHours: 0
