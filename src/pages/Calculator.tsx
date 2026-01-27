@@ -262,7 +262,7 @@ const CalculatorPage: React.FC = () => {
           ))}
         </div>
 
-        <div className="flex-1" id="calculator-container">
+        <div className="flex-1 overflow-y-auto" id="calculator-container">
           {activeCalculator && activeSubType ? (
             <div className="bg-white rounded-lg shadow-lg p-6 h-full w-full">
               <h2 className="text-xl font-semibold text-gray-900 mb-6">
