@@ -6,6 +6,7 @@ import { useAuthStore } from '../../../lib/store';
 
 interface SetupMaterialUsageProps {
   onClose: () => void;
+  wizardMode?: boolean;
 }
 
 interface Material {
@@ -27,7 +28,7 @@ const calculators = [
   { id: 'paving', name: 'Paving Calculator', defaultSandName: 'Sharp Sand' }
 ];
 
-const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
+const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizardMode = false }) => {
   const [sandSelections, setSandSelections] = useState<Record<string, string>>({});
   const [slabMortarMixRatioSelection, setSlabMortarMixRatioSelection] = useState<string>('1:4');
   const [brickBlockMortarMixRatioSelection, setBrickBlockMortarMixRatioSelection] = useState<string>('1:4');
@@ -252,19 +253,19 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
   };
 
   if (!companyId) {
-    return (
-      <Modal isOpen={true} onClose={onClose} title="Material Usage Setup">
-        <div className="p-6">
-          <p className="text-red-600">Error: No company selected</p>
-        </div>
-      </Modal>
+    const errorContent = (
+      <div className="p-6">
+        <p className="text-red-600">Error: No company selected</p>
+      </div>
     );
+    
+    if (wizardMode) return errorContent;
+    return <Modal isOpen={true} onClose={onClose} title="Material Usage Setup">{errorContent}</Modal>;
   }
 
-  return (
-    <Modal isOpen={true} onClose={onClose} title="Material Usage Setup">
-      <div className="p-6">
-        <h3 className="text-xl font-semibold mb-4">Material Usage Configuration</h3>
+  const contentMarkup = (
+    <div className="p-6">
+      <h3 className="text-xl font-semibold mb-4">Material Usage Configuration</h3>
         
         {/* Sand Usage Section */}
         <div className="space-y-6">
@@ -368,6 +369,16 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
           </button>
         </div>
       </div>
+    </div>
+  );
+
+  if (wizardMode) {
+    return <div className="p-6 overflow-y-auto h-full">{contentMarkup}</div>;
+  }
+
+  return (
+    <Modal isOpen={true} onClose={onClose} title="Material Usage Setup">
+      {contentMarkup}
     </Modal>
   );
 };
