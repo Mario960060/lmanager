@@ -405,18 +405,18 @@ const Dashboard = () => {
 
           {/* Day Notes Section */}
           {dayNotesForDate.length > 0 && (
-            <div className="mt-6 pt-6 border-t">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Day Notes</h3>
+            <div className="mt-6 pt-6 border-t border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-100 mb-4">Day Notes</h3>
               <div className="space-y-3">
                 {dayNotesForDate.map(note => (
-                  <div key={note.id} className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div key={note.id} className="bg-gray-800 p-4 rounded-lg border border-gray-700">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-blue-600">
+                        <p className="text-sm font-medium text-blue-400">
                           {note.events?.title || 'Unknown Event'}
                         </p>
-                        <p className="text-gray-900 mt-2">{note.content}</p>
-                        <p className="text-xs text-gray-500 mt-2">
+                        <p className="text-gray-100 mt-2">{note.content}</p>
+                        <p className="text-xs text-gray-400 mt-2">
                           By {note.profiles?.full_name} • {format(new Date(note.created_at), 'MMM d, h:mm a')}
                         </p>
                       </div>
