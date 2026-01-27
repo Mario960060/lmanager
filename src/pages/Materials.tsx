@@ -122,16 +122,25 @@ const Materials = () => {
   return (
     <div className="container mx-auto p-6 space-y-6">
       <BackButton />
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center md:flex-row flex-col">
         <h1 className="text-3xl font-bold text-gray-900">Materials</h1>
         <button
           onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="md:inline-flex hidden items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-5 h-5 mr-2" />
           Add Material
         </button>
       </div>
+
+      {/* Mobile Button */}
+      <button
+        onClick={() => setShowAddModal(true)}
+        className="md:hidden w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+      >
+        <Plus className="w-5 h-5 mr-2" />
+        Add Material
+      </button>
 
       {/* Search Bar */}
       <div className="relative">
