@@ -133,21 +133,25 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="p-4 border-b flex justify-between items-center">
-          <div className="flex items-center">
-            <Clock className="w-5 h-5 text-gray-700 mr-2" />
-            <h2 className="text-lg font-semibold">Tasks</h2>
-            <span className="ml-4 text-sm text-red-600 font-medium">
-              Dont create here any tasks that involving digging, tape1 preparation, and loading-in sand. All of them will be created automaticly whenever u add you excavation and carrier tools in "Excavators & Dumpers/Barrows" window in setup page. Also please don't use any words "excavation" or "preparation" in names of your task.
-            </span>
-          </div>
-          <div className="flex items-center">
+        <div className="border-b">
+          {/* First row - Tasks title and close button */}
+          <div className="p-4 flex justify-between items-center">
+            <div className="flex items-center">
+              <Clock className="w-5 h-5 text-gray-700 mr-2" />
+              <h2 className="text-lg font-semibold">Tasks</h2>
+            </div>
             <button 
               onClick={onClose}
               className="p-1 rounded-full hover:bg-gray-200 transition-colors"
             >
               <X className="w-6 h-6" />
             </button>
+          </div>
+          {/* Second row - Warning message */}
+          <div className="px-4 pb-4">
+            <span className="text-sm text-red-600 font-medium">
+              Dont create here any tasks that involving digging, tape1 preparation, and loading-in sand. All of them will be created automaticly whenever u add you excavation and carrier tools in "Excavators & Dumpers/Barrows" window in setup page. Also please don't use any words "excavation" or "preparation" in names of your task.
+            </span>
           </div>
         </div>
 
