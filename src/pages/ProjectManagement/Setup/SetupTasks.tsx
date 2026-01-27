@@ -257,7 +257,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
                         task.name
                       )}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-500">
+                    <td className="text-sm text-gray-500">
                       {editingTaskId === task.id ? (
                         <input
                           type="text"
@@ -269,7 +269,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
                         task.description
                       )}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-500">
+                    <td className="text-sm text-gray-500">
                       {editingTaskId === task.id ? (
                         <input
                           type="text"
@@ -281,7 +281,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
                         task.unit
                       )}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-500">
+                    <td className="text-sm text-gray-500">
                       {editingTaskId === task.id ? (
                         <input
                           type="number"
@@ -293,7 +293,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose }) => {
                         `${task.estimated_hours} hours`
                       )}
                     </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-right text-sm font-medium">
+                    <td className="whitespace-nowrap text-right text-sm font-medium">
                       {editingTaskId === task.id ? (
                         <button
                           onClick={handleSaveTaskEdit}
