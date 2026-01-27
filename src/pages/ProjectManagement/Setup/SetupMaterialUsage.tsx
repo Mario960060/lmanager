@@ -17,8 +17,7 @@ interface Material {
 interface MaterialUsageConfig {
   calculator_id: string;
   material_id?: string;
-  company_id?: string;
-  slab_mortar_mix_ratio?: string;
+  company_id: string;
 }
 
 const calculators = [
@@ -63,7 +62,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
       
       const { data, error } = await supabase
         .from('material_usage_configs')
-        .select('calculator_id, material_id, company_id, slab_mortar_mix_ratio')
+        .select('calculator_id, material_id, company_id')
         .eq('company_id', companyId);
 
       if (error) throw error;
@@ -97,9 +96,10 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
       setSandSelections(initialSelections);
       
       // Load mortar mix ratio for slab calculator if it exists
-      const slabConfig = existingConfigs.find(config => config.calculator_id === 'slab');
-      if (slabConfig?.slab_mortar_mix_ratio) {
-        setMortarMixRatioSelection(slabConfig.slab_mortar_mix_ratio);
+      // Mortar mix ratio is stored as material_id when calculator_id is 'slab_mortar_mix_ratio'
+      const mortarConfig = existingConfigs.find(config => config.calculator_id === 'slab_mortar_mix_ratio');
+      if (mortarConfig?.material_id) {
+        setMortarMixRatioSelection(mortarConfig.material_id);
       }
       
       setInitialLoad(false);
@@ -154,13 +154,25 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose }) => {
   });
 
   const handleSave = () => {
-    // Prepare the data to be saved (array of { calculator_id, material_id, slab_mortar_mix_ratio })
-    const configToSave: MaterialUsageConfig[] = Object.keys(sandSelections).map((calculatorId: string) => ({
-      calculator_id: calculatorId,
-      material_id: sandSelections[calculatorId],
-      company_id: companyId || undefined,
-      slab_mortar_mix_ratio: calculatorId === 'slab' ? mortarMixRatioSelection : undefined
-    }));
+    // Prepare the data to be saved (array of { calculator_id, material_id })
+    const configToSave: MaterialUsageConfig[] = [];
+    
+    // Add sand selections for each calculator
+    Object.keys(sandSelections).forEach((calculatorId: string) => {
+      configToSave.push({
+        calculator_id: calculatorId,
+        material_id: sandSelections[calculatorId],
+        company_id: companyId || undefined
+      });
+    });
+    
+    // Add mortar mix ratio as a separate config record
+    configToSave.push({
+      calculator_id: 'slab_mortar_mix_ratio',
+      material_id: mortarMixRatioSelection, // Mortar ratio is stored in material_id
+      company_id: companyId || undefined
+    });
+    
     saveConfigMutation.mutate(configToSave);
   };
 
