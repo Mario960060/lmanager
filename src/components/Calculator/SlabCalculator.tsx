@@ -245,18 +245,20 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     enabled: !!companyId
   });
 
-  // Fetch mortar mix ratio config for slab calculator
-  const { data: mortarMixRatioConfig } = useQuery<MaterialUsageConfig[]>({
-    queryKey: ['materialUsageConfig', 'slab_mortar_mix_ratio', companyId],
+  // Fetch mortar mix ratio config from dedicated table
+  const { data: mortarMixRatioConfig } = useQuery<{ id: string; mortar_mix_ratio: string } | null>({
+    queryKey: ['mortarMixRatio', companyId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('material_usage_configs')
-        .select('calculator_id, material_id, company_id')
-        .eq('calculator_id', 'slab_mortar_mix_ratio')
-        .eq('company_id', companyId);
+      if (!companyId) return null;
 
-      if (error) throw error;
-      return data as MaterialUsageConfig[];
+      const { data, error } = await supabase
+        .from('slab_mortar_mix_ratios')
+        .select('id, mortar_mix_ratio')
+        .eq('company_id', companyId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "not found"
+      return data;
     },
     enabled: !!companyId
   });
@@ -581,8 +583,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       const mortarVolumeM3 = areaNum * mortarThicknessM;
       
       // Break down mortar into cement and sand using configurable mix ratio
-      // Mortar mix ratio is stored in material_id when calculator_id is 'slab_mortar_mix_ratio'
-      const mortarMixRatio = mortarMixRatioConfig?.[0]?.material_id || '1:4';
+      // Mortar mix ratio is stored in slab_mortar_mix_ratios table
+      const mortarMixRatio = mortarMixRatioConfig?.mortar_mix_ratio || '1:4';
       const { cementProportion, sandProportion } = getMortarMixRatioProportion(mortarMixRatio);
       
       const cementVolume = mortarVolumeM3 * cementProportion * 1.3; // configured proportion + 30% extra cement
