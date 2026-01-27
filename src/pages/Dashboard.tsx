@@ -437,21 +437,39 @@ const Dashboard = () => {
     <div className="container mx-auto p-6">
       <div className="mb-8 flex items-center justify-between md:flex-row flex-col">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <div className="flex gap-4 md:flex-row flex-col md:w-auto w-full">
+          <button
+            className="md:flex hidden items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            onClick={() => navigate('/user-hours')}
+          >
+            Add Hours Progress
+          </button>
+          <button
+            className="md:flex hidden items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            onClick={() => setShowAddMaterialModal(true)}
+          >
+            <Plus className="w-5 h-5 mr-2" />
+            Order Required Material & Equipment
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Buttons */}
+      <div className="md:hidden flex flex-col gap-2 mb-6">
         <button
-          className="md:ml-4 md:px-4 md:py-2 md:flex hidden bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           onClick={() => navigate('/user-hours')}
         >
           Add Hours Progress
         </button>
+        <button
+          className="w-full flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          onClick={() => setShowAddMaterialModal(true)}
+        >
+          <Plus className="w-5 h-5 mr-2" />
+          Order Required Material & Equipment
+        </button>
       </div>
-
-      {/* Mobile Button */}
-      <button
-        className="md:hidden w-full mb-6 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        onClick={() => navigate('/user-hours')}
-      >
-        Add Hours Progress
-      </button>
       
       <div className="grid md:grid-cols-2 gap-6">
         <DayView 
