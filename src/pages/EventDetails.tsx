@@ -1350,7 +1350,7 @@ const EventDetails = () => {
         <div className="bg-white p-6 rounded-lg shadow">
           <h1 className="text-2xl font-bold mb-2">{event.title}</h1>
           <p className="text-gray-600">
-            {format(new Date(event.start_date), 'MMM dd, yyyy')} - {format(new Date(event.end_date), 'MMM dd, yyyy')}
+            {event.start_date && format(new Date(event.start_date), 'MMM dd, yyyy')} - {event.end_date && format(new Date(event.end_date), 'MMM dd, yyyy')}
           </p>
           <div className="mt-4">
             {event.status === 'finished' ? (
