@@ -22,7 +22,7 @@ interface CompactorSelectorProps {
 // Predefined compactor specifications
 const COMPACTORS: CompactorOption[] = [
   {
-    id: 'small_kompactor',
+    id: 'small_compactor',
     name: 'Small compactor',
     weightRange: '60–90 kg',
     width: 0.40,
@@ -35,7 +35,7 @@ const COMPACTORS: CompactorOption[] = [
     }
   },
   {
-    id: 'medium_kompactor',
+    id: 'medium_compactor',
     name: 'Medium compactor',
     weightRange: '90–150 kg',
     width: 0.50,
@@ -48,7 +48,7 @@ const COMPACTORS: CompactorOption[] = [
     }
   },
   {
-    id: 'large_kompactor',
+    id: 'large_compactor',
     name: 'Large compactor',
     weightRange: '180–250 kg',
     width: 0.60,
