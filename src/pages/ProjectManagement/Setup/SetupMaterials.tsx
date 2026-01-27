@@ -210,33 +210,45 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose }) => {
         </table>
       </div>
 
-      {/* Materials List - Mobile */}
-      <div className="md:hidden space-y-2">
+      {/* Materials List - Mobile: tabelka name / unit / price / edit */}
+      <div className="md:hidden overflow-x-auto -mx-2 px-2">
         {materials.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             No materials found.
           </div>
         ) : (
-          materials.map((material) => (
-            <div key={material.id} className="bg-white p-3 rounded-lg shadow">
-              <div className="flex justify-between items-start gap-2 mb-1">
-                <h3 className="font-semibold text-sm text-gray-900 flex-1 break-words">{material.name}</h3>
-                <button
-                  onClick={() => {
-                    setSelectedMaterial(material);
-                    setShowEditModal(true);
-                  }}
-                  className="text-blue-600 hover:text-blue-800 flex-shrink-0"
-                >
-                  <Pencil className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex justify-between text-xs text-gray-600 gap-2">
-                <span className="font-medium">{material.unit}</span>
-                <span>{formatPrice(material.price)}</span>
-              </div>
+          <div className="min-w-[280px] border border-gray-200 rounded-lg overflow-hidden">
+            <div className="grid grid-cols-[minmax(0,1fr)_60px_56px_44px] gap-2 py-2 px-3 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <div className="truncate">Name</div>
+              <div>Unit</div>
+              <div className="text-right">Price</div>
+              <div className="w-11" />
             </div>
-          ))
+            {materials.map((material) => (
+              <div
+                key={material.id}
+                className="grid grid-cols-[minmax(0,1fr)_60px_56px_44px] gap-2 py-2.5 px-3 items-center border-b border-gray-100 last:border-0 text-sm"
+              >
+                <div className="min-w-0 truncate font-medium text-gray-900" title={material.name}>
+                  {material.name}
+                </div>
+                <div className="text-gray-600 truncate">{material.unit}</div>
+                <div className="text-gray-900 text-right">{formatPrice(material.price)}</div>
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      setSelectedMaterial(material);
+                      setShowEditModal(true);
+                    }}
+                    className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors touch-manipulation"
+                    aria-label="Edit"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
