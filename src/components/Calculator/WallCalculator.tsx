@@ -528,16 +528,28 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         // Bricks per row: total wall length / (brick length + mortar thickness)
         const bricksPerRow = Math.ceil(l / (brickLength + mortarThickness));
         units = brickRows * bricksPerRow;
-        mortarVolume = area * 0.02; // 0.02m³ mortar per m²
+        // Mortar per brick + 20% extra: 0.000269 m³ (per brick)
+        mortarVolume = units * 0.000269;
         break;
       case 'block4':
+        // Calculate rows and round up
+        const blockRows4 = Math.ceil(h / (blockHeight + mortarThickness));
+        // Blocks per row: total wall length / (block length + mortar thickness)
+        const blocksPerRow4 = Math.ceil(l / (blockLength + mortarThickness));
+        units = blockRows4 * blocksPerRow4;
+        // Mortar per block (standing or flat) + 20% extra
+        const mortarPerBlock4 = layingMethod === 'flat' ? 0.001452 : 0.000871;
+        mortarVolume = units * mortarPerBlock4;
+        break;
       case 'block7':
         // Calculate rows and round up
-        const blockRows = Math.ceil(h / (blockHeight + mortarThickness));
+        const blockRows7 = Math.ceil(h / (blockHeight + mortarThickness));
         // Blocks per row: total wall length / (block length + mortar thickness)
-        const blocksPerRow = Math.ceil(l / (blockLength + mortarThickness));
-        units = blockRows * blocksPerRow;
-        mortarVolume = area * 0.015; // 0.015m³ mortar per m²
+        const blocksPerRow7 = Math.ceil(l / (blockLength + mortarThickness));
+        units = blockRows7 * blocksPerRow7;
+        // Mortar per block (standing or flat) + 20% extra
+        const mortarPerBlock7 = layingMethod === 'flat' ? 0.001531 : 0.001109;
+        mortarVolume = units * mortarPerBlock7;
         break;
       case 'sleeper':
         // Calculate sleepers needed
