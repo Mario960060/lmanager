@@ -130,6 +130,190 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
     }
   };
 
+  if (wizardMode) {
+    return (
+      <div className="p-6 overflow-y-auto h-full">
+        <div className="bg-gray-100 p-3 rounded-lg mb-3 text-sm">
+          <span className="text-sm text-red-600 font-medium">
+            Dont create here any tasks that involving digging, tape1 preparation, compacting and loading-in sand. All of them will be created automaticly whenever u add you excavation and carrier tools in "Excavators & Dumpers/Barrows" window in setup page. Also please don't use any words "excavation" or "preparation" in names of your task.
+          </span>
+        </div>
+        
+        {/* Updated Add Task Form with Name and Description side by side */}
+        <form onSubmit={handleAddTask} className="mb-4">
+          {/* Name and Description in one row */}
+          <div className="grid items-start mb-3" style={{gridTemplateColumns: '33% 33% 16.5% 16.5%', gap: '0.75rem'}}>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Task Name</label>
+              <input
+                type="text"
+                placeholder="Enter task name"
+                value={newTask.name}
+                onChange={(e) => setNewTask({...newTask, name: e.target.value})}
+                className="w-full p-2 border rounded text-sm"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea
+                placeholder="Enter task description"
+                value={newTask.description}
+                onChange={(e) => setNewTask({...newTask, description: e.target.value})}
+                className="w-full p-2 border rounded text-sm resize-none"
+                rows={2}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+              <input
+                type="text"
+                placeholder="e.g., m², hours, pieces"
+                value={newTask.unit}
+                onChange={(e) => setNewTask({...newTask, unit: e.target.value})}
+                className="w-full p-2 border rounded text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Hours</label>
+              <input
+                type="number"
+                placeholder="Base time estimate"
+                value={newTask.estimated_hours || ''}
+                onChange={(e) => setNewTask({...newTask, estimated_hours: parseFloat(e.target.value)})}
+                className="w-full p-2 border rounded text-sm"
+              />
+            </div>
+          </div>
+          
+          {/* Add Button */}
+          <button
+            type="submit"
+            className="w-full bg-gray-700 text-white p-2 rounded hover:bg-gray-800 text-sm"
+          >
+            Add Task
+          </button>
+        </form>
+        
+        {/* Search Tasks */}
+        <div className="relative mb-3">
+          <input
+            type="text"
+            placeholder="Search tasks..."
+            value={taskSearch}
+            onChange={(e) => setTaskSearch(e.target.value)}
+            className="w-full p-2 pl-8 border rounded text-sm"
+          />
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+        </div>
+        
+        {/* Tasks List */}
+        <div className="border rounded">
+          <table className="min-w-full divide-y divide-gray-200" style={{tableLayout: 'fixed'}}>
+            <colgroup>
+              <col style={{width: '33%'}} />
+              <col style={{width: '33%'}} />
+              <col style={{width: '16.5%'}} />
+              <col style={{width: '16.5%'}} />
+              <col style={{width: 'auto'}} />
+            </colgroup>
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit</th>
+                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Est. Hours</th>
+                <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {filteredTasks.map(task => (
+                <tr key={task.id}>
+                  <td className="text-sm font-medium text-gray-900">
+                    {editingTaskId === task.id ? (
+                      <input
+                        type="text"
+                        value={editTask?.name || ''}
+                        onChange={(e) => setEditTask({...editTask!, name: e.target.value})}
+                        className="w-full p-1 border rounded text-sm"
+                      />
+                    ) : (
+                      task.name
+                    )}
+                  </td>
+                  <td className="text-sm text-gray-500">
+                    {editingTaskId === task.id ? (
+                      <input
+                        type="text"
+                        value={editTask?.description || ''}
+                        onChange={(e) => setEditTask({...editTask!, description: e.target.value})}
+                        className="w-full p-1 border rounded text-sm"
+                      />
+                    ) : (
+                      task.description
+                    )}
+                  </td>
+                  <td className="text-sm text-gray-500">
+                    {editingTaskId === task.id ? (
+                      <input
+                        type="text"
+                        value={editTask?.unit || ''}
+                        onChange={(e) => setEditTask({...editTask!, unit: e.target.value})}
+                        className="w-full p-1 border rounded text-sm"
+                      />
+                    ) : (
+                      task.unit
+                    )}
+                  </td>
+                  <td className="text-sm text-gray-500">
+                    {editingTaskId === task.id ? (
+                      <input
+                        type="number"
+                        value={editTask?.estimated_hours || 0}
+                        onChange={(e) => setEditTask({...editTask!, estimated_hours: parseFloat(e.target.value)})}
+                        className="w-full p-1 border rounded text-sm"
+                      />
+                    ) : (
+                      `${task.estimated_hours} hours`
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap text-right text-sm font-medium">
+                    {editingTaskId === task.id ? (
+                      <button
+                        onClick={handleSaveTaskEdit}
+                        className="text-green-500 hover:text-green-700 mr-2"
+                      >
+                        <Save className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleEditTask(task)}
+                        className="text-green-500 hover:text-green-700 mr-2"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => deleteTaskMutation.mutate(task.id)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredTasks.length === 0 && (
+            <p className="text-center text-gray-500 py-4 text-sm">No tasks found</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
