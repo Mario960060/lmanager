@@ -571,7 +571,8 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
           task: 'final leveling (sand)',
           hours: areaNum * finalLevelingSandTask.estimated_hours,
           amount: areaNum.toString(),
-          unit: 'square meters'
+          unit: 'square meters',
+          event_task_id: finalLevelingSandTask.id
         });
       }
 
