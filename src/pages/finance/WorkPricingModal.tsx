@@ -560,7 +560,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
         onClick={(e) => e.stopPropagation()}
       >
         <button
-          className="absolute top-2 right-2 bg-white text-black text-3xl font-bold rounded-full w-10 h-10 md:w-12 md:h-12 flex items-center justify-center shadow-lg hover:bg-gray-200 transition"
+          className="absolute top-2 right-2 bg-white text-white text-3xl font-bold rounded-full w-10 h-10 md:w-12 md:h-12 flex items-center justify-center shadow-lg hover:bg-gray-300 transition"
           style={{ zIndex: 10 }}
           onClick={handleClose}
           aria-label="Close"
@@ -1052,7 +1052,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
             onClick={(e) => e.stopPropagation()}
           >
             <button
-              className="absolute top-2 right-2 bg-white text-black text-3xl font-bold rounded-full w-10 h-10 md:w-12 md:h-12 flex items-center justify-center shadow-lg hover:bg-gray-200 transition"
+              className="absolute top-2 right-2 bg-gray-700 text-white text-3xl font-bold rounded-full w-10 h-10 md:w-12 md:h-12 flex items-center justify-center shadow-lg hover:bg-gray-600 transition"
               style={{ zIndex: 10 }}
               onClick={() => setEditMode(false)}
               aria-label="Close"
