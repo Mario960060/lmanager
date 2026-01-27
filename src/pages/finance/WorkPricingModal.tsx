@@ -567,47 +567,48 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
         >
           ×
         </button>
-        <h2 className="text-xl md:text-2xl font-bold mb-4">Work Pricing</h2>
-        <div className="flex flex-col md:flex-row gap-3 md:gap-6 mb-4">
-          <div className="w-full md:w-auto">
-            <label className="font-semibold mr-2 block md:inline">Show prices:</label>
-            <select
-              className="border rounded p-1 w-full md:w-auto mt-1 md:mt-0"
-              value={showPrices}
-              onChange={e => setShowPrices(e.target.value as 'all' | 'none' | 'totals')}
-            >
-              <option value="all">All</option>
-              <option value="totals">Show only total prices</option>
-              <option value="none">Don't show at all</option>
-            </select>
+        <div className="flex-1 overflow-y-auto flex flex-col">
+          <h2 className="text-xl md:text-2xl font-bold mb-4">Work Pricing</h2>
+          <div className="flex flex-col md:flex-row gap-3 md:gap-6 mb-4">
+            <div className="w-full md:w-auto">
+              <label className="font-semibold mr-2 block md:inline">Show prices:</label>
+              <select
+                className="border rounded p-1 w-full md:w-auto mt-1 md:mt-0"
+                value={showPrices}
+                onChange={e => setShowPrices(e.target.value as 'all' | 'none' | 'totals')}
+              >
+                <option value="all">All</option>
+                <option value="totals">Show only total prices</option>
+                <option value="none">Don't show at all</option>
+              </select>
+            </div>
+            <div className="w-full md:w-auto">
+              <label className="font-semibold mr-2 block md:inline">Show hrs needed:</label>
+              <select
+                className="border rounded p-1 w-full md:w-auto mt-1 md:mt-0"
+                value={showHours}
+                onChange={e => setShowHours(e.target.value as 'all' | 'none')}
+              >
+                <option value="all">All</option>
+                <option value="none">Don't show at all</option>
+              </select>
+            </div>
           </div>
-          <div className="w-full md:w-auto">
-            <label className="font-semibold mr-2 block md:inline">Show hrs needed:</label>
-            <select
-              className="border rounded p-1 w-full md:w-auto mt-1 md:mt-0"
-              value={showHours}
-              onChange={e => setShowHours(e.target.value as 'all' | 'none')}
-            >
-              <option value="all">All</option>
-              <option value="none">Don't show at all</option>
-            </select>
-          </div>
-        </div>
-        <select
-          className="block w-full mb-6 border rounded p-2"
-          value={selectedProjectId}
-          onChange={e => setSelectedProjectId(e.target.value)}
-        >
-          <option value="">Select a project</option>
-          {projects.map(project => (
-            <option key={project.id} value={project.id}>
-              {project.title}
-            </option>
-          ))}
-        </select>
-        {selectedProjectId && invoice ? (
-          <div className="flex-1 overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-2">Work Pricing Preview</h3>
+          <select
+            className="block w-full mb-6 border rounded p-2"
+            value={selectedProjectId}
+            onChange={e => setSelectedProjectId(e.target.value)}
+          >
+            <option value="">Select a project</option>
+            {projects.map(project => (
+              <option key={project.id} value={project.id}>
+                {project.title}
+              </option>
+            ))}
+          </select>
+          {selectedProjectId && invoice ? (
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Work Pricing Preview</h3>
             {/* Main Tasks Summary */}
             <div className="mb-6">
               <div className="font-bold text-lg mb-2">Main tasks summary:</div>
@@ -1011,11 +1012,12 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
               })()}
             </div>
           </div>
-        ) : selectedProjectId ? (
-          <div className="text-gray-500">No work pricing found for this project.</div>
-        ) : (
-          <div className="text-gray-500">Please select a project to preview the work pricing.</div>
-        )}
+          ) : selectedProjectId ? (
+            <div className="text-gray-500">No work pricing found for this project.</div>
+          ) : (
+            <div className="text-gray-500">Please select a project to preview the work pricing.</div>
+          )}
+        </div>
         <div className="flex gap-2 mt-6">
           <button
             className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
