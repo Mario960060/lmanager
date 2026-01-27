@@ -1379,6 +1379,38 @@ const ProjectCreating = () => {
         }
       }
 
+      // Create invoice record for work pricing
+      const invoiceMainTasks = mainTasks.map(task => ({
+        id: task.id,
+        name: task.name,
+        description: '',
+        results: task.results || {
+          taskBreakdown: [],
+          materials: []
+        }
+      }));
+
+      const { error: invoiceError } = await supabase
+        .from('invoices')
+        .insert({
+          project_id: event.id,
+          company_id: freshCompanyId,
+          main_tasks: invoiceMainTasks,
+          main_breakdown: [],
+          main_materials: [],
+          minor_tasks: minorTasks,
+          extra_materials: [],
+          totals: {
+            totalHours: 0
+          },
+          additional_costs: []
+        } as any);
+
+      if (invoiceError) {
+        console.error('Error creating invoice:', invoiceError);
+        throw new Error('Failed to create invoice');
+      }
+
       // Navigate to projects page on success
       navigate('/projects');
     } catch (error) {
