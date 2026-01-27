@@ -555,7 +555,8 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
           task: 'compacting monoblocks',
           hours: areaNum * compactingMonoblocksTask.estimated_hours,
           amount: areaNum ? `${areaNum} square meters` : '0',
-          unit: areaNum ? 'square meters' : 'EMPTY'
+          unit: areaNum ? 'square meters' : 'EMPTY',
+          event_task_id: compactingMonoblocksTask.id
         });
       }
 
@@ -565,7 +566,8 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
           task: 'final leveling (type 1)',
           hours: areaNum * finalLevelingTypeOneTask.estimated_hours,
           amount: areaNum ? `${areaNum} square meters` : '0',
-          unit: areaNum ? 'square meters' : 'EMPTY'
+          unit: areaNum ? 'square meters' : 'EMPTY',
+          event_task_id: finalLevelingTypeOneTask.id
         });
       }
 
@@ -575,7 +577,8 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
           task: 'final leveling (sand)',
           hours: areaNum * finalLevelingSandTask.estimated_hours,
           amount: areaNum ? `${areaNum} square meters` : '0',
-          unit: areaNum ? 'square meters' : 'EMPTY'
+          unit: areaNum ? 'square meters' : 'EMPTY',
+          event_task_id: finalLevelingSandTask.id
         });
       }
 
