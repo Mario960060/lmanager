@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
 import { Loader2, X, Plus, Pencil, Info, Wrench, Truck, Search, AlertCircle } from 'lucide-react';
-import BackButton from '../../../components/BackButton';
 import { releaseEquipment } from '../../../lib/equipmentService';
 
 interface Equipment {
@@ -32,7 +31,11 @@ interface EquipmentUsage {
   quantity: number;
 }
 
-const SetupEquipment = () => {
+interface SetupEquipmentProps {
+  onClose: () => void;
+}
+
+const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose }) => {
   const queryClient = useQueryClient();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);
@@ -582,8 +585,19 @@ const SetupEquipment = () => {
   );
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-2">Equipment Manager</h1>
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b p-6 flex justify-between items-center">
+          <h1 className="text-2xl font-bold">Equipment Manager</h1>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="p-4">
       <div className="w-full">
         <p className="text-red-500 italic mb-4">
           Don't create here Excavators and Carriers (wheel barrow, petrol barrows and dumpers) do it in setup page in project management
@@ -967,6 +981,8 @@ const SetupEquipment = () => {
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 };
