@@ -1157,26 +1157,26 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 <span className="text-gray-800">Default (0.125t Wheelbarrow)</span>
               </div>
             </div>
-            {carrierSpeeds.length > 0 && carrierSpeeds.map((carrier) => (
+            {carriers.length > 0 && carriers.map((carrier) => (
               <div 
-                key={carrier.size}
+                key={carrier.id}
                 className="flex items-center p-2 cursor-pointer"
-                onClick={() => setSelectedTransportCarrier({ id: carrier.size.toString(), name: `${carrier.size}t`, type: 'barrows_dumpers', 'size (in tones)': carrier.size })}
+                onClick={() => setSelectedTransportCarrier(carrier)}
               >
                 <div className={`w-4 h-4 rounded-full border mr-2 ${
-                  selectedTransportCarrier?.['size (in tones)'] === carrier.size 
+                  selectedTransportCarrier?.id === carrier.id 
                     ? 'border-gray-400' 
                     : 'border-gray-400'
                 }`}>
                   <div className={`w-2 h-2 rounded-full m-0.5 ${
-                    selectedTransportCarrier?.['size (in tones)'] === carrier.size 
+                    selectedTransportCarrier?.id === carrier.id 
                       ? 'bg-gray-400' 
                       : 'bg-transparent'
                   }`}></div>
                 </div>
                 <div>
-                  <span className="text-gray-800">{carrier.size}t Carrier</span>
-                  <span className="text-sm text-gray-600 ml-2">({carrier.speed} m/h)</span>
+                  <span className="text-gray-800">{carrier.name}</span>
+                  <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
                 </div>
               </div>
             ))}
