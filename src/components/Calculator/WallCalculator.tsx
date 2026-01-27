@@ -826,7 +826,8 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           const lengthNum = parseFloat(length) || 0;
           taskBreakdown.push({
             task: 'preparing for the wall (leveling)',
-            hours: lengthNum * preparingForWallTask.estimated_hours
+            hours: lengthNum * preparingForWallTask.estimated_hours,
+            event_task_id: preparingForWallTask.id
           });
           totalHours += lengthNum * preparingForWallTask.estimated_hours;
         }
@@ -842,7 +843,8 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           if (numberOfBatches > 0) {
             taskBreakdown.push({
               task: 'mixing mortar',
-              hours: numberOfBatches * mixingMortarTask.estimated_hours
+              hours: numberOfBatches * mixingMortarTask.estimated_hours,
+              event_task_id: mixingMortarTask.id
             });
             totalHours += numberOfBatches * mixingMortarTask.estimated_hours;
           }
