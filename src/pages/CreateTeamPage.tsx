@@ -223,8 +223,8 @@ const CreateTeamPage = () => {
         }
       }
 
-      // Reload page to trigger AuthGuard check with new company_id
-      window.location.href = '/';
+      // Navigate to company setup wizard
+      navigate('/company-setup');
     } catch (err) {
       console.error('Error creating team:', err);
       setError(err instanceof Error ? err.message : 'Failed to create team');
