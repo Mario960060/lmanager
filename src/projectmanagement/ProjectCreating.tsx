@@ -314,6 +314,13 @@ const ProjectCreating = () => {
       subTypes: [
         { type: 'default', label: 'Tile Installation' }
       ]
+    },
+    {
+      type: 'foundation',
+      label: 'Foundation Calculator',
+      subTypes: [
+        { type: 'default', label: 'Foundation Excavation' }
+      ]
     }
   ];
 
