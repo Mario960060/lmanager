@@ -62,8 +62,8 @@ const Layout = () => {
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Projects', href: '/projects', icon: FolderOpenDot },
     { name: 'Calculator', href: '/calculator', icon: Calculator },
-    { name: 'Task Requirements', href: '/tasks', icon: CheckSquare },
     { name: 'Calendar', href: '/calendar', icon: Calendar },
+    { name: 'Task Requirements', href: '/tasks', icon: CheckSquare },
     ...(isAdmin ? [
       { name: 'Project Management', href: '/project-management', icon: Settings },
       { name: 'Setup', href: '/setup', icon: Wrench },
