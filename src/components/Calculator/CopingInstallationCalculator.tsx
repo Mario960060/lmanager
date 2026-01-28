@@ -246,6 +246,16 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
     // Find adhesive in materials table
     const adhesiveMaterial = materialsTable.find((m: Material) => m.name.toLowerCase().includes('adhesive'));
     let materials: { name: string; amount: number; unit: string; price_per_unit: number | null; total_price: number | null }[] = [];
+    
+    // Add copings as first material
+    materials.push({
+      name: 'Copings',
+      amount: numberOfSlabs,
+      unit: 'pieces',
+      price_per_unit: null,
+      total_price: null
+    });
+    
     if (adhesiveMaterial) {
       // Calculate number of bags based on the unit size
       const match = adhesiveMaterial.unit.match(/(\d+\.?\d*)\s*kg/i);
@@ -618,21 +628,6 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
                 </li>
               ))}
             </ul>
-          </div>
-
-          {/* Coping Installation Details */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Coping Summary</h3>
-            <div className="space-y-2 text-gray-900">
-              <div className="flex justify-between">
-                <span className="font-medium">Copings:</span>
-                <span>{results.numberOfSlabs}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-medium">Quantity:</span>
-                <span>{results.numberOfSlabs} pieces</span>
-              </div>
-            </div>
           </div>
 
           {/* Materials Breakdown Table */}
