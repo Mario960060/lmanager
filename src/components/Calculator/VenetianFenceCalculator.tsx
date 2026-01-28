@@ -114,7 +114,7 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
   const { data: layingTask, isLoading } = useQuery({
     queryKey: ['venetian_fence_laying_task', companyId],
     queryFn: async () => {
-      const taskName = 'venetian fence installation';
+      const taskName = 'standard fence venetian';
       const { data, error } = await supabase
         .from('event_tasks_with_dynamic_estimates')
         .select('id, name, unit, estimated_hours')
@@ -376,7 +376,7 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
     // Prepare materials list
     const materialsList: Material[] = [
       { name: 'Post', amount: posts, unit: 'posts', price_per_unit: null, total_price: null },
-      { name: 'Fence Slats', amount: slatsNeeded, unit: 'slats', price_per_unit: null, total_price: null },
+      { name: 'Venetian Slats', amount: slatsNeeded, unit: 'slats', price_per_unit: null, total_price: null },
       { name: 'Postmix', amount: totalPostmix, unit: 'bags', price_per_unit: null, total_price: null }
     ];
 
