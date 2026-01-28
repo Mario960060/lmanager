@@ -61,6 +61,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
   const [length, setLength] = useState('');
   const [height, setHeight] = useState('');
   const [slatWidth, setSlatWidth] = useState('5');
+  const [compositeSlatWidth, setCompositeSlatWidth] = useState('');
   const [slatLength, setSlatLength] = useState('360');
   const [postmixPerPost, setPostmixPerPost] = useState<string>('');
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -231,10 +232,10 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
 
     const l = parseFloat(length) * 100; // Convert meters to cm
     const h = parseFloat(height) * 100; // Convert meters to cm
-    const slatW = parseFloat(slatWidth);
+    const compSlatW = parseFloat(compositeSlatWidth);
     const slatL = parseFloat(slatLength);
 
-    if (isNaN(l) || isNaN(h) || isNaN(slatW) || isNaN(slatL)) {
+    if (isNaN(l) || isNaN(h) || isNaN(compSlatW) || isNaN(slatL)) {
       setCalculationError('Please enter valid numbers');
       return;
     }
@@ -245,8 +246,8 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
     // Calculate slats needed - HORIZONTAL FENCE LOGIC (NO GAPS - composite fence)
     // slatsPerLength = how many slats fit per row (fence length / slat length)
     let slatsPerLength = Math.ceil(l / slatL); // How many slats fit across the length
-    // slatsPerRow = how many rows fit in height (height / slat width, NO GAPS)
-    let slatsPerRow = Math.ceil(h / slatW); // How many rows fit in height
+    // slatsPerRow = how many rows fit in height (height / composite slat width, NO GAPS)
+    let slatsPerRow = Math.ceil(h / compSlatW); // How many rows fit in height
     let slatsNeeded = slatsPerLength * slatsPerRow; // Total slats needed
 
     const postmix = parseFloat(postmixPerPost) || 0;
@@ -474,6 +475,19 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
           <option value="4.5">4.5 cm</option>
           <option value="5">5 cm</option>
         </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Composite Slat Width (cm)</label>
+        <input
+          type="number"
+          value={compositeSlatWidth}
+          onChange={(e) => setCompositeSlatWidth(e.target.value)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          placeholder="Enter composite slat width in cm"
+          min="0"
+          step="0.1"
+        />
       </div>
 
       <div>
