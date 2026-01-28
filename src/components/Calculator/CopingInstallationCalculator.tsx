@@ -413,29 +413,29 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-900 mb-4">Coping Installation Calculator</h2>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Wall Length (m)</label>
-          <input
-            type="number"
-            value={wallLength}
-            onChange={(e) => setWallLength(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder="Enter wall length"
-            step="0.01"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Slab Length (cm)</label>
-          <input
-            type="number"
-            value={slabLength}
-            onChange={(e) => setSlabLength(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder="Enter slab length"
-            step="0.1"
-          />
-        </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Wall Length (m)</label>
+        <input
+          type="number"
+          value={wallLength}
+          onChange={(e) => setWallLength(e.target.value)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          placeholder="Enter wall length"
+          step="0.01"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Slab Length (cm)</label>
+        <input
+          type="number"
+          value={slabLength}
+          onChange={(e) => setSlabLength(e.target.value)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          placeholder="Enter slab length"
+          step="0.1"
+        />
       </div>
 
       <div>
