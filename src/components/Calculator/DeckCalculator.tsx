@@ -250,7 +250,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       const boardWidth_m = bw / 100; // Convert cm to m
       const jointGaps_m = jg / 1000; // Convert mm to m
       const rowsNeeded = Math.ceil(tw / (boardWidth_m + jointGaps_m));
-      let totalBoards = boardsPerRow * rowsNeeded;
+      let totalBoards = Math.ceil(boardsPerRow * rowsNeeded);
 
       // ===== FRAME BOARDS CALCULATION (if includeFrame is checked) =====
       // Frame calculation: ((total_length - board_width) / board_length) + ((total_length - board_width) / board_length) + ((total_width - board_width) / board_length) + ((total_width - board_width) / board_length)
@@ -259,7 +259,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         const adjustedLength = (tl - boardWidth_m) / bl;
         const adjustedWidth = (tw - boardWidth_m) / bl;
         
-        frameBoards = adjustedLength + adjustedLength + adjustedWidth + adjustedWidth;
+        frameBoards = Math.ceil(adjustedLength + adjustedLength + adjustedWidth + adjustedWidth);
         totalBoards += frameBoards;
       }
 
@@ -267,21 +267,21 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       // Bearers are spaced 1.8m apart (fixed)
       const bearersInRow = Math.ceil(tl / jl); // total_length / joist_length (bearer length)
       const bearerRows = Math.ceil(tw / 1.8) + 1;
-      const totalBearers = bearersInRow * bearerRows;
+      const totalBearers = Math.ceil(bearersInRow * bearerRows);
 
       // ===== JOISTS CALCULATION =====
       const joistsInRow = Math.ceil(tw / jl); // total_width / joist_length
       const joistRows = Math.ceil(tl / dbj) + 1;
-      const totalJoists = joistsInRow * joistRows;
+      const totalJoists = Math.ceil(joistsInRow * joistRows);
 
       // ===== POSTS CALCULATION =====
       const postsPerRow = Math.ceil(tl / 1.8) + 1;
       const postRows = Math.ceil(tw / 1.8) + 1;
-      const totalPosts = postsPerRow * postRows;
+      const totalPosts = Math.ceil(postsPerRow * postRows);
 
       // ===== POSTMIX CALCULATION =====
       const postmix = parseFloat(postmixPerPost) || 0;
-      const totalPostmix = totalPosts * postmix;
+      const totalPostmix = Math.ceil(totalPosts * postmix);
 
       // ===== TASK BREAKDOWN =====
       const breakdown: TaskBreakdown[] = [];
