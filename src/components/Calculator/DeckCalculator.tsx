@@ -254,11 +254,12 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
 
       // ===== FRAME BOARDS CALCULATION (if includeFrame is checked) =====
       // Frame calculation: ((total_length - board_width) / board_length) + ((total_length - board_width) / board_length) + ((total_width - board_width) / board_length) + ((total_width - board_width) / board_length)
+      let frameBoards = 0;
       if (includeFrame) {
         const adjustedLength = (tl - boardWidth_m) / bl;
         const adjustedWidth = (tw - boardWidth_m) / bl;
         
-        const frameBoards = adjustedLength + adjustedLength + adjustedWidth + adjustedWidth;
+        frameBoards = adjustedLength + adjustedLength + adjustedWidth + adjustedWidth;
         totalBoards += frameBoards;
       }
 
@@ -476,13 +477,25 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       const finalTotalHours = breakdown.reduce((sum, item) => sum + item.hours, 0);
 
       // ===== MATERIAL BREAKDOWN =====
+      const normalBoards = totalBoards - frameBoards; // Calculate normal boards (without frame)
       const materialsList: Material[] = [
-        { name: 'Decking Boards', amount: totalBoards, unit: 'boards', price_per_unit: null, total_price: null },
+        { name: 'Decking Boards', amount: normalBoards, unit: 'boards', price_per_unit: null, total_price: null },
         { name: 'Posts', amount: totalPosts, unit: 'posts', price_per_unit: null, total_price: null },
         { name: 'Joists', amount: totalJoists, unit: 'joists', price_per_unit: null, total_price: null },
         { name: 'Bearers', amount: totalBearers, unit: 'bearers', price_per_unit: null, total_price: null },
         { name: 'Postmix', amount: totalPostmix, unit: 'bags', price_per_unit: null, total_price: null }
       ];
+
+      // Add frame boards if included
+      if (includeFrame && frameBoards > 0) {
+        materialsList.push({
+          name: 'Frame Boards',
+          amount: frameBoards,
+          unit: 'boards',
+          price_per_unit: null,
+          total_price: null
+        });
+      }
 
       // Fetch prices
       const materialsWithPrices = await fetchMaterialPrices(materialsList);
