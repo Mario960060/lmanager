@@ -62,8 +62,8 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
 }: CopingInstallationCalculatorProps) => {
   const companyId = useAuthStore(state => state.getCompanyId());
   const [wallLength, setWallLength] = useState<string>('');
-  const [slabLength, setSlabLength] = useState<string>('');
-  const [slabWidth, setSlabWidth] = useState<string>('');
+  const [slabLength, setSlabLength] = useState<string>('90');
+  const [slabWidth, setSlabWidth] = useState<string>('60');
   const [selectedGap, setSelectedGap] = useState<number>(GAP_OPTIONS[0]);
   const [adhesiveThickness, setAdhesiveThickness] = useState<number>(ADHESIVE_THICKNESS[0].value);
   const [amountOfCorners, setAmountOfCorners] = useState<string>('2');
@@ -437,26 +437,24 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
 
       <div>
         <label className="block text-sm font-medium text-gray-700">Slab Length (cm)</label>
-        <input
-          type="number"
+        <select
           value={slabLength}
           onChange={(e) => setSlabLength(e.target.value)}
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder="Enter slab length"
-          step="0.1"
-        />
+        >
+          <option value="90">90 cm</option>
+        </select>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700">Slab Width (cm)</label>
-        <input
-          type="number"
+        <select
           value={slabWidth}
           onChange={(e) => setSlabWidth(e.target.value)}
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder="Enter slab width"
-          step="0.1"
-        />
+        >
+          <option value="60">60 cm</option>
+        </select>
       </div>
 
       <div>
