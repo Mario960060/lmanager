@@ -62,7 +62,6 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
   const [height, setHeight] = useState('');
   const [slatWidth, setSlatWidth] = useState('5');
   const [slatLength, setSlatLength] = useState('360');
-  const [gapsBetweenSlats, setGapsBetweenSlats] = useState('5');
   const [postmixPerPost, setPostmixPerPost] = useState<string>('');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [totalHours, setTotalHours] = useState<number | null>(null);
@@ -114,7 +113,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
   const { data: layingTask, isLoading } = useQuery({
     queryKey: ['composite_fence_laying_task', companyId],
     queryFn: async () => {
-      const taskName = 'composite fence installation';
+      const taskName = 'standard composite fence';
       const { data, error } = await supabase
         .from('event_tasks_with_dynamic_estimates')
         .select('id, name, unit, estimated_hours')
@@ -133,14 +132,14 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
     enabled: !!companyId
   });
 
-  // Fetch task templates for digging holes and setting up posts
+  // Fetch task templates for digging holes and setting posts for composite
   const { data: taskTemplates = [] } = useQuery({
     queryKey: ['fence_post_tasks'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('event_tasks_with_dynamic_estimates')
         .select('id, name, unit, estimated_hours')
-        .or('name.ilike.%digging holes%,name.ilike.%setting up posts%');
+        .or('name.ilike.%digging holes%,name.ilike.%setting posts for composite%');
 
       if (error) throw error;
       return data || [];
@@ -234,9 +233,8 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
     const h = parseFloat(height) * 100; // Convert meters to cm
     const slatW = parseFloat(slatWidth);
     const slatL = parseFloat(slatLength);
-    const gaps = parseFloat(gapsBetweenSlats) / 10; // Convert mm to cm
 
-    if (isNaN(l) || isNaN(h) || isNaN(slatW) || isNaN(slatL) || isNaN(gaps)) {
+    if (isNaN(l) || isNaN(h) || isNaN(slatW) || isNaN(slatL)) {
       setCalculationError('Please enter valid numbers');
       return;
     }
@@ -244,11 +242,11 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
     let posts = Math.ceil(l / 180) + 1; // One post every 1.8m (180cm) + 1 extra post
     posts = Math.max(posts, 2); // Minimum 2 posts
 
-    // Calculate slats needed - HORIZONTAL FENCE LOGIC
+    // Calculate slats needed - HORIZONTAL FENCE LOGIC (NO GAPS - composite fence)
     // slatsPerLength = how many slats fit per row (fence length / slat length)
     let slatsPerLength = Math.ceil(l / slatL); // How many slats fit across the length
-    // slatsPerRow = how many rows fit in height (height / (slat width + gap))
-    let slatsPerRow = Math.ceil(h / (slatW + gaps)); // How many rows fit in height
+    // slatsPerRow = how many rows fit in height (height / slat width, NO GAPS)
+    let slatsPerRow = Math.ceil(h / slatW); // How many rows fit in height
     let slatsNeeded = slatsPerLength * slatsPerRow; // Total slats needed
 
     const postmix = parseFloat(postmixPerPost) || 0;
@@ -293,8 +291,8 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
       });
     }
 
-    // Add setting up posts task
-    const settingPostsTask = taskTemplates?.find(t => t.name?.toLowerCase().includes('setting up posts'));
+    // Add setting posts for composite task
+    const settingPostsTask = taskTemplates?.find(t => t.name?.toLowerCase().includes('setting posts for composite'));
     if (settingPostsTask && settingPostsTask.estimated_hours && settingPostsTask.name) {
       breakdown.push({
         task: settingPostsTask.name,
@@ -337,9 +335,9 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
         }
       }
 
-      // Calculate slats transport - on foot (6 slats per trip for horizontal)
+      // Calculate slats transport - on foot (2 slats per trip for composite)
       if (slatsNeeded > 0) {
-        const slatsPerTrip = 6;
+        const slatsPerTrip = 2;
         const trips = Math.ceil(slatsNeeded / slatsPerTrip);
         const slatCarrySpeed = 1500; // m/h for foot carrying
         const timePerTrip = (parseFloat(transportDistance) || 30) * 2 / slatCarrySpeed;
@@ -375,8 +373,8 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
 
     // Prepare materials list
     const materialsList: Material[] = [
-      { name: 'Post', amount: posts, unit: 'posts', price_per_unit: null, total_price: null },
-      { name: 'Fence Slats', amount: slatsNeeded, unit: 'slats', price_per_unit: null, total_price: null },
+      { name: 'Composite Posts', amount: posts, unit: 'posts', price_per_unit: null, total_price: null },
+      { name: 'Composite Slats', amount: slatsNeeded, unit: 'slats', price_per_unit: null, total_price: null },
       { name: 'Postmix', amount: totalPostmix, unit: 'bags', price_per_unit: null, total_price: null }
     ];
 
@@ -479,17 +477,6 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">Gaps Between Slats (mm)</label>
-        <input
-          type="number"
-          value={gapsBetweenSlats}
-          onChange={(e) => setGapsBetweenSlats(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder="Enter gap in millimeters"
-          min="0"
-          step="0.5"
-        />
-      </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700">Slat Length (cm)</label>
