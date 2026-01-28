@@ -320,6 +320,13 @@ const ProjectCreating = () => {
       subTypes: [
         { type: 'default', label: 'Foundation Excavation' }
       ]
+    },
+    {
+      type: 'deck',
+      label: 'Deck Calculator',
+      subTypes: [
+        { type: 'default', label: 'Decking Standard Installation' }
+      ]
     }
   ];
 
