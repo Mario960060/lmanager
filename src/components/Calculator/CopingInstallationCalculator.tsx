@@ -265,7 +265,6 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
 
     // Prepare task breakdown
     const copingTaskName = `Coping Installation ${slabLengthCm} × ${slabWidthCm}`;
-    const cuttingTaskName = 'cutting porcelain'; // Default to porcelain for coping
 
     // Find the template for coping installation
     const copingTaskTemplate = taskTemplates.find(
@@ -273,9 +272,9 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
     );
     const copingTaskTime = copingTaskTemplate?.estimated_hours ?? 0.5;
 
-    // Find the template for cutting
+    // Find the template for cutting - fetch from "cutting porcelain" but display as "cutting coping"
     const cuttingTaskTemplate = cuttingTasks.find(
-      (t: TaskTemplate) => t.name.toLowerCase() === cuttingTaskName.toLowerCase()
+      (t: TaskTemplate) => t.name.toLowerCase() === 'cutting porcelain'
     );
     const cuttingTaskTime = cuttingTaskTemplate?.estimated_hours ?? 0.5;
 
@@ -623,15 +622,15 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
 
           {/* Coping Installation Details */}
           <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Installation Details</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600">Number of Slabs</p>
-                <p className="text-2xl font-bold text-gray-900">{results.numberOfSlabs}</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Coping Summary</h3>
+            <div className="space-y-2 text-gray-900">
+              <div className="flex justify-between">
+                <span className="font-medium">Copings:</span>
+                <span>{results.numberOfSlabs}</span>
               </div>
-              <div>
-                <p className="text-sm text-gray-600">Total Cuts</p>
-                <p className="text-2xl font-bold text-gray-900">{results.totalCuts}</p>
+              <div className="flex justify-between">
+                <span className="font-medium">Quantity:</span>
+                <span>{results.numberOfSlabs} pieces</span>
               </div>
             </div>
           </div>
