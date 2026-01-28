@@ -130,7 +130,12 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         .eq('company_id', companyId || '')
         .in('name', taskNames);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error fetching deck tasks:', error);
+        throw error;
+      }
+
+      console.log('Fetched deck tasks:', data);
 
       // Convert array to object for easy lookup
       const taskMap: Record<string, any> = {};
@@ -139,6 +144,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
           taskMap[task.name] = task;
         });
       }
+      console.log('Task map:', taskMap);
       return taskMap;
     },
     enabled: !!companyId
