@@ -14,6 +14,7 @@ import AggregateCalculator from '../components/Calculator/AggregateCalculator';
 import PavingCalculator from '../components/Calculator/PavingCalculator';
 import ArtificialGrassCalculator from '../components/Calculator/ArtificialGrassCalculator';
 import TileInstallationCalculator from '../components/Calculator/TileInstallationCalculator';
+import CopingInstallationCalculator from '../components/Calculator/CopingInstallationCalculator';
 import GritSandCalculator from '../components/Calculator/GritSandCalculator';
 import KerbsEdgesAndSetsCalculator from '../components/Calculator/KerbsEdgesAndSetsCalculator';
 import FoundationCalculator from '../components/Calculator/FoundationCalculator';
@@ -33,7 +34,7 @@ type SubCalculatorType = {
   grass: 'coming_soon';
   slab: 'default';
   paving: 'default';
-  tile: 'default';
+  tile: 'default' | 'coping';
   kerbs: 'kl' | 'rumbled' | 'flat' | 'sets';
   foundation: 'default';
 };
@@ -68,7 +69,8 @@ const CalculatorPage: React.FC = () => {
       icon: Square,
       label: 'Wall finish Calculator',
       subTypes: [
-        { type: 'default', label: 'Tile Installation' }
+        { type: 'default', label: 'Tile Installation' },
+        { type: 'coping', label: 'Coping Installation' }
       ]
     },
     {
@@ -194,6 +196,9 @@ const CalculatorPage: React.FC = () => {
       case 'paving':
         return <PavingCalculator key={calculatorKey} />;
       case 'tile':
+        if (activeSubType === 'coping') {
+          return <CopingInstallationCalculator key={calculatorKey} />;
+        }
         return <TileInstallationCalculator key={calculatorKey} />;
       case 'wall':
         return <WallCalculator key={calculatorKey} type={activeSubType as SubCalculatorType['wall']} />;
