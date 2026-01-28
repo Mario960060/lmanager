@@ -60,8 +60,9 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
 
   const [length, setLength] = useState('');
   const [height, setHeight] = useState('');
-  const [slatWidth, setSlatWidth] = useState('10');
-  const [slatLength, setSlatLength] = useState('180');
+  const [slatWidth, setSlatWidth] = useState('5');
+  const [slatLength, setSlatLength] = useState('360');
+  const [gapsBetweenSlats, setGapsBetweenSlats] = useState('5');
   const [postmixPerPost, setPostmixPerPost] = useState<string>('');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [totalHours, setTotalHours] = useState<number | null>(null);
@@ -233,8 +234,9 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
     const h = parseFloat(height) * 100; // Convert meters to cm
     const slatW = parseFloat(slatWidth);
     const slatL = parseFloat(slatLength);
+    const gaps = parseFloat(gapsBetweenSlats) / 10; // Convert mm to cm
 
-    if (isNaN(l) || isNaN(h) || isNaN(slatW) || isNaN(slatL)) {
+    if (isNaN(l) || isNaN(h) || isNaN(slatW) || isNaN(slatL) || isNaN(gaps)) {
       setCalculationError('Please enter valid numbers');
       return;
     }
@@ -242,9 +244,12 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
     let posts = Math.ceil(l / 180) + 1; // One post every 1.8m (180cm) + 1 extra post
     posts = Math.max(posts, 2); // Minimum 2 posts
 
-    let slatsPerRow = Math.ceil(h / (slatW + 2)); // Slats needed per row
+    // Calculate slats needed - HORIZONTAL FENCE LOGIC
+    // slatsPerLength = how many slats fit per row (fence length / slat length)
     let slatsPerLength = Math.ceil(l / slatL); // How many slats fit across the length
-    let slatsNeeded = slatsPerRow * slatsPerLength; // Total slats needed
+    // slatsPerRow = how many rows fit in height (height / (slat width + gap))
+    let slatsPerRow = Math.ceil(h / (slatW + gaps)); // How many rows fit in height
+    let slatsNeeded = slatsPerLength * slatsPerRow; // Total slats needed
 
     const postmix = parseFloat(postmixPerPost) || 0;
     const totalPostmix = posts * postmix;
@@ -468,10 +473,22 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
           onChange={(e) => setSlatWidth(e.target.value)}
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
         >
-          <option value="10">10 cm</option>
-          <option value="12">12 cm</option>
-          <option value="15">15 cm</option>
+          <option value="4.5">4.5 cm</option>
+          <option value="5">5 cm</option>
         </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Gaps Between Slats (mm)</label>
+        <input
+          type="number"
+          value={gapsBetweenSlats}
+          onChange={(e) => setGapsBetweenSlats(e.target.value)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          placeholder="Enter gap in millimeters"
+          min="0"
+          step="0.5"
+        />
       </div>
 
       <div>
