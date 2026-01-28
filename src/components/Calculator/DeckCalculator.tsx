@@ -252,13 +252,13 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       let totalBoards = boardsPerRow * rowsNeeded;
 
       // ===== FRAME BOARDS CALCULATION (if includeFrame is checked) =====
+      // Frame calculation: ((total_length - board_width) / board_length) + ((total_length - board_width) / board_length) + ((total_width - board_width) / board_length) + ((total_width - board_width) / board_length)
       if (includeFrame) {
-        const adjustedLength = tl - boardWidth_m;
-        const adjustedWidth = tw - boardWidth_m;
-        const boltLength = 0.10; // 10cm bolt length (fixed)
+        const adjustedLength = (tl - boardWidth_m) / bl;
+        const adjustedWidth = (tw - boardWidth_m) / bl;
         
-        const frameBoards = Math.ceil(((adjustedLength / boltLength) * 2) + ((adjustedWidth / boltLength) * 2));
-        totalBoards += frameBoards; // Add frame boards to total boards
+        const frameBoards = adjustedLength + adjustedLength + adjustedWidth + adjustedWidth;
+        totalBoards += frameBoards;
       }
 
       // ===== BEARERS CALCULATION =====
@@ -303,6 +303,19 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
           hours: totalPosts * settingPostsTask.estimated_hours,
           amount: totalPosts ? `${totalPosts} posts` : '0',
           unit: 'posts'
+        });
+      }
+
+      // Decking board cuts
+      // Pattern: 1 cut, 2 cuts, 1 cut, 2 cuts... = average 1.5 per row
+      const totalBoardCuts = Math.ceil(rowsNeeded * 1.5);
+      const boardCutsTask = taskTemplates['decking boards cuts'];
+      if (boardCutsTask && boardCutsTask.estimated_hours && boardCutsTask.name) {
+        breakdown.push({
+          task: boardCutsTask.name,
+          hours: totalBoardCuts * boardCutsTask.estimated_hours,
+          amount: totalBoardCuts ? `${totalBoardCuts} cuts` : '0',
+          unit: 'cuts'
         });
       }
 
@@ -355,7 +368,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
 
         const distanceVal = parseFloat(transportDistance) || 30;
 
-        // Transport boards (use carrier)
+        // Transport boards (all boards including frame boards)
         if (totalBoards > 0) {
           const boardsResult = calculateMaterialTransportTime(totalBoards, carrierSizeForTransport, 'timber', distanceVal);
           const boardTransportTime = boardsResult.totalTransportTime;
