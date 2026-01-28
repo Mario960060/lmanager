@@ -313,7 +313,8 @@ const ProjectCreating = () => {
       type: 'tile',
       label: 'Wall finish Calculator',
       subTypes: [
-        { type: 'default', label: 'Tile Installation' }
+        { type: 'default', label: 'Tile Installation' },
+        { type: 'coping', label: 'Coping Installation' }
       ]
     },
     {
