@@ -14,6 +14,7 @@ import SoilExcavationCalculator from '../components/Calculator/SoilExcavationCal
 import PavingCalculator from '../components/Calculator/PavingCalculator';
 import ArtificialGrassCalculator from '../components/Calculator/ArtificialGrassCalculator';
 import WallFinishCalculator from '../components/Calculator/TileInstallationCalculator';
+import CopingInstallationCalculator from '../components/Calculator/CopingInstallationCalculator';
 import FoundationCalculator from '../components/Calculator/FoundationCalculator';
 import DeckCalculator from '../components/Calculator/DeckCalculator';
 import VenetianFenceCalculator from '../components/Calculator/VenetianFenceCalculator';
@@ -174,6 +175,9 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
       case 'grass':
         return <ArtificialGrassCalculator {...commonProps} />;
       case 'tile':
+        if (calculatorSubType === 'coping') {
+          return <CopingInstallationCalculator {...commonProps} />;
+        }
         return <WallFinishCalculator {...commonProps} />;
       case 'foundation':
         return <FoundationCalculator {...commonProps} />;
