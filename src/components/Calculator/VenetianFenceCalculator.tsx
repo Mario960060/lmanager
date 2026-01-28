@@ -337,9 +337,9 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
         }
       }
 
-      // Calculate slats transport - on foot (2 slats per trip for horizontal)
+      // Calculate slats transport - on foot (6 slats per trip for horizontal)
       if (slatsNeeded > 0) {
-        const slatsPerTrip = 2;
+        const slatsPerTrip = 6;
         const trips = Math.ceil(slatsNeeded / slatsPerTrip);
         const slatCarrySpeed = 1500; // m/h for foot carrying
         const timePerTrip = (parseFloat(transportDistance) || 30) * 2 / slatCarrySpeed;
