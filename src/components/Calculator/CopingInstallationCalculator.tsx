@@ -274,19 +274,46 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
     }
 
     // Prepare task breakdown
-    const copingTaskName = `Coping Installation ${slabLengthCm} × ${slabWidthCm}`;
+    const copingTaskName = `Coping Installation ${slabLengthCm}x${slabWidthCm}`;
 
-    // Find the template for coping installation
-    const copingTaskTemplate = taskTemplates.find(
-      (t: TaskTemplate) => t.name.toLowerCase().includes('coping') && t.name.toLowerCase().includes('installation')
+    // Find the template for coping installation with smart matching
+    let copingTaskTemplate = taskTemplates.find(
+      (t: TaskTemplate) => t.name.toLowerCase() === copingTaskName.toLowerCase()
     );
-    const copingTaskTime = copingTaskTemplate?.estimated_hours ?? 0.5;
+    console.log(`[Coping] Searching for: "${copingTaskName}"`, copingTaskTemplate ? `✓ Found exact match: ${copingTaskTemplate.name}` : `✗ No exact match`);
+    
+    // If exact match not found, try to find best match (priority: length, then width)
+    if (!copingTaskTemplate) {
+      // Try to match by length first
+      copingTaskTemplate = taskTemplates.find(
+        (t: TaskTemplate) => {
+          const lowerName = t.name.toLowerCase();
+          return lowerName.includes('coping') && lowerName.includes('installation') && lowerName.includes(`${slabLengthCm}x`);
+        }
+      );
+      console.log(`[Coping] Trying LENGTH match (${slabLengthCm}x*)`, copingTaskTemplate ? `✓ Found: ${copingTaskTemplate.name}` : `✗ Not found`);
+    }
+    
+    // If still not found, try to match by width
+    if (!copingTaskTemplate) {
+      copingTaskTemplate = taskTemplates.find(
+        (t: TaskTemplate) => {
+          const lowerName = t.name.toLowerCase();
+          return lowerName.includes('coping') && lowerName.includes('installation') && lowerName.includes(`x${slabWidthCm}`);
+        }
+      );
+      console.log(`[Coping] Trying WIDTH match (*x${slabWidthCm})`, copingTaskTemplate ? `✓ Found: ${copingTaskTemplate.name}` : `✗ Not found`);
+    }
+    
+    const copingTaskTime = copingTaskTemplate?.estimated_hours ?? 0.1;
+    console.log(`[Coping] Final task time: ${copingTaskTime}h ${copingTaskTemplate ? `(from: ${copingTaskTemplate.name})` : '(default)'}`);
 
     // Find the template for cutting - fetch from "cutting porcelain" but display as "cutting coping"
     const cuttingTaskTemplate = cuttingTasks.find(
       (t: TaskTemplate) => t.name.toLowerCase() === 'cutting porcelain'
     );
-    const cuttingTaskTime = cuttingTaskTemplate?.estimated_hours ?? 0.5;
+    const cuttingTaskTime = cuttingTaskTemplate?.estimated_hours ?? 0.1;
+    console.log(`[Cutting] Looking for "cutting porcelain"`, cuttingTaskTemplate ? `✓ Found: ${cuttingTaskTemplate.name} (${cuttingTaskTime}h)` : `✗ Not found (using default 0.1h)`);
 
     const copingTaskTotal = numberOfSlabs * copingTaskTime;
     const cuttingTaskTotal = totalCuts * cuttingTaskTime;
