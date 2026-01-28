@@ -118,7 +118,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       const taskNames = [
         'digging holes for posts',
         'setting up posts',
-        'decking board cuts',
+        'decking boards cuts',
         'cutting decking joists',
         'fixing decking frame',
         'fixing decking boards'
@@ -293,7 +293,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       // Decking board cuts
       // Pattern: 1 cut, 2 cuts, 1 cut, 2 cuts... = average 1.5 per row
       const totalBoardCuts = Math.ceil(rowsNeeded * 1.5);
-      const boardCutsTask = taskTemplates['decking board cuts'];
+      const boardCutsTask = taskTemplates['decking boards cuts'];
       if (boardCutsTask && boardCutsTask.estimated_hours && boardCutsTask.name) {
         breakdown.push({
           task: boardCutsTask.name,
