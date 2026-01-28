@@ -121,7 +121,8 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         'decking boards cuts',
         'cutting decking joists',
         'fixing decking frame',
-        'fixing decking boards'
+        'fixing decking boards',
+        'decking frame boards cuts'
       ];
 
       const { data, error } = await supabase
@@ -329,6 +330,25 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
           amount: totalJoistCuts ? `${totalJoistCuts} cuts` : '0',
           unit: 'cuts'
         });
+      }
+
+      // Decking frame boards cuts (if includeFrame is checked)
+      if (includeFrame) {
+        const frameTask = taskTemplates['decking frame boards cuts'];
+        if (frameTask && frameTask.estimated_hours && frameTask.name) {
+          // Calculate frame boards amount for display
+          const boardWidth_m = bw / 100; // Convert cm to m
+          const adjustedLength = (tl - boardWidth_m) / bl;
+          const adjustedWidth = (tw - boardWidth_m) / bl;
+          const frameBoards = adjustedLength + adjustedLength + adjustedWidth + adjustedWidth;
+          
+          breakdown.push({
+            task: frameTask.name,
+            hours: frameBoards * frameTask.estimated_hours,
+            amount: frameBoards ? `${Math.ceil(frameBoards)} boards` : '0',
+            unit: 'boards'
+          });
+        }
       }
 
       // Fixing decking frame (joist + bearer + posts all related)
