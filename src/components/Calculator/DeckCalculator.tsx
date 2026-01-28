@@ -292,7 +292,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         breakdown.push({
           task: diggingTask.name,
           hours: totalPosts * diggingTask.estimated_hours,
-          amount: totalPosts ? `${totalPosts} posts` : '0',
+          amount: `${totalPosts}`,
           unit: 'posts'
         });
       }
@@ -303,7 +303,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         breakdown.push({
           task: settingPostsTask.name,
           hours: totalPosts * settingPostsTask.estimated_hours,
-          amount: totalPosts ? `${totalPosts} posts` : '0',
+          amount: `${totalPosts}`,
           unit: 'posts'
         });
       }
@@ -316,7 +316,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         breakdown.push({
           task: boardCutsTask.name,
           hours: totalBoardCuts * boardCutsTask.estimated_hours,
-          amount: totalBoardCuts ? `${totalBoardCuts} cuts` : '0',
+          amount: `${totalBoardCuts}`,
           unit: 'cuts'
         });
       }
@@ -328,7 +328,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         breakdown.push({
           task: joistCutsTask.name,
           hours: totalJoistCuts * joistCutsTask.estimated_hours,
-          amount: totalJoistCuts ? `${totalJoistCuts} cuts` : '0',
+          amount: `${totalJoistCuts}`,
           unit: 'cuts'
         });
       }
@@ -346,7 +346,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
           breakdown.push({
             task: frameTask.name,
             hours: frameBoards * frameTask.estimated_hours,
-            amount: frameBoards ? `${Math.ceil(frameBoards)} boards` : '0',
+            amount: `${Math.ceil(frameBoards)}`,
             unit: 'boards'
           });
         }
@@ -358,7 +358,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         breakdown.push({
           task: fixingFrameTask.name,
           hours: totalJoists * fixingFrameTask.estimated_hours,
-          amount: totalJoists ? `${totalJoists} joists` : '0',
+          amount: `${totalJoists}`,
           unit: 'joists'
         });
       }
@@ -369,7 +369,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         breakdown.push({
           task: fixingBoardsTask.name,
           hours: totalBoards * fixingBoardsTask.estimated_hours,
-          amount: totalBoards ? `${totalBoards} boards` : '0',
+          amount: `${totalBoards}`,
           unit: 'boards'
         });
       }
@@ -398,7 +398,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
             breakdown.push({
               task: 'transport decking boards',
               hours: boardTransportTime,
-              amount: totalBoards ? `${totalBoards} boards` : '0',
+              amount: `${totalBoards}`,
               unit: 'boards'
             });
             transportTime += boardTransportTime;
@@ -414,7 +414,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
             breakdown.push({
               task: 'transport joists',
               hours: joistTransportTime,
-              amount: totalJoists ? `${totalJoists} joists` : '0',
+              amount: `${totalJoists}`,
               unit: 'joists'
             });
             transportTime += joistTransportTime;
@@ -430,7 +430,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
             breakdown.push({
               task: 'transport bearers',
               hours: bearerTransportTime,
-              amount: totalBearers ? `${totalBearers} bearers` : '0',
+              amount: `${totalBearers}`,
               unit: 'bearers'
             });
             transportTime += bearerTransportTime;
@@ -449,7 +449,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
             breakdown.push({
               task: 'transport posts',
               hours: postTransportTime,
-              amount: totalPosts ? `${totalPosts} posts` : '0',
+              amount: `${totalPosts}`,
               unit: 'posts'
             });
             transportTime += postTransportTime;
@@ -465,7 +465,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
             breakdown.push({
               task: 'transport postmix',
               hours: postmixTransportTime,
-              amount: totalPostmix ? `${totalPostmix} bags` : '0',
+              amount: `${totalPostmix}`,
               unit: 'bags'
             });
             transportTime += postmixTransportTime;
