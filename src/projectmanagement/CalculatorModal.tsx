@@ -15,6 +15,7 @@ import PavingCalculator from '../components/Calculator/PavingCalculator';
 import ArtificialGrassCalculator from '../components/Calculator/ArtificialGrassCalculator';
 import WallFinishCalculator from '../components/Calculator/TileInstallationCalculator';
 import FoundationCalculator from '../components/Calculator/FoundationCalculator';
+import DeckCalculator from '../components/Calculator/DeckCalculator';
 
 interface CalculatorModalProps {
   calculatorType: string;
@@ -169,6 +170,8 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
         return <WallFinishCalculator {...commonProps} />;
       case 'foundation':
         return <FoundationCalculator {...commonProps} />;
+      case 'deck':
+        return <DeckCalculator {...commonProps} />;
       default:
         return null;
     }
