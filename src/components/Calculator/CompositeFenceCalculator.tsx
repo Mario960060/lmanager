@@ -477,8 +477,6 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
       </div>
 
       <div>
-
-      <div>
         <label className="block text-sm font-medium text-gray-700">Slat Length (cm)</label>
         <select
           value={slatLength}
