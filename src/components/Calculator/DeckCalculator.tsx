@@ -567,7 +567,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">Total Length (m)</label>
-          <p className="text-xs text-gray-500 mb-1">Along the direction boards run</p>
+          <p className="text-xs text-red-600 mb-1">Along the direction boards run</p>
           <input
             type="number"
             value={totalLength}
