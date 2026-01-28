@@ -246,10 +246,71 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       }
 
       // ===== DECKING BOARDS CALCULATION =====
-      const boardsPerRow = Math.ceil(tl / bl); // total_length / board_length
       const boardWidth_m = bw / 100; // Convert cm to m
       const jointGaps_m = jg / 1000; // Convert mm to m
-      const rowsNeeded = Math.ceil(tw / (boardWidth_m + jointGaps_m));
+      const sqrt2 = Math.sqrt(2);
+
+      let boardsPerRow: number;
+      let rowsNeeded: number;
+      let bearersInRow: number;
+      let bearerRows: number;
+      let joistsInRow: number;
+      let joistRows: number;
+      let postsPerRow: number;
+      let postRows: number;
+      let totalBoardCuts: number;
+
+      // ===== PATTERN-SPECIFIC CALCULATIONS =====
+      if (pattern === '45 degree angle') {
+        console.log('Using 45° angle pattern');
+
+        // 45° ANGLE PATTERN
+        const diagonalLength = Math.sqrt(tl * tl + tw * tw);
+        const effectiveLengthForJoists = (tl + tw) / sqrt2;
+
+        // Deski
+        boardsPerRow = Math.ceil(diagonalLength / bl);
+        rowsNeeded = Math.ceil((tw * sqrt2) / (boardWidth_m + jointGaps_m));
+
+        // Bearers
+        bearersInRow = Math.ceil(effectiveLengthForJoists / jl);
+        bearerRows = Math.ceil((tw * sqrt2) / 1.8) + 1;
+
+        // Joists
+        joistsInRow = Math.ceil(effectiveLengthForJoists / jl);
+        joistRows = Math.ceil((tw * sqrt2) / dbj) + 1;
+
+        // Posts
+        postsPerRow = Math.ceil(effectiveLengthForJoists / 1.8) + 1;
+        postRows = Math.ceil((tw * sqrt2) / 1.8) + 1;
+
+        // Cięcia - ZAWSZE 2 na rząd dla 45°
+        totalBoardCuts = rowsNeeded * 2;
+      } else {
+        // DEFAULT (LENGTH) PATTERN
+        console.log('Using default length pattern');
+
+        // Deski
+        boardsPerRow = Math.ceil(tl / bl);
+        rowsNeeded = Math.ceil(tw / (boardWidth_m + jointGaps_m));
+
+        // Bearers
+        bearersInRow = Math.ceil(tl / jl);
+        bearerRows = Math.ceil(tw / 1.8) + 1;
+
+        // Joists
+        joistsInRow = Math.ceil(tw / jl);
+        joistRows = Math.ceil(tl / dbj) + 1;
+
+        // Posts
+        postsPerRow = Math.ceil(tl / 1.8) + 1;
+        postRows = Math.ceil(tw / 1.8) + 1;
+
+        // Cięcia - alternacja 1-2-1-2 (średnia 1.5 na rząd)
+        totalBoardCuts = Math.ceil(rowsNeeded * 1.5);
+      }
+
+      // ===== SHARED CALCULATIONS =====
       let totalBoards = Math.ceil(boardsPerRow * rowsNeeded);
 
       // ===== FRAME BOARDS CALCULATION (if includeFrame is checked) =====
@@ -263,20 +324,9 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         totalBoards += frameBoards;
       }
 
-      // ===== BEARERS CALCULATION =====
-      // Bearers are spaced 1.8m apart (fixed)
-      const bearersInRow = Math.ceil(tl / jl); // total_length / joist_length (bearer length)
-      const bearerRows = Math.ceil(tw / 1.8) + 1;
+      // ===== MATERIAL COUNTS (using pattern-specific values from above) =====
       const totalBearers = Math.ceil(bearersInRow * bearerRows);
-
-      // ===== JOISTS CALCULATION =====
-      const joistsInRow = Math.ceil(tw / jl); // total_width / joist_length
-      const joistRows = Math.ceil(tl / dbj) + 1;
       const totalJoists = Math.ceil(joistsInRow * joistRows);
-
-      // ===== POSTS CALCULATION =====
-      const postsPerRow = Math.ceil(tl / 1.8) + 1;
-      const postRows = Math.ceil(tw / 1.8) + 1;
       const totalPosts = Math.ceil(postsPerRow * postRows);
 
       // ===== POSTMIX CALCULATION =====
@@ -309,8 +359,6 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       }
 
       // Decking board cuts
-      // Pattern: 1 cut, 2 cuts, 1 cut, 2 cuts... = average 1.5 per row
-      const totalBoardCuts = Math.ceil(rowsNeeded * 1.5);
       const boardCutsTask = taskTemplates['decking boards cuts'];
       if (boardCutsTask && boardCutsTask.estimated_hours && boardCutsTask.name) {
         breakdown.push({
@@ -323,7 +371,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
 
       // Cutting decking joists (joists + bearers)
       const totalJoistCuts = joistRows + bearerRows;
-      const joistCutsTask = taskTemplates['cutting decking joists'];
+      const joistCutsTask = taskTemplates['cutting decking  joists'];
       if (joistCutsTask && joistCutsTask.estimated_hours && joistCutsTask.name) {
         breakdown.push({
           task: joistCutsTask.name,
