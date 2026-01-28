@@ -291,6 +291,8 @@ const ProjectCreating = () => {
       subTypes: [
         { type: 'vertical', label: 'Vertical Fence' },
         { type: 'horizontal', label: 'Horizontal Fence' },
+        { type: 'venetian', label: 'Venetian Fence' },
+        { type: 'composite', label: 'Composite Fence' },
       ]
     },
     {
