@@ -121,8 +121,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         'decking boards cuts',
         'cutting decking joists',
         'fixing decking frame',
-        'fixing decking boards',
-        'decking frame boards cuts'
+        'fixing decking boards'
       ];
 
       const { data, error } = await supabase
@@ -250,7 +249,17 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       const boardWidth_m = bw / 100; // Convert cm to m
       const jointGaps_m = jg / 1000; // Convert mm to m
       const rowsNeeded = Math.ceil(tw / (boardWidth_m + jointGaps_m));
-      const totalBoards = boardsPerRow * rowsNeeded;
+      let totalBoards = boardsPerRow * rowsNeeded;
+
+      // ===== FRAME BOARDS CALCULATION (if includeFrame is checked) =====
+      if (includeFrame) {
+        const adjustedLength = tl - boardWidth_m;
+        const adjustedWidth = tw - boardWidth_m;
+        const boltLength = 0.10; // 10cm bolt length (fixed)
+        
+        const frameBoards = Math.ceil(((adjustedLength / boltLength) * 2) + ((adjustedWidth / boltLength) * 2));
+        totalBoards += frameBoards; // Add frame boards to total boards
+      }
 
       // ===== BEARERS CALCULATION =====
       // Bearers are spaced 1.8m apart (fixed)
@@ -271,17 +280,6 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       // ===== POSTMIX CALCULATION =====
       const postmix = parseFloat(postmixPerPost) || 0;
       const totalPostmix = totalPosts * postmix;
-
-      // ===== FRAME BOLTS CALCULATION (if includeFrame is checked) =====
-      let frameBolts = 0;
-      if (includeFrame) {
-        const boardWidth_m = bw / 100; // Convert cm to m
-        const adjustedLength = tl - boardWidth_m;
-        const adjustedWidth = tw - boardWidth_m;
-        const boltLength = 0.10; // 10cm bolt length (fixed)
-        
-        frameBolts = Math.ceil(((adjustedLength / boltLength) * 2) + ((adjustedWidth / boltLength) * 2));
-      }
 
       // ===== TASK BREAKDOWN =====
       const breakdown: TaskBreakdown[] = [];
@@ -308,19 +306,6 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         });
       }
 
-      // Decking board cuts
-      // Pattern: 1 cut, 2 cuts, 1 cut, 2 cuts... = average 1.5 per row
-      const totalBoardCuts = Math.ceil(rowsNeeded * 1.5);
-      const boardCutsTask = taskTemplates['decking boards cuts'];
-      if (boardCutsTask && boardCutsTask.estimated_hours && boardCutsTask.name) {
-        breakdown.push({
-          task: boardCutsTask.name,
-          hours: totalBoardCuts * boardCutsTask.estimated_hours,
-          amount: totalBoardCuts ? `${totalBoardCuts} cuts` : '0',
-          unit: 'cuts'
-        });
-      }
-
       // Cutting decking joists (joists + bearers)
       const totalJoistCuts = joistRows + bearerRows;
       const joistCutsTask = taskTemplates['cutting decking joists'];
@@ -331,19 +316,6 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
           amount: totalJoistCuts ? `${totalJoistCuts} cuts` : '0',
           unit: 'cuts'
         });
-      }
-
-      // Decking frame boards cuts (if includeFrame is checked)
-      if (includeFrame && frameBolts > 0) {
-        const frameTask = taskTemplates['decking frame boards cuts'];
-        if (frameTask && frameTask.estimated_hours && frameTask.name) {
-          breakdown.push({
-            task: frameTask.name,
-            hours: frameBolts * frameTask.estimated_hours,
-            amount: frameBolts ? `${frameBolts} bolts` : '0',
-            unit: 'bolts'
-          });
-        }
       }
 
       // Fixing decking frame (joist + bearer + posts all related)
@@ -383,13 +355,10 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
 
         const distanceVal = parseFloat(transportDistance) || 30;
 
-        // Transport boards (lightweight, on foot)
+        // Transport boards (use carrier)
         if (totalBoards > 0) {
-          const boardsPerTrip = 10; // Estimate: 10 boards per person per trip
-          const trips = Math.ceil(totalBoards / boardsPerTrip);
-          const carrySpeed = 1500; // m/h for foot carrying
-          const timePerTrip = (distanceVal * 2) / carrySpeed;
-          const boardTransportTime = trips * timePerTrip;
+          const boardsResult = calculateMaterialTransportTime(totalBoards, carrierSizeForTransport, 'timber', distanceVal);
+          const boardTransportTime = boardsResult.totalTransportTime;
 
           if (boardTransportTime > 0) {
             breakdown.push({
@@ -468,22 +437,6 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
             transportTime += postmixTransportTime;
           }
         }
-
-        // Transport frame bolts (if included)
-        if (includeFrame && frameBolts > 0) {
-          const frameBoltsResult = calculateMaterialTransportTime(frameBolts, carrierSizeForTransport, 'hardware', distanceVal);
-          const frameBoltsTransportTime = frameBoltsResult.totalTransportTime;
-
-          if (frameBoltsTransportTime > 0) {
-            breakdown.push({
-              task: 'transport frame bolts',
-              hours: frameBoltsTransportTime,
-              amount: frameBolts ? `${frameBolts} bolts` : '0',
-              unit: 'bolts'
-            });
-            transportTime += frameBoltsTransportTime;
-          }
-        }
       }
 
       // Final total hours
@@ -497,17 +450,6 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         { name: 'Bearers', amount: totalBearers, unit: 'bearers', price_per_unit: null, total_price: null },
         { name: 'Postmix', amount: totalPostmix, unit: 'bags', price_per_unit: null, total_price: null }
       ];
-
-      // Add frame bolts if included
-      if (includeFrame && frameBolts > 0) {
-        materialsList.push({
-          name: 'Frame Bolts',
-          amount: frameBolts,
-          unit: 'bolts',
-          price_per_unit: null,
-          total_price: null
-        });
-      }
 
       // Fetch prices
       const materialsWithPrices = await fetchMaterialPrices(materialsList);
