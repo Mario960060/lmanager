@@ -121,7 +121,8 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         'decking boards cuts',
         'cutting decking joists',
         'fixing decking frame',
-        'fixing decking boards'
+        'fixing decking boards',
+        'decking frame boards cuts'
       ];
 
       const { data, error } = await supabase
@@ -271,6 +272,17 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       const postmix = parseFloat(postmixPerPost) || 0;
       const totalPostmix = totalPosts * postmix;
 
+      // ===== FRAME BOLTS CALCULATION (if includeFrame is checked) =====
+      let frameBolts = 0;
+      if (includeFrame) {
+        const boardWidth_m = bw / 100; // Convert cm to m
+        const adjustedLength = tl - boardWidth_m;
+        const adjustedWidth = tw - boardWidth_m;
+        const boltLength = 0.10; // 10cm bolt length (fixed)
+        
+        frameBolts = Math.ceil(((adjustedLength / boltLength) * 2) + ((adjustedWidth / boltLength) * 2));
+      }
+
       // ===== TASK BREAKDOWN =====
       const breakdown: TaskBreakdown[] = [];
 
@@ -319,6 +331,19 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
           amount: totalJoistCuts ? `${totalJoistCuts} cuts` : '0',
           unit: 'cuts'
         });
+      }
+
+      // Decking frame boards cuts (if includeFrame is checked)
+      if (includeFrame && frameBolts > 0) {
+        const frameTask = taskTemplates['decking frame boards cuts'];
+        if (frameTask && frameTask.estimated_hours && frameTask.name) {
+          breakdown.push({
+            task: frameTask.name,
+            hours: frameBolts * frameTask.estimated_hours,
+            amount: frameBolts ? `${frameBolts} bolts` : '0',
+            unit: 'bolts'
+          });
+        }
       }
 
       // Fixing decking frame (joist + bearer + posts all related)
@@ -443,6 +468,22 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
             transportTime += postmixTransportTime;
           }
         }
+
+        // Transport frame bolts (if included)
+        if (includeFrame && frameBolts > 0) {
+          const frameBoltsResult = calculateMaterialTransportTime(frameBolts, carrierSizeForTransport, 'hardware', distanceVal);
+          const frameBoltsTransportTime = frameBoltsResult.totalTransportTime;
+
+          if (frameBoltsTransportTime > 0) {
+            breakdown.push({
+              task: 'transport frame bolts',
+              hours: frameBoltsTransportTime,
+              amount: frameBolts ? `${frameBolts} bolts` : '0',
+              unit: 'bolts'
+            });
+            transportTime += frameBoltsTransportTime;
+          }
+        }
       }
 
       // Final total hours
@@ -456,6 +497,17 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         { name: 'Bearers', amount: totalBearers, unit: 'bearers', price_per_unit: null, total_price: null },
         { name: 'Postmix', amount: totalPostmix, unit: 'bags', price_per_unit: null, total_price: null }
       ];
+
+      // Add frame bolts if included
+      if (includeFrame && frameBolts > 0) {
+        materialsList.push({
+          name: 'Frame Bolts',
+          amount: frameBolts,
+          unit: 'bolts',
+          price_per_unit: null,
+          total_price: null
+        });
+      }
 
       // Fetch prices
       const materialsWithPrices = await fetchMaterialPrices(materialsList);
@@ -626,7 +678,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       {/* Pattern and Frame */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700">Pattern (Informational)</label>
+          <label className="block text-sm font-medium text-gray-700">Pattern</label>
           <select
             value={pattern}
             onChange={(e) => setPattern(e.target.value)}
@@ -646,7 +698,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
               onChange={(e) => setIncludeFrame(e.target.checked)}
               className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
             />
-            <span className="text-sm font-medium text-gray-700">Include Frame (Informational)</span>
+            <span className="text-sm font-medium text-gray-700">Include Frame</span>
           </label>
         </div>
       </div>
