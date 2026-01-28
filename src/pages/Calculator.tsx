@@ -18,6 +18,8 @@ import GritSandCalculator from '../components/Calculator/GritSandCalculator';
 import KerbsEdgesAndSetsCalculator from '../components/Calculator/KerbsEdgesAndSetsCalculator';
 import FoundationCalculator from '../components/Calculator/FoundationCalculator';
 import DeckCalculator from '../components/Calculator/DeckCalculator';
+import VenetianFenceCalculator from '../components/Calculator/VenetianFenceCalculator';
+import CompositeFenceCalculator from '../components/Calculator/CompositeFenceCalculator';
 
 type CalculatorType = 'aggregate' | 'wall' | 'mortar' | 'time' | 'fence' | 'steps' | 'deck' | 'grass' | 'slab' | 'paving' | 'tile' | 'kerbs' | 'foundation';
 type SubCalculatorType = {
@@ -25,7 +27,7 @@ type SubCalculatorType = {
   wall: 'brick' | 'block4' | 'block7' | 'sleeper';
   mortar: 'slab' | 'general';
   time: 'task';
-  fence: 'vertical' | 'horizontal';
+  fence: 'vertical' | 'horizontal' | 'venetian' | 'composite';
   steps: 'standard';
   deck: 'standard';
   grass: 'coming_soon';
@@ -103,6 +105,8 @@ const CalculatorPage: React.FC = () => {
       subTypes: [
         { type: 'vertical', label: 'Vertical Fence' },
         { type: 'horizontal', label: 'Horizontal Fence' },
+        { type: 'venetian', label: 'Venetian Fence' },
+        { type: 'composite', label: 'Composite Fence' },
       ]
     },
     {
@@ -197,6 +201,11 @@ const CalculatorPage: React.FC = () => {
         return <TimeEstimator key={calculatorKey} />;
       case 'fence':
         console.log(`Calculator.tsx: Rendering FenceCalculator with fenceType=${activeSubType}`);
+        if (activeSubType === 'venetian') {
+          return <VenetianFenceCalculator key={calculatorKey} />;
+        } else if (activeSubType === 'composite') {
+          return <CompositeFenceCalculator key={calculatorKey} />;
+        }
         return <FenceCalculator key={calculatorKey} fenceType={activeSubType as 'vertical' | 'horizontal'} />;
       case 'slab':
         return <SlabCalculator key={calculatorKey} />;
