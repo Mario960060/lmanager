@@ -17,6 +17,7 @@ import TileInstallationCalculator from '../components/Calculator/TileInstallatio
 import GritSandCalculator from '../components/Calculator/GritSandCalculator';
 import KerbsEdgesAndSetsCalculator from '../components/Calculator/KerbsEdgesAndSetsCalculator';
 import FoundationCalculator from '../components/Calculator/FoundationCalculator';
+import DeckCalculator from '../components/Calculator/DeckCalculator';
 
 type CalculatorType = 'aggregate' | 'wall' | 'mortar' | 'time' | 'fence' | 'steps' | 'deck' | 'grass' | 'slab' | 'paving' | 'tile' | 'kerbs' | 'foundation';
 type SubCalculatorType = {
@@ -26,7 +27,7 @@ type SubCalculatorType = {
   time: 'task';
   fence: 'vertical' | 'horizontal';
   steps: 'standard';
-  deck: 'coming_soon';
+  deck: 'standard';
   grass: 'coming_soon';
   slab: 'default';
   paving: 'default';
@@ -117,7 +118,7 @@ const CalculatorPage: React.FC = () => {
       icon: Rows4,
       label: 'Deck Calculator',
       subTypes: [
-        { type: 'coming_soon', label: 'Coming Soon' }
+        { type: 'standard', label: 'Decking Standard' }
       ]
     },
     {
@@ -202,6 +203,8 @@ const CalculatorPage: React.FC = () => {
       case 'steps':
         return <StairCalculator key={calculatorKey} />;
       case 'deck':
+        console.log(`Calculator.tsx: Rendering DeckCalculator`);
+        return <DeckCalculator key={calculatorKey} />;
       case 'grass':
         return <ArtificialGrassCalculator key={calculatorKey} />;
       case 'kerbs':
