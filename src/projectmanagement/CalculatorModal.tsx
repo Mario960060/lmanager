@@ -16,6 +16,8 @@ import ArtificialGrassCalculator from '../components/Calculator/ArtificialGrassC
 import WallFinishCalculator from '../components/Calculator/TileInstallationCalculator';
 import FoundationCalculator from '../components/Calculator/FoundationCalculator';
 import DeckCalculator from '../components/Calculator/DeckCalculator';
+import VenetianFenceCalculator from '../components/Calculator/VenetianFenceCalculator';
+import CompositeFenceCalculator from '../components/Calculator/CompositeFenceCalculator';
 
 interface CalculatorModalProps {
   calculatorType: string;
@@ -161,6 +163,11 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
       case 'slab':
         return <SlabCalculator {...commonProps} />;
       case 'fence':
+        if (calculatorSubType === 'venetian') {
+          return <VenetianFenceCalculator {...commonProps} />;
+        } else if (calculatorSubType === 'composite') {
+          return <CompositeFenceCalculator {...commonProps} />;
+        }
         return <FenceCalculator fenceType={calculatorSubType as 'vertical' | 'horizontal'} {...commonProps} />;
       case 'steps':
         return <StairCalculator {...commonProps} />;
