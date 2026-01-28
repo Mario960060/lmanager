@@ -112,17 +112,36 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
   }, [transportDistance, isInProjectCreating]);
 
   // Fetch task templates
-  const { data: taskTemplates = [] } = useQuery({
-    queryKey: ['deck_post_tasks'],
+  const { data: taskTemplates = {} } = useQuery({
+    queryKey: ['deck_tasks', companyId],
     queryFn: async () => {
+      const taskNames = [
+        'digging holes for posts',
+        'setting up posts',
+        'decking board cuts',
+        'cutting decking joists',
+        'fixing decking frame',
+        'fixing decking boards'
+      ];
+
       const { data, error } = await supabase
         .from('event_tasks_with_dynamic_estimates')
         .select('id, name, unit, estimated_hours')
-        .or('name.ilike.%digging holes%,name.ilike.%setting up posts%,name.ilike.%decking%,name.ilike.%fixing%');
+        .eq('company_id', companyId || '')
+        .in('name', taskNames);
 
       if (error) throw error;
-      return data || [];
-    }
+
+      // Convert array to object for easy lookup
+      const taskMap: Record<string, any> = {};
+      if (data) {
+        data.forEach(task => {
+          taskMap[task.name] = task;
+        });
+      }
+      return taskMap;
+    },
+    enabled: !!companyId
   });
 
   // Fetch equipment
@@ -250,7 +269,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       const breakdown: TaskBreakdown[] = [];
 
       // Digging holes for posts
-      const diggingTask = taskTemplates?.find(t => t.name?.toLowerCase().includes('digging holes'));
+      const diggingTask = taskTemplates['digging holes for posts'];
       if (diggingTask && diggingTask.estimated_hours && diggingTask.name) {
         breakdown.push({
           task: diggingTask.name,
@@ -261,7 +280,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       }
 
       // Setting up posts
-      const settingPostsTask = taskTemplates?.find(t => t.name?.toLowerCase().includes('setting up posts'));
+      const settingPostsTask = taskTemplates['setting up posts'];
       if (settingPostsTask && settingPostsTask.estimated_hours && settingPostsTask.name) {
         breakdown.push({
           task: settingPostsTask.name,
@@ -274,7 +293,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       // Decking board cuts
       // Pattern: 1 cut, 2 cuts, 1 cut, 2 cuts... = average 1.5 per row
       const totalBoardCuts = Math.ceil(rowsNeeded * 1.5);
-      const boardCutsTask = taskTemplates?.find(t => t.name?.toLowerCase().includes('decking board cut'));
+      const boardCutsTask = taskTemplates['decking board cuts'];
       if (boardCutsTask && boardCutsTask.estimated_hours && boardCutsTask.name) {
         breakdown.push({
           task: boardCutsTask.name,
@@ -286,7 +305,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
 
       // Cutting decking joists (joists + bearers)
       const totalJoistCuts = joistRows + bearerRows;
-      const joistCutsTask = taskTemplates?.find(t => t.name?.toLowerCase().includes('cutting decking joist'));
+      const joistCutsTask = taskTemplates['cutting decking joists'];
       if (joistCutsTask && joistCutsTask.estimated_hours && joistCutsTask.name) {
         breakdown.push({
           task: joistCutsTask.name,
@@ -297,7 +316,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       }
 
       // Fixing decking frame (joist + bearer + posts all related)
-      const fixingFrameTask = taskTemplates?.find(t => t.name?.toLowerCase().includes('fixing decking frame'));
+      const fixingFrameTask = taskTemplates['fixing decking frame'];
       if (fixingFrameTask && fixingFrameTask.estimated_hours && fixingFrameTask.name) {
         breakdown.push({
           task: fixingFrameTask.name,
@@ -308,7 +327,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       }
 
       // Fixing decking boards
-      const fixingBoardsTask = taskTemplates?.find(t => t.name?.toLowerCase().includes('fixing decking board'));
+      const fixingBoardsTask = taskTemplates['fixing decking boards'];
       if (fixingBoardsTask && fixingBoardsTask.estimated_hours && fixingBoardsTask.name) {
         breakdown.push({
           task: fixingBoardsTask.name,
