@@ -421,6 +421,8 @@
   "total_front_slabs_needed_label": "Całkowita Liczba Potrzebnych Płyt Frontowych",
   "total_slabs_needed_label": "Całkowita Liczba Potrzebnych Płyt",
   "total_cuts_required_label": "Całkowita Liczba Potrzebnych Cięć",
+  "ushape_arm_left_subscript": "L",
+  "ushape_arm_right_subscript": "P",
   "waste_material_available_for_reuse_label": "Materiał Odpadowy Dostępny do Ponownego Użycia",
   "step_details_label": "Szczegóły Kroku",
   "hours_abbreviation": "godzin",
@@ -626,5 +628,7 @@
   "lshape_arm_a_too_short": "Ramie A ({{length}}cm) jest za krótkie na {{count}} stopni. Wymagane minimum: {{required}}cm. Zmniejsz całkowitą wysokość lub zwiększ długość ramienia A.",
   "lshape_arm_b_too_short": "Ramie B ({{length}}cm) jest za krótkie na {{count}} stopni. Wymagane minimum: {{required}}cm. Zmniejsz całkowitą wysokość lub zwiększ długość ramienia B.",
   "lshape_step_height_adjusted": "Wysokość stopnia dostosowana z {{from}}cm do {{to}}cm, aby zmieścić {{count}} równych stopni.",
-  "lshape_installation_name": "Instalacja schodów L-kształtnych"
+  "lshape_installation_name": "Instalacja schodów L-kształtnych",
+  "ushape_arm_a_too_short": "Ramie A ({{length}}cm) jest za krótkie na {{count}} stopni. Schody U wymagają 2× biegu (obie strony). Minimum: {{required}}cm. Zmniejsz biegun stopnia lub zwiększ ramię A.",
+  "ushape_arm_b_too_short": "Ramie B ({{length}}cm) jest za krótkie na {{count}} stopni. Wymagane minimum: {{required}}cm. Zmniejsz całkowitą wysokość lub zwiększ długość ramienia B."
 }

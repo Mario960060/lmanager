@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import LShapeStairsSlabs from './LShapeStairsSlabs';
+import UShapeStairsSlabs from './UShapeStairsSlabs';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
 import { translateTaskName } from '../../lib/translationMap';
 import { supabase } from '../../lib/supabase';
@@ -25,7 +25,8 @@ interface Material {
     mortarHeight: number;
     needsCutting?: boolean;
     armA_blocks?: number;
-    armB_blocks?: number;
+    armBL_blocks?: number;
+    armBR_blocks?: number;
   }[];
 }
 
@@ -44,18 +45,19 @@ interface StepDimension {
   isFirst: boolean;
   remainingTread: number;
   buriedDepth?: number;
-  // L-shape specific
-  armA_length: number;      // External length of arm A for this step
-  armB_length: number;      // External length of arm B for this step
+  // U-shape specific
+  armA_length: number;       // External length of arm A for this step
+  armBL_length: number;      // External length of arm B left for this step
+  armBR_length: number;      // External length of arm B right for this step
   armA_innerLength: number;  // Inner length of arm A (decreases per step)
-  armB_innerLength: number;  // Inner length of arm B (decreases per step)
+  armB_innerLength: number;  // Inner length of arm B (same for both sides, decreases per step)
   isPlatform: boolean;       // Whether this is the last step (platform)
 }
 
-interface LShapeStairResult {
+interface UShapeStairResult {
   totalSteps: number;
   totalArmALength: number;
-  totalArmBLength: number;
+  totalArmBLength: number;  // Same for both B sides
   materials: Material[];
   stepDimensions: StepDimension[];
   sideOverhang: number;
@@ -67,7 +69,7 @@ interface DiggingEquipment {
   'size (in tones)': number;
 }
 
-interface LShapeStairCalculatorProps {
+interface UShapeStairCalculatorProps {
   onResultsChange?: (results: any) => void;
   isInProjectCreating?: boolean;
   calculateTransport?: boolean;
@@ -82,7 +84,7 @@ interface LShapeStairCalculatorProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
+const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
   onResultsChange,
   isInProjectCreating = false,
   calculateTransport: propCalculateTransport,
@@ -106,9 +108,9 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
   const [stepHeight, setStepHeight] = useState<string>('');
   const [stepTread, setStepTread] = useState<string>('');
 
-  // L-shape specific: arm lengths
-  const [armALength, setArmALength] = useState<string>('');
-  const [armBLength, setArmBLength] = useState<string>('');
+  // U-shape specific: arm lengths
+  const [armALength, setArmALength] = useState<string>('');  // Front side
+  const [armBLength, setArmBLength] = useState<string>('');  // Both side arms (same length)
 
   // Slab/adhesive thickness (for block calculation - how much to subtract)
   const [slabThicknessTop, setSlabThicknessTop] = useState<string>('');
@@ -135,10 +137,10 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>(['blocks4', 'blocks7']);
 
   // Results
-  const [result, setResult] = useState<LShapeStairResult | null>(null);
+  const [result, setResult] = useState<UShapeStairResult | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
 
-  // Slab section state (for LShapeStairsSlabs)
+  // Slab section state (for UShapeStairsSlabs)
   const [slabType, setSlabType] = useState<string>('porcelain');
   const [cutsData, setCutsData] = useState<any>(null);
   const [slabsTransportHours, setSlabsTransportHours] = useState<number>(0);
@@ -448,7 +450,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
         const carrierSize = selectedTransportCarrier["size (in tones)"] || 0.125;
 
         result.materials.forEach(material => {
-          if (material.name.toLowerCase() === 'mortar') return; // Skip mortar transport
+          if (material.name.toLowerCase() === 'mortar') return;
           const materialType = material.name.toLowerCase().includes('brick') ? 'bricks' : 'blocks';
           const transportResult = calculateMaterialTransportTime(
             material.amount,
@@ -471,7 +473,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
       setTaskBreakdown(taskBreakdownCalc);
 
       const formattedResults = {
-        name: t('calculator:lshape_installation_name'),
+        name: t('calculator:ushape_installation_name'),
         amount: result.totalSteps || 0,
         materials: result.materials.map(material => ({
           name: material.name,
@@ -536,7 +538,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
 
       if (Math.abs(actualStepHeight - stepHeightInput) > 0.01) {
         setAdjustedStepHeightInfo(
-          t('calculator:lshape_step_height_adjusted', {
+          t('calculator:ushape_step_height_adjusted', {
             from: stepHeightInput,
             to: actualStepHeight.toFixed(2),
             count: stepCount
@@ -545,23 +547,13 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
       }
 
       // ── Step 2: Calculate tread reduction per step ─────────────────────
-      // Each step reduces the inner arm length by this amount
-      // This is the "depth" that each step takes from the arms
-      // Same logic as standard stairs: stepTread - frontOverhang - slabThicknessFront
       const treadReduction = stepTreadNum - overhangFrontNum;
 
-      // The last step tread is shorter by slabThicknessFront (same as standard stairs)
-
       // ── Step 3: Validate that stairs fit ───────────────────────────────
-      // After all steps, the inner length of each arm must be > 0
-      // The inner length decreases by treadReduction for each step
-      // But the last step is the platform, so we need (stepCount) reductions
+      // U-SHAPE KEY DIFFERENCE: Arm A shrinks from BOTH sides (B left + B right)
+      // So arm A loses 2× treadReduction per step
+      // Arm B loses 1× treadReduction per step (only from arm A side)
 
-      // Inner arm A after N steps = armALength - sum of treads
-      // Inner arm B after N steps = armBLength - sum of treads
-      // But arm A and arm B share the corner, so the reduction applies to both
-
-      // Calculate total tread consumed by all steps (same logic as standard stairs)
       let totalTreadConsumed = 0;
       for (let i = 0; i < stepCount; i++) {
         const isLast = i === stepCount - 1;
@@ -574,18 +566,17 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
         totalTreadConsumed += stepConsumption;
       }
 
-      // Check if arms are long enough
-      // The arm length must accommodate all step treads
-      // Arm A inner length after all steps
-      const armA_innerAfterAllSteps = armALengthNum - totalTreadConsumed;
+      // Arm A: shrinks by 2× totalTreadConsumed (both B sides eat into it)
+      const armA_innerAfterAllSteps = armALengthNum - (2 * totalTreadConsumed);
+      // Arm B: shrinks by 1× totalTreadConsumed (only A eats into it)
       const armB_innerAfterAllSteps = armBLengthNum - totalTreadConsumed;
 
       if (armA_innerAfterAllSteps <= 0) {
         setCalculationError(
-          t('calculator:lshape_arm_a_too_short', {
+          t('calculator:ushape_arm_a_too_short', {
             length: armALengthNum,
             count: stepCount,
-            required: totalTreadConsumed.toFixed(1)
+            required: (2 * totalTreadConsumed).toFixed(1)
           })
         );
         return;
@@ -593,7 +584,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
 
       if (armB_innerAfterAllSteps <= 0) {
         setCalculationError(
-          t('calculator:lshape_arm_b_too_short', {
+          t('calculator:ushape_arm_b_too_short', {
             length: armBLengthNum,
             count: stepCount,
             required: totalTreadConsumed.toFixed(1)
@@ -607,20 +598,16 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
       const stepDimensions: StepDimension[] = [];
       const materials: Material[] = [];
 
-      // Track consumed tread for inner dimension calculation
       let consumedTread = 0;
 
       for (let i = 0; i < stepCount; i++) {
         const isLast = i === stepCount - 1;
 
-        // Calculate tread for this step
-        let thisStepTread = treadReduction; // stepTread - overhangFront
+        let thisStepTread = treadReduction;
         if (isLast) {
-          // Last step: shorter by front slab thickness
           thisStepTread = treadReduction - slabThicknessFrontNum;
         }
 
-        // Tread reduction for inner dimensions (same logic as standard stairs)
         let thisTreadReduction: number;
         if (isLast) {
           thisTreadReduction = treadReduction - slabThicknessFrontNum;
@@ -628,11 +615,9 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
           thisTreadReduction = treadReduction;
         }
 
-        // External length = visible length from outside for THIS step
-        // Step 0: full arm length (no steps below)
-        // Step 1: armLength - one tread (step 0 below)
-        // Step 2: armLength - two treads, etc.
-        const armA_external = armALengthNum - consumedTread;
+        // U-SHAPE: Arm A external shrinks by 2× consumed tread (both B sides)
+        const armA_external = armALengthNum - (2 * consumedTread);
+        // Arm B external same for both sides, shrinks by 1× consumed tread
         const armB_external = armBLengthNum - consumedTread;
 
         consumedTread += thisTreadReduction;
@@ -640,8 +625,8 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
         // Target height for blocks (subtract slab thickness on top)
         const targetStepHeight = actualStepHeight * (i + 1) - slabThicknessTopNum;
 
-        // Inner lengths (what's left inside after this step, decreasing)
-        const armA_inner = armALengthNum - consumedTread;
+        // Inner lengths after this step
+        const armA_inner = armALengthNum - (2 * consumedTread);
         const armB_inner = armBLengthNum - consumedTread;
 
         stepDimensions.push({
@@ -650,16 +635,16 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
           isFirst: i === 0,
           remainingTread: thisTreadReduction,
           armA_length: armA_external,
-          armB_length: armB_external,
+          armBL_length: armB_external,
+          armBR_length: armB_external,  // Same as BL (symmetric)
           armA_innerLength: armA_inner,
-          armB_innerLength: armB_inner,
+          armB_innerLength: armB_inner,  // Same for both B sides
           isPlatform: isLast,
         });
       }
 
       // ── Step 5: Calculate blocks for each step ─────────────────────────
 
-      // Best material for each step (same logic as standard stairs)
       const bestMaterialsForSteps: {
         step: number;
         materialId: string;
@@ -670,7 +655,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
         buriedDepth?: number;
       }[] = [];
 
-      // Find best buried depth (same logic as standard stairs)
+      // Find best buried depth (same logic as L-shape)
       let bestBuriedDepth = 2;
       let bestBuriedDepthDiff = Infinity;
 
@@ -805,7 +790,6 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
           };
         }
 
-        // Update step dimension with buried depth
         if (bestConfiguration.buriedDepth) {
           stepDimensions[i].buriedDepth = bestConfiguration.buriedDepth;
         }
@@ -821,7 +805,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
         });
       }
 
-      // ── Step 6: Calculate actual block counts per step (L-shape) ───────
+      // ── Step 6: Calculate actual block counts per step (U-shape) ───────
 
       const materialCounts: Record<string, {
         totalBlocks: number;
@@ -833,7 +817,8 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
           mortarHeight: number;
           needsCutting: boolean;
           armA_blocks: number;
-          armB_blocks: number;
+          armBL_blocks: number;
+          armBR_blocks: number;
         }[];
       }> = {};
 
@@ -864,33 +849,46 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
 
         const rowsOfBlocks = bestMaterial.blocks; // Number of block rows high
 
-        // Use this step's external length (blocks are laid from the step edge)
         const stepDim = stepDimensions[index];
-        const armA_len = stepDim.armA_length;
-        const armB_len = stepDim.armB_length;
+        const armA_len = stepDim.armA_length;      // EXTERNAL length (blocks are built on the outside)
+        const armB_len = stepDim.armBL_length;     // EXTERNAL length, same for both B sides
 
-        // ── Calculate blocks for Arm A and Arm B (with bond pattern) ──
-        // L-shape has one corner: odd rows A full / B shorter by blockWidth, even rows B full / A shorter
+        // ── Calculate blocks for Arm A and both Arm B's ──
+        // U-SHAPE BOND PATTERN:
+        // Row 1 (odd): A full length, both B shorter by blockWidth (A covers corners)
+        // Row 2 (even): Both B full length, A shorter by 2× blockWidth (B covers corners from both sides)
+        // Row 3: same as row 1, etc.
+
         let armA_totalBlocks = 0;
-        let armB_totalBlocks = 0;
+        let armB_singleSideTotalBlocks = 0;
 
         for (let row = 1; row <= rowsOfBlocks; row++) {
           const isOddRow = row % 2 === 1;
+
           let armA_lengthThisRow: number;
           let armB_lengthThisRow: number;
 
           if (isOddRow) {
+            // Row 1, 3, 5...: A full, B shorter by blockWidth
             armA_lengthThisRow = armA_len;
-            armB_lengthThisRow = Math.max(0, armB_len - blockWidth);
+            armB_lengthThisRow = armB_len - blockWidth;
           } else {
-            armA_lengthThisRow = Math.max(0, armA_len - blockWidth);
+            // Row 2, 4, 6...: B full, A shorter by 2× blockWidth (both corners)
+            armA_lengthThisRow = armA_len - (2 * blockWidth);
             armB_lengthThisRow = armB_len;
           }
 
-          armA_totalBlocks += Math.max(0, Math.ceil(armA_lengthThisRow / effectiveBlockLength));
-          armB_totalBlocks += Math.max(0, Math.ceil(armB_lengthThisRow / effectiveBlockLength));
+          const armA_blocksThisRow = Math.max(0, Math.ceil(armA_lengthThisRow / effectiveBlockLength));
+          const armB_blocksThisRow = Math.max(0, Math.ceil(armB_lengthThisRow / effectiveBlockLength));
+
+          armA_totalBlocks += armA_blocksThisRow;
+          armB_singleSideTotalBlocks += armB_blocksThisRow;
         }
-        const stepBlocks = armA_totalBlocks + armB_totalBlocks;
+
+        // Both B sides are identical
+        const armBL_totalBlocks = armB_singleSideTotalBlocks;
+        const armBR_totalBlocks = armB_singleSideTotalBlocks;
+        const stepBlocks = armA_totalBlocks + armBL_totalBlocks + armBR_totalBlocks;
 
         materialCounts[bestMaterial.materialId].totalBlocks += stepBlocks;
         materialCounts[bestMaterial.materialId].courseDetails.push({
@@ -901,7 +899,8 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
           mortarHeight: bestMaterial.mortarHeight,
           needsCutting: bestMaterial.needsCutting,
           armA_blocks: armA_totalBlocks,
-          armB_blocks: armB_totalBlocks,
+          armBL_blocks: armBL_totalBlocks,
+          armBR_blocks: armBR_totalBlocks,
         });
       });
 
@@ -925,50 +924,36 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
       // ── Step 7: Calculate mortar (concrete fill) ───────────────────────
 
       const totalBlockCount = materials.reduce((sum, m) => sum + m.amount, 0);
-      const mortarPerBlock = 0.5; // kg per block (joints)
+      const mortarPerBlock = 0.5;
       let totalMortar = totalBlockCount * mortarPerBlock * 3;
 
-      // Calculate L-shaped concrete fill for each step
-      // Each step is built from the ground up
-      // The fill is: (stepTread - blockWidth) wide × arm length × height from ground
+      // Calculate U-shaped concrete fill for each step
       let totalFillVolumeCubicMeters = 0;
 
-      // Get block width for fill calculation
       const primaryMaterial = materialOptions.find(m => m.id === selectedMaterials[0]);
-      const fillBlockWidth = primaryMaterial ? primaryMaterial.height : 21; // block width when laid flat
+      const fillBlockWidth = primaryMaterial ? primaryMaterial.height : 21;
 
       stepDimensions.forEach((step, index) => {
-        // Fill depth = stepTread - block width (the gap behind the front blocks)
         const fillDepth = stepTreadNum - fillBlockWidth; // cm
 
-        if (fillDepth <= 0) return; // No fill needed if blocks fill the entire tread
+        if (fillDepth <= 0) return;
 
-        // Height from ground for this step
         const fillHeight = step.height; // cm
 
-        // Arm A fill length = inner length of arm A at this step
-        const armA_fillLength = step.armA_innerLength; // cm
+        // U-SHAPE FILL: arm A + 2× arm B - 2× corner (two corners instead of one)
+        const armA_fillLength = step.armA_innerLength;
+        const armB_fillLength = step.armB_innerLength; // Same for both sides
 
-        // Arm B fill length = inner length of arm B at this step
-        const armB_fillLength = step.armB_innerLength; // cm
-
-        // Volume for arm A fill
         const armA_volume = fillDepth * fillHeight * armA_fillLength; // cm³
+        const armB_volume = fillDepth * fillHeight * armB_fillLength; // cm³ (one side)
+        const cornerVolume = fillDepth * fillDepth * fillHeight; // cm³ (one corner)
 
-        // Volume for arm B fill
-        const armB_volume = fillDepth * fillHeight * armB_fillLength; // cm³
+        // U-shape: A + 2×B - 2×corner
+        const stepFillVolume = armA_volume + (2 * armB_volume) - (2 * cornerVolume);
 
-        // Corner fill (where both arms meet) - avoid double counting
-        // The corner is fillDepth × fillDepth × fillHeight
-        const cornerVolume = fillDepth * fillDepth * fillHeight; // cm³
-
-        // Total L-shaped fill = arm A + arm B - corner (to avoid double counting)
-        const stepFillVolume = armA_volume + armB_volume - cornerVolume;
-
-        totalFillVolumeCubicMeters += stepFillVolume / 1000000; // Convert cm³ to m³
+        totalFillVolumeCubicMeters += stepFillVolume / 1000000;
       });
 
-      // Convert fill volume to weight
       const mortarDensity = 1600; // kg/m³
       const additionalMortarKg = totalFillVolumeCubicMeters * mortarDensity;
       totalMortar += additionalMortarKg;
@@ -989,7 +974,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
         totalArmBLength: armBLengthNum,
         materials,
         stepDimensions,
-        sideOverhang: 0, // No side overhang for L-shape (walls on sides)
+        sideOverhang: 0,
       });
 
     } catch (error) {
@@ -1006,7 +991,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
       <div className="bg-gray-100 p-4 rounded-lg relative">
         <h3 className="text-lg font-medium text-gray-800 mb-2">{t('calculator:important_information_label')}</h3>
         <p className="text-sm text-gray-700">
-          {t('calculator:lshape_info_text')}
+          {t('calculator:ushape_info_text')}
         </p>
       </div>
 
@@ -1065,12 +1050,12 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
               </div>
             </div>
 
-            <h3 className="text-lg font-medium text-white mt-4">{t('calculator:lshape_arm_lengths_title')}</h3>
+            <h3 className="text-lg font-medium text-white mt-4">{t('calculator:ushape_arm_lengths_title')}</h3>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
-                  {t('calculator:lshape_arm_a_length')}
+                  {t('calculator:ushape_arm_a_length')}
                 </label>
                 <input
                   type="number"
@@ -1085,7 +1070,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-1">
-                  {t('calculator:lshape_arm_b_length')}
+                  {t('calculator:ushape_arm_b_length')}
                 </label>
                 <input
                   type="number"
@@ -1161,12 +1146,12 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
               <div className="flex items-center">
                 <input
                   type="radio"
-                  id="lshape-frontsOnTop"
+                  id="ushape-frontsOnTop"
                   checked={stepConfig === 'frontsOnTop'}
                   onChange={() => setStepConfig('frontsOnTop')}
                   className="h-4 w-4 text-gray-600 rounded"
                 />
-                <label htmlFor="lshape-frontsOnTop" className="ml-2 text-sm text-gray-300">
+                <label htmlFor="ushape-frontsOnTop" className="ml-2 text-sm text-gray-300">
                   {t('calculator:input_step_config_fronts_on_top')}
                 </label>
               </div>
@@ -1174,12 +1159,12 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
               <div className="flex items-center">
                 <input
                   type="radio"
-                  id="lshape-stepsToFronts"
+                  id="ushape-stepsToFronts"
                   checked={stepConfig === 'stepsToFronts'}
                   onChange={() => setStepConfig('stepsToFronts')}
                   className="h-4 w-4 text-gray-600 rounded"
                 />
-                <label htmlFor="lshape-stepsToFronts" className="ml-2 text-sm text-gray-300">
+                <label htmlFor="ushape-stepsToFronts" className="ml-2 text-sm text-gray-300">
                   {t('calculator:input_step_config_steps_to_fronts')}
                 </label>
               </div>
@@ -1192,7 +1177,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
                   <label key={mm} className="flex items-center">
                     <input
                       type="radio"
-                      name="lshape-gap"
+                      name="ushape-gap"
                       checked={gapBetweenSlabs === mm}
                       onChange={() => setGapBetweenSlabs(mm)}
                       className="h-4 w-4 text-gray-600 rounded"
@@ -1210,12 +1195,12 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
                 <div key={material.id} className="flex items-center">
                   <input
                     type="checkbox"
-                    id={`lshape-${material.id}`}
+                    id={`ushape-${material.id}`}
                     checked={selectedMaterials.includes(material.id)}
                     onChange={() => toggleMaterial(material.id)}
                     className="h-4 w-4 text-gray-600 rounded"
                   />
-                  <label htmlFor={`lshape-${material.id}`} className="ml-2 text-sm text-gray-300">
+                  <label htmlFor={`ushape-${material.id}`} className="ml-2 text-sm text-gray-300">
                     {material.id === 'blocks4' ? t('calculator:lshape_material_4inch') : material.id === 'blocks7' ? t('calculator:lshape_material_7inch') : t('calculator:lshape_material_bricks')}
                   </label>
                 </div>
@@ -1310,11 +1295,14 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
         </div>
       )}
 
-      {/* Error */}
+      {/* Error - theme-aware styling for visibility on dark backgrounds */}
       {calculationError && (
-        <div className="bg-red-50 p-4 rounded-lg flex items-start">
-          <AlertCircle className="w-5 h-5 text-red-500 mr-2 mt-0.5" />
-          <p className="text-red-700">{calculationError}</p>
+        <div
+          className="bg-red-900/90 border border-red-600 rounded-lg p-4 flex items-start"
+          data-calculator-error
+        >
+          <AlertCircle className="w-5 h-5 text-red-300 mr-2 mt-0.5 shrink-0" />
+          <p className="font-medium">{calculationError}</p>
         </div>
       )}
 
@@ -1322,7 +1310,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
       {result && (
         <div ref={resultsRef} style={getCardWithShadowStyle(currentTheme)}>
           <h3 style={{ fontSize: '1.25rem', fontWeight: '600', color: currentTheme.colors.textPrimary, marginBottom: '1rem' }}>
-            {t('calculator:results_label')} - {t('calculator:lshape_results_title')}
+            {t('calculator:results_label')} - {t('calculator:ushape_results_title')}
           </h3>
 
           <div className="overflow-x-auto">
@@ -1331,9 +1319,9 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
               {/* Platform info */}
               {result.stepDimensions.length > 0 && (
                 <div className="bg-blue-900 text-white text-sm rounded p-3 border border-blue-700">
-                  <p className="font-semibold mb-1">{t('calculator:lshape_platform_info', { count: result.totalSteps })}</p>
-                  <p>{t('calculator:lshape_arm_a_remaining')} {result.stepDimensions[result.stepDimensions.length - 1].armA_innerLength.toFixed(1)}cm</p>
-                  <p>{t('calculator:lshape_arm_b_remaining')} {result.stepDimensions[result.stepDimensions.length - 1].armB_innerLength.toFixed(1)}cm</p>
+                  <p className="font-semibold mb-1">{t('calculator:ushape_platform_info', { count: result.totalSteps })}</p>
+                  <p>{t('calculator:ushape_arm_a_remaining')} {result.stepDimensions[result.stepDimensions.length - 1].armA_innerLength.toFixed(1)}cm</p>
+                  <p>{t('calculator:ushape_arm_b_remaining')} {result.stepDimensions[result.stepDimensions.length - 1].armB_innerLength.toFixed(1)}cm ({t('calculator:ushape_both_sides')})</p>
                 </div>
               )}
 
@@ -1346,9 +1334,11 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
                 <div className="bg-red-900 text-white text-sm rounded p-3 mb-3 border border-red-700">
                   <p className="font-semibold mb-2">{t('calculator:calculation_logic')}:</p>
                   <ul className="list-disc list-inside space-y-1">
-                    <li>{t('calculator:lshape_logic_step_lshaped')}</li>
-                    <li>{t('calculator:lshape_logic_no_side_overhangs')}</li>
-                    <li>{t('calculator:lshape_logic_concrete_fill')}</li>
+                    <li>{t('calculator:ushape_logic_step_ushaped')}</li>
+                    <li>{t('calculator:ushape_logic_wall_behind')}</li>
+                    <li>{t('calculator:ushape_logic_two_b_arms')}</li>
+                    <li>{t('calculator:ushape_logic_bond_pattern')}</li>
+                    <li>{t('calculator:ushape_logic_concrete_fill')}</li>
                   </ul>
                 </div>
 
@@ -1360,8 +1350,9 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
                         <th className="py-2 px-3 text-left text-xs" style={{ color: currentTheme.colors.textPrimary }}>{t('calculator:lshape_table_step')}</th>
                         <th className="py-2 px-3 text-left text-xs" style={{ color: currentTheme.colors.textPrimary }}>{t('calculator:lshape_table_height_cm')}</th>
                         <th className="py-2 px-3 text-left text-xs" style={{ color: currentTheme.colors.textPrimary }}>{t('calculator:lshape_table_total_h_cm')}</th>
-                        <th className="py-2 px-3 text-left text-xs" style={{ color: currentTheme.colors.textPrimary }}>{t('calculator:lshape_table_arm_a_external_cm')}</th>
-                        <th className="py-2 px-3 text-left text-xs" style={{ color: currentTheme.colors.textPrimary }}>{t('calculator:lshape_table_arm_b_external_cm')}</th>
+                        <th className="py-2 px-3 text-left text-xs" style={{ color: currentTheme.colors.textPrimary }}>Arm A (cm)</th>
+                        <th className="py-2 px-3 text-left text-xs" style={{ color: currentTheme.colors.textPrimary }}>B(L) (cm)</th>
+                        <th className="py-2 px-3 text-left text-xs" style={{ color: currentTheme.colors.textPrimary }}>B(R) (cm)</th>
                         <th className="py-2 px-3 text-left text-xs" style={{ color: currentTheme.colors.textPrimary }}>{t('calculator:lshape_table_total_blocks')}</th>
                         <th className="py-2 px-3 text-left text-xs" style={{ color: currentTheme.colors.textPrimary }}>{t('calculator:lshape_table_total_rows')}</th>
                       </tr>
@@ -1401,12 +1392,15 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
                               {step.armA_length.toFixed(1)}
                             </td>
                             <td className="py-2 px-3" style={{ color: currentTheme.colors.textPrimary }}>
-                              {step.armB_length.toFixed(1)}
+                              {step.armBL_length.toFixed(1)}
+                            </td>
+                            <td className="py-2 px-3" style={{ color: currentTheme.colors.textPrimary }}>
+                              {step.armBR_length.toFixed(1)}
                             </td>
                             <td className="py-2 px-3" style={{ color: currentTheme.colors.textPrimary }}>
                               {stepCourseDetails.map((course, idx) => (
                                 <div key={idx} className={course.needsCutting ? "text-yellow-400" : ""}>
-                                  {course.blocks} ({course.armA_blocks || 0} + {course.armB_blocks || 0})
+                                  {course.blocks} (A:{course.armA_blocks || 0} + BL:{course.armBL_blocks || 0} + BR:{course.armBR_blocks || 0})
                                   {course.needsCutting && " ✂️"}
                                 </div>
                               ))}
@@ -1516,7 +1510,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
               </select>
             </div>
           </div>
-          <LShapeStairsSlabs
+          <UShapeStairsSlabs
             stairResult={result}
             slabType={slabType}
             taskBreakdown={taskBreakdown}
@@ -1541,4 +1535,4 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
   );
 };
 
-export default LShapeStairCalculator;
+export default UShapeStairCalculator;

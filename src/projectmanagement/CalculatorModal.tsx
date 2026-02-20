@@ -11,6 +11,7 @@ import FenceCalculator from '../components/Calculator/FenceCalculator';
 import SlabCalculator from '../components/Calculator/SlabCalculator';
 import StairCalculator from '../components/Calculator/StairCalculator';
 import LShapeStairCalculator from '../components/Calculator/LShapeStairCalculator';
+import UShapeStairCalculator from '../components/Calculator/Ushapestaircalculator';
 import Type1AggregateCalculator from '../components/Calculator/Type1AggregateCalculator';
 import SoilExcavationCalculator from '../components/Calculator/SoilExcavationCalculator';
 import PavingCalculator from '../components/Calculator/PavingCalculator';
@@ -176,6 +177,9 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
       case 'steps':
         if (calculatorSubType === 'l_shape') {
           return <LShapeStairCalculator {...commonProps} />;
+        }
+        if (calculatorSubType === 'u_shape') {
+          return <UShapeStairCalculator {...commonProps} />;
         }
         return <StairCalculator {...commonProps} />;
       case 'grass':

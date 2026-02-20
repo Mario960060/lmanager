@@ -135,7 +135,8 @@ const Layout = () => {
       label: t('nav:steps_calculator'),
       subTypes: [
         { type: 'standard', label: t('nav:standard_stairs') },
-        { type: 'l_shape', label: t('nav:l_shape_stairs') }
+        { type: 'l_shape', label: t('nav:l_shape_stairs') },
+        { type: 'u_shape', label: t('nav:u_shape_stairs') }
       ]
     },
     { 

@@ -20,6 +20,7 @@ import CompositeFenceCalculator from '../components/Calculator/CompositeFenceCal
 import FenceCalculator from '../components/Calculator/FenceCalculator';
 import StairCalculator from '../components/Calculator/StairCalculator';
 import LShapeStairCalculator from '../components/Calculator/LShapeStairCalculator';
+import UShapeStairCalculator from '../components/Calculator/Ushapestaircalculator';
 import SlabCalculator from '../components/Calculator/SlabCalculator';
 
 type CalculatorType = 'aggregate' | 'wall' | 'mortar' | 'time' | 'fence' | 'steps' | 'deck' | 'grass' | 'slab' | 'paving' | 'tile' | 'kerbs' | 'foundation';
@@ -29,7 +30,7 @@ type SubCalculatorType = {
   mortar: 'slab' | 'general';
   time: 'task';
   fence: 'vertical' | 'horizontal' | 'venetian' | 'composite';
-  steps: 'standard' | 'l_shape';
+  steps: 'standard' | 'l_shape' | 'u_shape';
   deck: 'standard';
   grass: 'coming_soon';
   slab: 'default';
@@ -129,6 +130,9 @@ const CalculatorPage: React.FC = () => {
       case 'steps':
         if (activeSubType === 'l_shape') {
           return <LShapeStairCalculator key={calculatorKey} />;
+        }
+        if (activeSubType === 'u_shape') {
+          return <UShapeStairCalculator key={calculatorKey} />;
         }
         return <StairCalculator key={calculatorKey} />;
       case 'deck':

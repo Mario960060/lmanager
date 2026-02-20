@@ -14,20 +14,22 @@ i18n
   .use(initReactI18next)
   .init({
     fallbackLng: 'en',
+    supportedLngs: ['en', 'pl'],
+    load: 'languageOnly', // Use 'en' instead of 'en-US' etc. - we only have en/ and pl/ folders
     debug: false,
     showSupportNotice: false,
-    
+
     interpolation: {
       escapeValue: false, // React already escapes values
     },
-    
+
     backend: {
       loadPath: '/locales/{{lng}}/{{ns}}.json',
     },
-    
-    ns: ['common', 'nav', 'calculator', 'project', 'form', 'dashboard', 'utilities', 'event'],
+
+    ns: ['common', 'nav', 'calculator', 'project', 'form', 'dashboard', 'utilities', 'event', 'plan', 'material'],
     defaultNS: 'common',
-    
+
     detection: {
       order: ['localStorage', 'navigator'],
       caches: ['localStorage'],

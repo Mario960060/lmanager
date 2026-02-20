@@ -421,6 +421,8 @@
   "total_front_slabs_needed_label": "Total Front Slabs Needed",
   "total_slabs_needed_label": "Total Slabs Needed",
   "total_cuts_required_label": "Total Cuts Required",
+  "ushape_arm_left_subscript": "L",
+  "ushape_arm_right_subscript": "R",
   "waste_material_available_for_reuse_label": "Waste Material Available for Reuse",
   "step_details_label": "Step Details",
   "hours_abbreviation": "hours",
@@ -626,5 +628,7 @@
   "lshape_arm_a_too_short": "Arm A ({{length}}cm) is too short for {{count}} steps. Minimum required: {{required}}cm. Reduce total height or increase arm A length.",
   "lshape_arm_b_too_short": "Arm B ({{length}}cm) is too short for {{count}} steps. Minimum required: {{required}}cm. Reduce total height or increase arm B length.",
   "lshape_step_height_adjusted": "Step height adjusted from {{from}}cm to {{to}}cm to fit {{count}} equal steps.",
-  "lshape_installation_name": "L-Shape Stair Installation"
+  "lshape_installation_name": "L-Shape Stair Installation",
+  "ushape_arm_a_too_short": "Arm A ({{length}}cm) is too short for {{count}} steps. U-shape requires 2× tread (both sides). Minimum required: {{required}}cm. Reduce step tread or increase arm A length.",
+  "ushape_arm_b_too_short": "Arm B ({{length}}cm) is too short for {{count}} steps. Minimum required: {{required}}cm. Reduce total height or increase arm B length."
 }

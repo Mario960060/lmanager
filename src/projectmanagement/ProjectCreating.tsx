@@ -398,7 +398,8 @@ const ProjectCreating = () => {
       label: 'Steps Calculator',
       subTypes: [
         { type: 'standard', label: 'Standard Stairs' },
-        { type: 'l_shape', label: 'L-Shape Stairs' }
+        { type: 'l_shape', label: 'L-Shape Stairs' },
+        { type: 'u_shape', label: 'U-Shape Stairs' }
       ]
     },
     {

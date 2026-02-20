@@ -311,6 +311,11 @@
   small {
     color: var(--color-text-muted) !important;
   }
+
+  /* Calculator error text - override global p color for visibility */
+  [data-calculator-error] p {
+    color: rgb(254 226 226) !important;
+  }
   
   /* Dark mode overrides - już są CSS variables, ta część jest OK */
 
