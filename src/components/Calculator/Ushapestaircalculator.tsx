@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import UShapeStairsSlabs from './UShapeStairsSlabs';
+import UShapeStairsSlabs from './Ushapestairsslabs';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
 import { translateTaskName } from '../../lib/translationMap';
 import { supabase } from '../../lib/supabase';
