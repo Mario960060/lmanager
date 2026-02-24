@@ -22,12 +22,14 @@ const KerbVisualization: React.FC<KerbVisualizationProps> = ({
   // Scale factors to fit SVG (1cm = 2px)
   const scale = 2;
   const margin = 20;
+  const MAX_DISPLAY_DEPTH = 100; // Cap visual height at 100cm
   
   // Front view dimensions:
   // Standing: width=8cm (actual width), height=20cm
   // Flat: width=8cm (same width), height=15cm (original length)
   const displayWidth = 8;  // Always 8cm width from front view
   const displayHeight = isFlat ? 15 : 20; // 15cm when flat (length), 20cm when standing
+  const displayBaseHeight = Math.min(baseHeight, MAX_DISPLAY_DEPTH); // Cap at 100cm for visual
   
   // Center the kerb
   const centerX = margin + (displayWidth * scale) / 2;
@@ -59,13 +61,16 @@ const KerbVisualization: React.FC<KerbVisualizationProps> = ({
       x: leftX,
       y: y,
       width: rightX - leftX,
-      height: baseHeight * scale
+      height: displayBaseHeight * scale
     };
   };
 
-  // Calculate SVG dimensions - baseHeight only affects the bottom extension
+  // Calculate SVG dimensions - capped at 100cm for baseHeight
   const svgWidth = (displayWidth * 3) * scale + 2 * margin;
-  const svgHeight = (displayHeight + baseHeight) * scale + 2 * margin;
+  const svgHeight = (displayHeight + displayBaseHeight) * scale + 2 * margin;
+
+  // Base mortar center Y for label placement (długość zaprawy pod hunch - z boku, na środku)
+  const baseMortarCenterY = margin + displayHeight * scale + (displayBaseHeight * scale) / 2;
 
   return (
     <div className="flex flex-col items-center mb-4">
@@ -132,11 +137,12 @@ const KerbVisualization: React.FC<KerbVisualizationProps> = ({
           {displayHeight}cm
         </text>
         <text
-          x={centerX}
-          y={svgHeight - 5}
-          textAnchor="middle"
+          x={centerX + (displayWidth * scale) / 2 + 15}
+          y={baseMortarCenterY}
+          textAnchor="start"
           className="text-xs"
           fill="#2563EB"
+          dominantBaseline="middle"
         >
           {baseHeight}cm
         </text>

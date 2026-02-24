@@ -211,7 +211,7 @@ const SandCalculator: React.FC<SandCalculatorProps> = ({ onResultsChange }) => {
               className="w-full p-2 border rounded-md"
             >
               <option value="">-- Select Carrier --</option>
-              <option value="default">0.125t Wheelbarrow (default)</option>
+              <option value="default">{t('calculator:default_wheelbarrow')}</option>
               {carrierSpeeds.map(carrier => (
                 <option key={carrier.size} value={carrier.size.toString()}>
                   {carrier.size}t Carrier

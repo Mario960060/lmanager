@@ -21,6 +21,7 @@ import {
   addDays
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import PageInfoModal from '../components/PageInfoModal';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
@@ -106,10 +107,10 @@ const Calendar = () => {
   });
 
   const statusColors = {
-    planned: 'bg-gray-100 text-gray-800',
-    scheduled: 'bg-blue-100 text-blue-800',
-    in_progress: 'bg-yellow-100 text-yellow-800',
-    finished: 'bg-green-100 text-green-800'
+    planned: 'bg-gray-600 text-white',
+    scheduled: 'bg-blue-600 text-white',
+    in_progress: 'bg-amber-600 text-white',
+    finished: 'bg-green-600 text-white'
   };
 
   const formatStatus = (status: Event['status']) => {
@@ -196,7 +197,10 @@ const Calendar = () => {
     <div className="p-6 max-w-[1600px] mx-auto">
       <BackButton />
       <div className="flex justify-between items-center mb-6 md:flex-row flex-col">
-        <h1 className="text-2xl font-bold text-gray-900">{t('dashboard:calendar_title')}</h1>
+        <div className="flex items-center">
+          <h1 className="text-2xl font-bold text-gray-900">{t('dashboard:calendar_title')}</h1>
+          <PageInfoModal description="" quickTips={[]} />
+        </div>
         <button
           onClick={() => setShowAddMaterialModal(true)}
           className="md:flex hidden items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

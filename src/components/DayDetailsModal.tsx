@@ -79,14 +79,14 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
     queryFn: async () => {
       const { data, error } = await supabase
         .from('materials')
-        .select('id, title')
+        .select('id, name')
         .eq('company_id', companyId);
 
       if (error) throw error;
       
       // Create map for easy lookup
       return data.reduce((acc: Record<string, string>, mat: any) => {
-        acc[mat.id] = mat.title;
+        acc[mat.id] = mat.name;
         return acc;
       }, {});
     },
@@ -218,7 +218,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
               {format(date, 'MMMM d, yyyy')}
             </h2>
             <p className="text-sm text-gray-600 mt-1">
-              {events.length} {t('event:events_label')} • {equipment.length} {t('event:equipment_in_use')}
+              {events.length} {t('event:events_label')}
             </p>
           </div>
           <button
@@ -248,7 +248,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
                       <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() => handleAddMaterial(event.id)}
-                          className="inline-flex items-center px-3 py-1.5 bg-green-100 text-green-800 rounded-full text-sm hover:bg-green-200"
+                          className="inline-flex items-center px-3 py-1.5 bg-green-600 text-white rounded-full text-sm hover:bg-green-700 transition-colors"
                         >
                           <Package className="w-4 h-4 mr-1" />
                           {t('event:add_material')}
@@ -258,7 +258,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
                             setSelectedEventForEquipment(event.id);
                             setShowEquipmentModal(true);
                           }}
-                          className="inline-flex items-center px-3 py-1.5 bg-amber-100 text-amber-800 rounded-full text-sm hover:bg-amber-200"
+                          className="inline-flex items-center px-3 py-1.5 bg-amber-600 text-white rounded-full text-sm hover:bg-amber-700 transition-colors"
                         >
                           <Wrench className="w-4 h-4 mr-1" />
                           {t('event:require_equipment')}
@@ -274,11 +274,11 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
           {/* Materials Needed Section - Grouped by Project */}
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">{t('event:materials_needed_label')}</h3>
-              <span className="text-sm text-red-600 font-medium flex items-center">
-                <AlertCircle className="w-4 h-4 mr-1" />
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600" />
                 {t('event:required_materials')}
-              </span>
+                <span className="text-2xl font-bold text-red-600">{materials.length}</span>
+              </h3>
             </div>
             <div className="space-y-6">
               {events.map(event => {
@@ -322,11 +322,11 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
           {/* Required Equipment Section - Grouped by Project */}
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">{t('event:required_equipment')}</h3>
-              <span className="text-sm text-amber-600 font-medium flex items-center">
-                <Wrench className="w-4 h-4 mr-1" />
-                {t('event:equipment_needed')}
-              </span>
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Wrench className="w-4 h-4 text-amber-600" />
+                {t('event:required_equipment')}
+                <span className="text-2xl font-bold text-amber-600">{calendarEquipment.length}</span>
+              </h3>
             </div>
             <div className="space-y-6">
               {events.map(event => {

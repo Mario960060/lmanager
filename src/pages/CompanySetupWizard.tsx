@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../lib/store';
 import { X, ChevronRight, ChevronLeft, AlertCircle, CheckCircle2 } from 'lucide-react';
+import PageInfoModal from '../components/PageInfoModal';
 import SetupDigging from './ProjectManagement/Setup/SetupDigging';
 import SetupMaterialUsage from './ProjectManagement/Setup/SetupMaterialUsage';
 import SetupEquipment from './ProjectManagement/Setup/SetupEquipment';
@@ -13,9 +16,28 @@ type Step = 1 | 2 | 3 | 4 | 5;
 const CompanySetupWizard: React.FC = () => {
   const { t } = useTranslation(['common', 'form', 'utilities']);
   const navigate = useNavigate();
+  const companyId = useAuthStore(state => state.getCompanyId());
+  const { user, setProfile } = useAuthStore();
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [hasShownWelcomeInfo, setHasShownWelcomeInfo] = useState(false);
+
+  // Refresh profile from DB if company_id is missing (e.g. page refresh, race condition)
+  useEffect(() => {
+    if (!companyId && user?.id) {
+      supabase
+        .from('profiles')
+        .select('role, full_name, email, company_id')
+        .eq('id', user.id)
+        .single()
+        .then(({ data, error }) => {
+          if (!error && data?.company_id) {
+            setProfile(data as any);
+          }
+        });
+    }
+  }, [companyId, user?.id, setProfile]);
 
   // Block browser back button and history navigation
   useEffect(() => {
@@ -143,6 +165,7 @@ const CompanySetupWizard: React.FC = () => {
                   {currentStep}
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900">{step.title}</h2>
+                <PageInfoModal description="" quickTips={[]} autoOpen={currentStep === 1 && !hasShownWelcomeInfo} onAutoOpened={() => setHasShownWelcomeInfo(true)} />
               </div>
               <p className="text-sm text-gray-600 ml-11">{step.description}</p>
             </div>
@@ -177,9 +200,9 @@ const CompanySetupWizard: React.FC = () => {
           <div className="flex-1 overflow-y-auto">
             {step.warning && (
               <div className="px-4 pt-2 pb-2">
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-800">{step.warning}</p>
+                <div className="bg-red-600 border border-red-700 rounded-lg p-3 flex gap-2">
+                  <AlertCircle className="w-4 h-4 text-white flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-white">{step.warning}</p>
                 </div>
               </div>
             )}

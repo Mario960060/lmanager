@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Plus, X, AlertCircle, Loader2, Check, Pencil, Wrench, Trash2 } from 'lucide-react';
+import PageInfoModal from '../components/PageInfoModal';
 import BackButton from '../components/BackButton';
 import MainTaskModal from './MainTaskModal';
 import CalculatorModal from './CalculatorModal';
@@ -358,7 +359,7 @@ const ProjectCreating = () => {
     },
     {
       type: 'wall',
-      label: 'Wall & Finish Calculator',
+      label: t('project:wall_finish_calc'),
       subTypes: [
         { type: 'brick', label: 'Brick Wall Calculator' },
         { type: 'block4', label: '4-inch Block Wall Calculator' },
@@ -1654,7 +1655,10 @@ const ProjectCreating = () => {
     <div className="container mx-auto px-4 py-8 max-w-5xl">
         <BackButton />
         <div className="flex justify-between items-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">{t('project:create_new_project')}</h1>
+            <div className="flex items-center">
+              <h1 className="text-3xl font-bold text-gray-900">{t('project:create_new_project')}</h1>
+              <PageInfoModal description="" quickTips={[]} />
+            </div>
           <button
           onClick={handleSubmit}
           disabled={isSubmitting || !formData.title || !formData.start_date || !formData.end_date}

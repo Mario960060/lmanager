@@ -86,7 +86,7 @@ const KERB_NAMES = {
   kl: 'KL kerbs',
   rumbled: 'Rumbled kerbs',
   flat: 'Flat edges',
-  sets: '10x10 sets'
+  sets: 'Sets'
 } as const;
 
 const KERB_DIMENSIONS = {
@@ -95,9 +95,31 @@ const KERB_DIMENSIONS = {
     flat: { length: 20, height: 15, width: 8 } as const,
     standing: { length: 15, height: 20, width: 8 } as const
   } as const,
-  flat: { length: 100, height: 15, width: 5 } as const,
+  flat: { length: 100, height: 15, width: 5 } as const, // default, overridden by selectedFlatDimensions
   sets: { length: 10, height: 5, width: 10 } as const
 } as const;
+
+const FLAT_EDGE_DIMENSION_OPTIONS: readonly KerbDimensions[] = [
+  { length: 100, height: 15, width: 5 },
+  { length: 100, height: 20, width: 5 }
+] as const;
+
+const SETS_DIMENSION_OPTIONS: readonly KerbDimensions[] = [
+  { length: 20, width: 10, height: 5 },
+  { length: 10, width: 10, height: 5 }
+] as const;
+
+const KL_DIMENSION_OPTIONS: readonly KerbDimensions[] = [
+  { length: 10, height: 20, width: 10 }
+] as const;
+
+const RUMBLED_FLAT_DIMENSION_OPTIONS: readonly KerbDimensions[] = [
+  { length: 20, height: 15, width: 8 }
+] as const;
+
+const RUMBLED_STANDING_DIMENSION_OPTIONS: readonly KerbDimensions[] = [
+  { length: 15, height: 20, width: 8 }
+] as const;
 
 const HUNCH_CONFIGS = {
   'full-both': { left: 0.8, right: 0.8, title: 'Full Hunch Both Sides (80%)' },
@@ -129,6 +151,11 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
   const [baseHeight, setBaseHeight] = useState('');
   const [hunchType, setHunchType] = useState<HunchType>('full-both');
   const [isRumbledStanding, setIsRumbledStanding] = useState(false);
+  const [selectedFlatDimensionsIndex, setSelectedFlatDimensionsIndex] = useState<number>(0);
+  const [selectedKlDimensionsIndex, setSelectedKlDimensionsIndex] = useState<number>(0);
+  const [selectedRumbledDimensionsIndex, setSelectedRumbledDimensionsIndex] = useState<number>(0);
+  const [selectedSetsDimensionsIndex, setSelectedSetsDimensionsIndex] = useState<number>(0);
+  const [setsLengthwise, setSetsLengthwise] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CalculationResults | null>(null);
   const [transportDistance, setTransportDistance] = useState<string>('30');
@@ -322,24 +349,37 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
     }
   };
 
+  // Get effective dimensions (from selected option)
+  const getEffectiveDims = (): KerbDimensions => {
+    if (kerbType === 'rumbled') {
+      return isRumbledStanding
+        ? RUMBLED_STANDING_DIMENSION_OPTIONS[selectedRumbledDimensionsIndex]
+        : RUMBLED_FLAT_DIMENSION_OPTIONS[selectedRumbledDimensionsIndex];
+    }
+    if (kerbType === 'flat') {
+      return FLAT_EDGE_DIMENSION_OPTIONS[selectedFlatDimensionsIndex];
+    }
+    if (kerbType === 'sets') {
+      return SETS_DIMENSION_OPTIONS[selectedSetsDimensionsIndex];
+    }
+    if (kerbType === 'kl') return KL_DIMENSION_OPTIONS[selectedKlDimensionsIndex];
+    return KERB_DIMENSIONS.sets;
+  };
+
   // Calculate mortar volume based on hunch type
   const calculateMortarVolume = (lengthM: number, baseHeightCm: number) => {
-    let dims: KerbDimensions;
-    if (kerbType === 'rumbled') {
-      dims = isRumbledStanding ? KERB_DIMENSIONS.rumbled.standing : KERB_DIMENSIONS.rumbled.flat;
-    } else if (kerbType === 'kl') {
-      dims = KERB_DIMENSIONS.kl;
-    } else if (kerbType === 'flat') {
-      dims = KERB_DIMENSIONS.flat;
-    } else {
-      dims = KERB_DIMENSIONS.sets;
-    }
+    const dims = getEffectiveDims();
     
     const hunchConfig = HUNCH_CONFIGS[hunchType as keyof typeof HUNCH_CONFIGS];
     const lengthCm = lengthM * 100;
     
+    // For sets: perpendicular dim depends on orientation (lengthwise vs crosswise)
+    const perpendicularCm = (kerbType === 'sets')
+      ? (setsLengthwise ? dims.width : dims.length)
+      : dims.width;
+    
     // Base mortar volume
-    let volume = (lengthCm * dims.width * baseHeightCm) / 1000000; // Convert to m³
+    let volume = (lengthCm * perpendicularCm * baseHeightCm) / 1000000; // Convert to m³
     
     // Add hunch volumes
     const calculateHunchVolume = (percent: number) => {
@@ -393,11 +433,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
     }
 
     try {
-      const dims = kerbType === 'rumbled' && isRumbledStanding 
-        ? KERB_DIMENSIONS.rumbled.standing 
-        : kerbType === 'rumbled' 
-          ? KERB_DIMENSIONS.rumbled.flat
-          : KERB_DIMENSIONS[kerbType as keyof typeof KERB_DIMENSIONS];
+      const dims = getEffectiveDims();
       
       const hunchConfig = HUNCH_CONFIGS[hunchType];
       const taskName = KERB_NAMES[kerbType as keyof typeof KERB_NAMES];
@@ -408,7 +444,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
       // Calculate materials
       const mortarMaterials = calculateMaterials(mortarVolume);
       
-      // Calculate number of individual kerb units needed
+      // Calculate number of individual kerb units needed (based on kerb length in cm)
       const calculateKerbUnits = (lengthInMeters: number): { quantity: number; unit: string } => {
         switch (kerbType) {
           case 'kl':
@@ -420,9 +456,13 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
               return { quantity: lengthInMeters * 5, unit: 'kerbs' };
             }
           case 'flat':
-            return { quantity: lengthInMeters * 1, unit: 'pieces' };
+            // lengthInMeters * 100cm / kerbLengthCm = pieces needed
+            return { quantity: Math.ceil((lengthInMeters * 100) / dims.length), unit: 'pieces' };
           case 'sets':
-            return { quantity: lengthInMeters * 10, unit: 'sets' };
+            // lengthwise: total length / set length; crosswise: total width / set width
+            const linearCm = lengthInMeters * 100;
+            const divisor = setsLengthwise ? dims.length : dims.width;
+            return { quantity: Math.ceil(linearCm / divisor), unit: 'sets' };
           default:
             return { quantity: lengthInMeters, unit: 'units' };
         }
@@ -595,12 +635,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
   };
 
   // Get current dimensions
-  const currentDims = (() => {
-    if (kerbType === 'rumbled') {
-      return isRumbledStanding ? KERB_DIMENSIONS.rumbled.standing : KERB_DIMENSIONS.rumbled.flat;
-    }
-    return KERB_DIMENSIONS[kerbType];
-  })();
+  const currentDims = getEffectiveDims();
 
   // For flat kerbs or rumbled kerbs laid flat, swap height and width
   const visualDims = (kerbType === 'flat' || (kerbType === 'rumbled' && !isRumbledStanding))
@@ -629,34 +664,168 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
       </p>
 
       <div className="space-y-4">
-        {kerbType === 'rumbled' && (
+        {kerbType === 'kl' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:installation_method')}</label>
-            <div className="mt-2 space-x-4">
-              <label className={`inline-flex items-center p-2 rounded text-white ${!isRumbledStanding ? 'bg-blue-600' : 'bg-gray-500'}`}>
-                <input
-                  type="radio"
-                  checked={!isRumbledStanding}
-                  onChange={() => setIsRumbledStanding(false)}
-                  className="form-radio"
-                />
-                <span className="ml-2">{t('calculator:flat_label')}</span>
-              </label>
-              <label className={`inline-flex items-center p-2 rounded text-white ${isRumbledStanding ? 'bg-blue-600' : 'bg-gray-500'}`}>
-                <input
-                  type="radio"
-                  checked={isRumbledStanding}
-                  onChange={() => setIsRumbledStanding(true)}
-                  className="form-radio"
-                />
-                <span className="ml-2">{t('calculator:standing_label')}</span>
-              </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:flat_edge_dimensions_label')}</label>
+            <div className="space-y-2">
+              {KL_DIMENSION_OPTIONS.map((dims, index) => (
+                <div key={index} className="flex items-center">
+                  <input
+                    type="radio"
+                    id={`kl-dims-${index}`}
+                    name="klDimensions"
+                    checked={selectedKlDimensionsIndex === index}
+                    onChange={() => setSelectedKlDimensionsIndex(index)}
+                    className="h-4 w-4 text-gray-600 rounded"
+                  />
+                  <label htmlFor={`kl-dims-${index}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
+                    {t('calculator:flat_edge_dimensions_format', { l: dims.length, h: dims.height, w: dims.width })}
+                  </label>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
+        {kerbType === 'rumbled' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:installation_method')}</label>
+              <div className="space-y-2">
+                <div className="flex items-center">
+                  <input
+                    type="radio"
+                    id="rumbled-flat"
+                    checked={!isRumbledStanding}
+                    onChange={() => setIsRumbledStanding(false)}
+                    className="h-4 w-4 text-gray-600 rounded"
+                  />
+                  <label htmlFor="rumbled-flat" className="ml-2 text-sm text-gray-700 cursor-pointer">
+                    {t('calculator:flat_label')}
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="radio"
+                    id="rumbled-standing"
+                    checked={isRumbledStanding}
+                    onChange={() => setIsRumbledStanding(true)}
+                    className="h-4 w-4 text-gray-600 rounded"
+                  />
+                  <label htmlFor="rumbled-standing" className="ml-2 text-sm text-gray-700 cursor-pointer">
+                    {t('calculator:standing_label')}
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:flat_edge_dimensions_label')}</label>
+              <div className="space-y-2">
+                {(isRumbledStanding ? RUMBLED_STANDING_DIMENSION_OPTIONS : RUMBLED_FLAT_DIMENSION_OPTIONS).map((dims, index) => (
+                  <div key={index} className="flex items-center">
+                    <input
+                      type="radio"
+                      id={`rumbled-dims-${index}`}
+                      name="rumbledDimensions"
+                      checked={selectedRumbledDimensionsIndex === index}
+                      onChange={() => setSelectedRumbledDimensionsIndex(index)}
+                      className="h-4 w-4 text-gray-600 rounded"
+                    />
+                    <label htmlFor={`rumbled-dims-${index}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
+                      {t('calculator:flat_edge_dimensions_format', { l: dims.length, h: dims.height, w: dims.width })}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {kerbType === 'flat' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:flat_edge_dimensions_label')}</label>
+            <div className="space-y-2">
+              {FLAT_EDGE_DIMENSION_OPTIONS.map((dims, index) => (
+                <div key={index} className="flex items-center">
+                  <input
+                    type="radio"
+                    id={`flat-dims-${index}`}
+                    name="flatDimensions"
+                    checked={selectedFlatDimensionsIndex === index}
+                    onChange={() => setSelectedFlatDimensionsIndex(index)}
+                    className="h-4 w-4 text-gray-600 rounded"
+                  />
+                  <label htmlFor={`flat-dims-${index}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
+                    {t('calculator:flat_edge_dimensions_format', { l: dims.length, h: dims.height, w: dims.width })}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {kerbType === 'sets' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:sets_dimensions_label')}</label>
+              <div className="space-y-2">
+                {SETS_DIMENSION_OPTIONS.map((dims, index) => (
+                  <div key={index} className="flex items-center">
+                    <input
+                      type="radio"
+                      id={`sets-dims-${index}`}
+                      name="setsDimensions"
+                      checked={selectedSetsDimensionsIndex === index}
+                      onChange={() => setSelectedSetsDimensionsIndex(index)}
+                      className="h-4 w-4 text-gray-600 rounded"
+                    />
+                    <label htmlFor={`sets-dims-${index}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
+                      {t('calculator:sets_dimensions_format', { l: dims.length, h: dims.height, w: dims.width })}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:sets_orientation_label')}</label>
+              <div className="space-y-2">
+                <div className="flex items-center">
+                  <input
+                    type="radio"
+                    id="sets-lengthwise"
+                    name="setsOrientation"
+                    checked={setsLengthwise}
+                    onChange={() => setSetsLengthwise(true)}
+                    className="h-4 w-4 text-gray-600 rounded"
+                  />
+                  <label htmlFor="sets-lengthwise" className="ml-2 text-sm text-gray-700 cursor-pointer">
+                    {t('calculator:sets_lengthwise')}
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="radio"
+                    id="sets-crosswise"
+                    name="setsOrientation"
+                    checked={!setsLengthwise}
+                    onChange={() => setSetsLengthwise(false)}
+                    className="h-4 w-4 text-gray-600 rounded"
+                  />
+                  <label htmlFor="sets-crosswise" className="ml-2 text-sm text-gray-700 cursor-pointer">
+                    {t('calculator:sets_crosswise')}
+                  </label>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_in_cm')}</label>
+          <label className="block text-sm font-medium text-gray-700">
+            {kerbType === 'sets'
+              ? (setsLengthwise ? t('calculator:input_total_length_m') : t('calculator:input_total_width_m'))
+              : t('calculator:input_length_in_cm')}
+          </label>
           <input
             type="number"
             value={length}
@@ -788,7 +957,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
         </button>
 
         {error && (
-          <div className="p-3 bg-red-50 text-red-700 rounded-md">
+          <div className="p-3 bg-red-900/90 border border-red-600 rounded-lg text-white">
             {error}
           </div>
         )}

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Loader2, X, Wrench, Package, Pencil, Info } from 'lucide-react';
+import PageInfoModal from '../components/PageInfoModal';
 import BackButton from '../components/BackButton';
 
 interface Task {
@@ -216,7 +217,10 @@ const TaskRequirements = () => {
     <div className="container mx-auto p-6 space-y-6">
       <BackButton />
       <div className="flex justify-between items-center md:flex-row flex-col">
-        <h1 className="text-3xl font-bold text-gray-900">{t('utilities:task_requirements_title')}</h1>
+        <div className="flex items-center">
+          <h1 className="text-3xl font-bold text-gray-900">{t('utilities:task_requirements_title')}</h1>
+          <PageInfoModal description="" quickTips={[]} />
+        </div>
         <button
           onClick={() => setShowAddModal(true)}
           className="md:flex hidden bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"

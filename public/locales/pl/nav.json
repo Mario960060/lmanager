@@ -15,7 +15,7 @@
   "mortar_calculator": "Kalkulator Zaprawy",
   "paving_calculator": "Kalkulator Utwardzania",
   "wall_finish_calculator": "Kalkulator Wykończenia Ścianki",
-  "wall_and_finish_calculator": "Kalkulator Ścianki i Wykończenia",
+  "wall_and_finish_calculator": "Kalkulator Murów",
   "brick_wall_calculator": "Kalkulator Ścianki z Cegły",
   "block4_wall_calculator": "Kalkulator Ścianki 4-calowej",
   "block7_wall_calculator": "Kalkulator Ścianki 7-calowej",
@@ -52,7 +52,7 @@
   "kl_kerbs": "Krawężniki KL",
   "rumbled_kerbs": "Krawężniki Rumblane",
   "flat_edges": "Krawędzie Płaskie",
-  "sets": "Zestawy 10x10",
+  "sets": "Zestawy",
   "foundation_excavation": "Kopanie Fundamentu"
 }
 

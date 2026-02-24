@@ -275,7 +275,7 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
           <button
             onClick={handleSubmit}
             disabled={!selectedMaterial || !quantity || !unit || (selectedMaterial.id === 'custom' && !selectedMaterial.name.trim()) || addMaterialMutation.isPending}
-            className="w-full bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
+            className="w-full bg-gray-700 text-white py-2 px-4 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
           >
             {addMaterialMutation.isPending ? t('event:adding') : t('event:add_material')}
           </button>

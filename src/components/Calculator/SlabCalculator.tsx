@@ -1362,7 +1362,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
                     }`}></div>
                   </div>
                   <div>
-                    <span className="text-gray-800">Default (0.125t Wheelbarrow)</span>
+                    <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
                   </div>
                 </div>
                 {carriers.length > 0 && carriers.map((carrier) => (
@@ -1433,7 +1433,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         </button>
         
         {calculationError && (
-          <div className="p-3 bg-red-50 text-red-700 rounded-md">
+          <div className="p-3 bg-red-900/90 border border-red-600 rounded-lg text-white">
             {calculationError}
           </div>
         )}

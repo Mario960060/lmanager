@@ -757,7 +757,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       {/* Transport Carrier Selection */}
       {calculateTransport && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier')} (optional - defaults to 0.125 wheelbarrow)</label>
+          <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier_label')}</label>
           <div className="space-y-2">
             <div 
               className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded"

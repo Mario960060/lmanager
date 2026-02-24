@@ -655,20 +655,20 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       {/* Inputs */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_in_cm')}</label>
+          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_m')}</label>
           <p className="text-xs text-red-600 mb-1">{t('calculator:along_direction_boards_run')}</p>
           <input
             type="number"
             value={totalLength}
             onChange={(e) => setTotalLength(e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder={t('calculator:placeholder_enter_length')}
+            placeholder={t('calculator:placeholder_enter_length_m')}
             step="0.1"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_width_in_cm')}</label>
+          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_width_m')}</label>
           <input
             type="number"
             value={totalWidth}
@@ -680,7 +680,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_slat_length_cm')}</label>
+          <label className="block text-sm font-medium text-gray-700">{t('calculator:deck_joist_length_label')}</label>
           <input
             type="number"
             value={joistLength}
@@ -692,7 +692,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_gaps_between_slats_mm')}</label>
+          <label className="block text-sm font-medium text-gray-700">{t('calculator:deck_distance_between_joists_label')}</label>
           <input
             type="number"
             value={distanceBetweenJoists}
@@ -704,7 +704,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_slat_length_cm')}</label>
+          <label className="block text-sm font-medium text-gray-700">{t('calculator:deck_board_length_label')}</label>
           <input
             type="number"
             value={boardLength}
@@ -716,7 +716,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_slat_width_cm')}</label>
+          <label className="block text-sm font-medium text-gray-700">{t('calculator:deck_board_width_label')}</label>
           <input
             type="number"
             value={boardWidth}
@@ -728,7 +728,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:joint_gaps_label')}</label>
+          <label className="block text-sm font-medium text-gray-700">{t('calculator:deck_gaps_between_boards_label')}</label>
           <input
             type="number"
             value={jointGaps}
@@ -753,33 +753,28 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         </div>
       </div>
 
-      {/* Pattern and Frame */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:pattern_label')}</label>
-          <select
-            value={pattern}
-            onChange={(e) => setPattern(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="Length">Length</option>
-            <option value="45 degree angle">45 Degree Angle</option>
-          </select>
-        </div>
-
-        <div className="flex items-end">
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={includeFrame}
-              onChange={(e) => setIncludeFrame(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-sm font-medium text-gray-700">{t('calculator:include_frame')}</span>
-          </label>
-        </div>
+      {/* Pattern */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700">{t('calculator:pattern_label')}</label>
+        <select
+          value={pattern}
+          onChange={(e) => setPattern(e.target.value)}
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+        >
+          <option value="Length">Length</option>
+          <option value="45 degree angle">45 Degree Angle</option>
+        </select>
       </div>
 
+      <label className="flex items-center space-x-2">
+        <input
+          type="checkbox"
+          checked={includeFrame}
+          onChange={(e) => setIncludeFrame(e.target.checked)}
+          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+        <span className="text-sm font-medium text-gray-700">{t('calculator:include_frame')}</span>
+      </label>
 
       <label className="flex items-center space-x-2">
         <input
@@ -812,7 +807,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
                 }`}></div>
               </div>
               <div>
-                <span className="text-gray-800">Default (0.125t Wheelbarrow)</span>
+                <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
               </div>
             </div>
             {carriers.length > 0 && carriers.map((carrier) => (
@@ -863,7 +858,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       </button>
 
       {calculationError && (
-        <div className="mt-4 p-4 bg-red-100 text-red-700 rounded-md">
+        <div className="mt-4 p-4 bg-red-900/90 border border-red-600 rounded-lg text-white">
           {calculationError}
         </div>
       )}

@@ -15,7 +15,7 @@
   "mortar_calculator": "Mortar Calculator",
   "paving_calculator": "Paving Calculator",
   "wall_finish_calculator": "Wall Finish Calculator",
-  "wall_and_finish_calculator": "Wall & Finish Calculator",
+  "wall_and_finish_calculator": "Walls Calculator",
   "brick_wall_calculator": "Brick Wall Calculator",
   "block4_wall_calculator": "4-inch Block Wall Calculator",
   "block7_wall_calculator": "7-inch Block Wall Calculator",
@@ -52,7 +52,7 @@
   "kl_kerbs": "KL Kerbs",
   "rumbled_kerbs": "Rumbled Kerbs",
   "flat_edges": "Flat Edges",
-  "sets": "10x10 Sets",
+  "sets": "Sets",
   "foundation_excavation": "Foundation Excavation"
 }
 

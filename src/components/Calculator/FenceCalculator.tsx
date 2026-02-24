@@ -265,12 +265,13 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
     const postmix = parseFloat(postmixPerPost) || 0;
     const totalPostmix = posts * postmix;
 
-    // Calculate labor hours
+    // Calculate labor hours - based on slats count (unit: slat, estimated_hours per slat)
     let mainTaskHours = 0;
-    if (layingTask?.unit && layingTask?.estimated_hours !== undefined && layingTask?.estimated_hours !== null) {
-      const lengthInMeters = parseFloat(length);
-      mainTaskHours = lengthInMeters * layingTask.estimated_hours;
+    if (layingTask?.estimated_hours !== undefined && layingTask?.estimated_hours !== null && slatsNeeded > 0) {
+      mainTaskHours = slatsNeeded * layingTask.estimated_hours;
     }
+
+    const layingUnit = layingTask?.unit || 'slat';
 
     // Create task breakdown
     const breakdown: TaskBreakdown[] = [];
@@ -280,16 +281,16 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
       breakdown.push({
         task: layingTask.name,
         hours: mainTaskHours,
-        amount: length ? `${length} meters` : '0',
-        unit: 'meters'
+        amount: `${slatsNeeded} ${layingUnit}s`,
+        unit: layingUnit
       });
     } else if (mainTaskHours > 0) {
       // Fallback if no specific laying task found
       breakdown.push({
         task: `${fenceType === 'vertical' ? 'Vertical' : 'Horizontal'} Fence Installation`,
         hours: mainTaskHours,
-        amount: length ? `${length} meters` : '0',
-        unit: 'meters'
+        amount: `${slatsNeeded} ${layingUnit}s`,
+        unit: layingUnit
       });
     }
 
@@ -413,10 +414,11 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
   // Add useEffect to notify parent of result changes
   useEffect(() => {
     if (totalHours !== null && materials.length > 0) {
+      const layingItem = taskBreakdown.find(t => ['slat', 'baton', 'board'].includes(t.unit));
       const formattedResults = {
         name: `${fenceType === 'vertical' ? 'Vertical' : 'Horizontal'} Fence Installation`,
-        amount: parseFloat(length) || 0,
-        unit: 'meters',
+        amount: layingItem ? parseInt(layingItem.amount, 10) || 0 : 0,
+        unit: layingItem?.unit || 'slat',
         hours_worked: totalHours,
         materials: materials.map(material => ({
           name: material.name,
@@ -558,7 +560,7 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
                 }`}></div>
               </div>
               <div>
-                <span className="text-gray-800">Default (0.125t Wheelbarrow)</span>
+                <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
               </div>
             </div>
             {carriers.length > 0 && carriers.map((carrier) => (
@@ -610,7 +612,7 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
       </button>
 
       {calculationError && (
-        <div className="mt-4 p-4 bg-red-100 text-red-700 rounded-md">
+        <div className="mt-4 p-4 bg-red-900/90 border border-red-600 rounded-lg text-white">
           {calculationError}
         </div>
       )}

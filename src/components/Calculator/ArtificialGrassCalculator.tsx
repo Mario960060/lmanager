@@ -1062,7 +1062,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
         </button>
         
         {calculationError && (
-          <div className="p-3 bg-red-50 text-red-700 rounded-md">
+          <div className="p-3 bg-red-900/90 border border-red-600 rounded-lg text-white">
             {calculationError}
           </div>
         )}

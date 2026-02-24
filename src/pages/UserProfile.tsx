@@ -6,6 +6,7 @@ import { useAuthStore } from '../lib/store';
 import { useNavigate } from 'react-router-dom';
 import { User, LogOut, Save, AlertCircle, Loader2, BarChart, ClipboardList, Package, FileText, Truck } from 'lucide-react';
 import BackButton from '../components/BackButton';
+import PageInfoModal from '../components/PageInfoModal';
 import TaskPerformanceModal from '../components/TaskPerformanceModal';
 import AdditionalTasksModal from '../components/AdditionalTasksModal';
 import MaterialAddedModal from '../components/MaterialAddedModal';
@@ -292,6 +293,7 @@ const UserProfile = () => {
       <div className="flex items-center mb-6">
         <BackButton />
         <h1 className="text-2xl font-bold ml-2">{t('common:user_profile_title')}</h1>
+        <PageInfoModal description="" quickTips={[]} />
       </div>
 
       {/* User Info Card */}

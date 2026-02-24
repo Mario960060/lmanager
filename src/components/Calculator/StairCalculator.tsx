@@ -289,6 +289,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
   // Results
   const [result, setResult] = useState<StairResult | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
+  const [adjustedStepHeightInfo, setAdjustedStepHeightInfo] = useState<string | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   
   // Add useEffect to notify parent of result changes
@@ -495,6 +496,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
   // Calculate the stair dimensions and materials
   const calculate = () => {
     setCalculationError(null);
+    setAdjustedStepHeightInfo(null);
     
     // Validate inputs
     if (!totalHeight || !totalWidth || !stepTread || !stepHeight || 
@@ -536,6 +538,16 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
       
       // Calculate actual step height so all steps are the same (for slabs/treads)
       const actualStepHeight = totalHeightNum / stepCount;
+
+      if (Math.abs(actualStepHeight - stepHeightNum) > 0.01) {
+        setAdjustedStepHeightInfo(
+          t('calculator:standard_step_height_adjusted', {
+            from: stepHeightNum,
+            to: actualStepHeight.toFixed(2),
+            count: stepCount
+          })
+        );
+      }
       
       // Calculate total length of stairs
       // Each step tread needs to account for slab thickness and overhang
@@ -1293,7 +1305,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
                     }`}></div>
                   </div>
                   <div>
-                    <span className="text-gray-300">Default (0.125t Wheelbarrow)</span>
+                    <span className="text-gray-300">{t('calculator:default_wheelbarrow')}</span>
                   </div>
                 </div>
                 {carriers.length > 0 && carriers.map((carrier) => (
@@ -1357,10 +1369,17 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
       </div>
       </div>
       
+      {adjustedStepHeightInfo && (
+        <div className="bg-red-900/90 border border-red-600 rounded-lg p-4 flex items-start">
+          <AlertCircle className="w-5 h-5 text-red-300 mr-2 mt-0.5 shrink-0" />
+          <p className="font-medium text-white">{adjustedStepHeightInfo}</p>
+        </div>
+      )}
+      
       {calculationError && (
-        <div className="bg-red-50 p-4 rounded-lg flex items-start">
-          <AlertCircle className="w-5 h-5 text-red-500 mr-2 mt-0.5" />
-          <p className="text-red-700">{calculationError}</p>
+        <div className="bg-red-900/90 border border-red-600 p-4 rounded-lg flex items-start">
+          <AlertCircle className="w-5 h-5 text-red-300 mr-2 mt-0.5 shrink-0" />
+          <p className="font-medium text-white">{calculationError}</p>
         </div>
       )}
       

@@ -1304,17 +1304,17 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
 
       {/* Step height adjustment info */}
       {adjustedStepHeightInfo && (
-        <div className="bg-yellow-50 p-4 rounded-lg flex items-start">
-          <AlertCircle className="w-5 h-5 text-yellow-500 mr-2 mt-0.5" />
-          <p className="text-yellow-700">{adjustedStepHeightInfo}</p>
+        <div className="bg-red-900/90 border border-red-600 rounded-lg p-4 flex items-start">
+          <AlertCircle className="w-5 h-5 text-red-300 mr-2 mt-0.5 shrink-0" />
+          <p className="font-medium text-white">{adjustedStepHeightInfo}</p>
         </div>
       )}
 
       {/* Error */}
       {calculationError && (
-        <div className="bg-red-50 p-4 rounded-lg flex items-start">
-          <AlertCircle className="w-5 h-5 text-red-500 mr-2 mt-0.5" />
-          <p className="text-red-700">{calculationError}</p>
+        <div className="bg-red-900/90 border border-red-600 p-4 rounded-lg flex items-start">
+          <AlertCircle className="w-5 h-5 text-red-300 mr-2 mt-0.5 shrink-0" />
+          <p className="font-medium text-white">{calculationError}</p>
         </div>
       )}
 

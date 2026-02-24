@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { format, parseISO } from 'date-fns';
 import { Plus, Calendar, Package, Loader2, Search, CheckSquare, Trash2 } from 'lucide-react';
+import PageInfoModal from '../components/PageInfoModal';
 import Modal from '../components/Modal';
 import BackButton from '../components/BackButton';
 import type { Database } from '../lib/database.types';
@@ -377,15 +378,15 @@ const Projects = () => {
   const getStatusColor = (status: Event['status']) => {
     switch (status) {
       case 'planned':
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-600 text-white';
       case 'scheduled':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-600 text-white';
       case 'in_progress':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-amber-600 text-white';
       case 'finished':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-600 text-white';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-600 text-white';
     }
   };
 
@@ -530,7 +531,10 @@ const Projects = () => {
       <BackButton />
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-3xl font-bold text-gray-900">{t('project:projects_title')}</h1>
+        <div className="flex items-center">
+          <h1 className="text-3xl font-bold text-gray-900">{t('project:projects_title')}</h1>
+          <PageInfoModal description="" quickTips={[]} />
+        </div>
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full sm:w-auto">
           <button
             onClick={() => setShowTaskModal(true)}

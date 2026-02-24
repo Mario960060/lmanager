@@ -1,38 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../lib/store';
-import { Navigate } from 'react-router-dom';
+import { show403Modal } from '../components/Error403Modal';
 import { DollarSign, FileText, Calculator } from 'lucide-react';
 import BackButton from '../components/BackButton';
-import { supabase } from '../lib/supabase';
+import PageInfoModal from '../components/PageInfoModal';
 import WorkPricingModal from '../pages/finance/WorkPricingModal';
 
 const Finance = () => {
   const { t } = useTranslation(['common', 'dashboard', 'form']);
   const { profile } = useAuthStore();
-  const companyId = useAuthStore(state => state.getCompanyId());
-  const [showInvoiceMaker, setShowInvoiceMaker] = useState(false);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [projects, setProjects] = useState<{ id: string; title: string }[]>([]);
   const [showWorkPricing, setShowWorkPricing] = useState(false);
 
-  // Fetch projects/events for the dropdown
-  useEffect(() => {
-    if (companyId) {
-      supabase
-        .from('events')
-        .select('id, title')
-        .eq('company_id', companyId)
-        .then(({ data }) => {
-          if (data) setProjects(data);
-        });
-    }
-  }, [companyId]);
-
-  // Redirect if not Admin or project_manager (invoices access)
-  if (profile?.role !== 'Admin' && profile?.role !== 'project_manager') {
-    return <Navigate to="/" replace />;
-  }
+  const hasFinanceAccess = profile?.role === 'Admin' || profile?.role === 'project_manager';
 
   const sections = [
     {
@@ -58,7 +38,10 @@ const Finance = () => {
   return (
     <div className="container mx-auto p-6 space-y-6">
       <BackButton />
-      <h1 className="text-3xl font-bold text-gray-900">{t('common:finance_title')}</h1>
+      <div className="flex items-center">
+        <h1 className="text-3xl font-bold text-gray-900">{t('common:finance_title')}</h1>
+        <PageInfoModal description="" quickTips={[]} />
+      </div>
       <div className="grid md:grid-cols-3 gap-6">
         {sections.map((section) => (
           <div key={section.title} className="bg-white rounded-lg shadow-lg p-6">
@@ -70,7 +53,13 @@ const Finance = () => {
             {section.button ? (
               <button
                 className="inline-block px-3 py-1 bg-blue-600 text-white rounded-full text-sm font-medium"
-                onClick={() => setShowWorkPricing(true)}
+                onClick={() => {
+                  if (!hasFinanceAccess) {
+                    show403Modal();
+                    return;
+                  }
+                  setShowWorkPricing(true);
+                }}
               >
                 {t('common:work_pricing')}
               </button>
@@ -82,13 +71,6 @@ const Finance = () => {
           </div>
         ))}
       </div>
-
-      {showInvoiceMaker && (
-        <InvoiceMakerModal
-          isOpen={showInvoiceMaker}
-          onClose={() => setShowInvoiceMaker(false)}
-        />
-      )}
 
       {showWorkPricing && (
         <WorkPricingModal

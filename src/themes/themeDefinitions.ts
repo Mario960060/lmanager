@@ -150,7 +150,7 @@ export const themes: Record<string, Theme> = {
       secondaryLight: '#9CA3AF', // gray-400
       
       // Backgrounds - ciemne tła
-      bgPrimary: '#111827',      // gray-900
+      bgPrimary: '#1e293b',      // slate-800 (jaśniejszy)
       bgSecondary: '#1F2937',    // gray-800
       bgTertiary: '#374151',     // gray-700
       bgHover: '#4B5563',        // gray-600

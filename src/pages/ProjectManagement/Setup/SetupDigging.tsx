@@ -179,13 +179,20 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
       
       console.log('Successfully added to setup_digging:', data);
       
+      // Equipment type for equipment table: excavators = machine; barrows/dumpers split by size
+      // < 0.29t = tools (taczki/wheelbarrows), >= 0.29t = machines (dumpers, petrol barrows)
+      const equipmentTypeForTable =
+        equipment.type === 'excavator'
+          ? 'machine'
+          : (sizeInTones >= 0.29 ? 'machine' : 'tool');
+      
       // Then, also add to equipment table
       const { error: equipmentError } = await supabase
         .from('equipment')
         .insert([{
           name: equipment.name,
           description: equipment.description || null,
-          type: equipment.type === 'excavator' ? 'machine' : 'tool',
+          type: equipmentTypeForTable,
           quantity: equipment.quantity,
           status: 'free_to_use',
           in_use_quantity: 0,
@@ -345,13 +352,19 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
       if (error) throw error;
       
       // Also update equipment table by original name
+      // Equipment type: excavators = machine; barrows/dumpers split by size (< 0.29t = tools, >= 0.29t = machines)
       if (originalData) {
+        const sizeInTones = equipment["size (in tones)"] ?? 0;
+        const equipmentTypeForTable =
+          equipment.type === 'excavator'
+            ? 'machine'
+            : (sizeInTones >= 0.29 ? 'machine' : 'tool');
         await supabase
           .from('equipment')
           .update({
             name: equipment.name,
             description: equipment.description,
-            type: equipment.type === 'excavator' ? 'machine' : 'tool',
+            type: equipmentTypeForTable,
             quantity: equipment.quantity
           })
           .eq('name', originalData.name);
@@ -393,17 +406,17 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
     }
   };
 
-  // Get status color
+  // Get status color - solid backgrounds with white text for visibility
   const getStatusColor = (status: DiggingEquipment['status']) => {
     switch (status) {
       case 'free_to_use':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-600 text-white';
       case 'in_use':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-600 text-white';
       case 'broken':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-600 text-white';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-600 text-white';
     }
   };
 
@@ -456,6 +469,11 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
 
   const contentMarkup = (
     <>
+          {!companyId && (
+            <div className="bg-red-50 p-3 rounded-lg mb-3 text-sm">
+              <p className="text-red-600">{t('form:no_company_selected')}</p>
+            </div>
+          )}
           <div className="bg-gray-100 p-3 rounded-lg mb-3 text-sm">
             <p className="text-red-600">
               {t('form:setup_digging_warning')}
@@ -561,7 +579,8 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
             
             <button
               type="submit"
-              className="w-full bg-gray-700 text-white p-2 rounded hover:bg-gray-800 text-sm"
+              disabled={!companyId}
+              className="w-full bg-gray-700 text-white p-2 rounded hover:bg-gray-800 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t('form:add_equipment_button_text')}
             </button>
@@ -715,21 +734,21 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                       {editingEquipmentId === item.id ? (
                         <button
                           onClick={handleSaveEdit}
-                          className="text-green-500 hover:text-green-700 mr-2"
+                          className="p-2 text-green-600 hover:text-green-700 mr-2 transition-colors"
                         >
                           <Save className="w-4 h-4" />
                         </button>
                       ) : (
                         <button
                           onClick={() => handleEditEquipment(item)}
-                          className="text-green-500 hover:text-green-700 mr-2"
+                          className="p-2 text-green-600 hover:text-green-700 mr-2 transition-colors"
                         >
                           <Settings className="w-4 h-4" />
                         </button>
                       )}
                       <button
                         onClick={() => deleteEquipmentMutation.mutate(item.id)}
-                        className="text-red-500 hover:text-red-700"
+                        className="p-2 text-red-600 hover:text-red-700 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

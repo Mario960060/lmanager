@@ -214,7 +214,7 @@ const CalendarEquipmentModal: React.FC<CalendarEquipmentModalProps> = ({ eventId
           <button
             onClick={handleSubmit}
             disabled={!selectedEquipment || parseInt(quantity) < 1 || requireEquipmentMutation.isPending}
-            className="w-full bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
+            className="w-full bg-gray-700 text-white py-2 px-4 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
           >
             {requireEquipmentMutation.isPending ? t('event:requiring') : t('event:require_equipment')}
           </button>

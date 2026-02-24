@@ -257,12 +257,13 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
     const postmix = parseFloat(postmixPerPost) || 0;
     const totalPostmix = posts * postmix;
 
-    // Calculate labor hours
+    // Calculate labor hours - based on batons/slats count (unit: baton, estimated_hours per baton)
     let mainTaskHours = 0;
-    if (layingTask?.unit && layingTask?.estimated_hours !== undefined && layingTask?.estimated_hours !== null) {
-      const lengthInMeters = parseFloat(length);
-      mainTaskHours = lengthInMeters * layingTask.estimated_hours;
+    if (layingTask?.estimated_hours !== undefined && layingTask?.estimated_hours !== null && slatsNeeded > 0) {
+      mainTaskHours = slatsNeeded * layingTask.estimated_hours;
     }
+
+    const layingUnit = layingTask?.unit || 'baton';
 
     // Create task breakdown
     const breakdown: TaskBreakdown[] = [];
@@ -272,16 +273,16 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
       breakdown.push({
         task: layingTask.name,
         hours: mainTaskHours,
-        amount: length ? `${length} meters` : '0',
-        unit: 'meters'
+        amount: `${slatsNeeded} ${layingUnit}s`,
+        unit: layingUnit
       });
     } else if (mainTaskHours > 0) {
       // Fallback if no specific laying task found
       breakdown.push({
         task: 'Venetian Fence Installation',
         hours: mainTaskHours,
-        amount: length ? `${length} meters` : '0',
-        unit: 'meters'
+        amount: `${slatsNeeded} ${layingUnit}s`,
+        unit: layingUnit
       });
     }
 
@@ -395,10 +396,11 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
   // Add useEffect to notify parent of result changes
   useEffect(() => {
     if (totalHours !== null && materials.length > 0) {
+      const layingItem = taskBreakdown.find(t => ['slat', 'baton', 'board'].includes(t.unit));
       const formattedResults = {
         name: 'Venetian Fence Installation',
-        amount: parseFloat(length) || 0,
-        unit: 'meters',
+        amount: layingItem ? parseInt(layingItem.amount, 10) || 0 : 0,
+        unit: layingItem?.unit || 'baton',
         hours_worked: totalHours,
         materials: materials.map(material => ({
           name: material.name,
@@ -602,7 +604,7 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
       </button>
 
       {calculationError && (
-        <div className="mt-4 p-4 bg-red-100 text-red-700 rounded-md">
+        <div className="mt-4 p-4 bg-red-900/90 border border-red-600 rounded-lg text-white">
           {calculationError}
         </div>
       )}

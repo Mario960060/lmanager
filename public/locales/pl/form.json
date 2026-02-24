@@ -203,6 +203,7 @@
   "update_equipment_status_heading": "Aktualizuj Stan Urządzenia",
   
   "system_task_cannot_delete": "To zadanie systemowe nie może być usunięte",
+  "system_task_cannot_edit": "To zadanie systemowe nie może być edytowane",
   "task_creation_warning": "Nie twórz tutaj żadnych zadań związanych z kopaniem, przygotowaniem taśmy1, zagęszczaniem i załadunkiem piasku. Wszystkie zostały stworzone automatycznie, gdy dodajesz kopaki i pojazdy w oknie \"Kopaki & Wywrotki/Przyczepy\" na stronie konfiguracji. Także nie używaj słów \"kopanie\" ani \"przygotowanie\" w nazwach zadań.",
   "system_label": "🔒 Systemowe",
   "yes_label": "✓ Tak",

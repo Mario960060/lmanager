@@ -203,6 +203,7 @@
   "update_equipment_status_heading": "Update Equipment Status",
   
   "system_task_cannot_delete": "This system task cannot be deleted",
+  "system_task_cannot_edit": "This system task cannot be edited",
   "task_creation_warning": "Don't create here any tasks that involve digging, tape1 preparation, compacting and loading-in sand. All of them will be created automatically whenever you add excavation and carrier tools in \"Excavators & Dumpers/Barrows\" window in setup page. Also please don't use any words \"excavation\" or \"preparation\" in names of your task.",
   "system_label": "🔒 System",
   "yes_label": "✓ Yes",

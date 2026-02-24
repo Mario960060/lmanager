@@ -300,18 +300,18 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
   const getStatusColor = (status: Equipment['status'], item?: Equipment) => {
     // If item is provided and it has available quantities, show as free_to_use
     if (item && item.quantity > item.in_use_quantity) {
-      return 'bg-green-100 text-green-800';
+      return 'bg-green-600 text-white';
     }
     
     switch (status) {
       case 'free_to_use':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-600 text-white';
       case 'in_use':
-        return 'bg-amber-200 text-amber-800';
+        return 'bg-amber-600 text-white';
       case 'broken':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-600 text-white';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-600 text-white';
     }
   };
 
@@ -489,7 +489,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
   if (wizardMode) {
     return (
       <div className="p-4 space-y-4 overflow-y-auto">
-        <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-200">
+        <div className="text-sm text-white bg-red-600 p-3 rounded-lg border border-red-700">
           <p>{t('form:equipment_management_description')}</p>
         </div>
         
@@ -677,10 +677,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
               <div className="flex space-x-1">
                 <button
                   onClick={() => handleEditClick(item)}
-                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 text-green-600 hover:text-green-700 transition-colors"
                   title={t('form:edit_equipment_title')}
                 >
-                  <Pencil className="w-4 h-4 text-blue-600" />
+                  <Pencil className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => {
@@ -688,10 +688,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                     setShowStatusModal(true);
                     setEquipmentUsage(prev => ({ ...prev, quantity: 1 }));
                   }}
-                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 text-blue-600 hover:text-blue-700 transition-colors"
                   title={t('form:update_status_title')}
                 >
-                  <Info className="w-4 h-4 text-gray-600" />
+                  <Info className="w-4 h-4" />
                 </button>
               </div>
             </div>

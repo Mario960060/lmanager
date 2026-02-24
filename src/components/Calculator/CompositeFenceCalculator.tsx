@@ -72,7 +72,6 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
 
   const [length, setLength] = useState('');
   const [height, setHeight] = useState('');
-  const [slatWidth, setSlatWidth] = useState('5');
   const [compositeSlatWidth, setCompositeSlatWidth] = useState('');
   const [slatLength, setSlatLength] = useState('360');
   const [postmixPerPost, setPostmixPerPost] = useState<string>('');
@@ -265,12 +264,13 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
     const postmix = parseFloat(postmixPerPost) || 0;
     const totalPostmix = posts * postmix;
 
-    // Calculate labor hours
+    // Calculate labor hours - based on boards count (unit: board, estimated_hours per board)
     let mainTaskHours = 0;
-    if (layingTask?.unit && layingTask?.estimated_hours !== undefined && layingTask?.estimated_hours !== null) {
-      const lengthInMeters = parseFloat(length);
-      mainTaskHours = lengthInMeters * layingTask.estimated_hours;
+    if (layingTask?.estimated_hours !== undefined && layingTask?.estimated_hours !== null && slatsNeeded > 0) {
+      mainTaskHours = slatsNeeded * layingTask.estimated_hours;
     }
+
+    const layingUnit = layingTask?.unit || 'board';
 
     // Create task breakdown
     const breakdown: TaskBreakdown[] = [];
@@ -280,16 +280,16 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
       breakdown.push({
         task: layingTask.name,
         hours: mainTaskHours,
-        amount: length ? `${length} meters` : '0',
-        unit: 'meters'
+        amount: `${slatsNeeded} ${layingUnit}s`,
+        unit: layingUnit
       });
     } else if (mainTaskHours > 0) {
       // Fallback if no specific laying task found
       breakdown.push({
         task: 'Composite Fence Installation',
         hours: mainTaskHours,
-        amount: length ? `${length} meters` : '0',
-        unit: 'meters'
+        amount: `${slatsNeeded} ${layingUnit}s`,
+        unit: layingUnit
       });
     }
 
@@ -400,10 +400,11 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
   // Add useEffect to notify parent of result changes
   useEffect(() => {
     if (totalHours !== null && materials.length > 0) {
+      const layingItem = taskBreakdown.find(t => ['slat', 'baton', 'board'].includes(t.unit));
       const formattedResults = {
         name: 'Composite Fence Installation',
-        amount: parseFloat(length) || 0,
-        unit: 'meters',
+        amount: layingItem ? parseInt(layingItem.amount, 10) || 0 : 0,
+        unit: layingItem?.unit || 'board',
         hours_worked: totalHours,
         materials: materials.map(material => ({
           name: material.name,
@@ -472,18 +473,6 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           placeholder={t('calculator:enter_height_meters')}
         />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:slat_width_cm_label')}</label>
-        <select
-          value={slatWidth}
-          onChange={(e) => setSlatWidth(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        >
-          <option value="4.5">4.5 cm</option>
-          <option value="5">5 cm</option>
-        </select>
       </div>
 
       <div>
@@ -607,7 +596,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
       </button>
 
       {calculationError && (
-        <div className="mt-4 p-4 bg-red-100 text-red-700 rounded-md">
+        <div className="mt-4 p-4 bg-red-900/90 border border-red-600 rounded-lg text-white">
           {calculationError}
         </div>
       )}

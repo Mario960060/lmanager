@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { format, parseISO, eachWeekOfInterval, startOfWeek, endOfWeek } from 'date-fns';
 import { Search, Calendar as CalendarIcon, ChevronDown, ChevronRight } from 'lucide-react';
+import PageInfoModal from '../../components/PageInfoModal';
 import BackButton from '../../components/BackButton';
 
 const ProjectPerformance = () => {
@@ -289,16 +290,16 @@ const ProjectPerformance = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'in_progress':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'finished':
-        return 'bg-green-100 text-green-800';
-      case 'scheduled':
-        return 'bg-gray-700 text-white';
       case 'planned':
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-600 text-white';
+      case 'scheduled':
+        return 'bg-blue-600 text-white';
+      case 'in_progress':
+        return 'bg-amber-600 text-white';
+      case 'finished':
+        return 'bg-green-600 text-white';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-600 text-white';
     }
   };
 
@@ -347,7 +348,10 @@ const ProjectPerformance = () => {
   return (
     <div className="container mx-auto p-6 space-y-6">
       <BackButton />
-      <h1 className="text-3xl font-bold text-gray-900">{t('project:project_performance_title')}</h1>
+      <div className="flex items-center">
+        <h1 className="text-3xl font-bold text-gray-900">{t('project:project_performance_title')}</h1>
+        <PageInfoModal description="" quickTips={[]} />
+      </div>
 
       {/* Project Selection */}
       <div className="bg-white p-6 rounded-lg shadow-lg">

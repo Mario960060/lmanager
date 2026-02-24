@@ -284,8 +284,8 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                 <p>{t('form:no_sand_materials_found')}</p>
               ) : (
                 calculators.map(calculator => (
-                  <div key={calculator.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div>
+                  <div key={calculator.id} className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="min-w-0 flex-1">
                       <h5 className="font-medium">{t(calculator.nameKey as any)}</h5>
                       <p className="text-sm text-gray-500">
                         {t('form:current_sand')}: {sandMaterialOptions.find(sand => sand.id === sandSelections[calculator.id])?.name || t('form:not_selected')}
@@ -294,7 +294,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                     <select
                       value={sandSelections[calculator.id] || ''}
                       onChange={(e: FormEvent<HTMLSelectElement>) => handleSandChange(calculator.id, e.currentTarget.value)}
-                      className="border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-1/3 min-w-[140px] max-w-[200px] shrink-0 border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="">{t('form:select_sand')}</option>
                       {sandMaterialOptions.map((sand: { id: string; name: string }) => (
@@ -315,20 +315,22 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
             
             {/* Slab Mortar Mix Ratio */}
             <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                {t('form:slab_mortar_mix_ratio')}
-              </label>
-              <select
-                value={slabMortarMixRatioSelection}
-                onChange={(e: FormEvent<HTMLSelectElement>) => setSlabMortarMixRatioSelection(e.currentTarget.value)}
-                className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="1:4">1:4</option>
-                <option value="1:5">1:5</option>
-                <option value="1:6">1:6</option>
-                <option value="1:7">1:7</option>
-                <option value="1:8">1:8</option>
-              </select>
+              <div className="flex items-center gap-4">
+                <label className="text-sm font-medium text-gray-700 flex-1">
+                  {t('form:slab_mortar_mix_ratio')}
+                </label>
+                <select
+                  value={slabMortarMixRatioSelection}
+                  onChange={(e: FormEvent<HTMLSelectElement>) => setSlabMortarMixRatioSelection(e.currentTarget.value)}
+                  className="w-1/3 min-w-[100px] max-w-[140px] shrink-0 border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="1:4">1:4</option>
+                  <option value="1:5">1:5</option>
+                  <option value="1:6">1:6</option>
+                  <option value="1:7">1:7</option>
+                  <option value="1:8">1:8</option>
+                </select>
+              </div>
               <p className="text-sm text-gray-500 mt-2">
                 {t('form:current_selection')}: {slabMortarMixRatioSelection}
               </p>
@@ -336,20 +338,22 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
 
             {/* Brick/Block Mortar Mix Ratio */}
             <div className="p-4 bg-gray-50 rounded-lg">
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                {t('form:brick_block_mortar_mix_ratio')}
-              </label>
-              <select
-                value={brickBlockMortarMixRatioSelection}
-                onChange={(e: FormEvent<HTMLSelectElement>) => setBrickBlockMortarMixRatioSelection(e.currentTarget.value)}
-                className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="1:4">1:4</option>
-                <option value="1:5">1:5</option>
-                <option value="1:6">1:6</option>
-                <option value="1:7">1:7</option>
-                <option value="1:8">1:8</option>
-              </select>
+              <div className="flex items-center gap-4">
+                <label className="text-sm font-medium text-gray-700 flex-1">
+                  {t('form:brick_block_mortar_mix_ratio')}
+                </label>
+                <select
+                  value={brickBlockMortarMixRatioSelection}
+                  onChange={(e: FormEvent<HTMLSelectElement>) => setBrickBlockMortarMixRatioSelection(e.currentTarget.value)}
+                  className="w-1/3 min-w-[100px] max-w-[140px] shrink-0 border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="1:4">1:4</option>
+                  <option value="1:5">1:5</option>
+                  <option value="1:6">1:6</option>
+                  <option value="1:7">1:7</option>
+                  <option value="1:8">1:8</option>
+                </select>
+              </div>
               <p className="text-sm text-gray-500 mt-2">
                 {t('form:current_selection')}: {brickBlockMortarMixRatioSelection}
               </p>

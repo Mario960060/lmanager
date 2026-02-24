@@ -53,6 +53,7 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
   const [length, setLength] = useState<string>('');
   const [width, setWidth] = useState<string>('');
   const [depth, setDepth] = useState<string>('');
+  const [calculationMethod, setCalculationMethod] = useState<'direct' | 'area'>('direct');
   
   // State for equipment selection
   const [excavators, setExcavators] = useState<DiggingEquipment[]>([]);

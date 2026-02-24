@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Calculator as CalculatorIcon } from 'lucide-react';
+import PageInfoModal from '../components/PageInfoModal';
 import { useCalculatorMenu } from '../contexts/CalculatorMenuContext';
 import WallCalculator from '../components/Calculator/WallCalculator';
 import MortarCalculator from '../components/Calculator/MortarCalculator';
@@ -154,6 +155,7 @@ const CalculatorPage: React.FC = () => {
       <div className="flex items-center px-6 py-4">
         <CalculatorIcon className="w-8 h-8 text-gray-600 mr-3" />
         <h1 className="text-3xl font-bold text-gray-900">{t('calculator:construction_calculator_title')}</h1>
+        <PageInfoModal description="" quickTips={[]} />
       </div>
 
       <div className="flex flex-col flex-1 overflow-hidden px-6">

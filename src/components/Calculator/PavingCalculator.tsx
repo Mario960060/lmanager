@@ -78,6 +78,13 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
   const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
   const [selectedCompactor, setSelectedCompactor] = useState<CompactorOption | null>(null);
 
+  // Use props when in ProjectCreating, otherwise local state
+  const useTransportProps = isInProjectCreating && propSetCalculateTransport != null;
+  const effectiveCalculateTransport = useTransportProps ? (propCalculateTransport ?? false) : calculateTransport;
+  const effectiveSetCalculateTransport = useTransportProps ? propSetCalculateTransport! : setCalculateTransport;
+  const effectiveSelectedTransportCarrier = useTransportProps ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
+  const effectiveSetSelectedTransportCarrier = useTransportProps ? propSetSelectedTransportCarrier! : setSelectedTransportCarrier;
+
   // Fetch task templates for monoblock laying
   const { data: layingTask, isLoading } = useQuery({
     queryKey: ['monoblock_laying_task', companyId],
@@ -400,12 +407,12 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       let normalizedMonoBlockTransportTime = 0;
       let normalizedSandTransportTime = 0;
 
-      if (calculateTransport) {
+      if (effectiveCalculateTransport) {
         // Use selected transport carrier or default to wheelbarrow 0.125t
         let carrierSizeForTransport = 0.125; // Default wheelbarrow
         
-        if (selectedTransportCarrier) {
-          carrierSizeForTransport = selectedTransportCarrier["size (in tones)"] || 0.125;
+        if (effectiveSelectedTransportCarrier) {
+          carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
         }
 
         // Calculate monoblock transport (assuming ~20kg per piece, so pieces = tonnes * 50)
@@ -804,18 +811,21 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
             />
             <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_digging_prep')}</span>
           </label>
-
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={calculateTransport}
-              onChange={(e) => setCalculateTransport(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-          </label>
         </div>
       )}
+
+      {/* Transport checkbox - always visible */}
+      <div className="mt-4">
+        <label className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={effectiveCalculateTransport}
+            onChange={(e) => effectiveSetCalculateTransport(e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
+        </label>
+      </div>
 
       {/* Equipment Selection */}
       {calculateDigging && (
@@ -909,21 +919,21 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       )}
 
       {/* Transport Carrier Selection */}
-      {calculateTransport && (
+      {effectiveCalculateTransport && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier')}</label>
           <div className="space-y-2">
             <div 
               className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded"
-              onClick={() => setSelectedTransportCarrier(null)}
+              onClick={() => effectiveSetSelectedTransportCarrier(null)}
             >
               <div className={`w-4 h-4 rounded-full border mr-2 ${
-                selectedTransportCarrier === null 
+                effectiveSelectedTransportCarrier === null 
                   ? 'border-gray-400' 
                   : 'border-gray-400'
               }`}>
                 <div className={`w-2 h-2 rounded-full m-0.5 ${
-                  selectedTransportCarrier === null 
+                  effectiveSelectedTransportCarrier === null 
                     ? 'bg-gray-400' 
                     : 'bg-transparent'
                 }`}></div>
@@ -932,19 +942,19 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
                 <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
               </div>
             </div>
-            {carriers.length > 0 && carriers.map((carrier) => (
+            {(isInProjectCreating ? propCarriers : carriers).length > 0 && (isInProjectCreating ? propCarriers : carriers).map((carrier: DiggingEquipment) => (
               <div 
                 key={carrier.id}
                 className="flex items-center p-2 cursor-pointer"
-                onClick={() => setSelectedTransportCarrier(carrier)}
+                onClick={() => effectiveSetSelectedTransportCarrier(carrier)}
               >
                 <div className={`w-4 h-4 rounded-full border mr-2 ${
-                  selectedTransportCarrier?.id === carrier.id 
+                  effectiveSelectedTransportCarrier?.id === carrier.id 
                     ? 'border-gray-400' 
                     : 'border-gray-400'
                 }`}>
                   <div className={`w-2 h-2 rounded-full m-0.5 ${
-                    selectedTransportCarrier?.id === carrier.id 
+                    effectiveSelectedTransportCarrier?.id === carrier.id 
                       ? 'bg-gray-400' 
                       : 'bg-transparent'
                   }`}></div>
@@ -960,7 +970,7 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       )}
 
       {/* Material Transport Distance */}
-      {calculateTransport && (
+      {effectiveCalculateTransport && (
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
           <input
@@ -984,7 +994,7 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       </button>
 
       {calculationError && (
-        <div className="mt-4 p-4 bg-red-100 text-red-700 rounded-md">
+        <div className="mt-4 p-4 bg-red-900/90 border border-red-600 rounded-lg text-white">
           {calculationError}
         </div>
       )}

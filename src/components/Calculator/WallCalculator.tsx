@@ -66,7 +66,6 @@ const WallCalculator: React.FC<CalculatorProps> = ({
   const [postMethod, setPostMethod] = useState<'concrete' | 'direct'>('concrete');
   const [length, setLength] = useState<string>('');
   const [height, setHeight] = useState<string>('');
-  const [openings, setOpenings] = useState<string>('');
   const [result, setResult] = useState<{ 
     units: number; 
     cementBags: number;
@@ -575,13 +574,11 @@ const WallCalculator: React.FC<CalculatorProps> = ({
   const calculate = async () => {
     const l = parseFloat(length);
     const h = parseFloat(height);
-    const o = parseFloat(openings) || 0;
-
     if (isNaN(l) || isNaN(h)) {
       return;
     }
 
-    let area = (l * h) - o;
+    let area = l * h;
     let units = 0;
     let mortarVolume = 0;
 
@@ -1170,15 +1167,6 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
         />
       </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:openings_area_label')}</label>
-        <input
-          type="number"
-          value={openings}
-          onChange={(e) => setOpenings(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        />
-      </div>
       
       {/* Foundation Calculator Tickbox - Only show for brick, block4, block7 */}
       {type !== 'sleeper' && (
@@ -1200,7 +1188,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_in_cm')}</label>
+              <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_m')}</label>
               <input
                 type="number"
                 value={foundationLength}
@@ -1212,7 +1200,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('calculator:input_width_in_cm')}</label>
+              <label className="block text-sm font-medium text-gray-700">{t('calculator:input_width_m')}</label>
               <input
                 type="number"
                 value={foundationWidth}

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
+import { show403Modal } from '../../components/Error403Modal';
 import { 
   Package, 
   Wrench, 
@@ -22,6 +23,7 @@ import {
   Truck
 } from 'lucide-react';
 import BackButton from '../../components/BackButton';
+import PageInfoModal from '../../components/PageInfoModal';
 import Modal from '../../components/Modal';
 import SetupTasks from './Setup/SetupTasks';
 import SetupEquipment from './Setup/SetupEquipment';
@@ -55,6 +57,16 @@ const SetupPage = () => {
   const { t } = useTranslation(['common', 'form', 'utilities']);
   const queryClient = useQueryClient();
   const companyId = useAuthStore(state => state.getCompanyId());
+  const profile = useAuthStore(state => state.profile);
+  const hasSetupAccess = profile?.role === 'Admin' || profile?.role === 'boss';
+
+  const handleSetupAction = (action: () => void) => {
+    if (!hasSetupAccess) {
+      show403Modal();
+      return;
+    }
+    action();
+  };
   
   // State for materials
   const [materialSearch, setMaterialSearch] = useState('');
@@ -388,7 +400,10 @@ const SetupPage = () => {
     <div className="container mx-auto px-4 py-6 space-y-6 max-w-full relative min-h-screen pb-20">
       <BackButton />
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">{t('form:setup_welcome_title')}</h1>
+        <div className="flex items-center">
+          <h1 className="text-3xl font-bold text-gray-900">{t('form:setup_welcome_title')}</h1>
+          <PageInfoModal description="" quickTips={[]} />
+        </div>
         <p className="text-xl text-gray-600">{t('form:setup_page_title')}</p>
       </div>
       
@@ -403,7 +418,7 @@ const SetupPage = () => {
             {t('form:setup_tasks_description')}
           </p>
           <button
-            onClick={() => setShowTasksModal(true)}
+            onClick={() => handleSetupAction(() => setShowTasksModal(true))}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
           >
             {t('form:manage_tasks_button')}
@@ -420,7 +435,7 @@ const SetupPage = () => {
             {t('form:setup_materials_description')}
           </p>
           <button
-            onClick={() => setShowMaterialsModal(true)}
+            onClick={() => handleSetupAction(() => setShowMaterialsModal(true))}
             className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
           >
             {t('form:manage_materials_button')}
@@ -437,7 +452,7 @@ const SetupPage = () => {
             {t('form:setup_equipment_description')}
           </p>
           <button
-            onClick={() => setShowEquipmentModal(true)}
+            onClick={() => handleSetupAction(() => setShowEquipmentModal(true))}
             className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors"
           >
             {t('form:manage_equipment_button')}
@@ -454,7 +469,7 @@ const SetupPage = () => {
             {t('form:setup_excavators_description')}
           </p>
           <button
-            onClick={() => setShowDiggingModal(true)}
+            onClick={() => handleSetupAction(() => setShowDiggingModal(true))}
             className="w-full bg-orange-600 text-white py-2 px-4 rounded-lg hover:bg-orange-700 transition-colors"
           >
             {t('form:manage_excavators_dumpers_button')}
@@ -471,7 +486,7 @@ const SetupPage = () => {
             {t('form:setup_material_usage_description')}
           </p>
           <button
-            onClick={() => setShowMaterialUsageModal(true)}
+            onClick={() => handleSetupAction(() => setShowMaterialUsageModal(true))}
             className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"
           >
             {t('form:manage_material_usage_button')}

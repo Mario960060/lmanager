@@ -96,9 +96,13 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
     }
   });
 
-  // Edit task mutation
+  // Edit task mutation (system tasks cannot be edited)
   const editTaskMutation = useMutation({
     mutationFn: async (task: Task) => {
+      const existingTask = tasks.find(t => t.id === task.id);
+      if (existingTask && existingTask.is_deletable === false) {
+        throw new Error(t('form:system_task_cannot_edit'));
+      }
       const { data, error } = await supabase
         .from('event_tasks')
         .update({
@@ -134,8 +138,9 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
     }
   };
 
-  // Handle editing tasks
+  // Handle editing tasks (system tasks cannot be edited)
   const handleEditTask = (task: Task) => {
+    if (task.is_deletable === false) return;
     setEditTask(task);
     setEditingTaskId(task.id);
   };
@@ -302,7 +307,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                       {editingTaskId === task.id ? (
                         <button
                           onClick={handleSaveTaskEdit}
-                          className="text-green-500 hover:text-green-700 p-1"
+                          disabled={task.is_deletable === false}
+                          className={task.is_deletable === false ? 'p-2 text-gray-300 cursor-not-allowed' : 'p-2 text-green-600 hover:text-green-700 transition-colors'}
                           title={t('form:save_button_title')}
                         >
                           <Save className="w-4 h-4" />
@@ -310,7 +316,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                       ) : (
                         <button
                           onClick={() => handleEditTask(task)}
-                          className="text-green-500 hover:text-green-700 p-1"
+                          disabled={task.is_deletable === false}
+                          className={task.is_deletable === false ? 'p-2 text-gray-300 cursor-not-allowed' : 'p-2 text-green-600 hover:text-green-700 transition-colors'}
                           title={t('form:edit_button_title')}
                         >
                           <Settings className="w-4 h-4" />
@@ -319,7 +326,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                       <button
                         onClick={() => deleteTaskMutation.mutate(task.id)}
                         disabled={task.is_deletable === false}
-                        className={task.is_deletable === false ? 'text-gray-300 cursor-not-allowed p-1' : 'text-red-500 hover:text-red-700 p-1'}
+                        className={task.is_deletable === false ? 'p-2 text-gray-300 cursor-not-allowed' : 'p-2 text-red-600 hover:text-red-700 transition-colors'}
                         title={t('form:delete_button_title')}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -508,7 +515,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                           {editingTaskId === task.id ? (
                           <button
                             onClick={handleSaveTaskEdit}
-                            className="text-green-500 hover:text-green-700 p-1"
+                            disabled={task.is_deletable === false}
+                            className={task.is_deletable === false ? 'p-2 text-gray-300 cursor-not-allowed' : 'p-2 text-green-600 hover:text-green-700 transition-colors'}
                             title={t('form:save_button_title')}
                           >
                             <Save className="w-4 h-4" />
@@ -516,7 +524,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                         ) : (
                           <button
                             onClick={() => handleEditTask(task)}
-                            className="text-green-500 hover:text-green-700 p-1"
+                            disabled={task.is_deletable === false}
+                            className={task.is_deletable === false ? 'p-2 text-gray-300 cursor-not-allowed' : 'p-2 text-green-600 hover:text-green-700 transition-colors'}
                             title={t('form:edit_button_title')}
                           >
                             <Settings className="w-4 h-4" />
@@ -524,7 +533,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                         )}
                         <button
                           onClick={() => deleteTaskMutation.mutate(task.id)}
-                          className="text-red-500 hover:text-red-700 p-1"
+                          disabled={task.is_deletable === false}
+                          className={task.is_deletable === false ? 'p-2 text-gray-300 cursor-not-allowed' : 'p-2 text-red-600 hover:text-red-700 transition-colors'}
                           title={t('form:delete_button_title')}
                         >
                           <Trash2 className="w-4 h-4" />

@@ -5,7 +5,7 @@ import { persist } from 'zustand/middleware';
 interface AuthState {
   user: User | null;
   profile: {
-    role: 'user' | 'project_manager' | 'Team_Leader' | 'Admin' | null;
+    role: 'user' | 'project_manager' | 'Team_Leader' | 'Admin' | 'boss' | null;
     full_name: string;
     email: string;
     company_id: string | null;

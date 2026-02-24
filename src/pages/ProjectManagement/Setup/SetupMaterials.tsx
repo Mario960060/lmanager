@@ -147,7 +147,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
   if (wizardMode) {
     return (
       <div className="p-4 space-y-4 overflow-y-auto">
-        <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg border border-blue-200">
+        <div className="text-sm text-white bg-red-600 p-3 rounded-lg border border-red-700">
           <p>{t('form:materials_management_description')}</p>
         </div>
         
@@ -337,7 +337,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
                       setSelectedMaterial(material);
                       setShowEditModal(true);
                     }}
-                    className="text-blue-600 hover:text-blue-800"
+                    className="p-2 text-green-600 hover:text-green-700 transition-colors"
                   >
                     <Pencil className="w-5 h-5" />
                   </button>
@@ -378,7 +378,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
                       setSelectedMaterial(material);
                       setShowEditModal(true);
                     }}
-                    className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors touch-manipulation"
+                    className="p-2 text-green-600 hover:text-green-700 transition-colors touch-manipulation"
                     aria-label="Edit"
                   >
                     <Pencil className="w-4 h-4" />

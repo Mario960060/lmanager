@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../lib/store';
+import { show403Modal } from '../components/Error403Modal';
 import { Clock, BarChart2, Trash2, FolderPlus } from 'lucide-react';
+import PageInfoModal from '../components/PageInfoModal';
 import BackButton from '../components/BackButton';
 import WeeklyWorkerHoursModal from '../components/ProjectManagement/WeeklyWorkerHoursModal';
 import RemovingRecords from './ProjectManagement/RemovingRecords';
@@ -14,15 +16,47 @@ const ProjectManagement = () => {
   const [showWorkerHours, setShowWorkerHours] = React.useState(false);
   const [showRemovingRecords, setShowRemovingRecords] = useState(false);
 
-  // Redirect if not Admin/boss
-  if (profile?.role !== 'Admin' && profile?.role !== 'boss') {
-    return <Navigate to="/" replace />;
-  }
+  const hasProjectManagementAccess = profile?.role === 'Admin' || profile?.role === 'boss';
+
+  const handleCreateProject = () => {
+    if (!hasProjectManagementAccess) {
+      show403Modal();
+      return;
+    }
+    navigate('/project-management/create');
+  };
+
+  const handleWorkerHours = () => {
+    if (!hasProjectManagementAccess) {
+      show403Modal();
+      return;
+    }
+    setShowWorkerHours(true);
+  };
+
+  const handleProjectPerformance = () => {
+    if (!hasProjectManagementAccess) {
+      show403Modal();
+      return;
+    }
+    navigate('/project-performance');
+  };
+
+  const handleRemovingRecords = () => {
+    if (!hasProjectManagementAccess) {
+      show403Modal();
+      return;
+    }
+    setShowRemovingRecords(true);
+  };
 
   return (
     <div className="container mx-auto p-6 space-y-6">
       <BackButton />
-      <h1 className="text-3xl font-bold text-gray-900">{t('project:project_management_title')}</h1>
+      <div className="flex items-center">
+        <h1 className="text-3xl font-bold text-gray-900">{t('project:project_management_title')}</h1>
+        <PageInfoModal description="" quickTips={[]} />
+      </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Project Creation */}
@@ -35,7 +69,7 @@ const ProjectManagement = () => {
             {t('project:create_project_description')}
           </p>
           <button
-            onClick={() => navigate('/project-management/create')}
+            onClick={handleCreateProject}
             className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"
           >
             {t('project:create_project_button')}
@@ -52,7 +86,7 @@ const ProjectManagement = () => {
             {t('project:weekly_worker_hours_description')}
           </p>
           <button
-            onClick={() => setShowWorkerHours(true)}
+            onClick={handleWorkerHours}
             className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
           >
             {t('project:check_hours_button')}
@@ -69,7 +103,7 @@ const ProjectManagement = () => {
             {t('project:project_performance_description')}
           </p>
           <button
-            onClick={() => navigate('/project-performance')}
+            onClick={handleProjectPerformance}
             className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
           >
             {t('project:view_performance_button')}
@@ -87,7 +121,7 @@ const ProjectManagement = () => {
             {t('project:removing_records_description')}
           </p>
           <button
-            onClick={() => setShowRemovingRecords(true)}
+            onClick={handleRemovingRecords}
             className="w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
           >
             {t('project:manage_requests_button')}

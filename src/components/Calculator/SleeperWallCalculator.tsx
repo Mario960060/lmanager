@@ -685,7 +685,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
                   }`}></div>
                 </div>
                 <div>
-                  <span className="text-gray-800">Default (0.125t Wheelbarrow)</span>
+                  <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
                 </div>
               </div>
               {carriers.length > 0 && carriers.map((carrier) => (

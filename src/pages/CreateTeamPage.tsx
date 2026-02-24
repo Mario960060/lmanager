@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../lib/store';
 import { ArrowLeft, Check, Loader2 } from 'lucide-react';
 
 interface SubscriptionPlan {
@@ -15,6 +16,7 @@ interface SubscriptionPlan {
 
 const CreateTeamPage = () => {
   const { t } = useTranslation(['common', 'form', 'plan']);
+  const { profile, setProfile } = useAuthStore();
   
   const subscriptionPlans: SubscriptionPlan[] = [
     {
@@ -127,6 +129,12 @@ const CreateTeamPage = () => {
       }
 
       console.log('Profile updated with company_id');
+
+      // Update Zustand store so Setup components get company_id immediately
+      setProfile({
+        ...(profile || { role: 'user', full_name: '', email: '' }),
+        company_id: (company as any).id
+      } as any);
 
       // Wait for profile update to propagate in database
       await new Promise(resolve => setTimeout(resolve, 500));

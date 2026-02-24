@@ -381,7 +381,7 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsCh
         {/* Excavation Dimensions */}
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_in_cm')}</label>
+            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_m')}</label>
             <input
               type="number"
               value={length}
@@ -393,7 +393,7 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsCh
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_width_in_cm')}</label>
+            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_width_m')}</label>
             <input
               type="number"
               value={width}
@@ -542,7 +542,7 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsCh
 
         {/* Error Message */}
         {calculationError && (
-          <div className="p-3 bg-red-50 text-red-700 rounded-md">
+          <div className="p-3 bg-red-900/90 border border-red-600 rounded-lg text-white">
             {calculationError}
           </div>
         )}

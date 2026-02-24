@@ -1182,15 +1182,15 @@ const EventDetails = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'planned':
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-600 text-white';
       case 'scheduled':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-600 text-white';
       case 'in_progress':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-amber-600 text-white';
       case 'finished':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-600 text-white';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-600 text-white';
     }
   };
 

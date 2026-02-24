@@ -7,6 +7,7 @@ import { format, addDays, parseISO, startOfDay, endOfDay, isWithinInterval } fro
 import { enUS, pl } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { Calendar as CalendarIcon, Clock, Package, AlertCircle, ChevronDown, ChevronUp, Wrench, Plus } from 'lucide-react';
+import PageInfoModal from '../components/PageInfoModal';
 
 const Dashboard = () => {
   const { t, i18n } = useTranslation(['dashboard', 'common', 'utilities', 'project']);
@@ -175,15 +176,15 @@ const Dashboard = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'planned':
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-600 text-white';
       case 'scheduled':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-600 text-white';
       case 'in_progress':
-        return 'bg-yellow-100 text-yellow-800';
+        return 'bg-amber-600 text-white';
       case 'finished':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-600 text-white';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-600 text-white';
     }
   };
 
@@ -309,16 +310,6 @@ const Dashboard = () => {
                         <span>{eventTasks.length} {t('dashboard:tasks')}</span>
                       </div>
                     )}
-                    {(eventMaterials.length > 0 || eventEquipment.length > 0) && (
-                      <div className="flex items-center text-gray-600">
-                        <Package className="w-4 h-4 mr-2" />
-                        <span>
-                          {eventMaterials.length > 0 && `${eventMaterials.length} ${t('dashboard:materials')}`}
-                          {eventMaterials.length > 0 && eventEquipment.length > 0 && ', '}
-                          {eventEquipment.length > 0 && `${eventEquipment.length} ${t('dashboard:equipment')}`}
-                        </span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Materials Section */}
@@ -331,9 +322,10 @@ const Dashboard = () => {
                           toggleSection(event.id, 'materials');
                         }}
                       >
-                        <div className="flex items-center">
+                        <div className="flex items-center gap-2">
                           <AlertCircle className="w-4 h-4 mr-1" />
                           <span>{t('dashboard:required_materials')}</span>
+                          <span className="text-xl font-bold">{eventMaterials.length}</span>
                         </div>
                         {isExpanded(event.id, 'materials') ? (
                           <ChevronUp className="w-4 h-4" />
@@ -372,9 +364,10 @@ const Dashboard = () => {
                           toggleSection(event.id, 'equipment');
                         }}
                       >
-                        <div className="flex items-center">
+                        <div className="flex items-center gap-2">
                           <Wrench className="w-4 h-4 mr-1" />
                           <span>{t('dashboard:required_equipment')}</span>
+                          <span className="text-xl font-bold">{eventEquipment.length}</span>
                         </div>
                         {isExpanded(event.id, 'equipment') ? (
                           <ChevronUp className="w-4 h-4" />
@@ -445,7 +438,10 @@ const Dashboard = () => {
   return (
     <div className="container mx-auto p-6">
       <div className="mb-8 flex items-center justify-between md:flex-row flex-col">
-        <h1 className="text-3xl font-bold text-gray-900">{t('dashboard:title')}</h1>
+        <div className="flex items-center">
+          <h1 className="text-3xl font-bold text-gray-900">{t('dashboard:title')}</h1>
+          <PageInfoModal description={t('dashboard:info_description')} title={t('dashboard:info_title')} />
+        </div>
         <div className="flex gap-4 md:flex-row flex-col md:w-auto w-full">
           <button
             className="md:flex hidden items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

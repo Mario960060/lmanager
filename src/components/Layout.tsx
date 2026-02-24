@@ -58,8 +58,6 @@ const Layout = () => {
     }
   };
 
-  const isAdmin = profile?.role === 'Admin';
-
   const { selectedCalculatorType, setSelectedCalculatorType, selectedSubType, setSelectedSubType, expandedCategory, setExpandedCategory } = useCalculatorMenu();
 
   const calculatorButtons = [
@@ -186,12 +184,10 @@ const Layout = () => {
     { name: t('nav:calculator'), href: '/calculator', icon: Calculator },
     { name: t('nav:calendar'), href: '/calendar', icon: Calendar },
     { name: t('nav:tasks'), href: '/tasks', icon: CheckSquare },
-    ...(isAdmin ? [
-      { name: t('nav:project_management'), href: '/project-management', icon: Settings },
-      { name: t('nav:setup'), href: '/setup', icon: Wrench },
-      { name: t('nav:company_panel'), href: '/company-panel', icon: Building2 },
-      { name: t('nav:finance'), href: '/finance', icon: DollarSign }
-    ] : [])
+    { name: t('nav:project_management'), href: '/project-management', icon: Settings },
+    { name: t('nav:setup'), href: '/setup', icon: Wrench },
+    { name: t('nav:company_panel'), href: '/company-panel', icon: Building2 },
+    { name: t('nav:finance'), href: '/finance', icon: DollarSign }
   ];
 
   const toggleSidebar = () => {
@@ -232,17 +228,17 @@ const Layout = () => {
 
         {/* Sidebar */}
         <aside
-          className={`fixed lg:sticky top-0 left-0 z-50 h-screen w-[280px] bg-white dark:bg-gray-800 shadow-lg transform transition-transform duration-200 ease-in-out ${
+          className={`fixed lg:sticky top-0 left-0 z-50 h-screen w-[280px] bg-white dark:bg-[#1e293b] shadow-lg transform transition-transform duration-200 ease-in-out ${
             isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
           } lg:translate-x-0 lg:h-screen`}
         >
           <div className="flex flex-col h-full overflow-hidden">
             {/* Sidebar Header */}
-            <div className="flex items-center justify-between h-16 px-4 border-b dark:border-gray-700">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200">{t('common:app_name')}</h2>
+            <div className="flex items-center justify-between h-16 px-4 border-b dark:border-[#334155]">
+              <h2 className="text-xl font-bold text-gray-800 dark:text-white">{t('common:app_name')}</h2>
               <button
                 onClick={toggleSidebar}
-                className="lg:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                className="lg:hidden p-2 hover:bg-gray-100 dark:hover:bg-[#334155] rounded-lg transition-colors"
                 aria-label={t('common:close')}
               >
                 <X className="w-6 h-6" />
@@ -262,14 +258,14 @@ const Layout = () => {
                         setSelectedSubType(null);
                         setExpandedCategory(null);
                       }}
-                      className="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 mb-4 flex-shrink-0"
+                      className="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-[#334155] dark:text-[#94a3b8] dark:hover:bg-[#475569] mb-4 flex-shrink-0"
                     >
                       <ArrowLeft className="w-5 h-5 mr-3 flex-shrink-0" />
                       {t('common:back')}
                     </button>
 
                     {/* Calculators Section Title */}
-                    <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex-shrink-0">
+                    <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-[#94a3b8] uppercase tracking-wider flex-shrink-0">
                       {t('nav:calculator')}
                     </div>
 
@@ -296,8 +292,8 @@ const Layout = () => {
                                 }}
                                 className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                                   selectedCalculatorType === calc.type
-                                    ? 'bg-blue-600 text-white'
-                                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                    ? 'bg-[#2563eb] text-white'
+                                    : 'text-gray-600 dark:text-[#94a3b8] hover:bg-gray-50 dark:hover:bg-[#334155]'
                                 }`}
                               >
                                 <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
@@ -343,8 +339,8 @@ const Layout = () => {
                                   }}
                                   className={`w-full flex items-center px-8 py-2 text-sm rounded-lg transition-colors ${
                                     isSubTypeActive
-                                      ? 'bg-blue-600 text-white'
-                                      : 'text-gray-500 dark:text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-300'
+                                      ? 'bg-[#2563eb] text-white'
+                                      : 'text-gray-500 dark:text-[#94a3b8] hover:bg-gray-50 dark:hover:bg-[#334155] dark:hover:text-white'
                                   }`}
                                 >
                                   {subType.label}
@@ -372,9 +368,9 @@ const Layout = () => {
                             setExpandedCategory(null);
                           }}
                           className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                            showCalculatorMenu
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
-                              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                            showCalculatorMenu || location.pathname === '/calculator'
+                              ? 'bg-[#2563eb] text-white'
+                              : 'text-gray-600 dark:text-[#94a3b8] hover:bg-gray-50 dark:hover:bg-[#334155]'
                           }`}
                         >
                           <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
@@ -393,8 +389,8 @@ const Layout = () => {
                         }}
                         className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                           location.pathname === item.href
-                            ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200'
-                            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+                            ? 'bg-[#2563eb] text-white'
+                            : 'text-gray-600 dark:text-[#94a3b8] hover:bg-gray-50 dark:hover:bg-[#334155]'
                         }`}
                       >
                         <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
@@ -407,18 +403,18 @@ const Layout = () => {
             </nav>
 
             {/* Theme Toggle and User Profile */}
-            <div className="p-4 border-t bg-gray-50 dark:bg-gray-700/50 dark:border-gray-700">
+            <div className="p-4 border-t bg-gray-50 dark:bg-[#2d3b4b] dark:border-[#334155]">
               <div className="flex items-center justify-between mb-4 relative">
                 <button
                   onClick={() => setShowThemeDropdown(!showThemeDropdown)}
-                  className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                  className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-[#334155] rounded-lg transition-colors"
                 >
                   <span>{currentTheme.icon}</span>
                   <span className="ml-2">{currentTheme.displayName}</span>
                 </button>
                 
                 {showThemeDropdown && (
-                  <div className="absolute bottom-full left-0 mb-2 w-48 bg-white dark:bg-gray-700 rounded-lg shadow-lg z-50 border border-gray-200 dark:border-gray-600">
+                  <div className="absolute bottom-full left-0 mb-2 w-48 bg-white dark:bg-[#2d3b4b] rounded-lg shadow-lg z-50 border border-gray-200 dark:border-[#334155]">
                     {allThemes.map((themeOption) => (
                       <button
                         key={themeOption.id}
@@ -428,8 +424,8 @@ const Layout = () => {
                         }}
                         className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ${
                           currentTheme.id === themeOption.id
-                            ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 font-medium'
-                            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+                            ? 'bg-blue-100 dark:bg-[#2563eb] text-blue-900 dark:text-white font-medium'
+                            : 'text-gray-700 dark:text-[#94a3b8] hover:bg-gray-100 dark:hover:bg-[#334155]'
                         }`}
                       >
                         <span>{themeOption.icon}</span>
@@ -451,17 +447,17 @@ const Layout = () => {
                 <div className="min-w-0 flex-1">
                   <Link 
                     to="/user-profile" 
-                    className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                    className="text-sm font-medium text-gray-900 dark:text-white truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
                   >
                     {profile?.full_name}
                   </Link>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                  <p className="text-xs text-gray-500 dark:text-[#94a3b8] truncate">
                     {profile?.role}
                   </p>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="ml-2 p-2 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                  className="ml-2 p-2 text-gray-400 hover:text-gray-500 dark:text-[#94a3b8] dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#334155] rounded-lg transition-colors"
                   aria-label={t('common:logout')}
                 >
                   <LogOut className="w-5 h-5" />
