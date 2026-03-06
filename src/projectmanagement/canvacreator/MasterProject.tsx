@@ -164,6 +164,8 @@ export default function MasterProject() {
   const [showRestoredToast, setShowRestoredToast] = useState(false);
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
   const modeDropdownRef = useRef<HTMLDivElement>(null);
+  const [layersDropdownOpen, setLayersDropdownOpen] = useState(false);
+  const layersDropdownRef = useRef<HTMLDivElement>(null);
   const [shapesDropdownOpen, setShapesDropdownOpen] = useState(false);
   const shapesDropdownRef = useRef<HTMLDivElement>(null);
   const [pathDropdownOpen, setPathDropdownOpen] = useState(false);
@@ -427,9 +429,10 @@ export default function MasterProject() {
   }, []);
 
   useEffect(() => {
-    if (!modeDropdownOpen && !shapesDropdownOpen && !pathDropdownOpen && !linearDropdownOpen && !groundworkDropdownOpen && !stairsDropdownOpen) return;
+    if (!modeDropdownOpen && !layersDropdownOpen && !shapesDropdownOpen && !pathDropdownOpen && !linearDropdownOpen && !groundworkDropdownOpen && !stairsDropdownOpen) return;
     const onOutside = (e: MouseEvent) => {
       if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) setModeDropdownOpen(false);
+      if (layersDropdownRef.current && !layersDropdownRef.current.contains(e.target as Node)) setLayersDropdownOpen(false);
       if (shapesDropdownRef.current && !shapesDropdownRef.current.contains(e.target as Node)) setShapesDropdownOpen(false);
       if (pathDropdownRef.current && !pathDropdownRef.current.contains(e.target as Node)) setPathDropdownOpen(false);
       if (linearDropdownRef.current && !linearDropdownRef.current.contains(e.target as Node)) setLinearDropdownOpen(false);
@@ -438,7 +441,7 @@ export default function MasterProject() {
     };
     document.addEventListener("mousedown", onOutside);
     return () => document.removeEventListener("mousedown", onOutside);
-  }, [modeDropdownOpen, shapesDropdownOpen, pathDropdownOpen, linearDropdownOpen, groundworkDropdownOpen, stairsDropdownOpen]);
+  }, [modeDropdownOpen, layersDropdownOpen, shapesDropdownOpen, pathDropdownOpen, linearDropdownOpen, groundworkDropdownOpen, stairsDropdownOpen]);
 
   useEffect(() => {
     if (projectSummaryContextMenu === null) return;
@@ -1087,29 +1090,7 @@ export default function MasterProject() {
           ctx.fill();
         }
 
-        if (isL2 && !geodesyEnabled && shape.calculatorType === "deck" && shape.calculatorInputs?.boardLength) {
-          drawDeckPattern(ctx, shape, worldToScreen, zoom, !isSel);
-        }
-        if (isL2 && !geodesyEnabled && shape.calculatorType === "slab" && shape.calculatorInputs?.vizSlabWidth) {
-          drawSlabPattern(ctx, shape, worldToScreen, zoom, true, undefined, undefined, !isSel);
-          if (shape.calculatorInputs?.framePieceWidthCm) {
-            drawSlabFrame(ctx, shape, worldToScreen, zoom);
-          }
-        }
-        if (isL2 && !geodesyEnabled && shape.calculatorType === "paving" && shape.closed) {
-          if (shape.calculatorInputs?.addFrameToMonoblock && shape.calculatorInputs?.framePieceWidthCm) {
-            drawMonoblockFrame(ctx, shape, worldToScreen, zoom);
-          }
-          drawCobblestonePattern(ctx, shape, worldToScreen, zoom, true, undefined, undefined, !isSel);
-        }
-        if (isL2 && !geodesyEnabled && shape.calculatorType === "grass") {
-          if (shape.calculatorInputs?.framePieceWidthCm) {
-            drawSlabFrame(ctx, shape, worldToScreen, zoom);
-          }
-          if ((shape.calculatorInputs?.vizPieces?.length ?? 0) > 0) {
-            drawGrassPieces(ctx, shape, worldToScreen, zoom, isSel, grassScaleInfo, si, isExportingRef.current);
-          }
-        }
+        {/* Patterns drawn only in Pattern layer (block at L697); Elements shows shapes without patterns */}
       }
 
       const vizAlignedEdges = (shape.calculatorInputs?.vizAlignedEdges as number[] | undefined) ?? [];
@@ -2735,8 +2716,10 @@ export default function MasterProject() {
       const pieces = (shape?.calculatorInputs?.vizPieces as GrassPiece[]) ?? [];
       if (pieceIdx < pieces.length) {
         const piece = pieces[pieceIdx];
-        const dx = world.x - startMouse.x;
-        const dy = world.y - startMouse.y;
+        const rawDx = world.x - startMouse.x;
+        const rawDy = world.y - startMouse.y;
+        const dx = rawDy;
+        const dy = rawDx;
         const movedPiece = { ...piece, x: piece.x + dx, y: piece.y + dy };
         const snapThreshold = toPixels(0.015);
         const { snappedPiece: snappedToPieces, nearEdge } = snapGrassPieceEdge(movedPiece, pieces, pieceIdx, snapThreshold);
@@ -4556,7 +4539,7 @@ export default function MasterProject() {
     }
   };
 
-  const LAYER_KEYS: Record<number, string> = { 1: "garden_label", 2: "elements_label", 3: "pattern_label", 4: "preparation_label" };
+  const LAYER_KEYS: Record<number, string> = { 1: "garden_label", 2: "elements_label", 3: "pattern_label", 4: "preparation_label", 5: "adjustment_label" };
 
   const handleExportPdf = async (layers: number[]) => {
     const canvas = canvasRef.current;
@@ -4649,49 +4632,60 @@ export default function MasterProject() {
       )}
       {/* Toolbar — CAD Dark Professional */}
       <div className="toolbar-cad">
-        {/* Row 1: Layer Tabs + Geodesy */}
+        {/* Row 1: Layers dropdown + Geodesy */}
         <div className="toolbar-row">
-          <div className="layer-tabs">
-            <button type="button" className={`layer-tab ${activeLayer === 1 ? "active" : ""}`} onClick={() => switchLayer(1)}>
-              <span className="layer-dot garden" />
-              {t("project:garden_label")}
-              <span className="layer-count">{l1Count}</span>
-            </button>
-            <button type="button" className={`layer-tab ${activeLayer === 2 ? "active" : ""}`} onClick={() => switchLayer(2)}>
-              <span className="layer-dot elements" />
-              {t("project:elements_label")}
-              <span className="layer-count">{l2Count}</span>
-            </button>
-            <button type="button" className={`layer-tab ${activeLayer === 3 ? "active" : ""}`} onClick={() => switchLayer(3)}>
-              <span className="layer-dot pattern" />
-              {t("project:pattern_label")}
-            </button>
-            <button type="button" className={`layer-tab ${activeLayer === 4 ? "active" : ""}`} onClick={() => switchLayer(4)}>
-              <span className="layer-dot preparation" />
-              {t("project:preparation_label")}
-            </button>
-            <button type="button" className={`layer-tab ${activeLayer === 5 ? "active" : ""}`} onClick={() => switchLayer(5)}>
-              <span className="layer-dot adjustment" />
-              {t("project:adjustment_label")}
+          <div className="tool-group">
+            <div ref={layersDropdownRef} style={{ position: "relative" }}>
+              <button type="button" className={`dropdown-trigger ${layersDropdownOpen ? "active" : ""}`} onClick={() => setLayersDropdownOpen(v => !v)}>
+                <span className={`layer-dot ${activeLayer === 1 ? "garden" : activeLayer === 2 ? "elements" : activeLayer === 3 ? "pattern" : activeLayer === 4 ? "preparation" : "adjustment"}`} />
+                {t(`project:${LAYER_KEYS[activeLayer] ?? "toolbar_layers"}`)}
+                <svg className="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+              {layersDropdownOpen && (
+                <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 160 }}>
+                  {[
+                    { layer: 1 as ActiveLayer, key: "garden_label", dotClass: "garden", count: l1Count },
+                    { layer: 2 as ActiveLayer, key: "elements_label", dotClass: "elements", count: l2Count },
+                    { layer: 3 as ActiveLayer, key: "pattern_label", dotClass: "pattern", count: null },
+                    { layer: 4 as ActiveLayer, key: "preparation_label", dotClass: "preparation", count: null },
+                    { layer: 5 as ActiveLayer, key: "adjustment_label", dotClass: "adjustment", count: null },
+                  ].map(({ layer: L, key, dotClass, count }) => (
+                    <button key={key} type="button"
+                      onClick={() => { switchLayer(L); setLayersDropdownOpen(false); }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px",
+                        border: "none", background: activeLayer === L ? "rgba(108,92,231,0.2)" : "transparent", color: "#dfe6f0",
+                        cursor: "pointer", fontSize: 13, fontFamily: "inherit", borderRadius: 4, textAlign: "left",
+                      }}
+                      onMouseEnter={(e) => { if (activeLayer !== L) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = activeLayer === L ? "rgba(108,92,231,0.2)" : "transparent"; }}
+                    >
+                      <span className={`layer-dot ${dotClass}`} style={{ flexShrink: 0 }} />
+                      {t(`project:${key}`)}
+                      {count != null && <span className="layer-count" style={{ marginLeft: "auto" }}>{count}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              className={`geodesy-toggle ${geodesyEnabled ? "on" : "off"}`}
+              onClick={() => { setGeodesyEnabled(v => !v); if (geodesyEnabled) setEditingHeight(null); }}
+              title={geodesyEnabled ? t("project:toolbar_geodesy_on_tooltip") : t("project:toolbar_geodesy_off_tooltip")}
+            >
+              <span className="geodesy-indicator" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 3l4 8 5-5 7 11H0z" />
+              </svg>
+              {t("project:toolbar_geodesy")}
             </button>
           </div>
           <div className="tb-spacer" />
-          <button
-            type="button"
-            className={`geodesy-toggle ${geodesyEnabled ? "on" : "off"}`}
-            onClick={() => { setGeodesyEnabled(v => !v); if (geodesyEnabled) setEditingHeight(null); }}
-            title={geodesyEnabled ? t("project:toolbar_geodesy_on_tooltip") : t("project:toolbar_geodesy_off_tooltip")}
-          >
-            <span className="geodesy-indicator" />
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M8 3l4 8 5-5 7 11H0z" />
-            </svg>
-            {t("project:toolbar_geodesy")}
-          </button>
         </div>
 
-        {/* Row 2: Tools + Drawing + View filters + Delete + Counter */}
-        <div className="toolbar-row">
+        {/* Row 2: Tools + Drawing + View filters + Delete + Counter — scrollable on mobile */}
+        <div className={`toolbar-row ${isMobile ? "toolbar-row-scroll" : ""}`}>
           {/* Mode dropdown: Select, Draw, Scale, View */}
           <div className="tool-group">
             <div ref={modeDropdownRef} style={{ position: "relative" }}>
@@ -5253,7 +5247,9 @@ export default function MasterProject() {
                   removeEntryAndLinked({ si, pi: -1 as const, edgeIdx: ei, arcId: ap.id });
                 }} />
                 {(() => {
-                  const si = contextMenu.shapeIdx, ei = contextMenu.edgeIdx, ap = contextMenu.arcPoint!;
+                  const si = contextMenu.shapeIdx;
+                  const ei = contextMenu.edgeIdx;
+                  const ap = contextMenu.arcPoint!;
                   const isLinked = isArcPointLinked(si, ei, ap.id);
                   if (isLinked) {
                     return <CtxItem label="🔗 Unlink arc point" color={C.text} onClick={() => {

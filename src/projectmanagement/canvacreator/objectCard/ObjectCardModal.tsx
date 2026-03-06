@@ -152,6 +152,17 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
     resultsMatchInputsRef.current = true; // loaded saved state, inputs match results
   }, [shape.calculatorType, shape.calculatorSubType, shape.calculatorResults]);
 
+  // Sync lastInputsRef when shape.calculatorInputs is updated by MasterProject (e.g. slab waste recompute)
+  // Ensures vizWasteSatisfied, vizWasteAreaCm2, vizReusedAreaCm2 are preserved when saving
+  useEffect(() => {
+    const inputs = shape.calculatorInputs ?? {};
+    // #region agent log
+    const vizLen = (inputs.vizPieces as unknown[] | undefined)?.map((x: { lengthM?: number }) => x?.lengthM);
+    if (calculatorType === "grass" && vizLen) fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ObjectCardModal.tsx:lastInputsSync',message:'lastInputsRef merge',data:{vizPiecesLengths:vizLen},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
+    lastInputsRef.current = { ...lastInputsRef.current, ...inputs };
+  }, [shape.calculatorInputs]);
+
   const handleTypeSelect = (type: string, subType: string) => {
     setCalculatorType(type);
     setCalculatorSubType(subType);
@@ -230,7 +241,8 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
         const effectiveAreaM2 = getEffectiveTotalArea(laidOut);
         merged.vizPieces = laidOut.map((p, i) => {
           const { effectiveWidthM, effectiveLengthM } = getEffectivePieceDimensionsForInput(p, laidOut, i);
-          return { ...p, effectiveWidthM, effectiveLengthM };
+          const nominal = grassPieces[i];
+          return { ...p, effectiveWidthM, effectiveLengthM, lengthM: nominal?.lengthM ?? p.lengthM, widthM: nominal?.widthM ?? p.widthM };
         });
         merged.effectiveAreaM2 = effectiveAreaM2;
         merged.jointsLength = String(cov.joinLengthM.toFixed(2));
@@ -272,8 +284,15 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
     setVizStartCorner(Number(savedInputsSnapshot.vizStartCorner ?? 0));
     const legacyMm = savedInputsSnapshot.vizGroutWidth != null ? Math.round(Number(savedInputsSnapshot.vizGroutWidth) * 10) : undefined;
     setVizGroutWidthMm(Number(savedInputsSnapshot.vizGroutWidthMm ?? legacyMm ?? 5));
-    if (!grassLivePreviewInProgressRef.current) {
-      const p = savedInputsSnapshot.vizPieces;
+    // #region agent log
+    const p = savedInputsSnapshot.vizPieces;
+    const willOverwrite = !grassLivePreviewInProgressRef.current && Array.isArray(p) && p.length > 0;
+    const incomingLengths = Array.isArray(p) ? p.map((x: { lengthM?: number }) => x?.lengthM) : [];
+    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ObjectCardModal.tsx:syncGrassPieces',message:'Sync useEffect',data:{refBlocksOverwrite:grassLivePreviewInProgressRef.current,willOverwrite,incomingLengths,vizPiecesLen:p?.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    // For grass: never overwrite grassPieces from vizPieces — layout modifies dimensions to fit shape,
+    // but user's nominal dimensions (lengthM, widthM) must stay as entered
+    if (!grassLivePreviewInProgressRef.current && calculatorType !== "grass") {
       if (Array.isArray(p) && p.length > 0) setGrassPieces(p);
     }
     grassLivePreviewInProgressRef.current = false;
@@ -284,6 +303,12 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
     grassLivePreviewInProgressRef.current = true;
     const shapeWithInputs = { ...shape, calculatorInputs: { ...shape.calculatorInputs, rollsOrientation: "along", grassVizDirection } };
     const laidOut = autoJoinAdjacentPieces(autoLayoutGrassPieces(shapeWithInputs, grassPieces));
+    // #region agent log
+    const inputLengths = grassPieces.map((x: { lengthM?: number }) => x?.lengthM);
+    const outputLengths = laidOut.map((x: { lengthM?: number }) => x?.lengthM);
+    const layoutChanged = inputLengths.some((v: number, i: number) => Math.abs((v ?? 0) - (outputLengths[i] ?? 0)) > 0.001);
+    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ObjectCardModal.tsx:previewEffect',message:'Preview layout',data:{inputLengths,outputLengths,layoutChanged},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     const cov = validateCoverage(shapeWithInputs, laidOut);
     const effectiveAreaM2 = getEffectiveTotalArea(laidOut);
     const vizPieces = laidOut.map((p, i) => {
@@ -881,7 +906,12 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                     onChange={e => {
                       const v = e.target.value;
                       if (v === "") setGrassPieces(prev => prev.map((p, j) => j === i ? { ...p, lengthM: 0 } : p));
-                      else { const n = parseFloat(v); if (!isNaN(n)) setGrassPieces(prev => prev.map((p, j) => j === i ? { ...p, lengthM: n } : p)); }
+                      else { const n = parseFloat(v); if (!isNaN(n)) {
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ObjectCardModal.tsx:lengthChange',message:'User changed length',data:{pieceIdx:i,newVal:n},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+                        // #endregion
+                        setGrassPieces(prev => prev.map((p, j) => j === i ? { ...p, lengthM: n } : p));
+                      } }
                     }}
                     style={{ width: 80, padding: "6px 8px", background: C.bg, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 12 }}
                   />

@@ -43,6 +43,17 @@
   min-height: 34px;
 }
 
+/* Mobile: horizontal scroll for toolbar row 2 */
+.toolbar-cad .toolbar-row.toolbar-row-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  flex-wrap: nowrap;
+}
+.toolbar-cad .toolbar-row.toolbar-row-scroll > * {
+  flex-shrink: 0;
+}
+
 /* Layer Tabs */
 .toolbar-cad .layer-tabs {
   display: flex;
