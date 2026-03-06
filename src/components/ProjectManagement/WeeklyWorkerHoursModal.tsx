@@ -4,7 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { format, startOfWeek, endOfWeek, subDays, subWeeks, isSameDay, eachWeekOfInterval } from 'date-fns';
+import { pl } from 'date-fns/locale';
 import { X, Search, Clock, Calendar, CheckCircle, AlertCircle, User, ChevronDown, ChevronUp, Calendar as CalendarIcon } from 'lucide-react';
+import DatePicker from '../DatePicker';
 
 interface WorkerHoursModalProps {
   onClose: () => void;
@@ -37,7 +39,8 @@ type AdditionalTaskEntry = {
 };
 
 const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t, i18n } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const dateLocale = i18n.language === 'pl' ? pl : undefined;
   const [workerName, setWorkerName] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<'current' | 'last'>('current');
@@ -159,10 +162,10 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
         hours_spent: entry.hours_spent,
         created_at: entry.created_at,
         tasks_done: {
-          name: entry.additional_tasks?.description || 'Additional Task',
+          name: entry.additional_tasks?.description || t('event:additional_task'),
           amount: null
         },
-        events: entry.additional_tasks?.events || { id: 'unknown', title: 'Unknown Event' }
+        events: entry.additional_tasks?.events || { id: 'unknown', title: t('event:unknown_event') }
       }));
 
       // Return combined data
@@ -204,7 +207,7 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
     acc[eventId].totalHours += entry.hours_spent;
     acc[eventId].dailyBreakdown[dateKey].hours += entry.hours_spent;
 
-    const taskName = entry.tasks_done?.name || 'Unknown Task';
+    const taskName = entry.tasks_done?.name || t('common:unknown_task');
     
     // Update total tasks
     if (!acc[eventId].tasks[taskName]) {
@@ -340,28 +343,18 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:start_date_button')}</label>
-                  <div className="relative">
-                    <input
-                      type="date"
-                      value={dateRange.start}
-                      onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 pr-10"
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 border-blue-500 pointer-events-none"></span>
-                  </div>
+                  <DatePicker
+                    value={dateRange.start}
+                    onChange={(v) => setDateRange(prev => ({ ...prev, start: v }))}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:end_date_button')}</label>
-                  <div className="relative">
-                    <input
-                      type="date"
-                      value={dateRange.end}
-                      onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                      min={dateRange.start}
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 pr-10"
-                    />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 border-blue-500 pointer-events-none"></span>
-                  </div>
+                  <DatePicker
+                    value={dateRange.end}
+                    onChange={(v) => setDateRange(prev => ({ ...prev, end: v }))}
+                    minDate={dateRange.start}
+                  />
                 </div>
               </div>
             )}
@@ -499,7 +492,7 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
                             .map(([dateKey, dayData]: [string, any]) => (
                               <div key={dateKey} className="border-l-2 border-gray-300 pl-3">
                                 <div className="font-medium text-sm text-gray-600">
-                                  {format(new Date(dayData.date), 'EEEE, MMM d')}
+                                  {format(new Date(dayData.date), 'EEEE, MMM d', { locale: dateLocale })}
                                   <span className="ml-2 font-normal">
                                     ({dayData.hours.toFixed(2)} {t('event:hours_text')})
                                   </span>

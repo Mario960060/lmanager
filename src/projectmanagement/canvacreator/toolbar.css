@@ -1,0 +1,423 @@
+/* CAD Toolbar — Dark Professional */
+.toolbar-cad {
+  --tb-bg-bar: #161e2e;
+  --tb-bg-bar-border: #1e2b40;
+  --tb-bg-tool: transparent;
+  --tb-bg-tool-hover: rgba(255,255,255,0.05);
+  --tb-bg-tool-active: rgba(34, 197, 94, 0.12);
+  --tb-bg-layer: rgba(255,255,255,0.03);
+  --tb-bg-layer-active: rgba(255,255,255,0.08);
+  --tb-border-tool: rgba(255,255,255,0.06);
+  --tb-border-active: rgba(34, 197, 94, 0.3);
+  --tb-border-layer-active: rgba(255,255,255,0.15);
+  --tb-text-primary: #dfe6f0;
+  --tb-text-secondary: #7a8ba5;
+  --tb-text-muted: #4a5a72;
+  --tb-text-active: #22c55e;
+  --tb-text-layer-count: #8a9ab5;
+  --tb-accent: #22c55e;
+  --tb-red: #ef4444;
+  --tb-blue: #3b82f6;
+  --tb-separator: rgba(255,255,255,0.06);
+  --tb-radius: 8px;
+  --tb-radius-sm: 6px;
+  --tb-radius-xs: 4px;
+}
+
+.toolbar-cad {
+  background: var(--tb-bg-bar);
+  border-bottom: 1px solid var(--tb-bg-bar-border);
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  position: relative;
+  z-index: 100;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.toolbar-cad .toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+}
+
+/* Layer Tabs */
+.toolbar-cad .layer-tabs {
+  display: flex;
+  gap: 2px;
+  background: rgba(0,0,0,0.15);
+  border-radius: var(--tb-radius);
+  padding: 2px;
+}
+
+.toolbar-cad .layer-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: var(--tb-radius-sm);
+  border: 1px solid transparent;
+  background: var(--tb-bg-layer);
+  color: var(--tb-text-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.toolbar-cad .layer-tab:hover {
+  background: var(--tb-bg-layer-active);
+  color: var(--tb-text-primary);
+}
+
+.toolbar-cad .layer-tab.active {
+  background: var(--tb-bg-layer-active);
+  border-color: var(--tb-border-layer-active);
+  color: var(--tb-text-primary);
+}
+
+.toolbar-cad .layer-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.toolbar-cad .layer-dot.garden { background: var(--tb-accent); }
+.toolbar-cad .layer-dot.elements { background: var(--tb-blue); }
+.toolbar-cad .layer-dot.pattern { background: #a78bfa; }
+.toolbar-cad .layer-dot.preparation { background: #f59e0b; }
+.toolbar-cad .layer-dot.adjustment { background: var(--tb-red); }
+.toolbar-cad .layer-dot.survey { background: #2dd4bf; }
+
+.toolbar-cad .layer-count {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--tb-text-muted);
+  background: rgba(255,255,255,0.04);
+  padding: 0 5px;
+  border-radius: 8px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.toolbar-cad .layer-tab.active .layer-count {
+  color: var(--tb-text-layer-count);
+  background: rgba(255,255,255,0.06);
+}
+
+/* Separator */
+.toolbar-cad .tb-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--tb-separator);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.toolbar-cad .tb-spacer { flex: 1; }
+
+/* Geodesy Toggle */
+.toolbar-cad .geodesy-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: var(--tb-radius-sm);
+  border: 1px solid var(--tb-border-tool);
+  background: var(--tb-bg-tool);
+  color: var(--tb-text-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.toolbar-cad .geodesy-toggle:hover {
+  background: var(--tb-bg-tool-hover);
+}
+
+.toolbar-cad .geodesy-toggle.on {
+  border-color: rgba(34, 197, 94, 0.25);
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--tb-accent);
+}
+
+.toolbar-cad .geodesy-toggle.off {
+  border-color: rgba(239, 68, 68, 0.2);
+  color: var(--tb-text-muted);
+}
+
+.toolbar-cad .geodesy-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.toolbar-cad .geodesy-toggle.on .geodesy-indicator {
+  background: var(--tb-accent);
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+
+.toolbar-cad .geodesy-toggle.off .geodesy-indicator {
+  background: var(--tb-red);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.3);
+}
+
+/* Tool Group */
+.toolbar-cad .tool-group {
+  display: flex;
+  gap: 1px;
+  background: rgba(0,0,0,0.1);
+  border-radius: var(--tb-radius-sm);
+  padding: 2px;
+}
+
+.toolbar-cad .tool-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--tb-radius-xs);
+  border: none;
+  background: transparent;
+  color: var(--tb-text-secondary);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.toolbar-cad .tool-btn:hover {
+  background: var(--tb-bg-tool-hover);
+  color: var(--tb-text-primary);
+}
+
+.toolbar-cad .tool-btn.active {
+  background: var(--tb-bg-tool-active);
+  color: var(--tb-text-active);
+}
+
+.toolbar-cad .tool-btn.icon-only {
+  padding: 5px 7px;
+}
+
+.toolbar-cad .tool-btn svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+.toolbar-cad .tool-btn.icon-only svg {
+  width: 16px;
+  height: 16px;
+}
+
+.toolbar-cad .tool-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Dropdown Trigger */
+.toolbar-cad .dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: var(--tb-radius-xs);
+  border: 1px solid var(--tb-border-tool);
+  background: transparent;
+  color: var(--tb-text-secondary);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.toolbar-cad .dropdown-trigger:hover {
+  background: var(--tb-bg-tool-hover);
+  color: var(--tb-text-primary);
+}
+
+.toolbar-cad .dropdown-trigger.active {
+  background: var(--tb-bg-tool-hover);
+}
+
+.toolbar-cad .dropdown-trigger svg {
+  width: 14px;
+  height: 14px;
+}
+
+.toolbar-cad .dropdown-caret {
+  width: 10px !important;
+  height: 10px !important;
+  color: var(--tb-text-muted);
+}
+
+/* View Filters (icon-only) */
+.toolbar-cad .view-filters {
+  display: flex;
+  gap: 1px;
+  background: rgba(0,0,0,0.1);
+  border-radius: var(--tb-radius-sm);
+  padding: 2px;
+}
+
+.toolbar-cad .view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 7px;
+  border-radius: var(--tb-radius-xs);
+  border: none;
+  background: transparent;
+  color: var(--tb-text-muted);
+  cursor: pointer;
+  transition: all 0.12s;
+  position: relative;
+}
+
+.toolbar-cad .view-btn:hover {
+  background: var(--tb-bg-tool-hover);
+  color: var(--tb-text-secondary);
+}
+
+.toolbar-cad .view-btn.active {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--tb-blue);
+}
+
+.toolbar-cad .view-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.toolbar-cad .view-btn[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  background: #0d1320;
+  border: 1px solid var(--tb-bg-bar-border);
+  border-radius: 4px;
+  font-size: 0.65rem;
+  color: var(--tb-text-secondary);
+  white-space: nowrap;
+  z-index: 200;
+  pointer-events: none;
+}
+
+/* Shape Counter */
+.toolbar-cad .shape-counter {
+  font-size: 0.68rem;
+  color: var(--tb-text-muted);
+  padding: 0 6px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.toolbar-cad .shape-counter span {
+  color: var(--tb-text-secondary);
+  font-weight: 600;
+}
+
+/* Action Buttons */
+.toolbar-cad .action-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--tb-radius-sm);
+  border: 1px solid var(--tb-border-tool);
+  background: transparent;
+  color: var(--tb-text-secondary);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.toolbar-cad .action-btn:hover {
+  background: var(--tb-bg-tool-hover);
+  color: var(--tb-text-primary);
+}
+
+.toolbar-cad .action-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--tb-red);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.toolbar-cad .action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Delete Button */
+.toolbar-cad .delete-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--tb-radius-sm);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  background: transparent;
+  color: var(--tb-text-muted);
+  font-size: 0.74rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.toolbar-cad .delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--tb-red);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.toolbar-cad .delete-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Undo Button */
+.toolbar-cad .undo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 7px;
+  border-radius: var(--tb-radius-xs);
+  border: none;
+  background: transparent;
+  color: var(--tb-text-muted);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.toolbar-cad .undo-btn:hover {
+  background: var(--tb-bg-tool-hover);
+  color: var(--tb-text-secondary);
+}
+
+.toolbar-cad .undo-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.toolbar-cad .undo-btn svg {
+  width: 16px;
+  height: 16px;
+}

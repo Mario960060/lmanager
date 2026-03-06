@@ -76,6 +76,22 @@ const COMPACTORS: CompactorOption[] = [
   }
 ];
 
+/** Map project compactor from setup_digging or CompactorOption to CompactorOption for calculations */
+export function mapProjectCompactorToOption(dbCompactor: { id?: string; name?: string } | CompactorOption | null): CompactorOption | null {
+  if (!dbCompactor) return null;
+  // If already a CompactorOption (from static list in project card)
+  if ('id' in dbCompactor && COMPACTORS.some(c => c.id === (dbCompactor as CompactorOption).id)) {
+    return COMPACTORS.find(c => c.id === (dbCompactor as CompactorOption).id) ?? null;
+  }
+  if (!(dbCompactor as { name?: string }).name) return null;
+  const n = (dbCompactor as { name: string }).name.toLowerCase();
+  if (n.includes('roller') || n.includes('walec')) return COMPACTORS.find(c => c.id === 'maly_walec') ?? null;
+  if (n.includes('small') || n.includes('mały') || n.includes('maly')) return COMPACTORS.find(c => c.id === 'small_compactor') ?? null;
+  if (n.includes('medium') || n.includes('średni') || n.includes('sredni')) return COMPACTORS.find(c => c.id === 'medium_compactor') ?? null;
+  if (n.includes('large') || n.includes('duży') || n.includes('duzy')) return COMPACTORS.find(c => c.id === 'large_compactor') ?? null;
+  return null;
+}
+
 const CompactorSelector: React.FC<CompactorSelectorProps> = ({
   selectedCompactor,
   onCompactorChange

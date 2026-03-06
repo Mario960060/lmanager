@@ -4,9 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName } from '../../lib/translationMap';
+import { translateTaskName, translateUnit } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
+import { colors } from '../../themes/designTokens';
+import { Spinner, Button } from '../../themes/uiComponents';
 
 interface Material {
   name: string;
@@ -16,9 +18,21 @@ interface Material {
   total_price: number | null;
 }
 
+interface Shape {
+  points: { x: number; y: number }[];
+  closed: boolean;
+  calculatorInputs?: Record<string, any>;
+}
+
 interface ArtificialGrassCalculatorProps {
   onResultsChange?: (results: any) => void;
+  onInputsChange?: (inputs: Record<string, any>) => void;
   isInProjectCreating?: boolean;
+  initialArea?: number;
+  savedInputs?: Record<string, any>;
+  shape?: Shape;
+  /** When true, hide edge trimming and joint length inputs (used in canvas where they're auto-filled) */
+  hideEdgeAndJointInputs?: boolean;
   calculateTransport?: boolean;
   setCalculateTransport?: (value: boolean) => void;
   selectedTransportCarrier?: any;
@@ -27,6 +41,8 @@ interface ArtificialGrassCalculatorProps {
   setTransportDistance?: (value: string) => void;
   carriers?: any[];
   selectedExcavator?: any;
+  selectedCompactor?: any; // CompactorOption from project when in project mode
+  recalculateTrigger?: number;
 }
 
 interface MaterialUsageConfig {
@@ -51,7 +67,12 @@ interface DiggingEquipment {
 
 const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({ 
   onResultsChange, 
+  onInputsChange,
   isInProjectCreating = false,
+  initialArea,
+  savedInputs = {},
+  shape,
+  hideEdgeAndJointInputs = !!shape,
   calculateTransport: propCalculateTransport,
   setCalculateTransport: propSetCalculateTransport,
   selectedTransportCarrier: propSelectedTransportCarrier,
@@ -59,20 +80,50 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
   transportDistance: propTransportDistance,
   setTransportDistance: propSetTransportDistance,
   carriers: propCarriers = [],
-  selectedExcavator: propSelectedExcavator
+  selectedExcavator: propSelectedExcavator,
+  selectedCompactor: propSelectedCompactor,
+  recalculateTrigger = 0
 }) => {
   const { t } = useTranslation(['calculator', 'utilities', 'common']);
   const companyId = useAuthStore(state => state.getCompanyId());
-  const [area, setArea] = useState<string>('');
-  const [tape1ThicknessCm, setTape1ThicknessCm] = useState<string>('');
-  const [sandThicknessCm, setSandThicknessCm] = useState<string>('');
-  const [soilExcessCm, setSoilExcessCm] = useState<string>('');
+  const initArea = (savedInputs?.effectiveAreaM2 != null && savedInputs.effectiveAreaM2 > 0)
+    ? String(savedInputs.effectiveAreaM2.toFixed(3))
+    : (savedInputs?.area != null ? String(savedInputs.area) : (initialArea != null ? initialArea.toFixed(3) : ''));
+  const [area, setArea] = useState<string>(initArea);
+  useEffect(() => {
+    if (savedInputs?.effectiveAreaM2 != null && savedInputs.effectiveAreaM2 > 0) setArea(String(savedInputs.effectiveAreaM2.toFixed(3)));
+    else if (savedInputs?.area != null) setArea(String(savedInputs.area));
+    else if (initialArea != null && isInProjectCreating) setArea(initialArea.toFixed(3));
+  }, [savedInputs?.effectiveAreaM2, savedInputs?.area, initialArea, isInProjectCreating]);
+  useEffect(() => {
+    if (!hideEdgeAndJointInputs && savedInputs?.jointsLength != null) setJointsLength(String(savedInputs.jointsLength));
+    if (!hideEdgeAndJointInputs && savedInputs?.trimLength != null) setTrimLength(String(savedInputs.trimLength));
+  }, [savedInputs?.jointsLength, savedInputs?.trimLength, hideEdgeAndJointInputs]);
+
+  useEffect(() => {
+    if (savedInputs?.tape1ThicknessCm != null && savedInputs.tape1ThicknessCm !== '') setTape1ThicknessCm(String(savedInputs.tape1ThicknessCm));
+    if (savedInputs?.sandThicknessCm != null && savedInputs.sandThicknessCm !== '') setSandThicknessCm(String(savedInputs.sandThicknessCm));
+  }, [savedInputs?.tape1ThicknessCm, savedInputs?.sandThicknessCm]);
+  const [tape1ThicknessCm, setTape1ThicknessCm] = useState<string>(savedInputs?.tape1ThicknessCm ?? '');
+  const [sandThicknessCm, setSandThicknessCm] = useState<string>(savedInputs?.sandThicknessCm ?? '');
+  const [soilExcessCm, setSoilExcessCm] = useState<string>(savedInputs?.soilExcessCm ?? '');
+  const [jointsLength, setJointsLength] = useState<string>(savedInputs?.jointsLength ?? '');
+  const [trimLength, setTrimLength] = useState<string>(savedInputs?.trimLength ?? '');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [totalHours, setTotalHours] = useState<number | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
   const [taskBreakdown, setTaskBreakdown] = useState<{task: string, hours: number, amount: string, unit: string}[]>([]);
-  const [jointsLength, setJointsLength] = useState<string>('');
-  const [trimLength, setTrimLength] = useState<string>('');
+  useEffect(() => {
+    if (onInputsChange && isInProjectCreating) {
+      onInputsChange({
+        area,
+        tape1ThicknessCm,
+        sandThicknessCm,
+        soilExcessCm,
+        ...(!hideEdgeAndJointInputs && { jointsLength, trimLength }),
+      });
+    }
+  }, [area, tape1ThicknessCm, sandThicknessCm, soilExcessCm, jointsLength, trimLength, hideEdgeAndJointInputs, onInputsChange, isInProjectCreating]);
   const [calculateDigging, setCalculateDigging] = useState<boolean>(false);
   const [selectedExcavator, setSelectedExcavator] = useState<DiggingEquipment | null>(null);
   const [selectedCarrier, setSelectedCarrier] = useState<DiggingEquipment | null>(null);
@@ -86,6 +137,9 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
   const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
   const [transportDistance, setTransportDistance] = useState<string>('30'); // Local state for transport distance
   const [selectedCompactor, setSelectedCompactor] = useState<CompactorOption | null>(null);
+  const effectiveCompactor = isInProjectCreating && propSelectedCompactor ? propSelectedCompactor : selectedCompactor;
+  const effectiveCalculateTransport = isInProjectCreating ? (propCalculateTransport ?? false) : calculateTransport;
+  const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
 
   // Use carriers from props if available (from ProjectCreating), otherwise use local state
   const carriers = propCarriers && propCarriers.length > 0 ? propCarriers : carriersLocal;
@@ -300,7 +354,10 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
     if (isInProjectCreating) {
       if (propCalculateTransport !== undefined) setCalculateTransport(propCalculateTransport);
       if (propSelectedTransportCarrier !== undefined) setSelectedTransportCarrier(propSelectedTransportCarrier);
-      if (propTransportDistance !== undefined) setTransportDistance(propTransportDistance);
+      if (propTransportDistance !== undefined) {
+        setTransportDistance(propTransportDistance);
+        setMaterialTransportDistance(propTransportDistance);
+      }
     }
   }, [
     isInProjectCreating,
@@ -308,25 +365,6 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
     propSelectedTransportCarrier,
     propTransportDistance
   ]);
-
-  // Sync local state back to parent when in ProjectCreating
-  useEffect(() => {
-    if (isInProjectCreating && propSetCalculateTransport) {
-      propSetCalculateTransport(calculateTransport);
-    }
-  }, [calculateTransport, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetSelectedTransportCarrier) {
-      propSetSelectedTransportCarrier(selectedTransportCarrier);
-    }
-  }, [selectedTransportCarrier, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetTransportDistance) {
-      propSetTransportDistance(transportDistance);
-    }
-  }, [transportDistance, isInProjectCreating, propSetTransportDistance]);
 
   // Add equipment fetching
   useEffect(() => {
@@ -412,7 +450,14 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
   };
 
   const calculate = async () => {
-    if (!area || !tape1ThicknessCm || !sandThicknessCm) {
+    const areaForCalc = (savedInputs?.effectiveAreaM2 != null && savedInputs.effectiveAreaM2 > 0)
+      ? savedInputs.effectiveAreaM2
+      : parseFloat(area);
+    if ((!area || isNaN(parseFloat(area))) && (!savedInputs?.effectiveAreaM2 || savedInputs.effectiveAreaM2 <= 0)) {
+      setCalculationError(t('calculator:fill_all_required_fields'));
+      return;
+    }
+    if (!tape1ThicknessCm || !sandThicknessCm) {
       setCalculationError(t('calculator:fill_all_required_fields'));
       return;
     }
@@ -420,7 +465,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
     setCalculationError(null);
 
     try {
-      const areaNum = parseFloat(area);
+      const areaNum = areaForCalc;
       const tape1ThicknessM = parseFloat(tape1ThicknessCm) / 100;
       const sandThicknessM = parseFloat(sandThicknessCm) / 100;
       const soilExcessM = soilExcessCm ? parseFloat(soilExcessCm) / 100 : 0;
@@ -466,11 +511,11 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
       let sandTransportTime = 0;
       let normalizedSandTransportTime = 0;
 
-      if (calculateTransport) {
+      if (effectiveCalculateTransport) {
         let carrierSizeForTransport = 0.125;
         
-        if (selectedTransportCarrier) {
-          carrierSizeForTransport = selectedTransportCarrier["size (in tones)"] || 0.125;
+        if (effectiveSelectedTransportCarrier) {
+          carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
         }
 
         // Calculate sand transport
@@ -499,9 +544,10 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
         });
       }
 
-      // Add jointing artificial grass task if available and jointsLength is provided
-      const jointsLengthNum = parseFloat(jointsLength);
-      if (jointingTask && jointingTask.estimated_hours !== undefined && jointingTask.estimated_hours !== null && jointsLength && !isNaN(jointsLengthNum) && jointsLengthNum > 0) {
+      // Add jointing artificial grass task if available and jointsLength is provided (auto-filled from canvas or manual input)
+      const effectiveJointsLength = hideEdgeAndJointInputs ? (savedInputs?.jointsLength ?? '') : (savedInputs?.jointsLength ?? jointsLength);
+      const jointsLengthNum = parseFloat(effectiveJointsLength);
+      if (jointingTask && jointingTask.estimated_hours !== undefined && jointingTask.estimated_hours !== null && effectiveJointsLength && !isNaN(jointsLengthNum) && jointsLengthNum > 0) {
         console.log('DEBUG: Adding jointing task:', jointingTask);
         breakdown.push({
           task: 'jointing artificial grass',
@@ -511,9 +557,10 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
         });
       }
 
-      // Add trimming edges artificial grass task if available and trimLength is provided
-      const trimLengthNum = parseFloat(trimLength);
-      if (trimmingEdgesTask && trimmingEdgesTask.estimated_hours !== undefined && trimmingEdgesTask.estimated_hours !== null && trimLength && !isNaN(trimLengthNum) && trimLengthNum > 0) {
+      // Add trimming edges artificial grass task if available and trimLength is provided (auto-filled from canvas or manual input)
+      const effectiveTrimLength = hideEdgeAndJointInputs ? (savedInputs?.trimLength ?? '') : (savedInputs?.trimLength ?? trimLength);
+      const trimLengthNum = parseFloat(effectiveTrimLength);
+      if (trimmingEdgesTask && trimmingEdgesTask.estimated_hours !== undefined && trimmingEdgesTask.estimated_hours !== null && effectiveTrimLength && !isNaN(trimLengthNum) && trimLengthNum > 0) {
         console.log('DEBUG: Adding trimming edges task:', trimmingEdgesTask);
         breakdown.push({
           task: 'trimming edges (artificial grass)',
@@ -537,7 +584,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
       console.log('DEBUG: ArtificialGrassCalculator - Final breakdown:', JSON.parse(JSON.stringify(breakdown)));
 
       // Add transport tasks if applicable
-      if (calculateTransport && sandTransportTime > 0) {
+      if (effectiveCalculateTransport && sandTransportTime > 0) {
         breakdown.push({
           task: 'transport sand',
           hours: sandTransportTime,
@@ -551,7 +598,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
       let compactingLayers = 0;
       let compactingCompactorName = '';
 
-      if (selectedCompactor && (sandThicknessCm || tape1ThicknessCm)) {
+      if (effectiveCompactor && (sandThicknessCm || tape1ThicknessCm)) {
         // In Artificial Grass Calculator, compact both sand and type1 layers (sum of both thicknesses)
         const sandDepthCm = parseFloat(sandThicknessCm || '0');
         const tape1DepthCm = parseFloat(tape1ThicknessCm || '0');
@@ -561,7 +608,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
           // Use sand material type as the primary type (both materials need compacting)
           const materialType = 'sand';
           
-          const compactingCalc = calculateCompactingTime(selectedCompactor, totalCompactingDepthCm, materialType);
+          const compactingCalc = calculateCompactingTime(effectiveCompactor, totalCompactingDepthCm, materialType);
           compactingTimeTotal = areaNum * compactingCalc.timePerM2 * compactingCalc.totalPasses;
           compactingLayers = compactingCalc.numberOfLayers;
           compactingCompactorName = compactingCalc.compactorTaskName;
@@ -722,6 +769,13 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
     }
   };
 
+  // Recalculate when project settings (transport, equipment) change
+  useEffect(() => {
+    if (recalculateTrigger > 0 && isInProjectCreating) {
+      void calculate();
+    }
+  }, [recalculateTrigger]);
+
   // Add useEffect to notify parent of result changes
   useEffect(() => {
     if (totalHours !== null && materials.length > 0) {
@@ -772,7 +826,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <Spinner size={32} />
       </div>
     );
   }
@@ -793,33 +847,6 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
             onChange={(e) => setArea(e.target.value)}
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
             placeholder={t('calculator:placeholder_enter_area_m2')}
-            min="0"
-            step="0.01"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_total_joint_length_m')}</label>
-          <input
-            type="number"
-            value={jointsLength}
-            onChange={(e) => setJointsLength(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_joint_length')}
-            min="0"
-            step="0.01"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_total_trim_length_m')}</label>
-          <p className="text-xs text-gray-500 mt-0.5 mb-2">{t('calculator:total_length_edges_trimmed')}</p>
-          <input
-            type="number"
-            value={trimLength}
-            onChange={(e) => setTrimLength(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_trim_length')}
             min="0"
             step="0.01"
           />
@@ -851,25 +878,60 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
           />
         </div>
         
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_additional_soil_depth_cm')}</label>
-          <input
-            type="number"
-            value={soilExcessCm}
-            onChange={(e) => setSoilExcessCm(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_depth_cm')}
-            min="0"
-            step="0.5"
-          />
-          <p className="text-xs text-gray-500 mt-1">{t('calculator:additional_soil_depth_desc')}</p>
-        </div>
+        {/* Additional soil depth — hidden in canvas (kanwa), shown in standalone calculator and project creation */}
+        {!hideEdgeAndJointInputs && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_additional_soil_depth_cm')}</label>
+            <input
+              type="number"
+              value={soilExcessCm}
+              onChange={(e) => setSoilExcessCm(e.target.value)}
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
+              placeholder={t('calculator:placeholder_enter_depth_cm')}
+              min="0"
+              step="0.5"
+            />
+            <p className="text-xs text-gray-500 mt-1">{t('calculator:additional_soil_depth_desc')}</p>
+          </div>
+        )}
+
+        {/* Joint length and trim length — shown only in standalone calculator and project creation, not in canvas */}
+        {!hideEdgeAndJointInputs && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">{t('calculator:input_total_joint_length_m')}</label>
+              <input
+                type="number"
+                value={jointsLength}
+                onChange={(e) => setJointsLength(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
+                placeholder={t('calculator:placeholder_enter_joint_length')}
+                min="0"
+                step="0.01"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">{t('calculator:input_total_trim_length_m')}</label>
+              <input
+                type="number"
+                value={trimLength}
+                onChange={(e) => setTrimLength(e.target.value)}
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
+                placeholder={t('calculator:placeholder_enter_trim_length')}
+                min="0"
+                step="0.01"
+              />
+            </div>
+          </>
+        )}
         
         {/* Compactor Type Selection */}
-        <CompactorSelector 
-          selectedCompactor={selectedCompactor}
-          onCompactorChange={setSelectedCompactor}
-        />
+        {!isInProjectCreating && (
+          <CompactorSelector 
+            selectedCompactor={selectedCompactor}
+            onCompactorChange={setSelectedCompactor}
+          />
+        )}
         
         {!isInProjectCreating && (
           <div className="mt-4">
@@ -957,7 +1019,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
         )}
 
         {/* Transport Distance for Soil and Tape1 */}
-        {calculateDigging && selectedCarrier && (
+        {!isInProjectCreating && calculateDigging && selectedCarrier && (
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
             <input
@@ -976,18 +1038,20 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
           </div>
         )}
         
-        <label className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            checked={calculateTransport}
-            onChange={(e) => setCalculateTransport(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-        </label>
+        {!isInProjectCreating && (
+          <label className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              checked={calculateTransport}
+              onChange={(e) => setCalculateTransport(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
+          </label>
+        )}
 
         {/* Transport Carrier Selection */}
-        {calculateTransport && (
+        {!isInProjectCreating && calculateTransport && (
           <>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier_label')}</label>
@@ -1053,13 +1117,9 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
           </>
         )}
         
-        <button
-          onClick={calculate}
-          disabled={isLoading}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-300"
-        >
+        <Button variant="accent" color={colors.accentBlue} onClick={calculate} disabled={isLoading}>
           {isLoading ? t('calculator:loading_in_progress') : t('calculator:calculate_button')}
-        </button>
+        </Button>
         
         {calculationError && (
           <div className="p-3 bg-red-900/90 border border-red-600 rounded-lg text-white">
@@ -1117,7 +1177,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
                           {material.amount.toFixed(2)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.unit}
+                          {translateUnit(material.unit, t)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                           {material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}

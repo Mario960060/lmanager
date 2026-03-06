@@ -4,7 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName } from '../../lib/translationMap';
+import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { colors, radii } from '../../themes/designTokens';
+import { Button } from '../../themes/uiComponents';
 
 interface TaskTemplate {
   id: string;
@@ -24,6 +26,17 @@ interface TileInstallationCalculatorProps {
   setTransportDistance?: (value: string) => void;
   carriers?: any[];
   selectedExcavator?: any;
+  /** From wall segments on canvas — area and dimensions auto-filled, read-only */
+  fromWallSegments?: boolean;
+  initialAreaM2?: number;
+  initialWallLengthM?: number;
+  initialWallHeightM?: number;
+  /** Canvas Object Card dark UI */
+  canvasMode?: boolean;
+  /** When Wall Calculate is clicked, parent increments this to trigger tile calc */
+  calculateTrigger?: number;
+  /** Per-segment dimensions for slab count per wycinka */
+  initialSegmentDimensions?: { length: number; height: number }[];
 }
 
 interface SlabDimension {
@@ -38,8 +51,10 @@ interface SlabCuttingBreakdown {
     width: number;
     height: number;
     quantity: number;
+    fullSlabsNeeded?: number;
   }[];
   totalCuts: number;
+  totalFullSlabsNeeded?: number;
 }
 
 // Add Material interface for fetched materials
@@ -87,12 +102,23 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
   transportDistance: propTransportDistance,
   setTransportDistance: propSetTransportDistance,
   carriers: propCarriers = [],
-  selectedExcavator: propSelectedExcavator
+  selectedExcavator: propSelectedExcavator,
+  fromWallSegments = false,
+  initialAreaM2,
+  initialWallLengthM,
+  initialWallHeightM,
+  canvasMode = false,
+  calculateTrigger = 0,
+  initialSegmentDimensions,
 }: TileInstallationCalculatorProps) => {
-  const { t } = useTranslation(['calculator', 'utilities', 'common']);
+  const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
-  const [wallLength, setWallLength] = useState<string>('');
-  const [wallHeight, setWallHeight] = useState<string>('');
+  const [wallLength, setWallLength] = useState<string>(() =>
+    fromWallSegments && initialWallLengthM != null ? initialWallLengthM.toFixed(3) : ''
+  );
+  const [wallHeight, setWallHeight] = useState<string>(() =>
+    fromWallSegments && initialWallHeightM != null ? initialWallHeightM.toFixed(3) : ''
+  );
   const [selectedSlab, setSelectedSlab] = useState<SlabDimension>(SLAB_DIMENSIONS[0]);
   const [slabOrientation, setSlabOrientation] = useState<'long' | 'side'>('long');
   const [selectedGap, setSelectedGap] = useState<number>(GAP_OPTIONS[0]);
@@ -107,14 +133,19 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     taskBreakdown: { task: string; hours: number }[];
     materials: { name: string; amount: number; unit: string; price_per_unit: number | null; total_price: number | null }[];
     labor: number;
+    slabsPerSegment?: number[];
   } | null>(null);
-  const [slabType, setSlabType] = useState<'porcelain' | 'sandstones'>('porcelain');
+  const [slabType, setSlabType] = useState<'porcelain' | 'sandstones' | 'granite'>('porcelain');
   const [selectedGroutingId, setSelectedGroutingId] = useState<string>('');
   const [transportDistance, setTransportDistance] = useState<string>('30');
   const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
   const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
   const [carriersLocal, setCarriersLocal] = useState<DiggingEquipment[]>([]);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  const effectiveCalculateTransport = isInProjectCreating ? (propCalculateTransport ?? false) : calculateTransport;
+  const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
+  const effectiveTransportDistance = isInProjectCreating && propTransportDistance ? propTransportDistance : transportDistance;
 
   // Use carriers from props if available (from ProjectCreating), otherwise use local state
   const carriers = propCarriers && propCarriers.length > 0 ? propCarriers : carriersLocal;
@@ -133,24 +164,13 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     propTransportDistance
   ]);
 
-  // Sync local state back to parent when in ProjectCreating
+  // Sync wall dimensions when from wall segments
   useEffect(() => {
-    if (isInProjectCreating && propSetCalculateTransport) {
-      propSetCalculateTransport(calculateTransport);
+    if (fromWallSegments && initialWallLengthM != null && initialWallHeightM != null) {
+      setWallLength(initialWallLengthM.toFixed(3));
+      setWallHeight(initialWallHeightM.toFixed(3));
     }
-  }, [calculateTransport, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetSelectedTransportCarrier) {
-      propSetSelectedTransportCarrier(selectedTransportCarrier);
-    }
-  }, [selectedTransportCarrier, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetTransportDistance) {
-      propSetTransportDistance(transportDistance);
-    }
-  }, [transportDistance, isInProjectCreating]);
+  }, [fromWallSegments, initialWallLengthM, initialWallHeightM]);
 
   // Add equipment fetching
   useEffect(() => {
@@ -174,10 +194,10 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       }
     };
     
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       fetchEquipment();
     }
-  }, [calculateTransport]);
+  }, [effectiveCalculateTransport]);
 
   // Fetch all task templates (for tile installation)
   const { data: taskTemplates = [] }: UseQueryResult<TaskTemplate[]> = useQuery({
@@ -255,11 +275,24 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
   });
 
   const calculateResults = () => {
-    if (!wallLength || !wallHeight) return;
+    let wallLengthCm: number;
+    let wallHeightCm: number;
+    let wallArea: number;
 
-    // Convert meters to centimeters for calculations
-    const wallLengthCm = parseFloat(wallLength) * 100;
-    const wallHeightCm = parseFloat(wallHeight) * 100;
+    if (fromWallSegments && initialAreaM2 != null && initialAreaM2 > 0) {
+      wallArea = initialAreaM2;
+      const len = initialWallLengthM ?? Math.sqrt(initialAreaM2);
+      const h = len > 0 ? initialAreaM2 / len : Math.sqrt(initialAreaM2);
+      wallLengthCm = len * 100;
+      wallHeightCm = h * 100;
+    } else if (fromWallSegments && (initialAreaM2 == null || initialAreaM2 <= 0)) {
+      return; // No sides selected yet
+    } else {
+      if (!wallLength || !wallHeight) return;
+      wallLengthCm = parseFloat(wallLength) * 100;
+      wallHeightCm = parseFloat(wallHeight) * 100;
+      wallArea = (wallLengthCm * wallHeightCm) / 10000;
+    }
     const gapCm = selectedGap / 10;
 
     // Determine slab dimensions based on orientation
@@ -390,8 +423,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       }
     });
 
-    // Calculate adhesive needed and wall area in m²
-    const wallArea = wallLengthCm * wallHeightCm / 10000; // Convert to m²
+    // Calculate adhesive needed (wallArea already set above)
     const adhesiveConsumption = ADHESIVE_THICKNESS.find(t => t.value === adhesiveThickness)?.consumption || 6;
     const adhesiveNeeded = wallArea * adhesiveConsumption;
 
@@ -416,44 +448,141 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       });
     }
 
+    // Waste-aware slab counting: shared waste pool, process larger pieces first
+    type WasteRect = { w: number; h: number };
+    const waste: WasteRect[] = [];
+    const cutSlabsWithFull: typeof cutSlabs = cutSlabs.map(c => ({ ...c, fullSlabsNeeded: 0 }));
+
+    const addWaste = (w: number, h: number) => {
+      if (w >= 1 && h >= 1) waste.push({ w, h });
+    };
+
+    const useFromWaste = (needW: number, needH: number): boolean => {
+      const idx = waste.findIndex(r => r.w >= needW && r.h >= needH);
+      if (idx < 0) return false;
+      const r = waste[idx];
+      waste.splice(idx, 1);
+      if (r.w > needW) addWaste(r.w - needW, needH);
+      if (r.h > needH) addWaste(needW, r.h - needH);
+      return true;
+    };
+
+    const cutSlabsByArea = cutSlabsWithFull
+      .map((c, i) => ({ ...c, idx: i, area: c.width * c.height }))
+      .sort((a, b) => b.area - a.area);
+
+    for (const cut of cutSlabsByArea) {
+      let needed = cut.quantity;
+      let slabsUsed = 0;
+      while (needed > 0) {
+        if (useFromWaste(cut.width, cut.height)) {
+          needed--;
+          continue;
+        }
+        const cols = Math.floor(slabWidth / cut.width);
+        const rows = Math.floor(slabHeight / cut.height);
+        const perSlab = cols * rows;
+        const take = Math.min(needed, Math.max(1, perSlab));
+        slabsUsed++;
+        needed -= take;
+        const usedRows = Math.ceil(take / cols);
+        const usedCols = take <= cols ? take : cols;
+        const usedW = usedCols * cut.width;
+        const usedH = usedRows * cut.height;
+        if (slabWidth > usedW) addWaste(slabWidth - usedW, slabHeight);
+        if (slabHeight > usedH) addWaste(usedW, slabHeight - usedH);
+      }
+      cutSlabsWithFull[cut.idx].fullSlabsNeeded = slabsUsed;
+    }
+
+    const totalFullSlabsNeeded = fullSlabs + cutSlabsWithFull.reduce((s, c) => s + (c.fullSlabsNeeded ?? 0), 0);
+
+    if (totalFullSlabsNeeded > 0) {
+      const slabMaterialLabel = slabType === 'porcelain' ? 'porcelain' : slabType === 'granite' ? 'granite' : 'sandstone';
+      materials.unshift({
+        name: `${slabMaterialLabel} slabs ${slabWidth}×${slabHeight}`,
+        amount: totalFullSlabsNeeded,
+        unit: 'pieces',
+        price_per_unit: null,
+        total_price: null
+      });
+    }
+
     const cuttingBreakdown: SlabCuttingBreakdown = {
       fullSlabs,
-      cutSlabs,
-      totalCuts
+      cutSlabs: cutSlabsWithFull,
+      totalCuts,
+      totalFullSlabsNeeded
     };
 
     // Prepare task breakdown
     const tileTaskName = `Tile Installation ${selectedSlab.width} × ${selectedSlab.height}`;
-    const cuttingTaskName = slabType === 'porcelain' ? 'cutting porcelain' : 'cutting sandstones';
 
     // Find the template for tile installation
     const tileTaskTemplate = taskTemplates.find(
       (t: TaskTemplate) => t.name.toLowerCase() === tileTaskName.toLowerCase()
     );
     const tileTaskTime = tileTaskTemplate?.estimated_hours ?? 0.5;
-
-    // Find the template for cutting
-    const cuttingTaskTemplate = cuttingTasks.find(
-      (t: TaskTemplate) => t.name.toLowerCase() === cuttingTaskName.toLowerCase()
-    );
-    const cuttingTaskTime = cuttingTaskTemplate?.estimated_hours ?? 0.5;
-
     const tileTaskTotal = wallArea * tileTaskTime;
-    const cuttingTaskTotal = totalCuts * cuttingTaskTime;
 
-    const taskBreakdown = [
+    // Cutting tasks by length: available lengths 30, 40, 60, 90, 120 cm
+    const CUT_LENGTHS = [30, 40, 60, 90, 120];
+    const findClosestCutLength = (actual: number) =>
+      CUT_LENGTHS.reduce((prev, curr) =>
+        Math.abs(curr - actual) < Math.abs(prev - actual) ? curr : prev
+      );
+    const slabMaterialForTask = slabType === 'porcelain' ? 'porcelain' : slabType === 'granite' ? 'granite' : 'sandstone';
+
+    const cutLengthCounts = new Map<number, number>();
+    for (const cut of cutSlabsWithFull) {
+      const isLengthCut = Math.abs(cut.width - slabWidth) > 0.1 && Math.abs(cut.height - slabHeight) < 0.1;
+      const isHeightCut = Math.abs(cut.width - slabWidth) < 0.1 && Math.abs(cut.height - slabHeight) > 0.1;
+      const isCornerCut = Math.abs(cut.width - slabWidth) > 0.1 && Math.abs(cut.height - slabHeight) > 0.1;
+      if (isLengthCut) {
+        const len = Math.round(slabHeight);
+        cutLengthCounts.set(len, (cutLengthCounts.get(len) ?? 0) + cut.quantity);
+      } else if (isHeightCut) {
+        const len = Math.round(slabWidth);
+        cutLengthCounts.set(len, (cutLengthCounts.get(len) ?? 0) + cut.quantity);
+      } else if (isCornerCut) {
+        const lenH = Math.round(slabWidth);
+        const lenL = Math.round(slabHeight);
+        cutLengthCounts.set(lenH, (cutLengthCounts.get(lenH) ?? 0) + cut.quantity);
+        cutLengthCounts.set(lenL, (cutLengthCounts.get(lenL) ?? 0) + cut.quantity);
+      }
+    }
+
+    const taskLengthCounts = new Map<number, number>();
+    for (const [actualLen, count] of cutLengthCounts) {
+      const taskLen = findClosestCutLength(actualLen);
+      taskLengthCounts.set(taskLen, (taskLengthCounts.get(taskLen) ?? 0) + count);
+    }
+    const cuttingTaskBreakdown: { task: string; hours: number; amount: string; unit: string }[] = [];
+    let cuttingTaskTotal = 0;
+    for (const [taskLen, count] of taskLengthCounts) {
+      const taskName = `cutting ${taskLen}cm ${slabMaterialForTask} slab`;
+      const cuttingTask = cuttingTasks.find(
+        (t: TaskTemplate) => t.name.toLowerCase() === taskName.toLowerCase()
+      );
+      const hoursPerCut = cuttingTask?.estimated_hours ?? 0.5;
+      const hours = count * hoursPerCut;
+      cuttingTaskTotal += hours;
+      cuttingTaskBreakdown.push({
+        task: taskName,
+        hours,
+        amount: `${count} pieces`,
+        unit: 'pieces'
+      });
+    }
+
+    const taskBreakdown: { task: string; hours: number; amount?: string; unit?: string }[] = [
       {
         task: `Tile Installation ${selectedSlab.width} x ${selectedSlab.height}`,
         hours: tileTaskTotal,
         amount: `${fullSlabs + cutSlabs.reduce((sum, cut) => sum + cut.quantity, 0)} pieces`,
         unit: 'pieces'
       },
-      {
-        task: `cutting ${slabType}`,
-        hours: cuttingTaskTotal,
-        amount: `${totalCuts} pieces`,
-        unit: 'pieces'
-      }
+      ...cuttingTaskBreakdown
     ];
 
     // Add grouting method if selected
@@ -480,17 +609,17 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     let normalizedTileTransportTime = 0;
     let normalizedAdhesiveTransportTime = 0;
 
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       let carrierSizeForTransport = 0.125;
       
-      if (selectedTransportCarrier) {
-        carrierSizeForTransport = selectedTransportCarrier["size (in tones)"] || 0.125;
+      if (effectiveSelectedTransportCarrier) {
+        carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
       }
 
       // Calculate tile transport
       const totalTiles = fullSlabs + cutSlabs.reduce((sum, cut) => sum + cut.quantity, 0);
       if (totalTiles > 0) {
-        const tileResult = calculateMaterialTransportTime(totalTiles, carrierSizeForTransport, 'slabs', parseFloat(transportDistance) || 30);
+        const tileResult = calculateMaterialTransportTime(totalTiles, carrierSizeForTransport, 'slabs', parseFloat(effectiveTransportDistance) || 30);
         tileTransportTime = tileResult.totalTransportTime;
         normalizedTileTransportTime = tileResult.normalizedTransportTime;
       }
@@ -503,7 +632,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       }
       const bagsNeeded = Math.max(1, Math.ceil(adhesiveNeeded / bagSize));
       if (bagsNeeded > 0) {
-        const adhesiveResult = calculateMaterialTransportTime(bagsNeeded, carrierSizeForTransport, 'cement', parseFloat(transportDistance) || 30);
+        const adhesiveResult = calculateMaterialTransportTime(bagsNeeded, carrierSizeForTransport, 'cement', parseFloat(effectiveTransportDistance) || 30);
         adhesiveTransportTime = adhesiveResult.totalTransportTime;
         normalizedAdhesiveTransportTime = adhesiveResult.normalizedTransportTime;
       }
@@ -530,6 +659,17 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
 
     const totalTransportTime = tileTransportTime + adhesiveTransportTime;
     
+    let slabsPerSegment: number[] | undefined;
+    if (initialSegmentDimensions && initialSegmentDimensions.length > 0) {
+      slabsPerSegment = initialSegmentDimensions.map(({ length, height }) => {
+        const lenCm = length * 100;
+        const hCm = height * 100;
+        const sL = Math.ceil((lenCm + gapCm) / (slabWidth + gapCm));
+        const sH = Math.ceil((hCm + gapCm) / (slabHeight + gapCm));
+        return sL * sH;
+      });
+    }
+
     const newResults = {
       totalSlabs: fullSlabs + cutSlabs.reduce((sum, cut) => sum + cut.quantity, 0),
       totalCuts,
@@ -537,7 +677,8 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       cuttingBreakdown,
       taskBreakdown,
       materials,
-      labor: tileTaskTotal + cuttingTaskTotal + totalTransportTime
+      labor: tileTaskTotal + cuttingTaskTotal + totalTransportTime,
+      ...(slabsPerSegment && { slabsPerSegment })
     };
 
     // Prepare formatted results for parent/modal (match other calculators)
@@ -557,6 +698,13 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     }
   };
 
+  // Auto-calculate when Wall Calculate is clicked (fromWallSegments + canvas mode)
+  useEffect(() => {
+    if (fromWallSegments && (canvasMode || isInProjectCreating) && calculateTrigger > 0 && (initialAreaM2 ?? 0) > 0) {
+      calculateResults();
+    }
+  }, [calculateTrigger, fromWallSegments, canvasMode, isInProjectCreating, initialAreaM2]);
+
   // Scroll to results when they appear
   useEffect(() => {
     if (results && resultsRef.current) {
@@ -571,28 +719,39 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     }
   }, [results]);
 
+  const inputStyle = canvasMode
+    ? { marginTop: 4, display: 'block', width: '100%', borderRadius: radii.md, border: `1px solid ${colors.borderInputDark}`, background: colors.bgInputDark, color: colors.textPrimaryLight, padding: '8px 12px', outline: 'none' } as React.CSSProperties
+    : undefined;
+  const inputCls = canvasMode ? undefined : "mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500";
+  const labelCls = canvasMode ? undefined : "block text-sm font-medium text-gray-700";
+  const labelStyle = canvasMode ? { display: 'block', fontSize: 14, fontWeight: 500, color: colors.textCool } as React.CSSProperties : undefined;
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-4">{t('calculator:tile_installation_calculator_title_alt')}</h2>
+    <div className={canvasMode ? "space-y-4" : "space-y-6"}>
+      {!canvasMode && <h2 className="text-2xl font-bold text-gray-900 mb-4">{t('calculator:tile_installation_calculator_title_alt')}</h2>}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_tile_wall_length_m')}</label>
+          <label className={labelCls} style={labelStyle}>{t('calculator:input_tile_wall_length_m')}</label>
           <input
             type="number"
             value={wallLength}
-            onChange={(e) => setWallLength(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            onChange={(e) => !fromWallSegments && setWallLength(e.target.value)}
+            readOnly={fromWallSegments}
+            className={inputCls}
+            style={inputStyle}
             placeholder={t('calculator:placeholder_enter_wall_length_tile')}
             step="0.01"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_tile_wall_height_m')}</label>
+          <label className={labelCls} style={labelStyle}>{t('calculator:input_tile_wall_height_m')}</label>
           <input
             type="number"
             value={wallHeight}
-            onChange={(e) => setWallHeight(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            onChange={(e) => !fromWallSegments && setWallHeight(e.target.value)}
+            readOnly={fromWallSegments}
+            className={inputCls}
+            style={inputStyle}
             placeholder={t('calculator:placeholder_enter_wall_height_tile')}
             step="0.01"
           />
@@ -750,6 +909,16 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
             />
             <span className="ml-2">{t('calculator:sandstones')}</span>
           </label>
+          <label className="inline-flex items-center p-2 rounded-md hover:bg-gray-50">
+            <input
+              type="radio"
+              value="granite"
+              checked={slabType === 'granite'}
+              onChange={() => setSlabType('granite')}
+              className="text-blue-600 focus:ring-blue-500"
+            />
+            <span className="ml-2">{t('calculator:granite')}</span>
+          </label>
         </div>
       </div>
 
@@ -761,7 +930,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-select"
           disabled={isLoadingGrouting}
         >
-          <option value="">Select grouting method</option>
+          <option value="">{t('calculator:select_grouting_method_placeholder')}</option>
           {groutingMethods.map((method: any) => (
             <option key={method.id} value={method.id}>{method.name}</option>
           ))}
@@ -770,18 +939,20 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
         <p className="text-xs text-red-600 mt-1">{t('calculator:grouting_method_note')}</p>
       </div>
 
-      <label className="flex items-center space-x-2">
-        <input
-          type="checkbox"
-          checked={calculateTransport}
-          onChange={(e) => setCalculateTransport(e.target.checked)}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-        <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-      </label>
+      {!isInProjectCreating && (
+        <label className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={calculateTransport}
+            onChange={(e) => setCalculateTransport(e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
+        </label>
+      )}
 
       {/* Transport Carrier Selection */}
-      {calculateTransport && (
+      {!isInProjectCreating && calculateTransport && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier_label')}</label>
           <div className="space-y-2">
@@ -844,33 +1015,17 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
           </div>
         )}
 
-      <div className="flex justify-center">
-        <button
-          onClick={calculateResults}
-          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          Calculate
-        </button>
-      </div>
+      {!(fromWallSegments && (canvasMode || isInProjectCreating)) && (
+        <div className="flex justify-center">
+          <Button variant="accent" color={colors.accentBlue} onClick={calculateResults}>
+            Calculate
+          </Button>
+        </div>
+      )}
 
       {results && (
         <div className="mt-6 space-y-4" ref={resultsRef}>
-          {/* Estimated Time Breakdown (styled as in screenshot) */}
-          <div className="bg-transparent p-0">
-            <div className="text-lg font-semibold mb-1">
-              <span className="text-gray-100">{t('calculator:total_labor_hours')}</span>
-              <span className="text-blue-400 text-2xl align-middle font-bold">{(results.labor).toFixed(2)} hours</span>
-            </div>
-            <div className="text-base font-medium text-gray-100 mb-1">{t('calculator:task_breakdown')}</div>
-            <ul className="list-disc ml-6 text-gray-100">
-              {results.taskBreakdown.map((task, index) => (
-                <li key={index}>
-                  <span className="font-bold">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours
-                </li>
-              ))}
-            </ul>
-          </div>
-
+          {/* Slab cutting breakdown first */}
           <div className="bg-gray-50 p-4 rounded-lg">
             <h3 className="text-lg font-medium text-gray-900 mb-4">{t('calculator:slab_cutting_breakdown_label')}</h3>
             <div className="overflow-x-auto">
@@ -923,7 +1078,9 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
                         {cut.height.toFixed(1)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {cut.quantity}
+                        {cut.fullSlabsNeeded != null
+                          ? `${cut.quantity} (${cut.fullSlabsNeeded})`
+                          : cut.quantity}
                       </td>
                     </tr>
                   ))}
@@ -932,7 +1089,41 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
             </div>
           </div>
 
-          {/* Materials Breakdown Table */}
+          {/* Slabs per segment (wycinka) when from wall */}
+          {fromWallSegments && results.slabsPerSegment && results.slabsPerSegment.length > 0 && (
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">{t('calculator:slabs_per_segment_label')}</h3>
+              <div className="space-y-1 text-sm text-gray-700">
+                {results.slabsPerSegment.map((count, i) => (
+                  <div key={i}>Segment {i + 1}: {count} slabs</div>
+                ))}
+                <div className="font-semibold mt-2">Total: {results.slabsPerSegment.reduce((a, b) => a + b, 0)} slabs</div>
+              </div>
+            </div>
+          )}
+
+          {/* Task breakdown */}
+          <div className="bg-transparent p-0">
+            <div className="text-base font-medium text-gray-100 mb-1">{t('calculator:task_breakdown')}</div>
+            <ul className="list-disc ml-6 text-gray-100">
+              {results.taskBreakdown.map((task, index) => (
+                <li key={index}>
+                  <span className="font-bold">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Total labor hours - only when not fromWallSegments canvas mode */}
+          {!(fromWallSegments && (canvasMode || isInProjectCreating)) && (
+            <div className="text-lg font-semibold mb-1">
+              <span className="text-gray-100">{t('calculator:total_labor_hours')}</span>
+              <span className="text-blue-400 text-2xl align-middle font-bold">{(results.labor).toFixed(2)} hours</span>
+            </div>
+          )}
+
+          {/* Materials Breakdown Table - only when not fromWallSegments canvas mode */}
+          {!(fromWallSegments && (canvasMode || isInProjectCreating)) && (
           <div className="bg-gray-50 p-4 rounded-lg">
             <h3 className="text-lg font-medium text-gray-900 mb-4">{t('calculator:materials_breakdown_label')}</h3>
             <div className="overflow-x-auto">
@@ -955,13 +1146,14 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
                     <tr key={idx}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.name}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.amount}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.unit}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{translateUnit(material.unit, t)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </div>
+          )}
         </div>
       )}
     </div>

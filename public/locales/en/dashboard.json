@@ -104,6 +104,8 @@
   "day_friday": "Fri",
   "day_saturday": "Sat",
   "day_sunday": "Sun",
-  "info_description": "In the Dashboard, you can see the **next two days** from the calendar.\nAny scheduled projects will automatically appear here.\n\nAnyone on your team can request **materials and equipment** for a project, and all requests will be visible to everyone — so nothing is ever forgotten before a job starts.\n\nAnother key feature of the Dashboard is **logging your daily hours**.\nBased on the hours you enter and the progress you update, the app will automatically calculate:\n\n• **Your weekly working hours**\n• **Estimated hours per task** (both personal and team-based)",
-  "info_title": "About this page"
+  "info_description": "In the **Dashboard**, you can see the **next two days** from the calendar.\nAny scheduled projects will automatically appear here.\n\nAnyone on your team can request **materials and equipment** for a project, and all requests will be visible to everyone — so nothing is ever forgotten before a job starts.\n\nAnother key feature of the Dashboard is **logging your daily hours**.\nBased on the hours you enter and the progress you update, the app will automatically calculate:\n\n• **Your weekly working hours**\n• **Estimated hours per task** (both personal and team-based)",
+  "info_title": "About this page",
+  "calendar_info_title": "About this page",
+  "calendar_info_description": "**Calendar**\n\nThere's nothing unusual here — it's a simple calendar where you can see which projects are scheduled for which days.\n\nYou can also request materials and equipment for any project directly from the calendar."
 }

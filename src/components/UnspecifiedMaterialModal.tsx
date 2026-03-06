@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
+import { Modal, Button, TextInput, Label } from '../themes/uiComponents';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
 
 interface UnspecifiedMaterialModalProps {
   onClose: () => void;
@@ -37,111 +38,33 @@ const UnspecifiedMaterialModal: React.FC<UnspecifiedMaterialModalProps> = ({ onC
     onClose();
   };
 
+  const formId = 'unspecified-material-form';
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
-        <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">{t('event:other_custom_item')}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
-            <X className="w-5 h-5" />
-          </button>
+    <Modal open={true} onClose={onClose} title={t('event:other_custom_item')} width={448}
+      footer={
+        <div style={{ display: 'flex', gap: spacing.base, width: '100%' }}>
+          <Button variant="secondary" onClick={onClose} style={{ flex: 1 }}>{t('common:cancel')}</Button>
+          <button type="submit" form={formId} style={{ flex: 1, padding: `${spacing.sm} ${spacing["6xl"]}`, borderRadius: radii.lg, background: `linear-gradient(135deg, ${colors.accentBlue}, ${colors.accentBlueDark})`, color: colors.textOnAccent, fontSize: fontSizes.lg, fontWeight: fontWeights.bold, fontFamily: fonts.display, border: 'none', cursor: 'pointer' }}>{t('event:add_material')}</button>
         </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+      }
+    >
+        <form id={formId} onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('event:select_project_label')}
-            </label>
-            <select
-              required
-              value={materialData.event_id}
-              onChange={(e) => setMaterialData(prev => ({ ...prev, event_id: e.target.value }))}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            >
+            <Label>{t('event:select_project_label')}</Label>
+            <select required value={materialData.event_id} onChange={(e) => setMaterialData(prev => ({ ...prev, event_id: e.target.value }))} style={{ marginTop: spacing.xs, width: '100%', padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base }}>
               <option value="">{t('event:select_project')}</option>
-              {projects.map(project => (
-                <option key={project.id} value={project.id}>
-                  {project.title}
-                </option>
-              ))}
+              {projects.map(project => (<option key={project.id} value={project.id}>{project.title}</option>))}
             </select>
           </div>
-
+          <TextInput label={t('event:material_name')} value={materialData.name} onChange={(v) => setMaterialData(prev => ({ ...prev, name: v }))} placeholder={t('event:enter_material_name')} />
+          <TextInput label={t('event:quantity_label')} value={materialData.total_amount || ''} onChange={(v) => setMaterialData(prev => ({ ...prev, total_amount: parseFloat(v) || 0 }))} placeholder={t('event:enter_quantity')} />
+          <TextInput label={t('event:unit_label')} value={materialData.unit} onChange={(v) => setMaterialData(prev => ({ ...prev, unit: v }))} placeholder={t('event:unit_placeholder')} />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('event:material_name')}
-            </label>
-            <input
-              type="text"
-              required
-              value={materialData.name}
-              onChange={(e) => setMaterialData(prev => ({ ...prev, name: e.target.value }))}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder={t('event:enter_material_name')}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('event:quantity_label')}
-            </label>
-            <input
-              type="number"
-              required
-              min="0.01"
-              step="0.01"
-              value={materialData.total_amount || ''}
-              onChange={(e) => setMaterialData(prev => ({ ...prev, total_amount: parseFloat(e.target.value) || 0 }))}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder={t('event:enter_quantity')}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('event:unit_label')}
-            </label>
-            <input
-              type="text"
-              required
-              value={materialData.unit}
-              onChange={(e) => setMaterialData(prev => ({ ...prev, unit: e.target.value }))}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder={t('event:unit_placeholder')}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t('event:notes_label')}
-            </label>
-            <textarea
-              value={materialData.notes}
-              onChange={(e) => setMaterialData(prev => ({ ...prev, notes: e.target.value }))}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder={t('event:add_notes_material')}
-              rows={3}
-            />
-          </div>
-
-          <div className="mt-6 flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-            >
-              {t('common:cancel')}
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-            >
-              {t('event:add_material')}
-            </button>
+            <Label>{t('event:notes_label')}</Label>
+            <textarea value={materialData.notes} onChange={(e) => setMaterialData(prev => ({ ...prev, notes: e.target.value }))} placeholder={t('event:add_notes_material')} rows={3} style={{ marginTop: spacing.xs, width: '100%', padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base }} />
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

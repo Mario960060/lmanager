@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { Loader2, Search, X, Package, Trash2 } from 'lucide-react';
+import { Search, X, Package, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Spinner, Button } from '../themes/uiComponents';
 
 interface AdditionalMaterialsModalProps {
   eventId: string;
@@ -37,25 +38,9 @@ const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
           <strong>{t('common:type_label')}:</strong> {recordType}<br />
           <strong>{t('common:name_label')}:</strong> {recordName}
         </p>
-        <div className="flex justify-end space-x-3">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onCancel();
-            }}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            {t('common:no')}
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onConfirm();
-            }}
-            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-          >
-            {t('common:yes')}
-          </button>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={(e) => { e.stopPropagation(); onCancel(); }}>{t('common:no')}</Button>
+          <Button variant="danger" onClick={(e) => { e.stopPropagation(); onConfirm(); }}>{t('common:yes')}</Button>
         </div>
       </div>
     </div>
@@ -199,7 +184,7 @@ const AdditionalMaterialsModal: React.FC<AdditionalMaterialsModalProps> = ({ eve
           <div className="flex-1 overflow-y-auto p-4">
             {isLoading ? (
               <div className="flex justify-center p-6">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                <Spinner size={32} />
               </div>
             ) : filteredMaterials.length > 0 ? (
               <div className="space-y-4">
@@ -275,12 +260,9 @@ const AdditionalMaterialsModal: React.FC<AdditionalMaterialsModalProps> = ({ eve
               {t('event:deletion_request_sent')}
             </p>
             <div className="flex justify-end">
-              <button
-                onClick={() => setShowRequestSent(false)}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
+              <Button variant="primary" onClick={() => setShowRequestSent(false)}>
                 {t('common:close')}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { handle403Error } from './lib/errorHandler';
 import Error403Modal from './components/Error403Modal';
 import { CalculatorMenuProvider } from './contexts/CalculatorMenuContext';
-import { ThemeProvider } from './themes';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
@@ -24,6 +23,7 @@ import CompanyPanel from './pages/CompanyPanel';
 import UserProfile from './pages/UserProfile';
 import { useAuthStore } from './lib/store';
 import ProjectCreating from './projectmanagement/ProjectCreating';
+import MasterProject from './projectmanagement/canvacreator/MasterProject';
 import UserHoursPage from './components/UserHoursModal';
 import CompanySetupWizard from './pages/CompanySetupWizard';
 
@@ -48,8 +48,7 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <Error403Modal />
+      <Error403Modal />
         <CalculatorMenuProvider>
           <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
@@ -67,6 +66,8 @@ function App() {
               <Route path="/events/:id" element={<EventDetails />} />
               <Route path="/project-management" element={<ProjectManagement />} />
               <Route path="/project-management/create" element={<ProjectCreating />} />
+              <Route path="/project-management/create-canvas" element={<MasterProject />} />
+              <Route path="/project-management/create-canvas/:planId" element={<MasterProject />} />
               <Route path="/project-performance" element={<ProjectPerformance />} />
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/company-panel" element={<CompanyPanel />} />
@@ -76,7 +77,6 @@ function App() {
           </Routes>
         </Router>
         </CalculatorMenuProvider>
-      </ThemeProvider>
     </QueryClientProvider>
   );
 }

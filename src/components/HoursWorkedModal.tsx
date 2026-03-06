@@ -57,7 +57,7 @@ const HoursWorkedModal: React.FC<HoursWorkedModalProps> = ({ eventId, onClose })
           acc[userId].tasks[taskName] = {
             totalHours: 0,
             totalCompleted: 0,
-            unit: entry.tasks_done?.amount?.split(' ')[1] || 'units'
+            unit: entry.tasks_done?.amount?.split(' ')[1] || t('common:units')
           };
         }
 

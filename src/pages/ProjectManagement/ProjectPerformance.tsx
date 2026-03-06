@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName } from '../../lib/translationMap';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { format, parseISO, eachWeekOfInterval, startOfWeek, endOfWeek } from 'date-fns';
+import { pl } from 'date-fns/locale';
 import { Search, Calendar as CalendarIcon, ChevronDown, ChevronRight } from 'lucide-react';
 import PageInfoModal from '../../components/PageInfoModal';
 import BackButton from '../../components/BackButton';
+import DatePicker from '../../components/DatePicker';
 
 const ProjectPerformance = () => {
   const { t } = useTranslation(['common', 'dashboard', 'utilities', 'project', 'calculator']);
@@ -382,7 +385,7 @@ const ProjectPerformance = () => {
                     <div>
                       <h3 className="font-medium">{project.title}</h3>
                       <p className={`text-sm ${selectedProject === project.id ? 'text-gray-300' : 'text-gray-600'}`}>
-                        {format(parseISO(project.start_date), 'MMM d, yyyy')} - {format(parseISO(project.end_date), 'MMM d, yyyy')}
+                        {format(parseISO(project.start_date), 'MMM d, yyyy', { locale: dateLocale })} - {format(parseISO(project.end_date), 'MMM d, yyyy', { locale: dateLocale })}
                       </p>
                     </div>
                     <span className={`px-2 py-1 text-sm rounded-full ${getStatusColor(project.status)}`}>
@@ -443,17 +446,13 @@ const ProjectPerformance = () => {
             {selectedTimeRange === 'single' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('project:select_date_label')}</label>
-                <div className="relative">
-                <input
-                  type="date"
+                <DatePicker
                   value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  min={selectedProject_data?.start_date}
-                  max={selectedProject_data?.end_date}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 pr-10"
+                  onChange={setSelectedDate}
+                  minDate={allowOutOfRangeSelection ? undefined : selectedProject_data?.start_date}
+                  maxDate={allowOutOfRangeSelection ? undefined : selectedProject_data?.end_date}
+                  className="mt-1"
                 />
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 border-blue-500 pointer-events-none"></span>
-                </div>
               </div>
             )}
 
@@ -489,31 +488,23 @@ const ProjectPerformance = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">{t('project:start_date_label')}</label>
-                  <div className="relative">
-                  <input
-                    type="date"
+                  <DatePicker
                     value={dateRange.start}
-                    onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                    min={allowOutOfRangeSelection ? undefined : selectedProject_data?.start_date}
-                    max={allowOutOfRangeSelection ? undefined : selectedProject_data?.end_date}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 pr-10"
+                    onChange={(v) => setDateRange(prev => ({ ...prev, start: v }))}
+                    minDate={allowOutOfRangeSelection ? undefined : selectedProject_data?.start_date}
+                    maxDate={allowOutOfRangeSelection ? undefined : selectedProject_data?.end_date}
+                    className="mt-1"
                   />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 border-blue-500 pointer-events-none"></span>
-                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">{t('project:end_date_label')}</label>
-                  <div className="relative">
-                  <input
-                    type="date"
+                  <DatePicker
                     value={dateRange.end}
-                    onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                    min={dateRange.start}
-                    max={allowOutOfRangeSelection ? undefined : selectedProject_data?.end_date}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 pr-10"
+                    onChange={(v) => setDateRange(prev => ({ ...prev, end: v }))}
+                    minDate={dateRange.start}
+                    maxDate={allowOutOfRangeSelection ? undefined : selectedProject_data?.end_date}
+                    className="mt-1"
                   />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 border-blue-500 pointer-events-none"></span>
-                  </div>
                 </div>
                 <div className="col-span-2 mt-2">
                   <div className="flex items-center">
@@ -530,7 +521,7 @@ const ProjectPerformance = () => {
                   </div>
                   {allowOutOfRangeSelection && (
                     <div className="mt-1 p-2 bg-gray-100 rounded-md text-xs text-gray-600">
-                      <p>Project date range: {selectedProject_data ? format(parseISO(selectedProject_data.start_date), 'MMM d, yyyy') : ''} - {selectedProject_data ? format(parseISO(selectedProject_data.end_date), 'MMM d, yyyy') : ''}</p>
+                      <p>{t('common:project_date_range')}: {selectedProject_data ? format(parseISO(selectedProject_data.start_date), 'MMM d, yyyy', { locale: dateLocale }) : ''} - {selectedProject_data ? format(parseISO(selectedProject_data.end_date), 'MMM d, yyyy', { locale: dateLocale }) : ''}</p>
                     </div>
                   )}
                 </div>
@@ -592,7 +583,7 @@ const ProjectPerformance = () => {
                               .sort(([, a], [, b]) => b - a)
                               .map(([taskName, hours]: [string, any]) => (
                                 <div key={taskName} className="flex justify-between text-sm py-1 border-b border-gray-700 last:border-b-0">
-                            <span>{taskName}</span>
+                            <span>{translateTaskName(taskName, t)}</span>
                             <span>{hours.toFixed(2)} {t('project:hours_unit')}</span>
                           </div>
                         ))}
@@ -641,7 +632,7 @@ const ProjectPerformance = () => {
                   <div className="space-y-4">
                     {performanceData.additionalTasks.map((task: any) => (
                       <div key={task.id} className="bg-gray-50 p-4 rounded-lg">
-                        <h3 className="font-medium">{task.description}</h3>
+                        <h3 className="font-medium">{translateTaskName(task.description ?? '', t)}</h3>
                         <div className="mt-2 text-sm">
                           <p className="text-gray-700">
                             Hours worked: {getAdditionalTaskHoursWorked(task.id, performanceData.additionalProgressData || []).toFixed(2)}

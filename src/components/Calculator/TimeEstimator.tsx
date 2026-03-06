@@ -1,9 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName, translateUnit } from '../../lib/translationMap';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { Clock, Users } from 'lucide-react';
+import { colors } from '../../themes/designTokens';
+import { Spinner, Button } from '../../themes/uiComponents';
 
 interface TaskTemplate {
   id: string;
@@ -13,7 +16,7 @@ interface TaskTemplate {
 }
 
 const TimeEstimator = () => {
-  const { t } = useTranslation(['calculator', 'utilities', 'common']);
+  const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
   const [selectedTask, setSelectedTask] = useState<TaskTemplate | null>(null);
   const [quantity, setQuantity] = useState('');
@@ -88,7 +91,7 @@ const TimeEstimator = () => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-48">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <Spinner size={32} />
       </div>
     );
   }
@@ -133,7 +136,7 @@ const TimeEstimator = () => {
                         setResult(null);
                       }}
                     >
-                      {task.name}
+                      {translateTaskName(task.name, t)}
                     </li>
                   ))
                 )}
@@ -147,7 +150,7 @@ const TimeEstimator = () => {
         <>
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Quantity ({selectedTask.unit})
+              Quantity ({translateUnit(selectedTask.unit, t)})
             </label>
             <input
               type="number"
@@ -159,7 +162,7 @@ const TimeEstimator = () => {
               min="0.1"
               step="0.1"
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder={`Enter amount in ${selectedTask.unit}`}
+              placeholder={`Enter amount in ${translateUnit(selectedTask.unit, t)}`}
             />
           </div>
 
@@ -185,13 +188,9 @@ const TimeEstimator = () => {
             </div>
           </div>
 
-          <button
-            onClick={calculateTime}
-            disabled={!quantity || !workers}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
+          <Button variant="accent" color={colors.accentBlue} onClick={calculateTime} disabled={!quantity || !workers}>
             Calculate
-          </button>
+          </Button>
 
           {result && (
             <div className="mt-4 p-4 bg-gray-800 rounded-md space-y-3">

@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { ArrowLeft, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, Check } from 'lucide-react';
+import { Spinner, Button } from '../themes/uiComponents';
 
 interface SubscriptionPlan {
   id: string;
@@ -196,6 +197,7 @@ const CreateTeamPage = () => {
           name: material.name,
           description: material.description,
           unit: material.unit,
+          is_deletable: material.is_deletable ?? false,
           company_id: (company as any).id
         }));
 
@@ -337,21 +339,13 @@ const CreateTeamPage = () => {
 
           {/* Create Button */}
           <div className="flex gap-4">
-            <button
-              onClick={() => navigate('/no-team')}
-              className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors font-semibold disabled:opacity-50"
-              disabled={isLoading}
-            >
+            <Button variant="secondary" style={{ flex: 1 }} onClick={() => navigate('/no-team')} disabled={isLoading}>
               {t('common:cancel')}
-            </button>
-            <button
-              onClick={handleCreateTeam}
-              disabled={isLoading || !teamName.trim()}
-              className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-lg transition-colors font-semibold disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
+            </Button>
+            <Button variant="primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={handleCreateTeam} disabled={isLoading || !teamName.trim()}>
+              {isLoading && <Spinner size={20} />}
               {isLoading ? t('common:creating_team') : t('common:create_team_btn')}
-            </button>
+            </Button>
           </div>
         </div>
 

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateMaterialName, translateMaterialDescription, translateUnit } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Search, X } from 'lucide-react';
 import { format } from 'date-fns';
+import { pl } from 'date-fns/locale';
 import UnspecifiedCalendarMaterialModal from './UnspecifiedCalendarMaterialModal';
 
 interface Material {
@@ -21,7 +23,8 @@ interface CalendarMaterialModalProps {
 }
 
 const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, date, onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t, i18n } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const dateLocale = i18n.language === 'pl' ? pl : undefined;
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
@@ -134,7 +137,7 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
           <div>
             <h2 className="text-xl font-semibold">{t('event:add_material_needed')}</h2>
             <p className="text-sm text-gray-600 mt-1">
-              {t('event:for_label')}: {format(date, 'MMMM d, yyyy')}
+              {t('event:for_label')}: {format(date, 'MMMM d, yyyy', { locale: dateLocale })}
             </p>
           </div>
           <button
@@ -194,11 +197,11 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
                   selectedMaterial?.id === material.id ? 'border-2 border-blue-500' : ''
                 }`}
               >
-                <h3 className="font-medium">{material.name}</h3>
-                {material.description && (
-                  <p className="text-sm text-gray-600 mt-1">{material.description}</p>
+                <h3 className="font-medium">{translateMaterialName(material.name, t)}</h3>
+                {translateMaterialDescription(material.name, material.description, t) && (
+                  <p className="text-sm text-gray-600 mt-1">{translateMaterialDescription(material.name, material.description, t)}</p>
                 )}
-                <p className="text-xs text-gray-500 mt-1">{t('event:unit_label')}: {material.unit}</p>
+                <p className="text-xs text-gray-500 mt-1">{t('event:unit_label')}: {translateUnit(material.unit, t)}</p>
               </div>
             ))}
           </div>

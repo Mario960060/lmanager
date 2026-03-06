@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import Modal from './Modal';
+import { translateTaskName } from '../lib/translationMap';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { Database } from '../lib/database.types';
 import { useAuthStore } from '../lib/store';
+import { Modal, Button, Label, TextInput, colors, spacing, radii, fontSizes, fontWeights, fonts, transitions } from '../themes';
 
 type TaskDone = Database['public']['Tables']['tasks_done']['Row'];
 
@@ -15,7 +16,7 @@ interface TaskProgressModalProps {
 }
 
 const TaskProgressModal: React.FC<TaskProgressModalProps> = ({ task, onClose, createdAt }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'event', 'calculator']);
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
@@ -141,71 +142,45 @@ const TaskProgressModal: React.FC<TaskProgressModalProps> = ({ task, onClose, cr
   const progressPercent = totalAmount > 0 ? Math.min(Math.round((totalCompleted / totalAmount) * 100), 100) : 0;
 
   return (
-    <Modal title={task.name || t('event:update_task_progress')} onClose={onClose}>
-      <div className="space-y-4">
-        {/* Progress Summary */}
-        <div className="bg-gray-50 p-3.5 rounded-lg space-y-2 border border-gray-200">
-          <div className="flex justify-between items-center text-[13px]">
-            <span className="text-gray-600">{t('event:total_completed')}</span>
-            <span className="font-semibold">{parseFloat(totalCompleted.toFixed(2))} / {totalAmount} {unit}</span>
+    <Modal open={!!task} onClose={onClose} title={translateTaskName(task.name ?? '', t) || t('event:update_task_progress')} width={520}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+        <div style={{ background: colors.bgCardInner, padding: '16px 20px', borderRadius: radii["2xl"], border: `1px solid ${colors.borderDefault}`, marginBottom: spacing["5xl"] }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontSizes.base }}>
+            <span style={{ color: colors.textDim, fontFamily: fonts.body }}>{t('event:total_completed')}</span>
+            <span style={{ fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.body }}>{parseFloat(totalCompleted.toFixed(2))} / {totalAmount} {unit}</span>
           </div>
-          <div className="flex justify-between items-center text-[13px]">
-            <span className="text-gray-600">{t('event:total_hours_spent')}</span>
-            <span className="font-semibold">{parseFloat(totalHoursSpent.toFixed(2))} / {task.hours_worked || 0}h</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontSizes.base, marginTop: spacing.sm }}>
+            <span style={{ color: colors.textDim, fontFamily: fonts.body }}>{t('event:total_hours_spent')}</span>
+            <span style={{ fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.body }}>{parseFloat(totalHoursSpent.toFixed(2))} / {task.hours_worked || 0}h</span>
           </div>
-          <div className="w-full h-1.5 bg-gray-200 rounded-full mt-2 overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${progressPercent}%`,
-                background: 'linear-gradient(90deg, #3b82f6, #60a5fa)'
-              }}
-            />
+          <div style={{ width: '100%', height: 3, background: colors.borderDefault, borderRadius: 2, marginTop: spacing.sm, overflow: 'hidden' }}>
+            <div style={{ height: '100%', background: colors.accentBlue, borderRadius: 2, width: `${progressPercent}%`, transition: 'width 0.5s' }} />
           </div>
         </div>
 
-        {/* Amount Input */}
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <label className="block text-sm font-medium text-gray-700">{t('event:amount_completed')}</label>
-            <span className="bg-gray-100 text-gray-500 text-[10px] px-1.5 py-0.5 rounded font-medium">{unit}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: 6 }}>
+            <Label>{t('event:amount_completed')}</Label>
+            <span style={{ background: colors.bgOverlay, color: colors.textFaint, fontSize: fontSizes.sm, padding: '2px 8px', borderRadius: radii.sm, fontWeight: fontWeights.medium }}>{unit}</span>
           </div>
-          <input
-            type="number"
-            value={amountCompleted}
-            onChange={(e) => setAmountCompleted(e.target.value)}
-            min="0.01"
-            step="0.01"
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder={t('event:enter_completed_amount', { defaultValue: `Enter completed amount in ${unit}` }).replace('{unit}', unit)}
-            inputMode="decimal"
-          />
+          <TextInput type="text" value={amountCompleted} onChange={setAmountCompleted} placeholder={t('event:enter_completed_amount', { defaultValue: `Wpisz ukończoną ilość w ${unit}` }).replace('{unit}', unit)} />
         </div>
 
-        {/* Hours Input with Quick Picks */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('event:hours_spent')}</label>
-          <input
-            type="number"
-            value={hoursSpent}
-            onChange={(e) => setHoursSpent(e.target.value)}
-            min="0.01"
-            step="0.5"
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder={t('event:enter_hours_spent', { defaultValue: 'np. 2.5' })}
-            inputMode="decimal"
-          />
-          <div className="flex gap-1.5 mt-2">
+          <Label style={{ marginBottom: 6 }}>{t('event:hours_spent')}</Label>
+          <TextInput type="text" value={hoursSpent} onChange={setHoursSpent} placeholder={t('event:enter_hours_spent', { defaultValue: 'np. 2.5' })} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: spacing.sm }}>
             {[1, 2, 4, 8].map(h => (
               <button
                 key={h}
                 type="button"
                 onClick={() => setHoursSpent(h.toString())}
-                className={`flex-1 py-1.5 text-[13px] font-semibold rounded-md border transition-colors min-h-0 ${
-                  hoursSpent === h.toString()
-                    ? 'bg-blue-600 bg-opacity-10 border-blue-600 text-blue-600'
-                    : 'bg-gray-50 border-gray-200 text-gray-500 active:bg-gray-100'
-                }`}
+                style={{
+                  padding: 10, borderRadius: radii.lg, border: `1px solid ${hoursSpent === h.toString() ? colors.accentBlue : colors.borderDefault}`,
+                  background: hoursSpent === h.toString() ? colors.accentBlueBg : colors.bgCardInner,
+                  color: hoursSpent === h.toString() ? colors.accentBlue : colors.textMuted,
+                  fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.body, cursor: 'pointer', transition: transitions.fast,
+                }}
               >
                 {h}h
               </button>
@@ -213,20 +188,11 @@ const TaskProgressModal: React.FC<TaskProgressModalProps> = ({ task, onClose, cr
           </div>
         </div>
 
-        {/* Submit */}
-        <button
-          onClick={handleSubmit}
-          disabled={
-            addProgressEntryMutation.isPending ||
-            !amountCompleted ||
-            !hoursSpent ||
-            parseFloat(amountCompleted) <= 0 ||
-            parseFloat(hoursSpent) <= 0
-          }
-          className="w-full bg-blue-600 text-white py-3 px-4 rounded-xl font-bold text-[15px] hover:bg-blue-700 transition-colors disabled:opacity-40 active:scale-[0.98] mt-2"
+        <Button variant="primary" fullWidth onClick={handleSubmit}
+          disabled={addProgressEntryMutation.isPending || !amountCompleted || !hoursSpent || parseFloat(amountCompleted) <= 0 || parseFloat(hoursSpent) <= 0}
         >
           {addProgressEntryMutation.isPending ? t('event:updating') : t('event:update_progress')}
-        </button>
+        </Button>
       </div>
     </Modal>
   );

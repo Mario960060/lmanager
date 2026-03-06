@@ -4,6 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { X, Trash2, ChevronDown, ChevronUp, User, Calendar, AlertCircle } from 'lucide-react';
+import { Spinner, Button } from '../../themes/uiComponents';
+import { colors } from '../../themes/designTokens';
 
 interface AdditionalMaterialRecord {
   id: string;
@@ -213,7 +215,7 @@ const AdminAdditionalMaterialsModal: React.FC<AdminAdditionalMaterialsModalProps
         <div className="flex-1 overflow-y-auto p-4">
           {isLoading ? (
             <div className="flex justify-center p-6">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
+              <Spinner size={32} color={colors.red} />
             </div>
           ) : isError ? (
             <div className="flex flex-col items-center justify-center py-10">
@@ -283,7 +285,7 @@ const AdminAdditionalMaterialsModal: React.FC<AdminAdditionalMaterialsModalProps
                             <button
                               onClick={() => setDeleteConfirmation({
                                 recordId: record.id,
-                                recordName: record.material || 'this material'
+                                recordName: record.material || t('common:this_material')
                               })}
                               className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-full"
                             >
@@ -309,20 +311,11 @@ const AdminAdditionalMaterialsModal: React.FC<AdminAdditionalMaterialsModalProps
             <p className="mb-6">
               {t('event:delete_record_confirmation')}
             </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setDeleteConfirmation(null)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                {t('form:cancel')}
-              </button>
-              <button
-                onClick={() => deleteRecord.mutate(deleteConfirmation.recordId)}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-                disabled={deleteRecord.isPending}
-              >
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setDeleteConfirmation(null)}>{t('form:cancel')}</Button>
+              <Button variant="danger" onClick={() => deleteRecord.mutate(deleteConfirmation.recordId)} disabled={deleteRecord.isPending}>
                 {deleteRecord.isPending ? t('event:deleting_action') : t('event:delete_action')}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

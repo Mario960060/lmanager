@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -11,7 +11,10 @@ import MainTaskModal from './MainTaskModal';
 import CalculatorModal from './CalculatorModal';
 import UnspecifiedMaterialModal from '../components/UnspecifiedMaterialModal';
 import { getMaterialCapacity } from '../constants/materialCapacity';
-import { useTheme, getCardWithShadowStyle, getButtonStyle } from '../themes';
+import { translateTaskName, translateMaterialName, translateMaterialDescription, translateUnit } from '../lib/translationMap';
+import { colors, fontSizes, fontWeights, spacing } from '../themes/designTokens';
+import { Card, Button } from '../themes/uiComponents';
+import DatePicker from '../components/DatePicker';
 
 // Types
 interface CalculatorResults {
@@ -118,8 +121,7 @@ const ProjectCreating = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
-  const { currentTheme } = useTheme();
-  const { t } = useTranslation(['project', 'form', 'utilities', 'common']);
+  const { t } = useTranslation(['project', 'form', 'utilities', 'common', 'nav', 'calculator', 'material']);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({
@@ -131,12 +133,6 @@ const ProjectCreating = () => {
     has_equipment: false,
     has_materials: false
   });
-
-  // Add refs for date inputs
-  const startDateRef = useRef<HTMLInputElement>(null);
-  const endDateRef = useRef<HTMLInputElement>(null);
-  const equipmentStartDateRef = useRef<HTMLInputElement>(null);
-  const equipmentEndDateRef = useRef<HTMLInputElement>(null);
 
   const [mainTasks, setMainTasks] = useState<MainTask[]>([]);
   const [minorTasks, setMinorTasks] = useState<MinorTask[]>([]);
@@ -344,92 +340,110 @@ const ProjectCreating = () => {
   const calculatorGroups = [
     {
       type: 'aggregate',
-      label: 'Aggregate Calculator',
+      label: t('nav:aggregate_calculator'),
       subTypes: [
-        { type: 'type1', label: 'Preparation' },
-        { type: 'soil_excavation', label: 'Soil Excavation' }
+        { type: 'type1', label: t('nav:preparation') },
+        { type: 'soil_excavation', label: t('nav:soil_excavation') }
       ]
     },
     {
       type: 'paving',
-      label: 'Paving Calculator',
+      label: t('nav:paving_calculator'),
       subTypes: [
-        { type: 'default', label: 'Monoblock Paving' }
+        { type: 'default', label: t('nav:monoblock_paving') }
       ]
     },
     {
       type: 'wall',
       label: t('project:wall_finish_calc'),
       subTypes: [
-        { type: 'brick', label: 'Brick Wall Calculator' },
-        { type: 'block4', label: '4-inch Block Wall Calculator' },
-        { type: 'block7', label: '7-inch Block Wall Calculator' },
-        { type: 'sleeper', label: 'Sleeper Wall Calculator' }
+        { type: 'brick', label: t('nav:brick_wall_calculator') },
+        { type: 'block4', label: t('nav:block4_wall_calculator') },
+        { type: 'block7', label: t('nav:block7_wall_calculator') },
+        { type: 'sleeper', label: t('nav:sleeper_wall_calculator') }
       ]
     },
     {
       type: 'kerbs',
-      label: 'Kerbs & Sets Calculator',
+      label: t('nav:kerbs_edges_calculator'),
       subTypes: [
-        { type: 'kl', label: 'KL Kerbs' },
-        { type: 'rumbled', label: 'Rumbled Kerbs' },
-        { type: 'flat', label: 'Flat Edges' },
-        { type: 'sets', label: '10x10 Sets' }
+        { type: 'kl', label: t('nav:kl_kerbs') },
+        { type: 'rumbled', label: t('nav:rumbled_kerbs') },
+        { type: 'flat', label: t('nav:flat_edges') },
+        { type: 'sets', label: t('nav:sets') }
       ]
     },
     {
       type: 'slab',
-      label: 'Slab Calculator',
+      label: t('nav:slab_calculator'),
       subTypes: [
-        { type: 'default', label: 'Slab Calculator' }
+        { type: 'default', label: t('nav:slab_calculator') },
+        { type: 'concreteSlabs', label: t('nav:concrete_slabs_calculator') }
       ]
     },
     {
       type: 'fence',
-      label: 'Fence Calculator',
+      label: t('nav:fence_calculator'),
       subTypes: [
-        { type: 'vertical', label: 'Vertical Fence' },
-        { type: 'horizontal', label: 'Horizontal Fence' },
-        { type: 'venetian', label: 'Venetian Fence' },
-        { type: 'composite', label: 'Composite Fence' },
+        { type: 'vertical', label: t('nav:vertical_fence') },
+        { type: 'horizontal', label: t('nav:horizontal_fence') },
+        { type: 'venetian', label: t('nav:venetian_fence_calculator') },
+        { type: 'composite', label: t('nav:composite_fence_calculator') },
       ]
     },
     {
       type: 'steps',
-      label: 'Steps Calculator',
+      label: t('nav:steps_calculator'),
       subTypes: [
-        { type: 'standard', label: 'Standard Stairs' },
-        { type: 'l_shape', label: 'L-Shape Stairs' },
-        { type: 'u_shape', label: 'U-Shape Stairs' }
+        { type: 'standard', label: t('nav:standard_stairs') },
+        { type: 'l_shape', label: t('nav:l_shape_stairs') },
+        { type: 'u_shape', label: t('nav:u_shape_stairs') }
       ]
     },
     {
       type: 'grass',
-      label: 'Artificial Grass Calculator',
+      label: t('nav:artificial_grass_calculator'),
       subTypes: [
-        { type: 'default', label: 'Artificial Grass' }
+        { type: 'default', label: t('nav:artificial_grass') }
+      ]
+    },
+    {
+      type: 'turf',
+      label: t('nav:natural_turf_calculator'),
+      subTypes: [
+        { type: 'default', label: t('nav:natural_turf') }
       ]
     },
     {
       type: 'tile',
-      label: 'Wall finish Calculator',
+      label: t('nav:wall_finish_calculator'),
       subTypes: [
-        { type: 'default', label: 'Tile Installation' },
-        { type: 'coping', label: 'Coping Installation' }
+        { type: 'default', label: t('nav:tile_installation_calculator') },
+        { type: 'coping', label: t('nav:coping_installation_calculator') }
       ]
     },
     {
       type: 'foundation',
-      label: 'Foundation Calculator',
+      label: t('nav:foundation_calculator'),
       subTypes: [
-        { type: 'default', label: 'Foundation Excavation' }
+        { type: 'default', label: t('nav:foundation_excavation') }
+      ]
+    },
+    {
+      type: 'groundwork',
+      label: t('nav:groundwork_linear'),
+      subTypes: [
+        { type: 'drainage', label: t('nav:groundwork_drainage') },
+        { type: 'canalPipe', label: t('nav:groundwork_canal_pipe') },
+        { type: 'waterPipe', label: t('nav:groundwork_water_pipe') },
+        { type: 'cable', label: t('nav:groundwork_cable') }
       ]
     },
     {
       type: 'deck',
-      label: 'Deck Calculator',
+      label: t('nav:deck_calculator'),
       subTypes: [
-        { type: 'default', label: 'Decking Standard Installation' }
+        { type: 'default', label: t('nav:decking_standard') }
       ]
     }
   ].sort((a, b) => a.label.localeCompare(b.label))
@@ -1428,7 +1442,7 @@ const ProjectCreating = () => {
       navigate('/projects');
     } catch (error) {
       console.error('Error creating event:', error);
-      setError(error instanceof Error ? error.message : 'An error occurred while creating the event');
+      setError(error instanceof Error ? error.message : t('project:error_creating_event'));
     } finally {
       setIsSubmitting(false);
     }
@@ -1657,7 +1671,11 @@ const ProjectCreating = () => {
         <div className="flex justify-between items-center mb-8">
             <div className="flex items-center">
               <h1 className="text-3xl font-bold text-gray-900">{t('project:create_new_project')}</h1>
-              <PageInfoModal description="" quickTips={[]} />
+              <PageInfoModal
+                description={t('project:project_creating_info_description')}
+                title={t('project:project_creating_info_title')}
+                quickTips={[]}
+              />
             </div>
           <button
           onClick={handleSubmit}
@@ -1671,8 +1689,8 @@ const ProjectCreating = () => {
 
         <div className="space-y-8">
           {/* Basic Information */}
-          <div style={getCardWithShadowStyle(currentTheme)}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: currentTheme.colors.textPrimary, marginBottom: '1.5rem' }}>{t('project:basic_information')}</h2>
+          <Card>
+            <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, marginBottom: spacing.xl }}>{t('project:basic_information')}</h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('project:project_title')}</label>
@@ -1711,30 +1729,24 @@ const ProjectCreating = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">{t('project:start_date')}</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formData.start_date}
-                    onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 cursor-pointer hover:bg-gray-50 transition-colors"
+                    onChange={(v) => setFormData(prev => ({ ...prev, start_date: v }))}
+                    placeholder={t('project:dd_mm_yyyy')}
                     required
-                    placeholder="dd/mm/yyyy"
-                    ref={startDateRef}
-                    onClick={() => startDateRef.current?.showPicker?.()}
+                    className="mt-1 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">{t('project:end_date')}</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={formData.end_date}
-                    onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 cursor-pointer hover:bg-gray-50 transition-colors"
-                    min={formData.start_date}
+                    onChange={(v) => setFormData(prev => ({ ...prev, end_date: v }))}
+                    placeholder={t('project:dd_mm_yyyy')}
+                    minDate={formData.start_date}
                     required
-                    placeholder="dd/mm/yyyy"
-                    ref={endDateRef}
-                    onClick={() => endDateRef.current?.showPicker?.()}
+                    className="mt-1 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   />
                 </div>
               </div>
@@ -1759,7 +1771,7 @@ const ProjectCreating = () => {
                       <Wrench className="w-5 h-5 text-blue-600" />
                       <h3 className="text-lg font-semibold text-gray-900">{t('utilities:equipment_needed')}</h3>
                     </div>
-                    <button
+                    <Button
                       onClick={() => {
                         setShowAddEquipmentModal(true);
                         setEquipmentStartDate(formData.start_date);
@@ -1767,22 +1779,11 @@ const ProjectCreating = () => {
                         setSelectedEquipmentToAdd(null);
                         setEquipmentQuantity(1);
                       }}
-                      style={{
-                        ...getButtonStyle(currentTheme, 'primary'),
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        fontSize: '0.875rem',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimaryHover;
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimary;
-                      }}
+                      icon={<Plus className="w-4 h-4" />}
+                      style={{ fontSize: fontSizes.sm }}
                     >
-                      <Plus className="w-4 h-4 mr-1" />
                       {t('utilities:add_equipment')}
-                    </button>
+                    </Button>
                   </div>
 
                   {/* Equipment List */}
@@ -1795,8 +1796,8 @@ const ProjectCreating = () => {
                         return (
                           <div key={index} className="flex items-center justify-between bg-white p-3 rounded border border-gray-200">
                             <div className="flex-1">
-                              <p className="font-medium text-gray-900">{equip?.name || 'Unknown Equipment'}</p>
-                              <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                              <p className="font-medium text-gray-900">{equip?.name || t('project:unknown_equipment')}</p>
+                              <p className="text-sm text-gray-600">{t('project:quantity_with_value', { count: item.quantity })}</p>
                               {item.start_date && item.end_date && (
                                 <p className="text-xs text-gray-500">
                                   {new Date(item.start_date).toLocaleDateString()} - {new Date(item.end_date).toLocaleDateString()}
@@ -1834,47 +1835,35 @@ const ProjectCreating = () => {
                 </div>
               )}
             </div>
-          </div>
+          </Card>
 
           {/* Main Tasks Section */}
-        <div style={{ marginTop: '2rem', ...getCardWithShadowStyle(currentTheme) }}>
+        <Card style={{ marginTop: spacing.xl }}>
           <div className="flex justify-between items-center mb-4">
-            <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: currentTheme.colors.textPrimary }}>{t('utilities:main_tasks')}</h2>
-              <button
+            <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary }}>{t('utilities:main_tasks')}</h2>
+              <Button
                 onClick={() => setShowMainTaskModal(true)}
-                style={{
-                  ...getButtonStyle(currentTheme, 'primary'),
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimaryHover;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimary;
-                }}
+                icon={<Plus className="w-5 h-5" />}
               >
-              <Plus className="w-5 h-5" />
                 {t('utilities:add_main_task')}
-              </button>
+              </Button>
             </div>
 
               {mainTasks.map((task, index) => (
-            <div key={task.id} style={{ ...getCardWithShadowStyle(currentTheme), marginBottom: '1rem' }}>
+            <Card key={task.id} style={{ marginBottom: spacing.lg }}>
               <div className="flex justify-between items-start mb-4">
-                <h3 style={{ fontSize: '1.125rem', fontWeight: '500', color: currentTheme.colors.textPrimary }}>{task.name}</h3>
+                <h3 style={{ fontSize: fontSizes.md, fontWeight: fontWeights.medium, color: colors.textPrimary }}>{translateTaskName(task.name, t)}</h3>
                     <button
                       onClick={() => {
                     const updatedTasks = mainTasks.filter((_, i) => i !== index);
                     setMainTasks(updatedTasks);
                   }}
-                  style={{ color: currentTheme.colors.textMuted, cursor: 'pointer' }}
+                  style={{ color: colors.textMuted, cursor: 'pointer', background: 'none', border: 'none', padding: 0 }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.color = currentTheme.colors.textPrimary;
+                    e.currentTarget.style.color = colors.textPrimary;
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.color = currentTheme.colors.textMuted;
+                    e.currentTarget.style.color = colors.textMuted;
                   }}
                     >
                       <X className="w-5 h-5" />
@@ -1885,15 +1874,15 @@ const ProjectCreating = () => {
                 <>
                   {/* Task Breakdown */}
                   <div className="mb-4">
-                    <h4 style={{ color: currentTheme.colors.info, marginBottom: '0.5rem' }}>{t('utilities:task_breakdown')}:</h4>
+                    <h4 style={{ color: colors.accentBlue, marginBottom: spacing.sm }}>{t('utilities:task_breakdown')}:</h4>
                     {task.results.taskBreakdown?.map((breakdown, i) => (
-                      <div key={i} className="flex justify-between" style={{ color: currentTheme.colors.textSecondary }}>
+                      <div key={i} className="flex justify-between" style={{ color: colors.textSecondary }}>
                         <span>{breakdown.name || breakdown.task}</span>
                         <span>{breakdown.hours.toFixed(2)} {t('utilities:hours')}</span>
                       </div>
                     ))}
-                    <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${currentTheme.colors.border}` }}>
-                      <div className="flex justify-between font-medium" style={{ color: currentTheme.colors.textPrimary }}>
+                    <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${colors.borderDefault}` }}>
+                      <div className="flex justify-between font-medium" style={{ color: colors.textPrimary }}>
                         <span>{t('utilities:total_labor_hours')}</span>
                         <span>
                           {task.results.taskBreakdown?.reduce((sum, breakdown) => sum + (breakdown.hours || 0), 0).toFixed(2) || '0.00'} {t('utilities:hours')}
@@ -1904,22 +1893,22 @@ const ProjectCreating = () => {
 
                   {/* Materials */}
                   <div>
-                    <h4 style={{ color: currentTheme.colors.info, marginBottom: '0.5rem' }}>{t('utilities:materials_required')}:</h4>
+                    <h4 style={{ color: colors.accentBlue, marginBottom: spacing.sm }}>{t('utilities:materials_required')}:</h4>
                     <div className="overflow-x-auto">
                       <table className="min-w-full">
                         <thead>
-                          <tr style={{ color: currentTheme.colors.textMuted, fontSize: '0.875rem' }}>
-                            <th className="text-left py-2" style={{ color: currentTheme.colors.textMuted }}>{t('utilities:material')}</th>
-                            <th className="text-right py-2" style={{ color: currentTheme.colors.textMuted }}>{t('utilities:quantity')}</th>
-                            <th className="text-left py-2" style={{ color: currentTheme.colors.textMuted }}>{t('utilities:unit')}</th>
+                          <tr style={{ color: colors.textMuted, fontSize: fontSizes.sm }}>
+                            <th className="text-left py-2" style={{ color: colors.textMuted }}>{t('utilities:material')}</th>
+                            <th className="text-right py-2" style={{ color: colors.textMuted }}>{t('utilities:quantity')}</th>
+                            <th className="text-left py-2" style={{ color: colors.textMuted }}>{t('utilities:unit')}</th>
                           </tr>
                         </thead>
-                        <tbody style={{ color: currentTheme.colors.textSecondary }}>
+                        <tbody style={{ color: colors.textSecondary }}>
                           {task.results.materials?.map((material, i) => (
                             <tr key={i}>
-                              <td className="py-1" style={{ color: currentTheme.colors.textSecondary }}>{material.name}</td>
-                              <td className="text-right py-1" style={{ color: currentTheme.colors.textSecondary }}>{material.quantity.toFixed(2)}</td>
-                              <td className="pl-4 py-1" style={{ color: currentTheme.colors.textSecondary }}>{material.unit}</td>
+                              <td className="py-1" style={{ color: colors.textSecondary }}>{translateMaterialName(material.name, t)}</td>
+                              <td className="text-right py-1" style={{ color: colors.textSecondary }}>{material.quantity.toFixed(2)}</td>
+                              <td className="pl-4 py-1" style={{ color: colors.textSecondary }}>{translateUnit(material.unit, t)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1928,31 +1917,20 @@ const ProjectCreating = () => {
                   </div>
                 </>
                   )}
-                </div>
+                </Card>
               ))}
-          </div>
+          </Card>
 
           {/* Minor Tasks Section */}
-          <div style={getCardWithShadowStyle(currentTheme)}>
+          <Card>
             <div className="flex justify-between items-center mb-6">
-              <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: currentTheme.colors.textPrimary }}>{t('utilities:minor_tasks')}</h2>
-              <button
+              <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary }}>{t('utilities:minor_tasks')}</h2>
+              <Button
                 onClick={handleAddMinorTask}
-                style={{
-                  ...getButtonStyle(currentTheme, 'primary'),
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimaryHover;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimary;
-                }}
+                icon={<Plus className="w-5 h-5" />}
               >
-                <Plus className="w-5 h-5 mr-2" />
                 {t('utilities:add_minor_task')}
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-4">
@@ -2052,7 +2030,7 @@ const ProjectCreating = () => {
                             </div>
                             {task.results.materials.map((material, i) => (
                               <div key={i} className="text-sm">
-                                {material.name}: {material.quantity} {material.unit}
+                                {translateMaterialName(material.name, t)}: {material.quantity} {translateUnit(material.unit, t)}
                               </div>
                             ))}
                           </div>
@@ -2073,29 +2051,18 @@ const ProjectCreating = () => {
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
 
           {/* Materials Section */}
-          <div style={getCardWithShadowStyle(currentTheme)}>
+          <Card>
             <div className="flex justify-between items-center mb-6">
-              <h2 style={{ fontSize: '1.25rem', fontWeight: '600', color: currentTheme.colors.textPrimary }}>{t('project:materials')}</h2>
-              <button
-              onClick={() => setMaterials(prev => [...prev, { template_id: '', quantity: 1, confirmed: false }])}
-                style={{
-                  ...getButtonStyle(currentTheme, 'primary'),
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimaryHover;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimary;
-                }}
+              <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary }}>{t('project:materials')}</h2>
+              <Button
+                onClick={() => setMaterials(prev => [...prev, { template_id: '', quantity: 1, confirmed: false }])}
+                icon={<Plus className="w-5 h-5" />}
               >
-                <Plus className="w-5 h-5 mr-2" />
                 {t('project:add_material')}
-              </button>
+              </Button>
             </div>
 
             <div className="space-y-4">
@@ -2132,17 +2099,17 @@ const ProjectCreating = () => {
                       >
                         <option value="">{t('project:select_a_material')}</option>
                         <option value="other" className="font-medium text-blue-600">{t('project:other_custom_material')}</option>
-                        {materialTemplates.map(template => (
+{materialTemplates.map(template => (
                           <option key={template.id} value={template.id}>
-                          {template.name} ({template.unit})
+                            {translateMaterialName(template.name, t)} ({translateUnit(template.unit, t)})
                           </option>
                         ))}
                       </select>
                     </div>
 
-                  {material.description && (
+                  {translateMaterialDescription(material.name, material.description, t) && (
                     <div className="text-sm text-gray-600">
-                      {material.description}
+                      {translateMaterialDescription(material.name, material.description, t)}
                     </div>
                   )}
 
@@ -2218,7 +2185,7 @@ const ProjectCreating = () => {
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
 
         {/* Shared Equipment Selection */}
         <div className="mb-8 bg-white p-6 rounded-lg shadow-sm">
@@ -2384,7 +2351,7 @@ const ProjectCreating = () => {
                       .filter(task => task.calculatorType === 'soil_excavation' && task.results)
                       .map((task, index) => (
                         <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                          <h4 className="font-medium text-gray-900 mb-3">{task.name}</h4>
+                          <h4 className="font-medium text-gray-900 mb-3">{translateTaskName(task.name, t)}</h4>
                           <div className="space-y-4">
                             {task.results?.totalTons && (
                               <div className="text-sm">
@@ -2612,12 +2579,12 @@ const ProjectCreating = () => {
                   .map((material, i) => (
                     <tr key={i}>
                       <td className="py-1">
-                        <div>{material.name}</div>
-                        {material.description && <div className="text-sm text-gray-400">{material.description}</div>}
+                        <div>{translateMaterialName(material.name, t)}</div>
+                        {translateMaterialDescription(material.name, material.description, t) && <div className="text-sm text-gray-400">{translateMaterialDescription(material.name, material.description, t)}</div>}
                         {material.category && <div className="text-sm text-gray-400">{t('project:category')}: {material.category}</div>}
                       </td>
                       <td className="text-right py-1">{(material.quantity ?? 0).toFixed(2)}</td>
-                      <td className="pl-4 py-1">{material.unit}</td>
+                      <td className="pl-4 py-1">{translateUnit(material.unit, t)}</td>
                       <td className="text-right py-1">£{(material.pricePerUnit ?? 0).toFixed(2)}</td>
                       <td className="text-right py-1">£{(material.totalPrice ?? 0).toFixed(2)}</td>
                     </tr>
@@ -2672,6 +2639,7 @@ const ProjectCreating = () => {
           setTransportDistance={setTransportDistance}
           carriers={carriers}
           selectedExcavator={selectedExcavator}
+          selectedCarrier={selectedCarrier}
         />
       )}
 
@@ -2715,7 +2683,7 @@ const ProjectCreating = () => {
           onSave={handleAddUnspecifiedMaterial}
           projects={[{
             id: 'new',
-            title: 'New Project'
+            title: t('project:new_project')
           }]}
         />
       )}
@@ -2726,7 +2694,7 @@ const ProjectCreating = () => {
           <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">
-                {editingEquipmentIndex !== null ? 'Edit Equipment' : 'Add Equipment to Project'}
+                {editingEquipmentIndex !== null ? t('project:edit_equipment') : t('project:add_equipment_to_project')}
               </h3>
               <button
                 onClick={() => {
@@ -2779,25 +2747,20 @@ const ProjectCreating = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('project:start_date')}</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={equipmentStartDate}
-                    onChange={(e) => setEquipmentStartDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 cursor-pointer hover:bg-gray-50 transition-colors"
-                    ref={equipmentStartDateRef}
-                    onClick={() => equipmentStartDateRef.current?.showPicker?.()}
+                    onChange={setEquipmentStartDate}
+                    className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('project:end_date')}</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={equipmentEndDate}
-                    onChange={(e) => setEquipmentEndDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 cursor-pointer hover:bg-gray-50 transition-colors"
-                    ref={equipmentEndDateRef}
-                    onClick={() => equipmentEndDateRef.current?.showPicker?.()}
+                    onChange={setEquipmentEndDate}
+                    minDate={equipmentStartDate}
+                    className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   />
                 </div>
 
@@ -2828,7 +2791,7 @@ const ProjectCreating = () => {
                 }}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800"
               >
-                Cancel
+                {t('project:cancel_button_label')}
               </button>
               <button
                 onClick={() => {
@@ -2875,7 +2838,7 @@ const ProjectCreating = () => {
                 disabled={!selectedEquipmentToAdd || !!equipmentConflict}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                {editingEquipmentIndex !== null ? 'Update Equipment' : 'Add Equipment'}
+                {editingEquipmentIndex !== null ? t('project:update_equipment') : t('project:add_equipment')}
               </button>
             </div>
           </div>

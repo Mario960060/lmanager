@@ -4,11 +4,14 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName } from '../../lib/translationMap';
+import { translateTaskName, translateUnit } from '../../lib/translationMap';
 
 interface CompositeFenceCalculatorProps {
   onResultsChange?: (results: any) => void;
+  onInputsChange?: (inputs: Record<string, any>) => void;
   isInProjectCreating?: boolean;
+  initialLength?: number;
+  savedInputs?: Record<string, any>;
   calculateTransport?: boolean;
   setCalculateTransport?: (value: boolean) => void;
   selectedTransportCarrier?: any;
@@ -17,6 +20,7 @@ interface CompositeFenceCalculatorProps {
   setTransportDistance?: (value: string) => void;
   carriers?: any[];
   selectedExcavator?: any;
+  recalculateTrigger?: number;
 }
 
 interface Material {
@@ -56,7 +60,10 @@ interface DiggingEquipment {
 
 const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({ 
   onResultsChange,
+  onInputsChange,
   isInProjectCreating = false,
+  initialLength,
+  savedInputs = {},
   calculateTransport: propCalculateTransport,
   setCalculateTransport: propSetCalculateTransport,
   selectedTransportCarrier: propSelectedTransportCarrier,
@@ -64,17 +71,28 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
   transportDistance: propTransportDistance,
   setTransportDistance: propSetTransportDistance,
   carriers: propCarriers = [],
-  selectedExcavator: _propSelectedExcavator
+  selectedExcavator: _propSelectedExcavator,
+  recalculateTrigger = 0
 }) => {
-  const { t } = useTranslation(['calculator', 'utilities', 'common']);
+  const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
   console.log(`CompositeFenceCalculator.tsx: Component mounted`);
 
-  const [length, setLength] = useState('');
-  const [height, setHeight] = useState('');
-  const [compositeSlatWidth, setCompositeSlatWidth] = useState('');
-  const [slatLength, setSlatLength] = useState('360');
-  const [postmixPerPost, setPostmixPerPost] = useState<string>('');
+  const initLength = savedInputs?.length != null ? String(savedInputs.length) : (initialLength != null ? initialLength.toFixed(3) : '');
+  const [length, setLength] = useState(initLength);
+  const [height, setHeight] = useState(savedInputs?.height ?? '');
+  useEffect(() => {
+    if (savedInputs?.length != null) setLength(String(savedInputs.length));
+    else if (initialLength != null && isInProjectCreating) setLength(initialLength.toFixed(3));
+  }, [savedInputs?.length, initialLength, isInProjectCreating]);
+  const [compositeSlatWidth, setCompositeSlatWidth] = useState(savedInputs?.compositeSlatWidth ?? '');
+  const [slatLength, setSlatLength] = useState(savedInputs?.slatLength ?? '360');
+  const [postmixPerPost, setPostmixPerPost] = useState<string>(savedInputs?.postmixPerPost ?? '');
+  useEffect(() => {
+    if (onInputsChange && isInProjectCreating) {
+      onInputsChange({ length, height, compositeSlatWidth, slatLength, postmixPerPost });
+    }
+  }, [length, height, compositeSlatWidth, slatLength, postmixPerPost, onInputsChange, isInProjectCreating]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [totalHours, setTotalHours] = useState<number | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
@@ -82,6 +100,9 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
   const [transportDistance, setTransportDistance] = useState<string>('30');
   const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
   const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
+  const effectiveCalculateTransport = isInProjectCreating ? (propCalculateTransport ?? false) : calculateTransport;
+  const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
+  const effectiveTransportDistance = isInProjectCreating && propTransportDistance ? propTransportDistance : transportDistance;
   const [carriersLocal, setCarriersLocal] = useState<DiggingEquipment[]>([]);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -101,25 +122,6 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
     propSelectedTransportCarrier,
     propTransportDistance
   ]);
-
-  // Sync local state back to parent when in ProjectCreating
-  useEffect(() => {
-    if (isInProjectCreating && propSetCalculateTransport) {
-      propSetCalculateTransport(calculateTransport);
-    }
-  }, [calculateTransport, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetSelectedTransportCarrier) {
-      propSetSelectedTransportCarrier(selectedTransportCarrier);
-    }
-  }, [selectedTransportCarrier, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetTransportDistance) {
-      propSetTransportDistance(transportDistance);
-    }
-  }, [transportDistance, isInProjectCreating]);
 
   // Fetch task template for fence installation
   const { data: layingTask, isLoading } = useQuery({
@@ -180,10 +182,10 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
       }
     };
     
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       fetchEquipment();
     }
-  }, [calculateTransport]);
+  }, [effectiveCalculateTransport]);
 
   const fetchMaterialPrices = async (materials: Material[]): Promise<Material[]> => {
     try {
@@ -320,11 +322,11 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
     let slatTransportTime = 0;
     let postmixTransportTime = 0;
 
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       let carrierSizeForTransport = 0.125;
       
-      if (selectedTransportCarrier) {
-        carrierSizeForTransport = selectedTransportCarrier["size (in tones)"] || 0.125;
+      if (effectiveSelectedTransportCarrier) {
+        carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
       }
 
       // Calculate posts transport - each post carried individually (on foot)
@@ -332,7 +334,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
         const postsPerTrip = 1; // 1 post per person per trip
         const trips = Math.ceil(posts / postsPerTrip);
         const postCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(transportDistance) || 30) * 2 / postCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / postCarrySpeed;
         postTransportTime = trips * timePerTrip;
         
         if (postTransportTime > 0) {
@@ -350,7 +352,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
         const slatsPerTrip = 2;
         const trips = Math.ceil(slatsNeeded / slatsPerTrip);
         const slatCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(transportDistance) || 30) * 2 / slatCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / slatCarrySpeed;
         slatTransportTime = trips * timePerTrip;
         
         if (slatTransportTime > 0) {
@@ -365,7 +367,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
 
       // Calculate postmix transport (it's bags like cement)
       if (totalPostmix > 0) {
-        const postmixResult = calculateMaterialTransportTime(totalPostmix, carrierSizeForTransport, 'cement', parseFloat(transportDistance) || 30);
+        const postmixResult = calculateMaterialTransportTime(totalPostmix, carrierSizeForTransport, 'cement', parseFloat(effectiveTransportDistance) || 30);
         postmixTransportTime = postmixResult.totalTransportTime;
         if (postmixTransportTime > 0) {
           breakdown.push({
@@ -396,6 +398,13 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
     setTaskBreakdown(breakdown);
     setCalculationError(null);
   };
+
+  // Recalculate when project settings (transport, equipment) change
+  useEffect(() => {
+    if (recalculateTrigger > 0 && isInProjectCreating) {
+      void calculate();
+    }
+  }, [recalculateTrigger]);
 
   // Add useEffect to notify parent of result changes
   useEffect(() => {
@@ -489,7 +498,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:slat_length_cm_label')}</label>
+        <label className="block text-sm font-medium text-gray-700">{t('calculator:composite_slat_length_cm_label')}</label>
         <select
           value={slatLength}
           onChange={(e) => setSlatLength(e.target.value)}
@@ -513,18 +522,20 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
         />
       </div>
 
-      <label className="flex items-center space-x-2">
-        <input
-          type="checkbox"
-          checked={calculateTransport}
-          onChange={(e) => setCalculateTransport(e.target.checked)}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-        <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-      </label>
+      {!isInProjectCreating && (
+        <label className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={calculateTransport}
+            onChange={(e) => setCalculateTransport(e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
+        </label>
+      )}
 
       {/* Transport Carrier Selection */}
-      {calculateTransport && (
+      {!isInProjectCreating && calculateTransport && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier_label')}</label>
           <div className="space-y-2">
@@ -651,7 +662,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
                         {material.amount.toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {material.unit}
+                        {translateUnit(material.unit, t)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                           {material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}

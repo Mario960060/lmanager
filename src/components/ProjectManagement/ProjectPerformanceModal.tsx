@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName } from '../../lib/translationMap';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { format, parseISO, eachWeekOfInterval, startOfWeek, endOfWeek } from 'date-fns';
 import { X, Search, Calendar as CalendarIcon } from 'lucide-react';
+import DatePicker from '../DatePicker';
 
 interface ProjectPerformanceModalProps {
   onClose: () => void;
 }
 
 const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'event', 'calculator']);
   const [projectSearch, setProjectSearch] = useState('');
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState<'single' | 'weekly' | 'range'>('single');
@@ -121,7 +123,7 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
         // Group tasks by user and task name
         const groupedTasks = data.reduce((acc: any, item) => {
           const userId = item.user_id;
-          const taskName = item.tasks_done?.name || 'Unknown Task';
+          const taskName = item.tasks_done?.name || t('common:unknown_task');
           const key = `${userId}-${taskName}`;
 
           if (!acc[key]) {
@@ -131,7 +133,7 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
               taskName,
               totalAmount: 0,
               totalHours: 0,
-              unit: item.tasks_done?.amount?.split(' ')[1] || 'units'
+              unit: item.tasks_done?.amount?.split(' ')[1] || t('common:units')
             };
           }
 
@@ -307,13 +309,12 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                 {selectedTimeRange === 'single' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700">{t('event:select_date')}</label>
-                    <input
-                      type="date"
+                    <DatePicker
                       value={selectedDate}
-                      onChange={(e) => setSelectedDate(e.target.value)}
-                      min={selectedProject_data?.start_date}
-                      max={selectedProject_data?.end_date}
-                      className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      onChange={setSelectedDate}
+                      minDate={selectedProject_data?.start_date}
+                      maxDate={selectedProject_data?.end_date}
+                      className="mt-1"
                     />
                   </div>
                 )}
@@ -346,24 +347,22 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700">{t('event:start_date_label')}</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={dateRange.start}
-                        onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                        min={selectedProject_data?.start_date}
-                        max={selectedProject_data?.end_date}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        onChange={(v) => setDateRange(prev => ({ ...prev, start: v }))}
+                        minDate={selectedProject_data?.start_date}
+                        maxDate={selectedProject_data?.end_date}
+                        className="mt-1"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700">{t('event:end_date_label')}</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={dateRange.end}
-                        onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                        min={dateRange.start || selectedProject_data?.start_date}
-                        max={selectedProject_data?.end_date}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        onChange={(v) => setDateRange(prev => ({ ...prev, end: v }))}
+                        minDate={dateRange.start || selectedProject_data?.start_date}
+                        maxDate={selectedProject_data?.end_date}
+                        className="mt-1"
                       />
                     </div>
                   </div>
@@ -411,7 +410,7 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                           >
                             <div className="flex justify-between items-start">
                               <div>
-                                <h3 className="font-medium">{item.taskName}</h3>
+                                <h3 className="font-medium">{translateTaskName(item.taskName, t)}</h3>
                                 <p className="text-sm text-gray-600 mt-1">
                                   {t('event:by_prefix')} {item.userName}
                                 </p>
@@ -459,7 +458,7 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                           >
                             <div className="flex justify-between items-start">
                               <div>
-                                <h3 className="font-medium">{item.description}</h3>
+                                <h3 className="font-medium">{translateTaskName(item.description ?? '', t)}</h3>
                                 <p className="text-sm text-gray-600 mt-1">
                                   {t('event:added_by')} {item.profiles?.full_name}
                                 </p>

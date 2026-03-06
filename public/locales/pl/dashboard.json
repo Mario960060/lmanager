@@ -104,6 +104,8 @@
   "day_friday": "Pią",
   "day_saturday": "Sob",
   "day_sunday": "Nie",
-  "info_description": "W Panelu widzisz kolejne dwa dni z kalendarza.\nWszystkie zaplanowane projekty pojawią się tutaj automatycznie.\n\nKażdy członek zespołu może **zgłaszać zapotrzebowanie na materiały i sprzęt** do projektu, a wszystkie zgłoszenia są widoczne dla wszystkich — dzięki temu nic nie zostanie zapomniane przed rozpoczęciem pracy.\n\nKolejną ważną funkcją Dashboardu jest **wpisywanie przepracowanych godzin**.\nNa podstawie wprowadzonych godzin oraz aktualizowanego progresu aplikacja automatycznie oblicza:\n\n• **Twoje tygodniowe godziny pracy**\n• **Szacowany czas realizacji zadań** (zarówno indywidualny, jak i zespołowy)",
-  "info_title": "O tej stronie"
+  "info_description": "W **Panelu** widzisz kolejne dwa dni z kalendarza.\nWszystkie zaplanowane projekty pojawią się tutaj automatycznie.\n\nKażdy członek zespołu może **zgłaszać zapotrzebowanie na materiały i sprzęt** do projektu, a wszystkie zgłoszenia są widoczne dla wszystkich — dzięki temu nic nie zostanie zapomniane przed rozpoczęciem pracy.\n\nKolejną ważną funkcją Dashboardu jest **wpisywanie przepracowanych godzin**.\nNa podstawie wprowadzonych godzin oraz aktualizowanego progresu aplikacja automatycznie oblicza:\n\n• **Twoje tygodniowe godziny pracy**\n• **Szacowany czas realizacji zadań** (zarówno indywidualny, jak i zespołowy)",
+  "info_title": "O tej stronie",
+  "calendar_info_title": "O tej stronie",
+  "calendar_info_description": "**Kalendarz**\n\nNie ma tu nic nadzwyczajnego — to prosty kalendarz, w którym możesz zobaczyć, jakie projekty są zaplanowane na poszczególne dni.\n\nMożesz także zgłaszać zapotrzebowanie na materiały i sprzęt do dowolnego projektu bezpośrednio z poziomu kalendarza."
 }

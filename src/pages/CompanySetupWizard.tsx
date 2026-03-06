@@ -165,7 +165,13 @@ const CompanySetupWizard: React.FC = () => {
                   {currentStep}
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900">{step.title}</h2>
-                <PageInfoModal description="" quickTips={[]} autoOpen={currentStep === 1 && !hasShownWelcomeInfo} onAutoOpened={() => setHasShownWelcomeInfo(true)} />
+                <PageInfoModal
+                description={currentStep === 1 ? t('form:welcome_page_description') : ''}
+                title={currentStep === 1 ? t('form:welcome_page_title') : t('form:setup_page_info_title')}
+                quickTips={[]}
+                autoOpen={currentStep === 1 && !hasShownWelcomeInfo}
+                onAutoOpened={() => setHasShownWelcomeInfo(true)}
+              />
               </div>
               <p className="text-sm text-gray-600 ml-11">{step.description}</p>
             </div>

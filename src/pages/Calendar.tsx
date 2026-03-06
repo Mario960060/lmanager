@@ -20,6 +20,7 @@ import {
   subDays,
   addDays
 } from 'date-fns';
+import { pl } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import PageInfoModal from '../components/PageInfoModal';
 import { useQuery } from '@tanstack/react-query';
@@ -28,11 +29,15 @@ import { useAuthStore } from '../lib/store';
 import { Database } from '../lib/database.types';
 import BackButton from '../components/BackButton';
 import DayDetailsModal from '../components/DayDetailsModal';
+import DatePicker from '../components/DatePicker';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
+import { Button, Card, Modal, ChipToggle } from '../themes/uiComponents';
 
 type Event = Database['public']['Tables']['events']['Row'];
 
 const Calendar = () => {
-  const { t } = useTranslation(['common', 'dashboard', 'utilities', 'project']);
+  const { t, i18n } = useTranslation(['common', 'dashboard', 'utilities', 'project']);
+  const dateLocale = i18n.language === 'pl' ? pl : undefined;
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedStatus, setSelectedStatus] = useState<Event['status'] | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -106,11 +111,14 @@ const Calendar = () => {
     return true;
   });
 
-  const statusColors = {
-    planned: 'bg-gray-600 text-white',
-    scheduled: 'bg-blue-600 text-white',
-    in_progress: 'bg-amber-600 text-white',
-    finished: 'bg-green-600 text-white'
+  const getStatusBgColor = (status: Event['status']) => {
+    switch (status) {
+      case 'scheduled': return colors.accentBlue;
+      case 'in_progress': return colors.orange;
+      case 'finished': return colors.green;
+      case 'planned':
+      default: return colors.textFaint;
+    }
   };
 
   const formatStatus = (status: Event['status']) => {
@@ -187,90 +195,85 @@ const Calendar = () => {
   // Loading spinner
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: fonts.body }}>
+        <div style={{ width: 48, height: 48, borderRadius: '50%', border: `2px solid ${colors.borderLight}`, borderTopColor: colors.accentBlue, animation: 'spin 1s linear infinite' }} />
       </div>
     );
   }
 
+  const statusOptions = ['planned', 'scheduled', 'in_progress'] as const;
+
   return (
-    <div className="p-6 max-w-[1600px] mx-auto">
+    <div style={{ padding: spacing["6xl"], maxWidth: 1600, margin: '0 auto', fontFamily: fonts.body }}>
       <BackButton />
-      <div className="flex justify-between items-center mb-6 md:flex-row flex-col">
-        <div className="flex items-center">
-          <h1 className="text-2xl font-bold text-gray-900">{t('dashboard:calendar_title')}</h1>
-          <PageInfoModal description="" quickTips={[]} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing["6xl"], flexDirection: 'column' }} className="md:flex-row">
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <h1 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('dashboard:calendar_title')}</h1>
+          <PageInfoModal
+            description={t('dashboard:calendar_info_description')}
+            title={t('dashboard:calendar_info_title')}
+            quickTips={[]}
+          />
         </div>
-        <button
-          onClick={() => setShowAddMaterialModal(true)}
-          className="md:flex hidden items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
+        <Button variant="accent" color={colors.accentBlue} icon="📦" onClick={() => setShowAddMaterialModal(true)} className="md:flex hidden">
           {t('dashboard:order_material_equipment')}
-        </button>
+        </Button>
       </div>
 
-      {/* Mobile Button */}
-      <button
-        onClick={() => setShowAddMaterialModal(true)}
-        className="md:hidden w-full mb-6 flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-      >
+      {/* Mobile Button - compact, not full width */}
+      <Button variant="accent" color={colors.accentBlue} icon="📦" onClick={() => setShowAddMaterialModal(true)} style={{ alignSelf: 'flex-start', marginBottom: spacing["6xl"] }} className="md:hidden">
         {t('dashboard:order_material_equipment')}
-      </button>
+      </Button>
 
       {/* Status Filter */}
-      <div className="flex space-x-4 mb-6">
-        {(['planned', 'scheduled', 'in_progress'] as const).map(status => (
-          <button
-            key={status}
-            onClick={() => setSelectedStatus(selectedStatus === status ? null : status)}
-            className={`px-4 py-2 rounded-lg transition-colors ${
-              selectedStatus === status ? statusColors[status] : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            {formatStatus(status)}
-          </button>
-        ))}
+      <div style={{ marginBottom: spacing["6xl"] }}>
+        <ChipToggle
+          options={statusOptions.map(s => formatStatus(s))}
+          value={selectedStatus ? formatStatus(selectedStatus) : ''}
+          onChange={(val) => {
+            const s = statusOptions.find(x => formatStatus(x) === val);
+            setSelectedStatus(s && selectedStatus === s ? null : s || null);
+          }}
+        />
       </div>
 
       {/* Calendar Grid */}
-      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+      <Card style={{ overflow: 'hidden' }}>
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <button
               onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors md:block hidden"
+              style={{ padding: spacing.sm, borderRadius: radii.full, background: 'transparent', border: 'none', color: colors.textSecondary, cursor: 'pointer' }}
+              className="md:block hidden"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft style={{ width: 20, height: 20 }} />
             </button>
             <button
-              onClick={() => setCurrentDate(prev => {
-                const newDate = subDays(prev, 7);
-                return newDate;
-              })}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors md:hidden"
+              onClick={() => setCurrentDate(prev => subDays(prev, 7))}
+              style={{ padding: spacing.sm, borderRadius: radii.full, background: 'transparent', border: 'none', color: colors.textSecondary, cursor: 'pointer' }}
+              className="md:hidden"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft style={{ width: 20, height: 20 }} />
             </button>
-            <h2 className="text-lg font-semibold">
-              <span className="md:inline hidden">{format(currentDate, 'MMMM yyyy')}</span>
+            <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, margin: 0 }}>
+              <span className="md:inline hidden">{format(currentDate, 'MMMM yyyy', { locale: dateLocale })}</span>
               <span className="md:hidden">
-                {format(currentWeekStart, 'MMM d')} - {format(currentWeekEnd, 'MMM d, yyyy')}
+                {format(currentWeekStart, 'MMM d', { locale: dateLocale })} - {format(currentWeekEnd, 'MMM d, yyyy', { locale: dateLocale })}
               </span>
             </h2>
             <button
               onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors md:block hidden"
+              style={{ padding: spacing.sm, borderRadius: radii.full, background: 'transparent', border: 'none', color: colors.textSecondary, cursor: 'pointer' }}
+              className="md:block hidden"
             >
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight style={{ width: 20, height: 20 }} />
             </button>
             <button
-              onClick={() => setCurrentDate(prev => {
-                const newDate = addDays(prev, 7);
-                return newDate;
-              })}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors md:hidden"
+              onClick={() => setCurrentDate(prev => addDays(prev, 7))}
+              style={{ padding: spacing.sm, borderRadius: radii.full, background: 'transparent', border: 'none', color: colors.textSecondary, cursor: 'pointer' }}
+              className="md:hidden"
             >
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight style={{ width: 20, height: 20 }} />
             </button>
           </div>
 
@@ -286,7 +289,7 @@ const Calendar = () => {
               t('dashboard:day_saturday'),
               t('dashboard:day_sunday')
             ].map(day => (
-              <div key={day} className="text-center font-medium text-gray-500 pb-4">
+              <div key={day} style={{ textAlign: 'center', fontWeight: fontWeights.medium, color: colors.textDim, paddingBottom: spacing['4xl'] }}>
                 {day}
               </div>
             ))}
@@ -307,35 +310,25 @@ const Calendar = () => {
                   const dayEquipment = filterEquipmentForDay(date);
                   const isSelected = selectedDate ? isSameDay(date, selectedDate) : false;
 
+                  const isOtherMonth = !isSameMonth(date, currentDate);
+                  const dayCellStyle: React.CSSProperties = {
+                    minHeight: 120, padding: spacing['4xl'], border: `1px solid ${
+                      isOtherMonth ? colors.borderSubtle : isToday(date) ? colors.accentBlue : isSelected ? colors.accentBlueBorder : colors.borderDefault
+                    }`, borderRadius: radii.lg, cursor: 'pointer', transition: 'all 0.2s ease',
+                    background: isOtherMonth ? colors.bgSubtle : isToday(date) ? colors.accentBlueBg : isSelected ? colors.accentBlueBg : colors.bgCard,
+                    boxShadow: isSelected ? `0 0 0 2px ${colors.accentBlue}` : undefined,
+                  };
+                  const dayNumColor = isOtherMonth ? colors.textFaint : isToday(date) ? colors.accentBlue : colors.textPrimary;
+
                   return (
-                    <div
-                      key={date.toISOString()}
-                      onClick={() => setSelectedDate(date)}
-                      className={`min-h-[120px] p-4 border rounded-lg cursor-pointer transition-all ${
-                        !isSameMonth(date, currentDate)
-                          ? 'bg-gray-50 text-gray-400 hover:bg-gray-100'
-                          : isToday(date)
-                          ? 'bg-white border-blue-400 hover:bg-gray-50'
-                          : isSelected
-                          ? 'bg-blue-100 border-blue-300'
-                          : 'bg-white hover:bg-gray-50'
-                      } ${
-                        isSelected ? 'ring-2 ring-blue-500 ring-offset-2' : ''
-                      }`}
-                    >
-                      <div className={`font-medium mb-2 flex items-center ${
-                        !isSameMonth(date, currentDate)
-                          ? 'text-gray-400'
-                          : isToday(date)
-                          ? 'text-blue-600'
-                          : 'text-gray-900'
-                      }`}>
+                    <div key={date.toISOString()} onClick={() => setSelectedDate(date)} style={dayCellStyle}>
+                      <div style={{ fontWeight: fontWeights.medium, marginBottom: spacing.sm, display: 'flex', alignItems: 'center', color: dayNumColor }}>
                         {format(date, 'd')}
                         {isToday(date) && (
-                          <span className="ml-2 w-2 h-2 rounded-full bg-blue-500"></span>
+                          <span style={{ marginLeft: spacing.sm, width: 8, height: 8, borderRadius: '50%', background: colors.accentBlue }} />
                         )}
                       </div>
-                      <div className="space-y-2">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
                         {dayEvents.map(event => (
                           <button
                             key={event.id}
@@ -343,17 +336,25 @@ const Calendar = () => {
                               e.stopPropagation();
                               handleEventClick(event.id);
                             }}
-                            className={`w-full text-left px-3 py-2 rounded text-sm font-medium ${statusColors[event.status]}`}
+                            style={{
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: `${spacing.sm} ${spacing.base}`,
+                              borderRadius: radii.lg,
+                              fontSize: fontSizes.base,
+                              fontWeight: fontWeights.medium,
+                              background: getStatusBgColor(event.status),
+                              color: '#fff',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontFamily: fonts.body,
+                            }}
                           >
-                            <span className="block truncate">{event.title}</span>
+                            <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.title}</span>
                           </button>
                         ))}
                         {dayEquipment.length > 0 && (
-                          <div className={`text-xs ${
-                            !isSameMonth(date, currentDate)
-                              ? 'text-gray-400'
-                              : 'text-gray-500'
-                          }`}>
+                          <div style={{ fontSize: fontSizes.xs, color: isOtherMonth ? colors.textFaint : colors.textDim }}>
                             {dayEquipment.length} {t('dashboard:equipment_in_use')}
                           </div>
                         )}
@@ -378,26 +379,16 @@ const Calendar = () => {
               const dayEquipment = filterEquipmentForDay(date);
               const isSelected = selectedDate ? isSameDay(date, selectedDate) : false;
 
+              const mobileCellStyle: React.CSSProperties = {
+                padding: spacing['4xl'], border: `1px solid ${isToday(date) ? colors.accentBlue : isSelected ? colors.accentBlueBorder : colors.borderDefault}`,
+                borderRadius: radii.lg, cursor: 'pointer', transition: 'all 0.2s ease',
+                background: isToday(date) ? colors.accentBlueBg : isSelected ? colors.accentBlueBg : colors.bgCard,
+                boxShadow: isSelected ? `0 0 0 2px ${colors.accentBlue}` : undefined,
+              };
               return (
-                <div
-                  key={date.toISOString()}
-                  onClick={() => setSelectedDate(date)}
-                  className={`p-4 border rounded-lg cursor-pointer transition-all ${
-                    isToday(date)
-                      ? 'bg-white border-blue-400'
-                      : isSelected
-                      ? 'bg-blue-100 border-blue-300'
-                      : 'bg-white'
-                  } ${
-                    isSelected ? 'ring-2 ring-blue-500 ring-offset-2' : ''
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className={`font-medium flex items-center ${
-                      isToday(date)
-                        ? 'text-blue-600'
-                        : 'text-gray-900'
-                    }`}>
+                <div key={date.toISOString()} onClick={() => setSelectedDate(date)} style={mobileCellStyle}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg }}>
+                    <div style={{ fontWeight: fontWeights.medium, display: 'flex', alignItems: 'center', color: isToday(date) ? colors.accentBlue : colors.textPrimary }}>
                       <span className="text-lg">{getDayAbbreviation(date)}</span>
                       <span className="ml-2">{format(date, 'd')}</span>
                       {isToday(date) && (
@@ -405,12 +396,12 @@ const Calendar = () => {
                       )}
                     </div>
                     {dayEquipment.length > 0 && (
-                      <div className="text-xs text-gray-500">
+                      <div style={{ fontSize: fontSizes.xs, color: colors.textDim }}>
                         {dayEquipment.length} {t('dashboard:equipment_in_use')}
                       </div>
                     )}
                   </div>
-                  <div className="space-y-2">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
                     {dayEvents.map(event => (
                       <button
                         key={event.id}
@@ -418,9 +409,21 @@ const Calendar = () => {
                           e.stopPropagation();
                           handleEventClick(event.id);
                         }}
-                        className={`w-full text-left px-3 py-2 rounded text-sm font-medium ${statusColors[event.status]}`}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: `${spacing.sm} ${spacing.base}`,
+                          borderRadius: radii.lg,
+                          fontSize: fontSizes.base,
+                          fontWeight: fontWeights.medium,
+                          background: getStatusBgColor(event.status),
+                          color: '#fff',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontFamily: fonts.body,
+                        }}
                       >
-                        <span className="block truncate">{event.title}</span>
+                        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.title}</span>
                       </button>
                     ))}
                   </div>
@@ -429,44 +432,38 @@ const Calendar = () => {
             })}
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Add Material & Equipment Modal */}
-      {showAddMaterialModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
-            <h2 className="text-xl font-semibold">{t('dashboard:add_material_equipment')}</h2>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {t('dashboard:select_date_modal')}
-              </label>
-              <input
-                type="date"
-                value={materialDate}
-                onChange={(e) => setMaterialDate(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
-              />
-            </div>
-            <div className="flex justify-end space-x-3 pt-4">
-              <button
-                onClick={() => setShowAddMaterialModal(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 rounded-md"
-              >
-                {t('dashboard:cancel')}
-              </button>
-              <button
-                onClick={() => {
-                  setSelectedDate(parseISO(materialDate));
-                  setShowAddMaterialModal(false);
-                }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                {t('dashboard:go_to_day')}
-              </button>
-            </div>
+      <Modal
+        open={showAddMaterialModal}
+        onClose={() => setShowAddMaterialModal(false)}
+        title={t('dashboard:add_material_equipment')}
+        width={448}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: spacing.base, paddingTop: spacing["5xl"] }}>
+            <Button variant="secondary" onClick={() => setShowAddMaterialModal(false)}>
+              {t('dashboard:cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setSelectedDate(parseISO(materialDate));
+                setShowAddMaterialModal(false);
+              }}
+            >
+              {t('dashboard:go_to_day')}
+            </Button>
           </div>
+        }
+      >
+        <div>
+          <label style={{ display: 'block', fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.textSecondary, marginBottom: spacing.sm, fontFamily: fonts.body }}>
+            {t('dashboard:select_date_modal')}
+          </label>
+          <DatePicker value={materialDate} onChange={setMaterialDate} />
         </div>
-      )}
+      </Modal>
 
       {/* Day Details Modal */}
       {selectedDate && (

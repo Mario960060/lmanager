@@ -3,10 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../lib/store';
 import { show403Modal } from '../components/Error403Modal';
-import { Clock, BarChart2, Trash2, FolderPlus } from 'lucide-react';
+import { Clock, BarChart2, Trash2, FolderPlus, FileImage } from 'lucide-react';
 import PageInfoModal from '../components/PageInfoModal';
 import BackButton from '../components/BackButton';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
+import { Button, Card } from '../themes/uiComponents';
 import WeeklyWorkerHoursModal from '../components/ProjectManagement/WeeklyWorkerHoursModal';
+import CreateProjectChoiceModal from '../components/ProjectManagement/CreateProjectChoiceModal';
+import PlansListModal from '../components/ProjectManagement/PlansListModal';
 import RemovingRecords from './ProjectManagement/RemovingRecords';
 
 const ProjectManagement = () => {
@@ -15,15 +19,18 @@ const ProjectManagement = () => {
   const { profile } = useAuthStore();
   const [showWorkerHours, setShowWorkerHours] = React.useState(false);
   const [showRemovingRecords, setShowRemovingRecords] = useState(false);
+  const [showCreateProjectChoice, setShowCreateProjectChoice] = useState(false);
+  const [showPlansList, setShowPlansList] = useState(false);
 
   const hasProjectManagementAccess = profile?.role === 'Admin' || profile?.role === 'boss';
+  const hasPlansAccess = profile?.role === 'Admin' || profile?.role === 'boss' || profile?.role === 'project_manager' || profile?.role === 'Team_Leader';
 
   const handleCreateProject = () => {
     if (!hasProjectManagementAccess) {
       show403Modal();
       return;
     }
-    navigate('/project-management/create');
+    setShowCreateProjectChoice(true);
   };
 
   const handleWorkerHours = () => {
@@ -50,86 +57,106 @@ const ProjectManagement = () => {
     setShowRemovingRecords(true);
   };
 
+  const handlePlansList = () => {
+    if (!hasPlansAccess) {
+      show403Modal();
+      return;
+    }
+    setShowPlansList(true);
+  };
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["6xl"], fontFamily: fonts.body }}>
       <BackButton />
-      <div className="flex items-center">
-        <h1 className="text-3xl font-bold text-gray-900">{t('project:project_management_title')}</h1>
-        <PageInfoModal description="" quickTips={[]} />
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <h1 style={{ fontSize: fontSizes["3xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:project_management_title')}</h1>
+        <PageInfoModal
+          description={t('project:project_management_info_description')}
+          title={t('project:project_management_info_title')}
+          quickTips={[]}
+        />
       </div>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: spacing["6xl"] }}>
         {/* Project Creation */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <FolderPlus className="w-6 h-6 text-indigo-600 mr-3" />
-            <h2 className="text-xl font-semibold">{t('project:create_project_heading')}</h2>
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+            <FolderPlus style={{ width: 24, height: 24, color: colors.accentBlue, marginRight: spacing.base }} />
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:create_project_heading')}</h2>
           </div>
-          <p className="text-gray-600 mb-4">
+          <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"] }}>
             {t('project:create_project_description')}
           </p>
-          <button
-            onClick={handleCreateProject}
-            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"
-          >
+          <Button onClick={handleCreateProject} style={{ width: '100%' }}>
             {t('project:create_project_button')}
-          </button>
-        </div>
+          </Button>
+        </Card>
+
+        {/* Plans and Garden Canvases */}
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+            <FileImage style={{ width: 24, height: 24, color: colors.green, marginRight: spacing.base }} />
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:plans_canvases_heading')}</h2>
+          </div>
+          <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"] }}>
+            {t('project:plans_canvases_description')}
+          </p>
+          <Button variant="accent" color={colors.green} onClick={handlePlansList} style={{ width: '100%' }}>
+            {t('project:plans_canvases_button')}
+          </Button>
+        </Card>
 
         {/* Weekly Worker Hours */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <Clock className="w-6 h-6 text-blue-600 mr-3" />
-            <h2 className="text-xl font-semibold">{t('project:weekly_worker_hours_heading')}</h2>
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+            <Clock style={{ width: 24, height: 24, color: colors.accentBlue, marginRight: spacing.base }} />
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:weekly_worker_hours_heading')}</h2>
           </div>
-          <p className="text-gray-600 mb-4">
+          <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"] }}>
             {t('project:weekly_worker_hours_description')}
           </p>
-          <button
-            onClick={handleWorkerHours}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
-          >
+          <Button onClick={handleWorkerHours} style={{ width: '100%' }}>
             {t('project:check_hours_button')}
-          </button>
-        </div>
+          </Button>
+        </Card>
 
         {/* Project Performance */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <BarChart2 className="w-6 h-6 text-green-600 mr-3" />
-            <h2 className="text-xl font-semibold">{t('project:project_performance_heading')}</h2>
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+            <BarChart2 style={{ width: 24, height: 24, color: colors.green, marginRight: spacing.base }} />
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:project_performance_heading')}</h2>
           </div>
-          <p className="text-gray-600 mb-4">
+          <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"] }}>
             {t('project:project_performance_description')}
           </p>
-          <button
-            onClick={handleProjectPerformance}
-            className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
-          >
+          <Button variant="accent" color={colors.green} onClick={handleProjectPerformance} style={{ width: '100%' }}>
             {t('project:view_performance_button')}
-          </button>
-        </div>
+          </Button>
+        </Card>
 
 
         {/* Removing Records */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <Trash2 className="w-6 h-6 text-red-600 mr-3" />
-            <h2 className="text-xl font-semibold">{t('project:removing_records_heading')}</h2>
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+            <Trash2 style={{ width: 24, height: 24, color: colors.red, marginRight: spacing.base }} />
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:removing_records_heading')}</h2>
           </div>
-          <p className="text-gray-600 mb-4">
+          <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"] }}>
             {t('project:removing_records_description')}
           </p>
-          <button
-            onClick={handleRemovingRecords}
-            className="w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
-          >
+          <Button variant="accent" color={colors.red} onClick={handleRemovingRecords} style={{ width: '100%' }}>
             {t('project:manage_requests_button')}
-          </button>
-        </div>
+          </Button>
+        </Card>
       </div>
 
       {/* Modals */}
+      {showCreateProjectChoice && (
+        <CreateProjectChoiceModal onClose={() => setShowCreateProjectChoice(false)} />
+      )}
+      {showPlansList && (
+        <PlansListModal onClose={() => setShowPlansList(false)} />
+      )}
       {showWorkerHours && (
         <WeeklyWorkerHoursModal onClose={() => setShowWorkerHours(false)} />
       )}

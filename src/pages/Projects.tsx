@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName, translateMaterialName, translateMaterialDescription, translateTaskDescription, translateUnit } from '../lib/translationMap';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { format, parseISO } from 'date-fns';
-import { Plus, Calendar, Package, Loader2, Search, CheckSquare, Trash2 } from 'lucide-react';
+import { pl } from 'date-fns/locale';
+import { Plus, Calendar, Package, Search, CheckSquare, Trash2 } from 'lucide-react';
 import PageInfoModal from '../components/PageInfoModal';
-import Modal from '../components/Modal';
-import BackButton from '../components/BackButton';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii, layout, accentColorsHex } from '../themes/designTokens';
+import { Button, ProjectCard, ActionButton, Badge, Modal, TextInput, Label, Spinner } from '../themes/uiComponents';
 import type { Database } from '../lib/database.types';
 import CalculatorModal from '../projectmanagement/CalculatorModal';
 import UnspecifiedMaterialModal from '../components/UnspecifiedMaterialModal';
@@ -27,7 +29,8 @@ interface EventTask {
 }
 
 const Projects = () => {
-  const { t } = useTranslation(['project', 'common', 'form', 'utilities']);
+  const { t, i18n } = useTranslation(['project', 'common', 'event', 'form', 'utilities', 'calculator', 'material', 'units']);
+  const dateLocale = i18n.language === 'pl' ? pl : undefined;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -375,18 +378,13 @@ const Projects = () => {
     });
   };
 
-  const getStatusColor = (status: Event['status']) => {
+  const getStatusBadgeColor = (status: Event['status']) => {
     switch (status) {
+      case 'scheduled': return colors.accentBlue;
+      case 'in_progress': return colors.orange;
+      case 'finished': return colors.green;
       case 'planned':
-        return 'bg-gray-600 text-white';
-      case 'scheduled':
-        return 'bg-blue-600 text-white';
-      case 'in_progress':
-        return 'bg-amber-600 text-white';
-      case 'finished':
-        return 'bg-green-600 text-white';
-      default:
-        return 'bg-gray-600 text-white';
+      default: return colors.textFaint;
     }
   };
 
@@ -487,6 +485,8 @@ const Projects = () => {
         // Extract amount and unit from taskItem
         let amount = taskItem.amount;
         let unit = taskItem.unit;
+        const formatTaskAmount = (am: string | number | undefined, u: string | undefined) =>
+          typeof am === 'string' && String(am).trim().includes(' ') ? String(am).trim() : `${am ?? 0} ${u ?? ''}`.trim();
         const insertObj = {
           event_id: selectedProject,
           user_id: user?.id,
@@ -494,7 +494,7 @@ const Projects = () => {
           task_name: userTaskName,
           description: results.name || '',
           unit: typeof taskName === 'string' && taskName.toLowerCase() === 'cutting slabs' ? 'slabs' : (unit || ''),
-          amount: `${amount} ${unit}`.trim(),
+          amount: formatTaskAmount(amount, unit),
           hours_worked: taskItem.hours || 0,
           is_finished: false,
           event_task_id: matchingTaskTemplateId,
@@ -520,86 +520,140 @@ const Projects = () => {
 
   if (isProjectsLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: fonts.body }}>
+        <Spinner size={32} />
       </div>
     );
   }
 
+  const inProgressCount = projects.filter((p) => p.status === 'in_progress').length;
+  const plannedCount = projects.filter((p) => p.status === 'planned' || p.status === 'scheduled').length;
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <BackButton />
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: layout.contentPadding, display: 'flex', flexDirection: 'column', gap: spacing["6xl"], fontFamily: fonts.body }}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center">
-          <h1 className="text-3xl font-bold text-gray-900">{t('project:projects_title')}</h1>
-          <PageInfoModal description="" quickTips={[]} />
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: spacing["5xl"], flexWrap: 'wrap', gap: spacing.xl,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg }}>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: spacing.sm,
+              padding: `${spacing.sm}px ${spacing.lg}px`, background: 'transparent', border: 'none',
+              color: colors.textDim, fontSize: fontSizes.base, fontFamily: fonts.body,
+              cursor: 'pointer', transition: 'color 0.15s',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textSecondary; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textDim; }}
+          >
+            ← {t('common:back')}
+          </button>
+          <h1 style={{
+            fontSize: fontSizes["3xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary,
+            fontFamily: fonts.display, letterSpacing: '0.5px', margin: 0,
+          }}>
+            {t('project:projects_title')}
+          </h1>
+          <PageInfoModal
+            description={t('project:info_description')}
+            importantNote={t('project:info_important_note')}
+            title={t('project:info_title')}
+            quickTips={[]}
+          />
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 w-full sm:w-auto">
-          <button
+        <div style={{ display: 'flex', gap: spacing.lg }}>
+          <ActionButton
+            label={t('project:add_task_button')}
+            color={accentColorsHex.blue}
+            icon="+"
             onClick={() => setShowTaskModal(true)}
-            className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 w-full sm:w-auto"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            {t('project:add_task_button')}
-          </button>
-          <button
+          />
+          <ActionButton
+            label={t('project:add_materials_button')}
+            color={accentColorsHex.green}
+            icon="+"
             onClick={() => setShowMaterialModal(true)}
-            className="inline-flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 w-full sm:w-auto"
-          >
-            <Plus className="w-5 h-5 mr-2" />
-            {t('project:add_materials_button')}
-          </button>
-          <button
+          />
+          <ActionButton
+            label={t('project:delete_project_button')}
+            color={accentColorsHex.red}
+            icon="🗑"
             onClick={() => setShowDeleteModal(true)}
-            className="inline-flex items-center justify-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 w-full sm:w-auto"
-          >
-            <Trash2 className="w-5 h-5 mr-2" />
-            {t('project:delete_project_button')}
-          </button>
+          />
         </div>
       </div>
 
-      {/* Projects Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.map((project) => (
+      {/* Summary strip */}
+      <div style={{
+        display: 'flex', gap: spacing["3xl"], marginBottom: spacing["5xl"], flexWrap: 'wrap',
+      }}>
+        {[
+          { label: t('project:summary_all'), count: projects.length, color: accentColorsHex.blue },
+          { label: t('project:summary_in_progress'), count: inProgressCount, color: accentColorsHex.orange },
+          { label: t('project:summary_planned'), count: plannedCount, color: accentColorsHex.green },
+        ].map((s) => (
           <div
-            key={project.id}
-            className="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow cursor-pointer"
-            onClick={() => navigate(`/events/${project.id}`)}
+            key={s.label}
+            style={{
+              display: 'flex', alignItems: 'center', gap: spacing.md,
+              padding: `${spacing.md}px ${spacing["2xl"]}px`,
+              background: colors.bgSubtle,
+              border: `1px solid ${colors.borderSubtle}`,
+              borderRadius: radii.lg,
+            }}
           >
-            <div className="p-6">
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">{project.title}</h3>
-              <p className="text-gray-600 mb-4">{project.description}</p>
-              <div className="flex items-center text-sm text-gray-500 mb-4">
-                <Calendar className="w-4 h-4 mr-2" />
-                <span>
-                  {project.start_date ? format(parseISO(project.start_date), 'MMM dd, yyyy') : t('project:date_not_set')}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(project.status)}`}>
-                  {formatStatus(project.status)}
-                </span>
-                {project.has_materials && (
-                  <Package className="w-5 h-5 text-gray-400" />
-                )}
-              </div>
-              {project.tasks && project.tasks.length > 0 && (
-                <div className="mt-4 pt-4 border-t">
-                  <p className="text-sm text-gray-600">
-                    {t('project:tasks_count')}: {project.tasks.length} | {t('project:hours_count')}: {project.tasks.reduce((sum, t) => sum + (t.hours_worked || 0), 0).toFixed(2)}
-                  </p>
-                </div>
-              )}
-            </div>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%', background: s.color,
+              boxShadow: `0 0 6px ${s.color}80`,
+            }} />
+            <span style={{
+              fontSize: fontSizes.xl, fontWeight: fontWeights.extrabold, color: colors.textSecondary,
+              fontFamily: fonts.display, lineHeight: 1,
+            }}>
+              {s.count}
+            </span>
+            <span style={{
+              fontSize: fontSizes.sm, color: colors.textDim,
+              fontFamily: fonts.body,
+            }}>
+              {s.label}
+            </span>
           </div>
         ))}
       </div>
 
+      {/* Projects Grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+        gap: spacing["5xl"],
+      }}>
+        {projects.map((project, i) => {
+          const tasksCount = project.tasks?.length ?? 0;
+          const hours = project.tasks?.reduce((sum, t) => sum + (t.hours_worked || 0), 0) ?? 0;
+          return (
+            <div key={project.id} style={{ animation: `fadeUp 0.35s ease ${0.15 + i * 0.05}s both` }}>
+              <ProjectCard
+                name={project.title}
+                description={project.description ?? undefined}
+                date={project.start_date ? format(parseISO(project.start_date), 'MMM dd, yyyy', { locale: dateLocale }) : t('project:date_not_set')}
+                statusDisplay={formatStatus(project.status)}
+                tasksCount={tasksCount}
+                hours={hours}
+                tasksLabel={t('event:tasks_count_label')}
+                hoursLabel={t('project:hours_suffix')}
+                onClick={() => navigate(`/events/${project.id}`)}
+              />
+            </div>
+          );
+        })}
+      </div>
+
       {/* Task Modal */}
-      {showTaskModal && (
-        <Modal title={t('project:add_task_modal')} onClose={() => setShowTaskModal(false)}>
+      <Modal open={showTaskModal} onClose={() => setShowTaskModal(false)} title={t('project:add_task_modal')} width={672}>
           <div className="flex flex-col h-[calc(100vh-16rem)]">
             <div className="space-y-4 flex-none">
               <div>
@@ -671,7 +725,7 @@ const Projects = () => {
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <div className="font-medium">{selectedTask.name}</div>
+                            <div className="font-medium">{translateTaskName(selectedTask.name, t)}</div>
                             <div className="text-sm text-gray-300">{selectedTask.description}</div>
                             <div className="text-sm mt-1">
                               <span className="text-gray-300">{t('project:unit_label')}: {selectedTask.unit}</span>
@@ -693,10 +747,10 @@ const Projects = () => {
                             className="p-2 hover:bg-gray-50 rounded-lg cursor-pointer border border-gray-200 hover:border-blue-200 transition-all"
                           >
                             <div>
-                              <h3 className="text-sm font-medium text-gray-900">{task.name}</h3>
-                              <p className="text-xs mt-0.5 text-gray-600">{task.description}</p>
+                              <h3 className="text-sm font-medium text-gray-900">{translateTaskName(task.name, t)}</h3>
+                              <p className="text-xs mt-0.5 text-gray-600">{translateTaskDescription(task.description, t)}</p>
                               <div className="flex items-center mt-1 space-x-3">
-                                <span className="text-xs text-gray-500">{t('project:unit_label')}: {task.unit}</span>
+                                <span className="text-xs text-gray-500">{t('project:unit_label')}: {translateUnit(task.unit, t)}</span>
                                 <span className="text-xs text-gray-500">{t('project:est_hours')}: {task.estimated_hours !== null ? parseFloat((task.estimated_hours || 0).toFixed(2)) : 0} {t('project:per_unit')}</span>
                               </div>
                             </div>
@@ -715,7 +769,7 @@ const Projects = () => {
                             type="text"
                             value={taskName}
                             onChange={(e) => setTaskName(e.target.value)}
-                            placeholder={selectedTask.name}
+                            placeholder={translateTaskName(selectedTask.name, t)}
                             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                           />
                         </div>
@@ -727,16 +781,12 @@ const Projects = () => {
                           value={quantity}
                           onChange={(e) => setQuantity(e.target.value)}
                           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          placeholder={`${t('project:enter_quantity_in')} ${selectedTask.unit}`}
+                          placeholder={`${t('project:enter_quantity_in')} ${translateUnit(selectedTask.unit, t)}`}
                         />
                       </div>
-                      <button
-                        onClick={handleTaskSubmit}
-                        disabled={!selectedProject || !selectedTask || !quantity || addTaskMutation.isPending}
-                        className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                      >
+                      <Button variant="primary" fullWidth onClick={handleTaskSubmit} disabled={!selectedProject || !selectedTask || !quantity || addTaskMutation.isPending}>
                         {addTaskMutation.isPending ? t('project:adding') : t('project:add_task_button')}
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -789,62 +839,45 @@ const Projects = () => {
               </>
             )}
           </div>
-        </Modal>
-      )}
+      </Modal>
 
-      {showNamePrompt && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
-            <h3 className="text-lg font-semibold mb-4">{t('project:enter_task_name_prompt')}</h3>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700">{t('project:select_project')}</label>
-              <select
-                value={selectedProject}
-                onChange={(e) => setSelectedProject(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                <option value="">{t('project:please_select_project')}</option>
-                {projects.map((proj) => (
-                  <option key={proj.id} value={proj.id}>{proj.title}</option>
-                ))}
-              </select>
-              {!selectedProject && (
-                <p className="mt-2 text-sm text-red-600">{t('project:please_select_project_continue')}</p>
-              )}
-            </div>
-            <input
-              type="text"
-              value={mainTaskName}
-              onChange={(e) => setMainTaskName(e.target.value)}
-              placeholder={t('project:enter_task_name_placeholder')}
-              className="w-full p-2 border rounded mb-4"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setMainTaskName('');
-                  setMainTaskResults(null);
-                  setShowNamePrompt(false);
-                }}
-                className="px-4 py-2 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition-colors"
-              >
-                {t('project:cancel_button')}
-              </button>
-              <button
-                onClick={handleConfirmMainTaskName}
-                disabled={!mainTaskName.trim() || !selectedProject}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {t('project:confirm_button')}
-              </button>
-            </div>
+      <Modal
+        open={showNamePrompt}
+        onClose={() => { setMainTaskName(''); setMainTaskResults(null); setShowNamePrompt(false); }}
+        title={t('project:enter_task_name_prompt')}
+        width={448}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: spacing.sm }}>
+            <Button variant="secondary" onClick={() => { setMainTaskName(''); setMainTaskResults(null); setShowNamePrompt(false); }}>
+              {t('project:cancel_button')}
+            </Button>
+            <Button variant="primary" onClick={handleConfirmMainTaskName} disabled={!mainTaskName.trim() || !selectedProject}>
+              {t('project:confirm_button')}
+            </Button>
           </div>
+        }
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
+          <div>
+            <Label>{t('project:select_project')}</Label>
+            <select
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              style={{ width: '100%', padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base }}
+            >
+              <option value="">{t('project:please_select_project')}</option>
+              {projects.map((proj) => (
+                <option key={proj.id} value={proj.id}>{proj.title}</option>
+              ))}
+            </select>
+            {!selectedProject && <p style={{ marginTop: spacing.sm, fontSize: fontSizes.base, color: colors.red }}>{t('project:please_select_project_continue')}</p>}
+          </div>
+          <TextInput value={mainTaskName} onChange={(val) => setMainTaskName(val)} placeholder={t('project:enter_task_name_placeholder')} />
         </div>
-      )}
+      </Modal>
 
       {/* Materials Modal */}
-      {showMaterialModal && (
-        <Modal title={t('project:add_materials_modal')} onClose={() => setShowMaterialModal(false)}>
+      <Modal open={showMaterialModal} onClose={() => setShowMaterialModal(false)} title={t('project:add_materials_modal')} width={560}>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">{t('project:select_project')}</label>
@@ -897,9 +930,9 @@ const Projects = () => {
                     selectedMaterial?.id === material.id ? 'border-4 border-blue-500' : ''
                   }`}
                 >
-                  <h3 className="font-medium">{material.name}</h3>
-                  <p className="text-sm text-gray-600">{material.description}</p>
-                  <p className="text-xs text-gray-500">{t('project:unit_label')}: {material.unit}</p>
+                  <h3 className="font-medium">{translateMaterialName(material.name, t)}</h3>
+                  <p className="text-sm text-gray-600">{translateMaterialDescription(material.name, material.description, t)}</p>
+                  <p className="text-xs text-gray-500">{t('project:unit_label')}: {translateUnit(material.unit, t)}</p>
                 </div>
               ))}
             </div>
@@ -913,20 +946,15 @@ const Projects = () => {
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  placeholder={`${t('project:enter_quantity_in')} ${selectedMaterial.unit}`}
+                  placeholder={`${t('project:enter_quantity_in')} ${translateUnit(selectedMaterial.unit, t)}`}
                 />
               </div>
             )}
-            <button
-              onClick={handleMaterialSubmit}
-              disabled={!selectedProject || !selectedMaterial || !quantity || addMaterialMutation.isPending}
-              className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-            >
+            <Button variant="success" fullWidth onClick={handleMaterialSubmit} disabled={!selectedProject || !selectedMaterial || !quantity || addMaterialMutation.isPending}>
               {addMaterialMutation.isPending ? t('project:adding') : t('project:add_materials_button')}
-            </button>
+            </Button>
           </div>
-        </Modal>
-      )}
+      </Modal>
 
       {showUnspecifiedMaterialModal && (
         <UnspecifiedMaterialModal
@@ -943,8 +971,7 @@ const Projects = () => {
       )}
 
       {/* Delete Project Modal */}
-      {showDeleteModal && (
-        <Modal title={t('project:delete_project_modal')} onClose={() => setShowDeleteModal(false)}>
+      <Modal open={showDeleteModal} onClose={() => setShowDeleteModal(false)} title={t('project:delete_project_modal')} width={560}>
           <div className="space-y-4">
             <p className="text-sm text-gray-600">{t('project:select_project_delete')}:</p>
             <div className="max-h-96 overflow-y-auto space-y-2">
@@ -961,11 +988,11 @@ const Projects = () => {
                       <div className="flex items-center gap-4 mt-2">
                         <div className="flex items-center text-sm text-gray-500">
                           <Calendar className="w-4 h-4 mr-1" />
-                          {project.start_date ? format(parseISO(project.start_date), 'MMM dd, yyyy') : t('project:no_date')}
+                          {project.start_date ? format(parseISO(project.start_date), 'MMM dd, yyyy', { locale: dateLocale }) : t('project:no_date')}
                         </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(project.status)}`}>
+                        <Badge color={getStatusBadgeColor(project.status)}>
                           {formatStatus(project.status)}
-                        </span>
+                        </Badge>
                       </div>
                       {project.tasks && project.tasks.length > 0 && (
                         <p className="text-xs text-gray-500 mt-2">
@@ -979,59 +1006,36 @@ const Projects = () => {
               ))}
             </div>
           </div>
-        </Modal>
-      )}
+      </Modal>
 
       {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && projectToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">{t('project:delete_project_title')}</h3>
-            </div>
-            
-            <p className="text-gray-600 mb-2">
-              {t('project:delete_project_confirm')}
-            </p>
-            
-            <div className="bg-gray-50 p-3 rounded-lg mb-4">
-              <p className="font-semibold text-gray-900">{projectToDelete.title}</p>
-              <p className="text-sm text-gray-600 mt-1">{projectToDelete.description}</p>
-            </div>
-            
-            <p className="text-sm text-red-600 mb-6">
-              {t('project:delete_warning')}
-            </p>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={handleCancelDelete}
-                disabled={deleteProjectMutation.isPending}
-                className="flex-1 px-4 py-2 bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50"
-              >
-                {t('project:no_cancel')}
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                disabled={deleteProjectMutation.isPending}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {deleteProjectMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {t('project:deleting')}
-                  </>
-                ) : (
-                  t('project:yes_delete')
-                )}
-              </button>
-            </div>
+      <Modal
+        open={!!(showDeleteConfirm && projectToDelete)}
+        onClose={handleCancelDelete}
+        title={t('project:delete_project_title')}
+        width={448}
+        footer={
+          <div style={{ display: 'flex', gap: spacing.base }}>
+            <Button variant="secondary" onClick={handleCancelDelete} disabled={deleteProjectMutation.isPending} style={{ flex: 1 }}>
+              {t('project:no_cancel')}
+            </Button>
+            <Button variant="accent" color={colors.red} onClick={handleConfirmDelete} disabled={deleteProjectMutation.isPending} style={{ flex: 1 }}>
+              {deleteProjectMutation.isPending ? <><Spinner size={16} style={{ marginRight: spacing.sm }} />{t('project:deleting')}</> : t('project:yes_delete')}
+            </Button>
           </div>
-        </div>
-      )}
+        }
+      >
+        {projectToDelete && (
+          <>
+            <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing.sm }}>{t('project:delete_project_confirm')}</p>
+            <div style={{ background: colors.bgSubtle, padding: spacing.base, borderRadius: radii.lg, marginBottom: spacing["5xl"] }}>
+              <p style={{ fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.body, margin: 0 }}>{projectToDelete.title}</p>
+              <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, marginTop: spacing.xs, margin: `${spacing.xs} 0 0 0` }}>{projectToDelete.description}</p>
+            </div>
+            <p style={{ fontSize: fontSizes.base, color: colors.red, fontFamily: fonts.body, margin: 0 }}>{t('project:delete_warning')}</p>
+          </>
+        )}
+      </Modal>
     </div>
   );
 };

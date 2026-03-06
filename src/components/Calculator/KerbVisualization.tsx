@@ -1,4 +1,5 @@
 import React from 'react';
+import { colors, radii } from '../../themes/designTokens';
 
 interface KerbVisualizationProps {
   kerbWidth: number;  // in cm
@@ -73,18 +74,18 @@ const KerbVisualization: React.FC<KerbVisualizationProps> = ({
   const baseMortarCenterY = margin + displayHeight * scale + (displayBaseHeight * scale) / 2;
 
   return (
-    <div className="flex flex-col items-center mb-4">
-      <h3 className="text-sm font-medium mb-2">{title}</h3>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 16 }}>
+      <h3 style={{ fontSize: 14, fontWeight: 500, marginBottom: 8, color: colors.textSecondary }}>{title}</h3>
       <svg
         width={svgWidth}
         height={svgHeight}
         viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-        className="border border-gray-300 rounded"
+        style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.sm }}
       >
         {/* Base mortar */}
         <rect
           {...getBaseMortarPath()}
-          fill="#E5E7EB"
+          fill={colors.diagramFill}
           opacity={0.9}
         />
         
@@ -92,7 +93,7 @@ const KerbVisualization: React.FC<KerbVisualizationProps> = ({
         {leftHunchPercent > 0 && (
           <path
             d={getHunchPath('left', leftHunchPercent)}
-            fill="#E5E7EB"
+            fill={colors.diagramFill}
             opacity={0.9}
           />
         )}
@@ -101,7 +102,7 @@ const KerbVisualization: React.FC<KerbVisualizationProps> = ({
         {rightHunchPercent > 0 && (
           <path
             d={getHunchPath('right', rightHunchPercent)}
-            fill="#E5E7EB"
+            fill={colors.diagramFill}
             opacity={0.9}
           />
         )}
@@ -112,8 +113,8 @@ const KerbVisualization: React.FC<KerbVisualizationProps> = ({
           y={margin}
           width={displayWidth * scale}
           height={displayHeight * scale}
-          fill="#FFFFFF"
-          stroke="#E5E7EB"
+          fill={colors.textOnAccent}
+          stroke={colors.diagramStroke}
           strokeWidth="1"
         />
         
@@ -122,8 +123,8 @@ const KerbVisualization: React.FC<KerbVisualizationProps> = ({
           x={centerX}
           y={margin - 5}
           textAnchor="middle"
-          className="text-xs"
-          fill="#2563EB"
+          style={{ fontSize: 12 }}
+          fill={colors.accentBlueDark}
         >
           {displayWidth}cm
         </text>
@@ -131,8 +132,8 @@ const KerbVisualization: React.FC<KerbVisualizationProps> = ({
           x={centerX + (displayWidth * scale) / 2 + 15}
           y={margin + (displayHeight * scale) / 2}
           textAnchor="start"
-          className="text-xs"
-          fill="#2563EB"
+          style={{ fontSize: 12 }}
+          fill={colors.accentBlueDark}
         >
           {displayHeight}cm
         </text>
@@ -140,8 +141,8 @@ const KerbVisualization: React.FC<KerbVisualizationProps> = ({
           x={centerX + (displayWidth * scale) / 2 + 15}
           y={baseMortarCenterY}
           textAnchor="start"
-          className="text-xs"
-          fill="#2563EB"
+          style={{ fontSize: 12 }}
+          fill={colors.accentBlueDark}
           dominantBaseline="middle"
         >
           {baseHeight}cm

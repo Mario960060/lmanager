@@ -30,10 +30,12 @@ import {
   Grid, 
   Square, 
   Minus, 
-  Pickaxe
+  Pickaxe,
+  Activity
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useTheme, getAllThemes } from '../themes';
+import { colors, spacing, radii, fontSizes, fontWeights, transitions, layout, shadows, gradients } from '../themes/designTokens';
 
 const Layout = () => {
   const location = useLocation();
@@ -105,7 +107,8 @@ const Layout = () => {
       icon: Grid, 
       label: t('nav:slab_calculator'),
       subTypes: [
-        { type: 'default', label: t('nav:slab_calculator') }
+        { type: 'default', label: t('nav:slab_calculator') },
+        { type: 'concreteSlabs', label: t('nav:concrete_slabs_calculator') }
       ]
     },
     { 
@@ -150,7 +153,15 @@ const Layout = () => {
       icon: Grass, 
       label: t('nav:artificial_grass_calculator'),
       subTypes: [
-        { type: 'Artificial Grass', label: 'Artificial Grass' }
+        { type: 'Artificial Grass', label: t('nav:artificial_grass') }
+      ]
+    },
+    { 
+      type: 'turf', 
+      icon: Grass, 
+      label: t('nav:natural_turf_calculator'),
+      subTypes: [
+        { type: 'default', label: t('nav:natural_turf') }
       ]
     },
     { 
@@ -162,6 +173,17 @@ const Layout = () => {
         { type: 'rumbled', label: t('nav:rumbled_kerbs') },
         { type: 'flat', label: t('nav:flat_edges') },
         { type: 'sets', label: t('nav:sets') }
+      ]
+    },
+    { 
+      type: 'groundwork', 
+      icon: Activity, 
+      label: t('nav:groundwork_linear'),
+      subTypes: [
+        { type: 'drainage', label: t('nav:groundwork_drainage') },
+        { type: 'canalPipe', label: t('nav:groundwork_canal_pipe') },
+        { type: 'waterPipe', label: t('nav:groundwork_water_pipe') },
+        { type: 'cable', label: t('nav:groundwork_cable') }
       ]
     },
     { 
@@ -195,20 +217,24 @@ const Layout = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+    <div style={{ minHeight: '100vh', background: colors.bgApp }}>
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 h-16 bg-white dark:bg-gray-800 shadow-md flex items-center justify-between px-4">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 h-16 shadow-md flex items-center justify-between px-4" style={{ background: colors.bgSidebar }}>
         <button
           onClick={toggleSidebar}
-          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          style={{ padding: spacing.md, borderRadius: radii.lg, transition: transitions.fast, background: 'transparent' }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
           aria-label={t('common:menu')}
         >
           <Menu className="w-6 h-6" />
         </button>
-        <h1 className="text-xl font-bold text-gray-800 dark:text-gray-200">{t('common:app_name')}</h1>
+        <h1 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.bold, color: colors.textPrimary }}>{t('common:app_name')}</h1>
         <button
           onClick={toggleTheme}
-          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          style={{ padding: spacing.md, borderRadius: radii.lg, transition: transitions.fast, background: 'transparent' }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
           aria-label={t('common:theme')}
         >
           {theme === 'dark' ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
@@ -220,7 +246,8 @@ const Layout = () => {
         {/* Sidebar Backdrop */}
         {isSidebarOpen && (
           <div
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden transition-opacity"
+            style={{ position: 'fixed', inset: 0, background: colors.bgModalBackdrop, zIndex: 40, transition: 'opacity 0.2s' }}
+            className="lg:hidden"
             onClick={toggleSidebar}
             aria-hidden="true"
           />
@@ -228,17 +255,27 @@ const Layout = () => {
 
         {/* Sidebar */}
         <aside
-          className={`fixed lg:sticky top-0 left-0 z-50 h-screen w-[280px] bg-white dark:bg-[#1e293b] shadow-lg transform transition-transform duration-200 ease-in-out ${
+          className={`fixed lg:sticky top-0 left-0 z-50 h-screen shadow-lg transform transition-transform duration-200 ease-in-out ${
             isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
           } lg:translate-x-0 lg:h-screen`}
+          style={{ background: colors.bgSidebar, width: layout.sidebarWidth, borderRight: `1px solid ${colors.borderDefault}`, flexShrink: 0, overflow: 'hidden', height: '100vh' }}
         >
           <div className="flex flex-col h-full overflow-hidden">
-            {/* Sidebar Header */}
-            <div className="flex items-center justify-between h-16 px-4 border-b dark:border-[#334155]">
-              <h2 className="text-xl font-bold text-gray-800 dark:text-white">{t('common:app_name')}</h2>
+            {/* Sidebar Header - Logo */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 18px', borderBottom: `1px solid ${colors.borderDefault}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg }}>
+                <div style={{ width: 34, height: 34, borderRadius: radii.lg, background: gradients.blueLogo, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: fontWeights.extrabold, color: '#fff', fontFamily: 'Rajdhani, sans-serif', boxShadow: shadows.blue }}>LM</div>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: 'Rajdhani, sans-serif', lineHeight: 1.1 }}>Landscape</div>
+                  <div style={{ fontSize: 11, color: colors.textDim, fontFamily: 'Exo 2, sans-serif', fontWeight: fontWeights.normal, letterSpacing: '1px', textTransform: 'uppercase' }}>Manager</div>
+                </div>
+              </div>
               <button
                 onClick={toggleSidebar}
-                className="lg:hidden p-2 hover:bg-gray-100 dark:hover:bg-[#334155] rounded-lg transition-colors"
+                className="lg:hidden"
+                style={{ padding: spacing.md, borderRadius: radii.lg, transition: transitions.fast, background: 'transparent' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 aria-label={t('common:close')}
               >
                 <X className="w-6 h-6" />
@@ -258,14 +295,18 @@ const Layout = () => {
                         setSelectedSubType(null);
                         setExpandedCategory(null);
                       }}
-                      className="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors bg-gray-200 text-gray-800 hover:bg-gray-300 dark:bg-[#334155] dark:text-[#94a3b8] dark:hover:bg-[#475569] mb-4 flex-shrink-0"
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', padding: `${spacing.sm}px ${spacing.lg}px`, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, borderRadius: radii.lg, transition: transitions.fast, background: colors.bgOverlay, color: colors.textMuted, marginBottom: spacing.lg, flexShrink: 0,
+                      }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textSecondary; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgOverlay; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
                     >
-                      <ArrowLeft className="w-5 h-5 mr-3 flex-shrink-0" />
+                      <ArrowLeft style={{ width: 20, height: 20, marginRight: spacing.sm, flexShrink: 0 }} />
                       {t('common:back')}
                     </button>
 
                     {/* Calculators Section Title */}
-                    <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-[#94a3b8] uppercase tracking-wider flex-shrink-0">
+                    <div style={{ padding: `${spacing.md}px ${spacing.lg}px`, fontSize: fontSizes.xs, fontWeight: fontWeights.semibold, color: colors.textDim, textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
                       {t('nav:calculator')}
                     </div>
 
@@ -290,16 +331,19 @@ const Layout = () => {
                                   }
                                   // Don't close menu on mobile - keep it open for calculator
                                 }}
-                                className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                                  selectedCalculatorType === calc.type
-                                    ? 'bg-[#2563eb] text-white'
-                                    : 'text-gray-600 dark:text-[#94a3b8] hover:bg-gray-50 dark:hover:bg-[#334155]'
-                                }`}
+                                style={{
+                                  width: '100%', display: 'flex', alignItems: 'center', padding: '10px 12px', gap: 10, marginBottom: 2, fontSize: fontSizes.base, fontWeight: selectedCalculatorType === calc.type ? fontWeights.semibold : fontWeights.normal, borderRadius: radii.lg, transition: transitions.fast,
+                                  background: selectedCalculatorType === calc.type ? colors.accentBlueBg : 'transparent',
+                                  borderLeft: `3px solid ${selectedCalculatorType === calc.type ? colors.accentBlue : 'transparent'}`,
+                                  color: selectedCalculatorType === calc.type ? colors.textSecondary : colors.textSubtle,
+                                }}
+                                onMouseEnter={(e) => { if (selectedCalculatorType !== calc.type) { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textSecondary; } }}
+                                onMouseLeave={(e) => { if (selectedCalculatorType !== calc.type) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.textSubtle; } }}
                               >
-                                <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
+                                <Icon size={20} style={{ flexShrink: 0, color: selectedCalculatorType === calc.type ? colors.accentBlue : colors.textFaint }} />
                                 {calc.label}
                                 {calc.subTypes.length > 1 && (
-                                  <span className="ml-auto" style={{ color: '#9CA3AF' }}>
+                                  <span style={{ marginLeft: 'auto', color: colors.textDim }}>
                                   </span>
                                 )}
                               </button>
@@ -337,11 +381,14 @@ const Layout = () => {
                                     // Close sidebar on mobile after selecting sub-calculator
                                     setIsSidebarOpen(false);
                                   }}
-                                  className={`w-full flex items-center px-8 py-2 text-sm rounded-lg transition-colors ${
-                                    isSubTypeActive
-                                      ? 'bg-[#2563eb] text-white'
-                                      : 'text-gray-500 dark:text-[#94a3b8] hover:bg-gray-50 dark:hover:bg-[#334155] dark:hover:text-white'
-                                  }`}
+                                  style={{
+                                    width: '100%', display: 'flex', alignItems: 'center', padding: `${spacing.md}px ${spacing["6xl"]}px`, fontSize: fontSizes.sm, borderRadius: radii.lg, transition: transitions.fast,
+                                    background: isSubTypeActive ? colors.accentBlueBg : 'transparent',
+                                    borderLeft: `3px solid ${isSubTypeActive ? colors.accentBlue : 'transparent'}`,
+                                    color: isSubTypeActive ? colors.textSecondary : colors.navTextInactive,
+                                  }}
+                                  onMouseEnter={(e) => { if (!isSubTypeActive) { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textSecondary; } }}
+                                  onMouseLeave={(e) => { if (!isSubTypeActive) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.navTextInactive; } }}
                                 >
                                   {subType.label}
                                 </button>
@@ -354,11 +401,12 @@ const Layout = () => {
                     </div>
                   </>
                 ) : (
-                  navigation.map((item) => {
+                  navigation.map((item, index) => {
                     const Icon = item.icon;
                     
                     // Special handling for Calculator - use button instead of Link
                     if (item.href === '/calculator') {
+                      const isActive = showCalculatorMenu || location.pathname === '/calculator';
                       return (
                         <button
                           key={item.name}
@@ -367,19 +415,23 @@ const Layout = () => {
                             setSelectedCalculatorType(null);
                             setExpandedCategory(null);
                           }}
-                          className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                            showCalculatorMenu || location.pathname === '/calculator'
-                              ? 'bg-[#2563eb] text-white'
-                              : 'text-gray-600 dark:text-[#94a3b8] hover:bg-gray-50 dark:hover:bg-[#334155]'
-                          }`}
+                          style={{
+                            width: '100%', display: 'flex', alignItems: 'center', padding: '10px 12px', gap: 10, marginBottom: 2, fontSize: fontSizes.base, fontWeight: isActive ? fontWeights.semibold : fontWeights.normal, borderRadius: radii.lg, transition: transitions.fast,
+                            background: isActive ? colors.accentBlueBg : 'transparent',
+                            borderLeft: `3px solid ${isActive ? colors.accentBlue : 'transparent'}`,
+                            color: isActive ? colors.textSecondary : colors.navTextInactive,
+                          }}
+                          onMouseEnter={(e) => { if (!isActive) { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textSecondary; } }}
+                          onMouseLeave={(e) => { if (!isActive) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.navTextInactive; } }}
                         >
-                          <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
+                          <Icon size={20} style={{ flexShrink: 0, color: isActive ? colors.accentBlue : colors.navIconInactive }} />
                           {item.name}
                         </button>
                       );
                     }
                     
                     // Regular Link for other items
+                    const isActive = location.pathname === item.href;
                     return (
                       <Link
                         key={item.name}
@@ -387,13 +439,17 @@ const Layout = () => {
                         onClick={() => {
                           setIsSidebarOpen(false);
                         }}
-                        className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
-                          location.pathname === item.href
-                            ? 'bg-[#2563eb] text-white'
-                            : 'text-gray-600 dark:text-[#94a3b8] hover:bg-gray-50 dark:hover:bg-[#334155]'
-                        }`}
+                        style={{
+                          display: 'flex', alignItems: 'center', padding: '10px 12px', gap: 10, marginBottom: 2, fontSize: fontSizes.base, fontWeight: isActive ? fontWeights.semibold : fontWeights.normal, borderRadius: radii.lg, transition: transitions.fast,
+                          background: isActive ? colors.accentBlueBg : 'transparent',
+                          borderLeft: `3px solid ${isActive ? colors.accentBlue : 'transparent'}`,
+                          color: isActive ? colors.textSecondary : colors.navTextInactive,
+                          animation: `slideIn 0.3s ease ${index * 0.04}s both`,
+                        }}
+                        onMouseEnter={(e) => { if (!isActive) { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textSecondary; } }}
+                        onMouseLeave={(e) => { if (!isActive) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.navTextInactive; } }}
                       >
-                        <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
+                        <Icon size={20} style={{ flexShrink: 0, color: isActive ? colors.accentBlue : colors.navIconInactive }} />
                         {item.name}
                       </Link>
                     );
@@ -403,18 +459,30 @@ const Layout = () => {
             </nav>
 
             {/* Theme Toggle and User Profile */}
-            <div className="p-4 border-t bg-gray-50 dark:bg-[#2d3b4b] dark:border-[#334155]">
+            <div style={{ padding: '12px 14px', borderTop: `1px solid ${colors.borderDefault}` }}>
               <div className="flex items-center justify-between mb-4 relative">
                 <button
                   onClick={() => setShowThemeDropdown(!showThemeDropdown)}
-                  className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-white hover:bg-gray-100 dark:hover:bg-[#334155] rounded-lg transition-colors"
+                  style={{ display: 'flex', alignItems: 'center', padding: `${spacing.md}px ${spacing.lg}px`, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textPrimary, borderRadius: radii.lg, transition: transitions.fast, background: 'transparent' }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
                   <span>{currentTheme.icon}</span>
                   <span className="ml-2">{currentTheme.displayName}</span>
                 </button>
                 
                 {showThemeDropdown && (
-                  <div className="absolute bottom-full left-0 mb-2 w-48 bg-white dark:bg-[#2d3b4b] rounded-lg shadow-lg z-50 border border-gray-200 dark:border-[#334155]">
+                  <div
+                    style={{
+                      position: 'absolute', bottom: '100%', left: 0, marginBottom: spacing.sm,
+                      width: 192, zIndex: 50,
+                      background: colors.bgElevated,
+                      border: `1px solid ${colors.borderDefault}`,
+                      borderRadius: radii.lg,
+                      boxShadow: shadows.xl,
+                      overflow: 'hidden',
+                    }}
+                  >
                     {allThemes.map((themeOption) => (
                       <button
                         key={themeOption.id}
@@ -422,16 +490,29 @@ const Layout = () => {
                           setTheme(themeOption.id);
                           setShowThemeDropdown(false);
                         }}
-                        className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ${
-                          currentTheme.id === themeOption.id
-                            ? 'bg-blue-100 dark:bg-[#2563eb] text-blue-900 dark:text-white font-medium'
-                            : 'text-gray-700 dark:text-[#94a3b8] hover:bg-gray-100 dark:hover:bg-[#334155]'
-                        }`}
+                        style={{
+                          width: '100%', textAlign: 'left', padding: `${spacing.md}px ${spacing.lg}px`, fontSize: fontSizes.sm, display: 'flex', alignItems: 'center', gap: spacing.md, transition: transitions.fast,
+                          background: currentTheme.id === themeOption.id ? colors.accentBlueBg : 'transparent',
+                          color: currentTheme.id === themeOption.id ? colors.textPrimary : colors.textMuted,
+                          fontWeight: currentTheme.id === themeOption.id ? fontWeights.medium : fontWeights.normal,
+                        }}
+                        onMouseEnter={(e) => {
+                          if (currentTheme.id !== themeOption.id) {
+                            (e.currentTarget as HTMLElement).style.background = colors.bgHover;
+                            (e.currentTarget as HTMLElement).style.color = colors.textPrimary;
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (currentTheme.id !== themeOption.id) {
+                            (e.currentTarget as HTMLElement).style.background = 'transparent';
+                            (e.currentTarget as HTMLElement).style.color = colors.textMuted;
+                          }
+                        }}
                       >
                         <span>{themeOption.icon}</span>
                         <span>{themeOption.displayName}</span>
                         {currentTheme.id === themeOption.id && (
-                          <span className="ml-auto">✓</span>
+                          <span style={{ marginLeft: 'auto', color: colors.accentBlue }}>✓</span>
                         )}
                       </button>
                     ))}
@@ -447,17 +528,21 @@ const Layout = () => {
                 <div className="min-w-0 flex-1">
                   <Link 
                     to="/user-profile" 
-                    className="text-sm font-medium text-gray-900 dark:text-white truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                    style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', transition: transitions.fast, cursor: 'pointer' }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.accentBlue; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textPrimary; }}
                   >
                     {profile?.full_name}
                   </Link>
-                  <p className="text-xs text-gray-500 dark:text-[#94a3b8] truncate">
+                  <p style={{ fontSize: fontSizes.xs, color: colors.textDim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {profile?.role}
                   </p>
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="ml-2 p-2 text-gray-400 hover:text-gray-500 dark:text-[#94a3b8] dark:hover:text-white hover:bg-gray-100 dark:hover:bg-[#334155] rounded-lg transition-colors"
+                  style={{ marginLeft: spacing.md, padding: spacing.md, color: colors.textDim, borderRadius: radii.lg, transition: transitions.fast, background: 'transparent' }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textPrimary; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.textDim; }}
                   aria-label={t('common:logout')}
                 >
                   <LogOut className="w-5 h-5" />
@@ -468,8 +553,13 @@ const Layout = () => {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 min-w-0 bg-gray-100 dark:bg-gray-900 min-h-screen">
-          <div className={`px-4 py-6 mt-16 lg:mt-0 lg:p-6`}>
+        <main className="flex-1 min-w-0 min-h-screen overflow-auto" style={{ background: colors.bgMain, position: 'relative' }}>
+          <div style={{
+            position: 'fixed', top: 0, right: 0, bottom: 0,
+            backgroundImage: layout.gridPattern, backgroundSize: layout.gridPatternSize,
+            pointerEvents: 'none', zIndex: 0,
+          }} className="left-0 lg:left-[240px]" />
+          <div className="px-4 py-6 mt-16 lg:mt-0" style={{ padding: layout.contentPadding, position: 'relative', zIndex: 1 }}>
             <Outlet />
           </div>
         </main>

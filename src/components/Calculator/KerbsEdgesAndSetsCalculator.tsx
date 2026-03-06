@@ -5,12 +5,34 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import KerbVisualization from './KerbVisualization';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName } from '../../lib/translationMap';
+import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import {
+  colors,
+  fonts,
+  fontSizes,
+  fontWeights,
+  spacing,
+  radii,
+  gradients,
+  shadows,
+} from '../../themes/designTokens';
+import {
+  TextInput,
+  SelectDropdown,
+  Checkbox,
+  Button,
+  Card,
+  Label,
+  DataTable,
+} from '../../themes/uiComponents';
 
 interface CalculatorProps {
   onResultsChange?: (results: CalculationResults) => void;
+  onInputsChange?: (inputs: Record<string, any>) => void;
   type: KerbType;
   isInProjectCreating?: boolean;
+  initialLength?: number;
+  savedInputs?: Record<string, any>;
   calculateTransport?: boolean;
   setCalculateTransport?: (value: boolean) => void;
   selectedTransportCarrier?: any;
@@ -19,6 +41,7 @@ interface CalculatorProps {
   setTransportDistance?: (value: string) => void;
   carriers?: any[];
   selectedExcavator?: any;
+  recalculateTrigger?: number;
 }
 
 interface MaterialUsageConfig {
@@ -131,9 +154,14 @@ const HUNCH_CONFIGS = {
 } as const;
 
 const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({ 
-  onResultsChange, 
+  onResultsChange,
+  onInputsChange,
   type,
   isInProjectCreating = false,
+  initialLength,
+  savedInputs = {},
+  canvasMode = false,
+  canvasLength,
   calculateTransport: propCalculateTransport,
   setCalculateTransport: propSetCalculateTransport,
   selectedTransportCarrier: propSelectedTransportCarrier,
@@ -141,28 +169,51 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
   transportDistance: propTransportDistance,
   setTransportDistance: propSetTransportDistance,
   carriers: propCarriers = [],
-  selectedExcavator: propSelectedExcavator
+  selectedExcavator: propSelectedExcavator,
+  recalculateTrigger = 0
 }) => {
   // State
-  const { t } = useTranslation(['calculator', 'utilities', 'common']);
+  const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
+  const segmentLengths: number[] = savedInputs?.segmentLengths ?? [];
+  const totalLengthCanvas = canvasLength ?? (segmentLengths.length > 0 ? segmentLengths.reduce((a, b) => a + b, 0) : 0);
+  const initLength = savedInputs?.length != null ? String(savedInputs.length) : (initialLength != null ? initialLength.toFixed(3) : (totalLengthCanvas > 0 ? totalLengthCanvas.toFixed(3) : ''));
   const [kerbType, setKerbType] = useState<KerbType>(type);
-  const [length, setLength] = useState('');
-  const [baseHeight, setBaseHeight] = useState('');
-  const [hunchType, setHunchType] = useState<HunchType>('full-both');
-  const [isRumbledStanding, setIsRumbledStanding] = useState(false);
-  const [selectedFlatDimensionsIndex, setSelectedFlatDimensionsIndex] = useState<number>(0);
-  const [selectedKlDimensionsIndex, setSelectedKlDimensionsIndex] = useState<number>(0);
-  const [selectedRumbledDimensionsIndex, setSelectedRumbledDimensionsIndex] = useState<number>(0);
-  const [selectedSetsDimensionsIndex, setSelectedSetsDimensionsIndex] = useState<number>(0);
-  const [setsLengthwise, setSetsLengthwise] = useState<boolean>(true);
+  const [length, setLength] = useState(initLength);
+  const [kerbConfigMode, setKerbConfigMode] = useState<'single' | 'segments'>(segmentLengths.length > 1 ? 'segments' : 'single');
+  useEffect(() => {
+    if (savedInputs?.length != null) setLength(String(savedInputs.length));
+    else if (initialLength != null && isInProjectCreating) setLength(initialLength.toFixed(3));
+    else if (totalLengthCanvas > 0 && segmentLengths.length <= 1) setLength(totalLengthCanvas.toFixed(3));
+  }, [savedInputs?.length, initialLength, isInProjectCreating, totalLengthCanvas, segmentLengths.length]);
+  useEffect(() => {
+    if (segmentLengths.length > 1) setKerbConfigMode('segments');
+  }, [segmentLengths.length]);
+  const [baseHeight, setBaseHeight] = useState(savedInputs?.baseHeight ?? '');
+  const [hunchType, setHunchType] = useState<HunchType>(savedInputs?.hunchType ?? 'full-both');
+  const [isRumbledStanding, setIsRumbledStanding] = useState(savedInputs?.isRumbledStanding ?? false);
+  const [selectedFlatDimensionsIndex, setSelectedFlatDimensionsIndex] = useState<number>(savedInputs?.selectedFlatDimensionsIndex ?? 0);
+  const [selectedKlDimensionsIndex, setSelectedKlDimensionsIndex] = useState<number>(savedInputs?.selectedKlDimensionsIndex ?? 0);
+  const [selectedRumbledDimensionsIndex, setSelectedRumbledDimensionsIndex] = useState<number>(savedInputs?.selectedRumbledDimensionsIndex ?? 0);
+  const [selectedSetsDimensionsIndex, setSelectedSetsDimensionsIndex] = useState<number>(savedInputs?.selectedSetsDimensionsIndex ?? 0);
+  const [setsLengthwise, setSetsLengthwise] = useState<boolean>(savedInputs?.setsLengthwise ?? true);
+  useEffect(() => {
+    if (onInputsChange && isInProjectCreating) {
+      onInputsChange({ length, baseHeight, hunchType, isRumbledStanding, selectedFlatDimensionsIndex, selectedKlDimensionsIndex, selectedRumbledDimensionsIndex, selectedSetsDimensionsIndex, setsLengthwise });
+    }
+  }, [length, baseHeight, hunchType, isRumbledStanding, selectedFlatDimensionsIndex, selectedKlDimensionsIndex, selectedRumbledDimensionsIndex, selectedSetsDimensionsIndex, setsLengthwise, onInputsChange, isInProjectCreating]);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CalculationResults | null>(null);
+  const [segmentResults, setSegmentResults] = useState<Array<{ lengthM: number; units: number; unit: string }>>([]);
   const [transportDistance, setTransportDistance] = useState<string>('30');
   const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
   const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
   const [carriersLocal, setCarriersLocal] = useState<DiggingEquipment[]>([]);
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  const effectiveCalculateTransport = isInProjectCreating ? (propCalculateTransport ?? false) : calculateTransport;
+  const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
+  const effectiveTransportDistance = isInProjectCreating && propTransportDistance ? propTransportDistance : transportDistance;
 
   // Use carriers from props if available (from ProjectCreating), otherwise use local state
   const carriers = propCarriers && propCarriers.length > 0 ? propCarriers : carriersLocal;
@@ -181,25 +232,6 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
     propTransportDistance
   ]);
 
-  // Sync local state back to parent when in ProjectCreating
-  useEffect(() => {
-    if (isInProjectCreating && propSetCalculateTransport) {
-      propSetCalculateTransport(calculateTransport);
-    }
-  }, [calculateTransport, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetSelectedTransportCarrier) {
-      propSetSelectedTransportCarrier(selectedTransportCarrier);
-    }
-  }, [selectedTransportCarrier, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetTransportDistance) {
-      propSetTransportDistance(transportDistance);
-    }
-  }, [transportDistance, isInProjectCreating]);
-  
   // Update kerbType when type prop changes
   useEffect(() => {
     setKerbType(type);
@@ -227,10 +259,10 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
       }
     };
     
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       fetchEquipment();
     }
-  }, [calculateTransport]);
+  }, [effectiveCalculateTransport]);
 
   // Helper function to calculate material transport time
   const calculateMaterialTransportTime = (
@@ -419,15 +451,25 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
     setError(null);
     setResult(null);
 
-    const lengthM = parseFloat(length);
     const baseHeightCm = parseFloat(baseHeight);
 
-    if (isNaN(lengthM) || isNaN(baseHeightCm)) {
+    if (isNaN(baseHeightCm)) {
       setError(t('calculator:enter_valid_length_height'));
       return;
     }
 
-    if (lengthM <= 0 || baseHeightCm <= 0) {
+    if (baseHeightCm <= 0) {
+      setError(t('calculator:values_must_be_positive'));
+      return;
+    }
+
+    // Segment lengths: from canvas (single or segments) or single length input
+    const segLengths: number[] = (canvasMode && kerbConfigMode === 'single' && totalLengthCanvas > 0)
+      ? [totalLengthCanvas]
+      : (segmentLengths.length > 0 ? segmentLengths : [parseFloat(length) || 0]);
+
+    const lengthM = segLengths.reduce((a, b) => a + b, 0);
+    if (lengthM <= 0 || segLengths.some(s => s <= 0)) {
       setError(t('calculator:values_must_be_positive'));
       return;
     }
@@ -438,12 +480,6 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
       const hunchConfig = HUNCH_CONFIGS[hunchType];
       const taskName = KERB_NAMES[kerbType as keyof typeof KERB_NAMES];
 
-      // Calculate mortar volume
-      const mortarVolume = calculateMortarVolume(lengthM, baseHeightCm);
-      
-      // Calculate materials
-      const mortarMaterials = calculateMaterials(mortarVolume);
-      
       // Calculate number of individual kerb units needed (based on kerb length in cm)
       const calculateKerbUnits = (lengthInMeters: number): { quantity: number; unit: string } => {
         switch (kerbType) {
@@ -456,10 +492,8 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
               return { quantity: lengthInMeters * 5, unit: 'kerbs' };
             }
           case 'flat':
-            // lengthInMeters * 100cm / kerbLengthCm = pieces needed
             return { quantity: Math.ceil((lengthInMeters * 100) / dims.length), unit: 'pieces' };
           case 'sets':
-            // lengthwise: total length / set length; crosswise: total width / set width
             const linearCm = lengthInMeters * 100;
             const divisor = setsLengthwise ? dims.length : dims.width;
             return { quantity: Math.ceil(linearCm / divisor), unit: 'sets' };
@@ -467,11 +501,32 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
             return { quantity: lengthInMeters, unit: 'units' };
         }
       };
+
+      // Per-segment results
+      const segResults: Array<{ lengthM: number; units: number; unit: string }> = [];
+      let totalKerbQuantity = 0;
+      let totalMortarVolume = 0;
+
+      for (let i = 0; i < segLengths.length; i++) {
+        const segLenM = segLengths[i] ?? 0;
+        const ku = calculateKerbUnits(segLenM);
+        totalKerbQuantity += ku.quantity;
+        totalMortarVolume += calculateMortarVolume(segLenM, baseHeightCm);
+        segResults.push({ lengthM: segLenM, units: ku.quantity, unit: ku.unit });
+      }
+
+      setSegmentResults(segResults);
+
+      // Calculate mortar volume (sum over segments)
+      const mortarVolume = totalMortarVolume;
       
-      const kerbUnits = calculateKerbUnits(lengthM);
+      // Calculate materials
+      const mortarMaterials = calculateMaterials(mortarVolume);
+      
+      const kerbUnits = { quantity: totalKerbQuantity, unit: segResults[0]?.unit ?? 'kerbs' };
       
       // Get transport distance in meters
-      const transportDistanceMeters = parseFloat(transportDistance) || 30;
+      const transportDistanceMeters = parseFloat(effectiveTransportDistance) || 30;
 
       // Calculate material transport times if "Calculate transport time" is checked
       let kerbTransportTime = 0;
@@ -481,11 +536,11 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
       let normalizedSandTransportTime = 0;
       let normalizedCementTransportTime = 0;
 
-      if (calculateTransport) {
+      if (effectiveCalculateTransport) {
         let carrierSizeForTransport = 0.125;
         
-        if (selectedTransportCarrier) {
-          carrierSizeForTransport = selectedTransportCarrier["size (in tones)"] || 0.125;
+        if (effectiveSelectedTransportCarrier) {
+          carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
         }
 
         // Get material type for kerbs
@@ -554,7 +609,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
       }];
 
       // Add transport tasks if applicable
-      if (calculateTransport && kerbTransportTime > 0) {
+      if (effectiveCalculateTransport && kerbTransportTime > 0) {
         taskBreakdown.push({
           name: 'transport kerbs',
           hours: kerbTransportTime,
@@ -564,7 +619,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
         });
       }
 
-      if (calculateTransport && sandTransportTime > 0) {
+      if (effectiveCalculateTransport && sandTransportTime > 0) {
         taskBreakdown.push({
           name: 'transport sand',
           hours: sandTransportTime,
@@ -574,7 +629,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
         });
       }
 
-      if (calculateTransport && cementTransportTime > 0) {
+      if (effectiveCalculateTransport && cementTransportTime > 0) {
         taskBreakdown.push({
           name: 'transport cement',
           hours: cementTransportTime,
@@ -634,6 +689,13 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
     }
   };
 
+  // Recalculate when project settings (transport, equipment) change
+  useEffect(() => {
+    if (recalculateTrigger > 0 && isInProjectCreating) {
+      void calculate();
+    }
+  }, [recalculateTrigger]);
+
   // Get current dimensions
   const currentDims = getEffectiveDims();
 
@@ -656,32 +718,47 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
     }
   }, [result]);
 
+  const radioOptionStyle = (checked: boolean) => ({
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: `${spacing.lg}px 0`,
+    cursor: 'pointer' as const,
+  });
+  const radioInputStyle = {
+    width: 16,
+    height: 16,
+    accentColor: colors.accentBlue,
+  };
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold">{KERB_NAMES[kerbType]} Calculator</h2>
-      <p className="text-sm text-gray-600">
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display }}>
+        {KERB_NAMES[kerbType]} Calculator
+      </h2>
+      <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>
         Calculate materials, time, and costs for {KERB_NAMES[kerbType].toLowerCase()} installation projects.
       </p>
 
-      <div className="space-y-4">
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
         {kerbType === 'kl' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:flat_edge_dimensions_label')}</label>
-            <div className="space-y-2">
+            <Label>{t('calculator:flat_edge_dimensions_label')}</Label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
               {KL_DIMENSION_OPTIONS.map((dims, index) => (
-                <div key={index} className="flex items-center">
+                <label key={index} style={radioOptionStyle(selectedKlDimensionsIndex === index)}>
                   <input
                     type="radio"
-                    id={`kl-dims-${index}`}
                     name="klDimensions"
                     checked={selectedKlDimensionsIndex === index}
                     onChange={() => setSelectedKlDimensionsIndex(index)}
-                    className="h-4 w-4 text-gray-600 rounded"
+                    style={radioInputStyle}
                   />
-                  <label htmlFor={`kl-dims-${index}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>
                     {t('calculator:flat_edge_dimensions_format', { l: dims.length, h: dims.height, w: dims.width })}
-                  </label>
-                </div>
+                  </span>
+                </label>
               ))}
             </div>
           </div>
@@ -690,51 +767,26 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
         {kerbType === 'rumbled' && (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:installation_method')}</label>
-              <div className="space-y-2">
-                <div className="flex items-center">
-                  <input
-                    type="radio"
-                    id="rumbled-flat"
-                    checked={!isRumbledStanding}
-                    onChange={() => setIsRumbledStanding(false)}
-                    className="h-4 w-4 text-gray-600 rounded"
-                  />
-                  <label htmlFor="rumbled-flat" className="ml-2 text-sm text-gray-700 cursor-pointer">
-                    {t('calculator:flat_label')}
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="radio"
-                    id="rumbled-standing"
-                    checked={isRumbledStanding}
-                    onChange={() => setIsRumbledStanding(true)}
-                    className="h-4 w-4 text-gray-600 rounded"
-                  />
-                  <label htmlFor="rumbled-standing" className="ml-2 text-sm text-gray-700 cursor-pointer">
-                    {t('calculator:standing_label')}
-                  </label>
-                </div>
+              <Label>{t('calculator:installation_method')}</Label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
+                <label style={radioOptionStyle(!isRumbledStanding)}>
+                  <input type="radio" checked={!isRumbledStanding} onChange={() => setIsRumbledStanding(false)} style={radioInputStyle} />
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:flat_label')}</span>
+                </label>
+                <label style={radioOptionStyle(isRumbledStanding)}>
+                  <input type="radio" checked={isRumbledStanding} onChange={() => setIsRumbledStanding(true)} style={radioInputStyle} />
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:standing_label')}</span>
+                </label>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:flat_edge_dimensions_label')}</label>
-              <div className="space-y-2">
+              <Label>{t('calculator:flat_edge_dimensions_label')}</Label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
                 {(isRumbledStanding ? RUMBLED_STANDING_DIMENSION_OPTIONS : RUMBLED_FLAT_DIMENSION_OPTIONS).map((dims, index) => (
-                  <div key={index} className="flex items-center">
-                    <input
-                      type="radio"
-                      id={`rumbled-dims-${index}`}
-                      name="rumbledDimensions"
-                      checked={selectedRumbledDimensionsIndex === index}
-                      onChange={() => setSelectedRumbledDimensionsIndex(index)}
-                      className="h-4 w-4 text-gray-600 rounded"
-                    />
-                    <label htmlFor={`rumbled-dims-${index}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
-                      {t('calculator:flat_edge_dimensions_format', { l: dims.length, h: dims.height, w: dims.width })}
-                    </label>
-                  </div>
+                  <label key={index} style={radioOptionStyle(selectedRumbledDimensionsIndex === index)}>
+                    <input type="radio" name="rumbledDimensions" checked={selectedRumbledDimensionsIndex === index} onChange={() => setSelectedRumbledDimensionsIndex(index)} style={radioInputStyle} />
+                    <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:flat_edge_dimensions_format', { l: dims.length, h: dims.height, w: dims.width })}</span>
+                  </label>
                 ))}
               </div>
             </div>
@@ -743,22 +795,13 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
 
         {kerbType === 'flat' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:flat_edge_dimensions_label')}</label>
-            <div className="space-y-2">
+            <Label>{t('calculator:flat_edge_dimensions_label')}</Label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
               {FLAT_EDGE_DIMENSION_OPTIONS.map((dims, index) => (
-                <div key={index} className="flex items-center">
-                  <input
-                    type="radio"
-                    id={`flat-dims-${index}`}
-                    name="flatDimensions"
-                    checked={selectedFlatDimensionsIndex === index}
-                    onChange={() => setSelectedFlatDimensionsIndex(index)}
-                    className="h-4 w-4 text-gray-600 rounded"
-                  />
-                  <label htmlFor={`flat-dims-${index}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
-                    {t('calculator:flat_edge_dimensions_format', { l: dims.length, h: dims.height, w: dims.width })}
-                  </label>
-                </div>
+                <label key={index} style={radioOptionStyle(selectedFlatDimensionsIndex === index)}>
+                  <input type="radio" name="flatDimensions" checked={selectedFlatDimensionsIndex === index} onChange={() => setSelectedFlatDimensionsIndex(index)} style={radioInputStyle} />
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:flat_edge_dimensions_format', { l: dims.length, h: dims.height, w: dims.width })}</span>
+                </label>
               ))}
             </div>
           </div>
@@ -767,99 +810,98 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
         {kerbType === 'sets' && (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:sets_dimensions_label')}</label>
-              <div className="space-y-2">
+              <Label>{t('calculator:sets_dimensions_label')}</Label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
                 {SETS_DIMENSION_OPTIONS.map((dims, index) => (
-                  <div key={index} className="flex items-center">
-                    <input
-                      type="radio"
-                      id={`sets-dims-${index}`}
-                      name="setsDimensions"
-                      checked={selectedSetsDimensionsIndex === index}
-                      onChange={() => setSelectedSetsDimensionsIndex(index)}
-                      className="h-4 w-4 text-gray-600 rounded"
-                    />
-                    <label htmlFor={`sets-dims-${index}`} className="ml-2 text-sm text-gray-700 cursor-pointer">
-                      {t('calculator:sets_dimensions_format', { l: dims.length, h: dims.height, w: dims.width })}
-                    </label>
-                  </div>
+                  <label key={index} style={radioOptionStyle(selectedSetsDimensionsIndex === index)}>
+                    <input type="radio" name="setsDimensions" checked={selectedSetsDimensionsIndex === index} onChange={() => setSelectedSetsDimensionsIndex(index)} style={radioInputStyle} />
+                    <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:sets_dimensions_format', { l: dims.length, h: dims.height, w: dims.width })}</span>
+                  </label>
                 ))}
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:sets_orientation_label')}</label>
-              <div className="space-y-2">
-                <div className="flex items-center">
-                  <input
-                    type="radio"
-                    id="sets-lengthwise"
-                    name="setsOrientation"
-                    checked={setsLengthwise}
-                    onChange={() => setSetsLengthwise(true)}
-                    className="h-4 w-4 text-gray-600 rounded"
-                  />
-                  <label htmlFor="sets-lengthwise" className="ml-2 text-sm text-gray-700 cursor-pointer">
-                    {t('calculator:sets_lengthwise')}
-                  </label>
-                </div>
-                <div className="flex items-center">
-                  <input
-                    type="radio"
-                    id="sets-crosswise"
-                    name="setsOrientation"
-                    checked={!setsLengthwise}
-                    onChange={() => setSetsLengthwise(false)}
-                    className="h-4 w-4 text-gray-600 rounded"
-                  />
-                  <label htmlFor="sets-crosswise" className="ml-2 text-sm text-gray-700 cursor-pointer">
-                    {t('calculator:sets_crosswise')}
-                  </label>
-                </div>
+              <Label>{t('calculator:sets_orientation_label')}</Label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
+                <label style={radioOptionStyle(setsLengthwise)}>
+                  <input type="radio" name="setsOrientation" checked={setsLengthwise} onChange={() => setSetsLengthwise(true)} style={radioInputStyle} />
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:sets_lengthwise')}</span>
+                </label>
+                <label style={radioOptionStyle(!setsLengthwise)}>
+                  <input type="radio" name="setsOrientation" checked={!setsLengthwise} onChange={() => setSetsLengthwise(false)} style={radioInputStyle} />
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:sets_crosswise')}</span>
+                </label>
               </div>
             </div>
           </>
         )}
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700">
-            {kerbType === 'sets'
-              ? (setsLengthwise ? t('calculator:input_total_length_m') : t('calculator:input_total_width_m'))
-              : t('calculator:input_length_in_cm')}
-          </label>
-          <input
-            type="number"
-            value={length}
-            onChange={(e) => setLength(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            step="0.1"
-            placeholder={t('calculator:placeholder_enter_length_m')}
-          />
-        </div>
+        {canvasMode && segmentLengths.length > 0 && (
+          <div style={{ marginBottom: spacing.xl }}>
+            <div style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.semibold, color: colors.textDim, marginBottom: spacing.sm }}>{t('calculator:kerb_configuration_label')}</div>
+            <div style={{ display: 'flex', background: colors.bgCardInner, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}`, padding: spacing.sm, gap: spacing.sm }}>
+              <button
+                type="button"
+                disabled={segmentLengths.length > 1}
+                onClick={() => segmentLengths.length <= 1 && setKerbConfigMode('single')}
+                title={segmentLengths.length > 1 ? 'Remove segments to use single length' : undefined}
+                style={{
+                  flex: 1, padding: `${spacing.lg}px ${spacing.xl}px`, borderRadius: radii.lg, border: 'none',
+                  background: kerbConfigMode === 'single' ? colors.accentBlueBg : 'transparent',
+                  color: segmentLengths.length > 1 ? colors.textFaint : (kerbConfigMode === 'single' ? colors.green : colors.textDim),
+                  fontWeight: fontWeights.semibold, fontSize: fontSizes.base, cursor: segmentLengths.length > 1 ? 'not-allowed' : 'pointer', opacity: segmentLengths.length > 1 ? 0.5 : 1
+                }}
+              >
+                Single length
+              </button>
+              <button
+                type="button"
+                onClick={() => setKerbConfigMode('segments')}
+                style={{
+                  flex: 1, padding: `${spacing.lg}px ${spacing.xl}px`, borderRadius: radii.lg, border: 'none',
+                  background: kerbConfigMode === 'segments' ? colors.accentBlueBg : 'transparent',
+                  color: kerbConfigMode === 'segments' ? colors.green : colors.textDim, fontWeight: fontWeights.semibold, fontSize: fontSizes.base, cursor: 'pointer'
+                }}
+              >
+                Segments ({segmentLengths.length})
+              </button>
+            </div>
+            <div style={{ fontSize: fontSizes.xs, color: colors.textDim, marginTop: spacing.sm }}>
+              Total length: <strong style={{ color: colors.textSecondary }}>{totalLengthCanvas.toFixed(3)} m</strong>
+            </div>
+          </div>
+        )}
+
+        <TextInput
+          label={kerbType === 'sets' ? (setsLengthwise ? t('calculator:input_total_length_m') : t('calculator:input_total_width_m')) : t('calculator:kerb_total_length_m')}
+          value={length}
+          onChange={setLength}
+          placeholder={t('calculator:placeholder_enter_length_m')}
+          unit="m"
+        />
+
+        <TextInput
+          label={t('calculator:kerb_mortar_height_cm')}
+          value={baseHeight}
+          onChange={setBaseHeight}
+          placeholder={t('calculator:placeholder_mortar_depth_cm')}
+          unit="cm"
+        />
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_depth_in_cm')}</label>
-          <input
-            type="number"
-            value={baseHeight}
-            onChange={(e) => setBaseHeight(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            step="0.1"
-            placeholder={t('calculator:placeholder_enter_depth_cm')}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:hunch_configuration')}</label>
-          <div className="grid grid-cols-2 gap-4">
+          <Label>{t('calculator:hunch_configuration')}</Label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing["5xl"], marginTop: spacing.sm }}>
             {Object.entries(HUNCH_CONFIGS).map(([key, config]) => (
               <button
                 key={key}
                 onClick={() => setHunchType(key as HunchType)}
-                className={`p-2 rounded-md transition-all ${
-                  hunchType === key 
-                    ? 'border-8 border-blue-500' 
-                    : 'border border-gray-300 hover:border-blue-300'
-                }`}
+                style={{
+                  padding: spacing.md,
+                  borderRadius: radii.lg,
+                  border: hunchType === key ? `3px solid ${colors.accentBlue}` : `1px solid ${colors.borderInput}`,
+                  background: hunchType === key ? colors.accentBlueBg : 'transparent',
+                  cursor: 'pointer',
+                }}
               >
                 <KerbVisualization
                   kerbWidth={visualDims.width}
@@ -867,7 +909,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
                   baseHeight={parseFloat(baseHeight) || 3}
                   leftHunchPercent={config.left}
                   rightHunchPercent={config.right}
-                  title={config.title}
+                  title={t(`calculator:hunch_${key.replace(/-/g, '_')}`)}
                   isFlat={kerbType === 'rumbled' && !isRumbledStanding}
                 />
               </button>
@@ -875,171 +917,140 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
           </div>
         </div>
 
-        <label className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            checked={calculateTransport}
-            onChange={(e) => setCalculateTransport(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-        </label>
-
-        {/* Transport Carrier Selection */}
-        {calculateTransport && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier')}</label>
-            <div className="space-y-2">
-              <div 
-                className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded"
-                onClick={() => setSelectedTransportCarrier(null)}
-              >
-                <div className={`w-4 h-4 rounded-full border mr-2 ${
-                  selectedTransportCarrier === null 
-                    ? 'border-gray-400' 
-                    : 'border-gray-400'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full m-0.5 ${
-                    selectedTransportCarrier === null 
-                      ? 'bg-gray-400' 
-                      : 'bg-transparent'
-                  }`}></div>
-                </div>
-                <div>
-                  <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
-                </div>
-              </div>
-              {carriers.length > 0 && carriers.map((carrier) => (
-                <div 
-                  key={carrier.id}
-                  className="flex items-center p-2 cursor-pointer"
-                  onClick={() => setSelectedTransportCarrier(carrier)}
-                >
-                  <div className={`w-4 h-4 rounded-full border mr-2 ${
-                    selectedTransportCarrier?.id === carrier.id 
-                      ? 'border-gray-400' 
-                      : 'border-gray-400'
-                  }`}>
-                    <div className={`w-2 h-2 rounded-full m-0.5 ${
-                      selectedTransportCarrier?.id === carrier.id 
-                        ? 'bg-gray-400' 
-                        : 'bg-transparent'
-                    }`}></div>
-                  </div>
-                  <div>
-                    <span className="text-gray-800">{carrier.name}</span>
-                    <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
-              <input
-                type="number"
-                value={transportDistance}
-                onChange={(e) => setTransportDistance(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:placeholder_enter_transport_distance')}
-                min="0"
-                step="1"
-              />
-            </div>
-          </div>
+        {!isInProjectCreating && (
+          <Checkbox label={t('calculator:calculate_transport_time_label')} checked={calculateTransport} onChange={setCalculateTransport} />
         )}
 
-        <button
-          onClick={calculate}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-300"
-        >
+        {!isInProjectCreating && effectiveCalculateTransport && (
+          <>
+            <div>
+              <Label>{t('calculator:transport_carrier')}</Label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
+                <div
+                  style={{
+                    display: 'flex', alignItems: 'center', padding: spacing.md, cursor: 'pointer', borderRadius: radii.lg,
+                    border: `2px dashed ${colors.borderInput}`, background: effectiveSelectedTransportCarrier === null ? colors.bgHover : 'transparent',
+                  }}
+                  onClick={() => setSelectedTransportCarrier(null)}
+                >
+                  <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {effectiveSelectedTransportCarrier === null && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.textSubtle }} />}
+                  </div>
+                  <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{t('calculator:default_wheelbarrow')}</span>
+                </div>
+                {carriers.length > 0 && carriers.map((carrier) => (
+                  <div key={carrier.id} style={{ display: 'flex', alignItems: 'center', padding: spacing.md, cursor: 'pointer', borderRadius: radii.lg, background: effectiveSelectedTransportCarrier?.id === carrier.id ? colors.bgHover : 'transparent' }} onClick={() => setSelectedTransportCarrier(carrier)}>
+                    <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {effectiveSelectedTransportCarrier?.id === carrier.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.textSubtle }} />}
+                    </div>
+                    <div>
+                      <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{carrier.name}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({carrier["size (in tones)"]} tons)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <TextInput
+              label={t('calculator:transport_distance_label')}
+              value={transportDistance}
+              onChange={setTransportDistance}
+              placeholder={t('calculator:placeholder_enter_transport_distance')}
+              helperText={t('calculator:set_to_zero_no_transport')}
+            />
+          </>
+        )}
+
+        <Button onClick={calculate} variant="primary" fullWidth>
           {t('calculator:calculate_button')}
-        </button>
+        </Button>
 
         {error && (
-          <div className="p-3 bg-red-900/90 border border-red-600 rounded-lg text-white">
+          <div style={{ padding: spacing.base, background: 'rgba(239,68,68,0.15)', border: `1px solid ${colors.red}`, borderRadius: radii.lg, color: colors.textPrimary }}>
             {error}
           </div>
         )}
 
         {result && (
-          <div className="mt-6 space-y-4" ref={resultsRef}>
-            <div>
-              <h3 className="text-lg font-medium">{t('calculator:total_labor_hours_label')} <span className="text-blue-600">{result.hours_worked.toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
-              
-              <div className="mt-2">
-                <h4 className="font-medium text-gray-700 mb-2">{t('calculator:task_breakdown_label')}</h4>
-                <ul className="space-y-1 pl-5 list-disc">
-                  {result.taskBreakdown.map((task, index) => (
-                    <li key={index} className="text-sm">
-                      <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours
-                    </li>
+          <div style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }} ref={resultsRef}>
+            {segmentResults.length > 1 && (
+              <div style={{ marginBottom: spacing["3xl"] }}>
+                <div style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.bold, color: colors.textSubtle, marginBottom: spacing.md }}>{t('calculator:kerb_segments_label')}</div>
+                <div style={{ background: colors.bgCardInner, border: `1px solid ${colors.borderDefault}`, borderRadius: radii["2xl"], overflow: 'hidden' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 100px', padding: `${spacing.md}px ${spacing.xl}px`, borderBottom: `1px solid ${colors.borderLight}`, fontSize: fontSizes.xs, fontWeight: fontWeights.bold, color: colors.textDim, textTransform: 'uppercase' }}>
+                    <span>#</span>
+                    <span>{t('calculator:segment_length_m')}</span>
+                    <span style={{ textAlign: 'right' }}>{t('calculator:units_label')}</span>
+                  </div>
+                  {segmentResults.map((seg, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 100px', alignItems: 'center', padding: `${spacing.lg}px ${spacing.xl}px`, borderBottom: idx < segmentResults.length - 1 ? `1px solid ${colors.borderLight}` : 'none', background: idx % 2 === 1 ? colors.bgTableRowAlt : undefined, fontSize: fontSizes.base }}>
+                      <span style={{ fontWeight: fontWeights.semibold, color: colors.textDim }}>{idx + 1}</span>
+                      <span style={{ fontWeight: fontWeights.semibold, color: colors.textSecondary }}>{seg.lengthM.toFixed(2)} m</span>
+                      <span style={{ textAlign: 'right', color: colors.textSecondary }}>{seg.units} {translateUnit(seg.unit, t)}</span>
+                    </div>
                   ))}
-                </ul>
-              </div>
-            </div>
-            
-            <div>
-              <h3 className="font-medium mb-2">{t('calculator:materials_required_label')}</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Material
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Quantity
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Unit
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Price per Unit
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total Price
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {result.materials.map((material, index) => (
-                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.quantity.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.unit}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.total_price ? `£${material.total_price.toFixed(2)}` : 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                {/* Add total price row */}
-                <div className="mt-4 text-right pr-6">
-                  <p className="text-sm font-medium">
-                    Total Cost: {
-                      result.materials.some(m => m.total_price !== null) 
-                        ? `£${result.materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}`
-                        : 'N/A'
-                    }
-                  </p>
                 </div>
               </div>
-            </div>
+            )}
+            <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg }}>
+                <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                  {t('calculator:total_labor_hours_label')}
+                </span>
+                <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                  {result.hours_worked.toFixed(2)}
+                </span>
+                <span style={{ fontSize: fontSizes.md, color: colors.accentBlue, fontFamily: fonts.body, fontWeight: fontWeights.medium }}>
+                  {t('calculator:hours_abbreviation')}
+                </span>
+              </div>
+            </Card>
+            
+            <Card>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+                {t('calculator:task_breakdown_label')}
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+                {result.taskBreakdown.map((task, index) => (
+                  <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${spacing.lg}px ${spacing["2xl"]}px`, background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderLight}` }}>
+                    <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName(task.task || task.name || '', t)}</span>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                      <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{task.hours.toFixed(2)}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>hrs</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+            
+            <DataTable
+              columns={[
+                { key: 'name', label: 'MATERIAL', width: '2fr' },
+                { key: 'quantity', label: 'QUANTITY', width: '1fr' },
+                { key: 'unit', label: 'UNIT', width: '1fr' },
+                { key: 'price', label: 'PRICE/UNIT', width: '1fr' },
+                { key: 'total', label: 'TOTAL', width: '1fr' },
+              ]}
+              rows={result.materials.map((m) => ({
+                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{m.name}</span>,
+                quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.quantity.toFixed(2)}</span>,
+                unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
+                price: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : 'N/A'}</span>,
+                total: <span style={{ fontSize: fontSizes.md, fontWeight: fontWeights.bold, color: colors.textSecondary }}>{m.total_price ? `£${m.total_price.toFixed(2)}` : 'N/A'}</span>,
+              }))}
+              footer={
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: spacing.md }}>
+                  <span style={{ fontSize: fontSizes.base, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>Total Cost:</span>
+                  <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display }}>
+                    {result.materials.some(m => m.total_price !== null) ? `£${result.materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}` : 'N/A'}
+                  </span>
+                </div>
+              }
+            />
           </div>
         )}
-      </div>
+        </div>
+      </Card>
     </div>
   );
 };

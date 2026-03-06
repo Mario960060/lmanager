@@ -21,6 +21,7 @@
   "block7_wall_calculator": "7-inch Block Wall Calculator",
   "sleeper_wall_calculator": "Sleeper Wall Calculator",
   "slab_calculator": "Slab Calculator",
+  "concrete_slabs_calculator": "Concrete Slabs Calculator",
   "fence_calculator": "Fence Calculator",
   "steps_calculator": "Steps Calculator",
   "deck_calculator": "Deck Calculator",
@@ -53,6 +54,14 @@
   "rumbled_kerbs": "Rumbled Kerbs",
   "flat_edges": "Flat Edges",
   "sets": "Sets",
-  "foundation_excavation": "Foundation Excavation"
+  "foundation_excavation": "Foundation Excavation",
+  "natural_turf_calculator": "Natural Turf Calculator",
+  "natural_turf": "Natural Turf",
+  "groundwork_linear": "Groundwork linear elements",
+  "groundwork_drainage": "Drainage",
+  "groundwork_canal_pipe": "Canal Pipe",
+  "groundwork_water_pipe": "Water Pipe",
+  "groundwork_cable": "Cable",
+  "artificial_grass": "Artificial Grass"
 }
 

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import Modal from './Modal';
+import DatePicker from './DatePicker';
 import { ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { useAuthStore } from '../lib/store';
 import { format, parseISO, addDays, subDays, isFriday, startOfDay, endOfDay, isToday, isSameDay, eachWeekOfInterval, startOfWeek, endOfWeek } from 'date-fns';
@@ -31,7 +32,7 @@ const getLastWeekRange = () => {
 };
 
 const CheckWeeklyHoursModal = ({ open, onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'event', 'calculator']);
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [tab, setTab] = useState('thisweek');
@@ -285,15 +286,10 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
         {selectedTimeRange === 'single' && (
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:select_date')}</label>
-            <div className="relative">
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 pr-10"
-              />
-              <span className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 border-blue-500 pointer-events-none"></span>
-            </div>
+            <DatePicker
+              value={selectedDate}
+              onChange={setSelectedDate}
+            />
           </div>
         )}
 
@@ -331,28 +327,18 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:start_date')}</label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={dateRange.start}
-                  onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 pr-10"
-                />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 border-blue-500 pointer-events-none"></span>
-              </div>
+              <DatePicker
+                value={dateRange.start}
+                onChange={(v) => setDateRange(prev => ({ ...prev, start: v }))}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:end_date')}</label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={dateRange.end}
-                  onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                  min={dateRange.start}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 pr-10"
-                />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 border-blue-500 pointer-events-none"></span>
-              </div>
+              <DatePicker
+                value={dateRange.end}
+                onChange={(v) => setDateRange(prev => ({ ...prev, end: v }))}
+                minDate={dateRange.start}
+              />
             </div>
           </div>
         )}
@@ -378,7 +364,7 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
                   // For today/yesterday, show entries directly
                   project.entries.map((entry, idx) => (
                     <div key={idx} className="flex justify-between text-sm py-1 border-b border-gray-700 last:border-b-0">
-                      <span>{entry.type === 'regular' ? (entry.tasks_done?.name || 'Unknown Task') : (additionalTaskDescriptions[entry.task_id] || 'Unknown Additional Task')}</span>
+                      <span>{entry.type === 'regular' ? (entry.tasks_done?.name || t('common:unknown_task')) : (additionalTaskDescriptions[entry.task_id] || t('calculator:unknown_additional_task'))}</span>
                       <span>{entry.hours_spent?.toFixed(2)} {t('event:hours_label')}</span>
                     </div>
                   ))
@@ -394,7 +380,7 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
                         </div>
                         {entries.map((entry, idx) => (
                           <div key={idx} className="flex justify-between text-sm py-1 border-b border-gray-700 last:border-b-0">
-                            <span>{entry.type === 'regular' ? (entry.tasks_done?.name || 'Unknown Task') : (additionalTaskDescriptions[entry.task_id] || 'Unknown Additional Task')}</span>
+                            <span>{entry.type === 'regular' ? (entry.tasks_done?.name || t('common:unknown_task')) : (additionalTaskDescriptions[entry.task_id] || t('calculator:unknown_additional_task'))}</span>
                             <span>{entry.hours_spent?.toFixed(2)} {t('event:hours_label')}</span>
                           </div>
                         ))}

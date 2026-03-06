@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
-import { X, Loader, Check, AlertTriangle } from 'lucide-react';
+import { X, Check, AlertTriangle } from 'lucide-react';
 
 interface MachineryTaskCreatorProps {
   onClose: () => void;
@@ -526,7 +526,7 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
         <div className="p-6 overflow-y-auto flex-grow dark:bg-gray-800">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-64">
-              <Loader className="w-8 h-8 text-gray-400 dark:text-gray-500 animate-spin mb-4" />
+              <Spinner size={32} style={{ marginBottom: 16 }} />
               <p className="text-gray-500 dark:text-gray-400">{t('form:loading_equipment_data')}</p>
             </div>
           ) : error ? (
@@ -598,7 +598,7 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
               >
                 {isCreating ? (
                   <>
-                    <Loader className="w-4 h-4 mr-2 animate-spin" />
+                    <Spinner size={16} style={{ marginRight: 8 }} />
                     {t('form:creating_tasks_progress', { current: creationStatus.success + creationStatus.failed + creationStatus.skipped, total: creationStatus.total })}
                   </>
                 ) : (

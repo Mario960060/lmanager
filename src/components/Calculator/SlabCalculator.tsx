@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
@@ -6,10 +6,32 @@ import { useAuthStore } from '../../lib/store';
 import SlabFrameCalculator from './SlabFrameCalculator';
 import type {} from 'react/jsx-runtime';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName } from '../../lib/translationMap';
+import { translateTaskName, translateUnit } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
-import { useTheme, getCardWithShadowStyle, getButtonStyle } from '../../themes';
+import {
+  colors,
+  fonts,
+  fontSizes,
+  fontWeights,
+  spacing,
+  radii,
+  gradients,
+  shadows,
+} from '../../themes/designTokens';
+import {
+  TextInput,
+  SelectDropdown,
+  Checkbox,
+  Button,
+  Card,
+  Label,
+  HelperText,
+  DataTable,
+  Badge,
+} from '../../themes/uiComponents';
+import { computeSlabCuts, computePathSlabCuts, groupCutsByLength } from '../../projectmanagement/canvacreator/visualization/slabPattern';
+import { distance, PIXELS_PER_METER } from '../../projectmanagement/canvacreator/geometry';
 
 interface SlabType {
   id: string | number;
@@ -52,9 +74,19 @@ interface DiggingEquipment {
   updated_at?: string;
 }
 
+interface Shape {
+  points: { x: number; y: number }[];
+  closed: boolean;
+  calculatorInputs?: Record<string, any>;
+}
+
 interface SlabCalculatorProps {
   onResultsChange?: (results: any) => void;
+  onInputsChange?: (inputs: Record<string, any>) => void;
   isInProjectCreating?: boolean;
+  initialArea?: number;
+  savedInputs?: Record<string, any>;
+  shape?: Shape;
   calculateTransport?: boolean;
   setCalculateTransport?: (value: boolean) => void;
   selectedTransportCarrier?: any;
@@ -63,11 +95,19 @@ interface SlabCalculatorProps {
   setTransportDistance?: (value: string) => void;
   carriers?: any[];
   selectedExcavator?: any;
+  selectedCompactor?: any; // CompactorOption from project when in project mode
+  recalculateTrigger?: number;
+  /** When true, hide area, soil excess, transport, compactor, digging — for path edit */
+  compactForPath?: boolean;
 }
 
 const SlabCalculator: React.FC<SlabCalculatorProps> = ({ 
   onResultsChange, 
+  onInputsChange,
   isInProjectCreating = false,
+  initialArea,
+  savedInputs = {},
+  shape,
   calculateTransport: propCalculateTransport,
   setCalculateTransport: propSetCalculateTransport,
   selectedTransportCarrier: propSelectedTransportCarrier,
@@ -75,90 +115,33 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
   transportDistance: propTransportDistance,
   setTransportDistance: propSetTransportDistance,
   carriers: propCarriers = [],
-  selectedExcavator: propSelectedExcavator
+  selectedExcavator: propSelectedExcavator,
+  selectedCompactor: propSelectedCompactor,
+  recalculateTrigger = 0,
+  compactForPath = false,
 }: SlabCalculatorProps) => {
   const companyId = useAuthStore(state => state.getCompanyId());
-  const { currentTheme } = useTheme();
-  const { t } = useTranslation(['calculator', 'utilities', 'common']);
-  const [area, setArea] = useState<string>('');
-  const [tape1ThicknessCm, setTape1ThicknessCm] = useState<string>('');
-  const [mortarThicknessCm, setMortarThicknessCm] = useState<string>('');
-  const [selectedSlabId, setSelectedSlabId] = useState<string>('');
-  const [cutSlabs, setCutSlabs] = useState<string>('');
-  const [soilExcessCm, setSoilExcessCm] = useState<string>('');
+  const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
+  const isConcrete = false; // SlabCalculator handles sandstones/porcelain only; concrete slabs use ConcreteSlabsCalculator
+  const initArea = savedInputs?.area != null ? String(savedInputs.area) : (initialArea != null ? initialArea.toFixed(3) : '');
+  const [area, setArea] = useState<string>(initArea);
+  useEffect(() => {
+    if (savedInputs?.area != null) setArea(String(savedInputs.area));
+    else if (initialArea != null && isInProjectCreating) setArea(initialArea.toFixed(3));
+  }, [savedInputs?.area, initialArea, isInProjectCreating]);
+  const [tape1ThicknessCm, setTape1ThicknessCm] = useState<string>(savedInputs?.tape1ThicknessCm ?? '');
+  const [mortarThicknessCm, setMortarThicknessCm] = useState<string>(savedInputs?.mortarThicknessCm ?? '');
+  const [slabThicknessCm, setSlabThicknessCm] = useState<string>(savedInputs?.slabThicknessCm ?? '');
+  const [selectedSlabId, setSelectedSlabId] = useState<string>(savedInputs?.selectedSlabId ?? '');
+  const [soilExcessCm, setSoilExcessCm] = useState<string>(savedInputs?.soilExcessCm ?? '');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [totalHours, setTotalHours] = useState<number | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
   const [taskBreakdown, setTaskBreakdown] = useState<{task: string, hours: number, amount: number | string, unit: string, normalizedHours?: number}[]>([]);
-  const [selectedGroutingId, setSelectedGroutingId] = useState<string>('');
-  const [calculateDigging, setCalculateDigging] = useState<boolean>(false);
-  const [selectedExcavator, setSelectedExcavator] = useState<DiggingEquipment | null>(null);
-  const [selectedCarrier, setSelectedCarrier] = useState<DiggingEquipment | null>(null);
-  const [excavators, setExcavators] = useState<DiggingEquipment[]>([]);
-  const [carriersLocal, setCarriersLocal] = useState<DiggingEquipment[]>([]);
-  const resultsRef = useRef<HTMLDivElement>(null);
+  const [selectedGroutingId, setSelectedGroutingId] = useState<string>(savedInputs?.selectedGroutingId ?? '');
 
-  // Use carriers from props if available (from ProjectCreating), otherwise use local state
-  const carriers = propCarriers && propCarriers.length > 0 ? propCarriers : carriersLocal;
-  const [soilTransportDistance, setSoilTransportDistance] = useState<string>('30');
-  const [tape1TransportDistance, setTape1TransportDistance] = useState<string>('30');
-  const [materialTransportDistance, setMaterialTransportDistance] = useState<string>('30'); // For slabs/sand/cement transport
-  const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
-  const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
-  const [transportDistance, setTransportDistance] = useState<string>('30'); // Local state for transport distance
-  const [selectedCompactor, setSelectedCompactor] = useState<CompactorOption | null>(null);
-
-  const [addFrameBoard, setAddFrameBoard] = useState<boolean>(false);
-  const [isFrameModalOpen, setIsFrameModalOpen] = useState<boolean>(false);
-  const [frameResults, setFrameResults] = useState<{
-    totalFrameSlabs: number;
-    totalHours: number;
-    totalFrameAreaM2: number;
-    sides: Array<{ length: number; slabs: number }>;
-    taskName: string;
-    task_id?: string;
-    frameSlabsName: string;
-    cuttingHours: number;
-    cuttingTaskName: string;
-    cutting_task_id?: string;
-    transportTime?: number;
-  } | null>(null);
-
-  // Sync transport props to local state when in ProjectCreating
-  useEffect(() => {
-    if (isInProjectCreating) {
-      if (propCalculateTransport !== undefined) setCalculateTransport(propCalculateTransport);
-      if (propSelectedTransportCarrier !== undefined) setSelectedTransportCarrier(propSelectedTransportCarrier);
-      if (propTransportDistance !== undefined) setTransportDistance(propTransportDistance);
-    }
-  }, [
-    isInProjectCreating,
-    propCalculateTransport,
-    propSelectedTransportCarrier,
-    propTransportDistance
-  ]);
-
-  // Sync local state back to parent when in ProjectCreating
-  useEffect(() => {
-    if (isInProjectCreating && propSetCalculateTransport) {
-      propSetCalculateTransport(calculateTransport);
-    }
-  }, [calculateTransport, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetSelectedTransportCarrier) {
-      propSetSelectedTransportCarrier(selectedTransportCarrier);
-    }
-  }, [selectedTransportCarrier, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetTransportDistance) {
-      propSetTransportDistance(transportDistance);
-    }
-  }, [transportDistance, isInProjectCreating, propSetTransportDistance]);
-
-  // Fetch all task templates (no filtering by 'slab')
-  const { data: taskTemplates = [], isLoading, error: fetchError }: UseQueryResult<SlabType[]> = useQuery({
+  // Fetch task templates early (needed by onInputsChange useEffect below)
+  const { data: taskTemplatesData, isLoading, error: fetchError }: UseQueryResult<SlabType[]> = useQuery({
     queryKey: ['task_templates', companyId || 'no-company'],
     queryFn: async () => {
       if (!companyId) return [];
@@ -175,9 +158,88 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     },
     enabled: !!companyId
   });
+  const taskTemplates = useMemo(() => taskTemplatesData ?? [], [taskTemplatesData]);
 
-  // Add a new query to fetch time estimates for cutting tasks
-  const { data: cuttingTasks = [] } = useQuery({
+  const [canvasCutSlabs, setCanvasCutSlabs] = useState<number | null>(null);
+  const [canvasCutGroups, setCanvasCutGroups] = useState<{ lengthCm: number; count: number }[]>([]);
+
+  const [addFrameBoard, setAddFrameBoard] = useState<boolean>(!!savedInputs?.addFrameBoard);
+  const [isFrameModalOpen, setIsFrameModalOpen] = useState<boolean>(false);
+  const [framePieceLengthCm, setFramePieceLengthCm] = useState<string>(savedInputs?.framePieceLengthCm ?? '60');
+  const [framePieceWidthCm, setFramePieceWidthCm] = useState<string>(savedInputs?.framePieceWidthCm ?? '10');
+  const [frameJointType, setFrameJointType] = useState<'butt' | 'miter45'>(savedInputs?.frameJointType ?? 'butt');
+  const [frameResults, setFrameResults] = useState<{
+    totalFrameSlabs: number;
+    totalHours: number;
+    totalFrameAreaM2: number;
+    sides: Array<{ length: number; slabs: number }>;
+    taskName: string;
+    task_id?: string;
+    frameSlabsName: string;
+    cuttingHours: number;
+    cuttingTaskName: string;
+    cutting_task_id?: string;
+    transportTime?: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (onInputsChange && isInProjectCreating) {
+      const selectedSlab = taskTemplates?.find((t: SlabType) => t.id?.toString() === selectedSlabId);
+      const selectedSlabName = selectedSlab?.name ?? "";
+      onInputsChange({
+        area: area,
+        tape1ThicknessCm,
+        mortarThicknessCm,
+        slabThicknessCm,
+        selectedSlabId,
+        selectedSlabName,
+        cutSlabs: String(canvasCutSlabs ?? 0),
+        soilExcessCm,
+        selectedGroutingId,
+        addFrameBoard,
+        framePieceLengthCm: addFrameBoard ? framePieceLengthCm : undefined,
+        framePieceWidthCm: addFrameBoard ? framePieceWidthCm : undefined,
+        frameJointType: addFrameBoard ? frameJointType : undefined,
+      });
+    }
+  }, [area, tape1ThicknessCm, mortarThicknessCm, slabThicknessCm, selectedSlabId, canvasCutSlabs, soilExcessCm, selectedGroutingId, addFrameBoard, framePieceLengthCm, framePieceWidthCm, frameJointType, onInputsChange, isInProjectCreating, taskTemplates?.length]);
+
+  useEffect(() => {
+    if (!isInProjectCreating || !shape?.closed || shape.points.length < 3) {
+      setCanvasCutSlabs(null);
+      setCanvasCutGroups([]);
+      return;
+    }
+    const inputs = { ...shape.calculatorInputs };
+    if (!inputs.vizSlabWidth) {
+      setCanvasCutSlabs(null);
+      setCanvasCutGroups([]);
+      return;
+    }
+    const slabResult = inputs?.pathCenterline ? computePathSlabCuts(shape as any, inputs) : computeSlabCuts(shape as any, inputs);
+    const { cuts, cutSlabCount, fullSlabCount, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = slabResult;
+    setCanvasCutSlabs(cutSlabCount);
+    setCanvasCutGroups(cuts.length > 0 ? groupCutsByLength(cuts) : []);
+    if (onInputsChange) {
+      const prev = shape.calculatorInputs ?? {};
+      const next = {
+        vizWasteSatisfied: wasteSatisfiedPositions ?? [],
+        vizFullSlabCount: fullSlabCount,
+        vizWasteAreaCm2: wasteAreaCm2,
+        vizReusedAreaCm2: reusedAreaCm2,
+      };
+      const same = prev.vizFullSlabCount === next.vizFullSlabCount
+        && prev.vizWasteAreaCm2 === next.vizWasteAreaCm2
+        && prev.vizReusedAreaCm2 === next.vizReusedAreaCm2
+        && JSON.stringify(prev.vizWasteSatisfied ?? []) === JSON.stringify(next.vizWasteSatisfied);
+      if (!same) {
+        onInputsChange(next);
+      }
+    }
+  }, [isInProjectCreating, shape?.calculatorInputs?.vizSlabWidth, shape?.calculatorInputs?.vizSlabLength, shape?.calculatorInputs?.vizDirection, shape?.calculatorInputs?.vizStartCorner, shape?.calculatorInputs?.vizPattern, shape?.calculatorInputs?.vizGroutWidthMm, shape?.calculatorInputs?.vizOriginOffsetX, shape?.calculatorInputs?.vizOriginOffsetY, shape?.calculatorInputs?.framePieceWidthCm, shape?.calculatorInputs?.pathCenterline, shape?.calculatorInputs?.pathIsOutline, shape?.calculatorInputs?.slabOrientation, JSON.stringify(shape?.points), shape?.closed, onInputsChange]);
+
+  // Fetch time estimates for cutting tasks (needed by frame auto-compute below)
+  const { data: cuttingTasksData } = useQuery({
     queryKey: ['cutting_tasks', companyId || 'no-company'],
     queryFn: async () => {
       if (!companyId) return [];
@@ -187,13 +249,156 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         .eq('company_id', companyId)
         .or('name.ilike.%cutting%,name.ilike.%cut%')
         .order('name');
-      
       if (error) throw error;
-      console.log('Fetched cutting tasks:', data);
       return data;
     },
     enabled: !!companyId
   });
+  const cuttingTasks = cuttingTasksData ?? [];
+
+  // Fetch task templates for slab frame laying (needed by frame auto-compute below)
+  const { data: frameTaskTemplatesData } = useQuery({
+    queryKey: ['slab_frame_tasks', companyId || 'no-company'],
+    queryFn: async () => {
+      if (!companyId) return [];
+      const { data, error } = await supabase
+        .from('event_tasks_with_dynamic_estimates')
+        .select('id, name, unit, estimated_hours')
+        .eq('company_id', companyId)
+        .or('name.ilike.%laying slab frame belove 0.3m2%,name.ilike.%laying slab frame above 0.3m2%')
+        .order('name');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!companyId && isInProjectCreating && addFrameBoard
+  });
+  const frameTaskTemplates = useMemo(() => frameTaskTemplatesData ?? [], [frameTaskTemplatesData]);
+
+  const selectedSlabTypeForFrame = useMemo(
+    () => (selectedSlabId ? taskTemplates.find((t: SlabType) => t.id?.toString() === selectedSlabId) ?? null : null),
+    [selectedSlabId, taskTemplates]
+  );
+
+  // Auto-compute frame sides from polygon edges when in canvas mode
+  useEffect(() => {
+    if (!isInProjectCreating || !addFrameBoard) {
+      return;
+    }
+    if (!shape?.closed || !shape.points || shape.points.length < 3) {
+      setFrameResults(null);
+      return;
+    }
+    const pieceLen = parseFloat(framePieceLengthCm);
+    const pieceWid = parseFloat(framePieceWidthCm);
+    if (isNaN(pieceLen) || isNaN(pieceWid) || pieceLen <= 0 || pieceWid <= 0) {
+      setFrameResults(null);
+      return;
+    }
+    const groutMm = Number(shape?.calculatorInputs?.vizGroutWidthMm ?? (shape?.calculatorInputs?.vizGroutWidth != null ? Number(shape.calculatorInputs.vizGroutWidth) * 10 : 5));
+    const groutM = groutMm / 1000;
+    const pieceLenM = pieceLen / 100;
+    const stepM = pieceLenM + groutM;
+    const pts = shape.points;
+    const n = pts.length;
+    const sides: Array<{ length: number; slabs: number }> = [];
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const sideLengthM = distance(pts[i], pts[j]) / PIXELS_PER_METER;
+      const slabsPerSide = Math.ceil((sideLengthM + groutM) / stepM);
+      sides.push({ length: sideLengthM, slabs: slabsPerSide });
+    }
+    const totalFrameSlabs = sides.reduce((sum, s) => sum + s.slabs, 0);
+    const widthM = pieceWid / 100;
+    const pieceAreaM2 = (pieceLen / 100) * widthM;
+    const taskName = pieceAreaM2 < 0.3 ? 'laying slab frame belove 0.3m2' : 'laying slab frame above 0.3m2';
+    const frameTask = frameTaskTemplates.find((t: any) => t.name?.toLowerCase().includes(taskName.toLowerCase()));
+    let totalHours = 0;
+    if (frameTask?.estimated_hours != null) {
+      totalHours = totalFrameSlabs * frameTask.estimated_hours;
+    }
+    const totalCuts = sides.length * 3;
+    const selectedSlabType = taskTemplates?.find((t: SlabType) => t.id?.toString() === selectedSlabId);
+    let cuttingHours = 0;
+    let cuttingTaskName = '';
+    let cuttingTaskId: string | undefined;
+    if (selectedSlabType && totalCuts > 0) {
+      const isPorcelain = (selectedSlabType.name || '').toLowerCase().includes('slab') && !(selectedSlabType.name || '').toLowerCase().includes('sandstone');
+      const cuttingTaskSearchName = isPorcelain ? 'cutting porcelain' : 'cutting sandstones';
+      const cuttingTask = (cuttingTasks as any[])?.find((t: any) => (t.name || '').toLowerCase().includes(cuttingTaskSearchName));
+      if (cuttingTask?.estimated_hours != null) {
+        cuttingHours = totalCuts * cuttingTask.estimated_hours;
+        cuttingTaskName = `${cuttingTask.name} (frame)`;
+        cuttingTaskId = cuttingTask.id;
+      } else {
+        const minutesPerCut = isPorcelain ? 6 : 4;
+        cuttingHours = (totalCuts * minutesPerCut) / 60;
+        cuttingTaskName = isPorcelain ? 'Cutting porcelain (frame)' : 'Cutting sandstones (frame)';
+      }
+    }
+    const totalFrameAreaM2 = sides.reduce((sum, s) => sum + s.length * widthM, 0);
+    setFrameResults({
+      totalFrameSlabs,
+      totalHours: totalHours + cuttingHours,
+      totalFrameAreaM2,
+      sides,
+      taskName: frameTask?.name || taskName,
+      task_id: frameTask?.id,
+      frameSlabsName: `Frame slabs ${framePieceLengthCm}x${framePieceWidthCm}`,
+      cuttingHours,
+      cuttingTaskName,
+      cutting_task_id: cuttingTaskId,
+    });
+  }, [isInProjectCreating, addFrameBoard, shape?.closed, JSON.stringify(shape?.points), shape?.calculatorInputs?.vizGroutWidthMm, shape?.calculatorInputs?.vizGroutWidth, framePieceLengthCm, framePieceWidthCm, frameTaskTemplates, cuttingTasks, taskTemplates, selectedSlabId]);
+
+  const [calculateDigging, setCalculateDigging] = useState<boolean>(false);
+  const [selectedExcavator, setSelectedExcavator] = useState<DiggingEquipment | null>(null);
+  const [selectedCarrier, setSelectedCarrier] = useState<DiggingEquipment | null>(null);
+  const [excavators, setExcavators] = useState<DiggingEquipment[]>([]);
+  const [carriersLocal, setCarriersLocal] = useState<DiggingEquipment[]>([]);
+  const resultsRef = useRef<HTMLDivElement>(null);
+
+  // Use carriers from props if available (from ProjectCreating), otherwise use local state
+  const carriers = propCarriers && propCarriers.length > 0 ? propCarriers : carriersLocal;
+  const [soilTransportDistance, setSoilTransportDistance] = useState<string>('30');
+  const [tape1TransportDistance, setTape1TransportDistance] = useState<string>('30');
+  const [materialTransportDistance, setMaterialTransportDistance] = useState<string>('30'); // For slabs/sand/cement transport
+  const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
+  const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
+  const [transportDistance, setTransportDistance] = useState<string>('30'); // Local state for transport distance
+  const [selectedCompactor, setSelectedCompactor] = useState<CompactorOption | null>(null);
+  const effectiveCompactor = isInProjectCreating && propSelectedCompactor ? propSelectedCompactor : selectedCompactor;
+  const effectiveCalculateTransport = isInProjectCreating ? (propCalculateTransport ?? false) : calculateTransport;
+  const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
+
+  useEffect(() => {
+    if (savedInputs?.addFrameBoard !== undefined) setAddFrameBoard(!!savedInputs.addFrameBoard);
+    if (savedInputs?.framePieceLengthCm != null) setFramePieceLengthCm(String(savedInputs.framePieceLengthCm));
+    if (savedInputs?.framePieceWidthCm != null) setFramePieceWidthCm(String(savedInputs.framePieceWidthCm));
+    if (savedInputs?.frameJointType === 'butt' || savedInputs?.frameJointType === 'miter45') setFrameJointType(savedInputs.frameJointType);
+  }, [savedInputs?.addFrameBoard, savedInputs?.framePieceLengthCm, savedInputs?.framePieceWidthCm, savedInputs?.frameJointType]);
+
+  useEffect(() => {
+    if (savedInputs?.tape1ThicknessCm != null && savedInputs.tape1ThicknessCm !== '') setTape1ThicknessCm(String(savedInputs.tape1ThicknessCm));
+    if (savedInputs?.mortarThicknessCm != null && savedInputs.mortarThicknessCm !== '') setMortarThicknessCm(String(savedInputs.mortarThicknessCm));
+    if (savedInputs?.slabThicknessCm != null && savedInputs.slabThicknessCm !== '') setSlabThicknessCm(String(savedInputs.slabThicknessCm));
+  }, [savedInputs?.tape1ThicknessCm, savedInputs?.mortarThicknessCm, savedInputs?.slabThicknessCm]);
+
+  // Sync transport props to local state when in ProjectCreating (one-way: parent → child)
+  useEffect(() => {
+    if (isInProjectCreating) {
+      if (propCalculateTransport !== undefined) setCalculateTransport(propCalculateTransport);
+      if (propSelectedTransportCarrier !== undefined) setSelectedTransportCarrier(propSelectedTransportCarrier);
+      if (propTransportDistance !== undefined) {
+        setTransportDistance(propTransportDistance);
+        setMaterialTransportDistance(propTransportDistance);
+      }
+    }
+  }, [
+    isInProjectCreating,
+    propCalculateTransport,
+    propSelectedTransportCarrier,
+    propTransportDistance
+  ]);
 
   // Fetch grouting methods (tasks with 'grouting' in the name)
   const { data: groutingMethods = [], isLoading: isLoadingGrouting } = useQuery({
@@ -469,6 +674,11 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       return;
     }
     
+    if (!slabThicknessCm) {
+      setCalculationError(t('calculator:enter_slab_thickness'));
+      return;
+    }
+    
     if (!selectedSlabId) {
       setCalculationError(t('calculator:select_slab_type'));
       return;
@@ -491,8 +701,9 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       // Convert cm to meters for calculations
       const tape1ThicknessM = parseFloat(tape1ThicknessCm) / 100; // cm to meters
       const mortarThicknessM = parseFloat(mortarThicknessCm) / 100; // cm to meters
+      const slabThicknessM = parseFloat(slabThicknessCm) / 100; // cm to meters
       const soilExcessM = soilExcessCm ? parseFloat(soilExcessCm) / 100 : 0; // cm to meters
-      const cutSlabsNum = cutSlabs ? parseInt(cutSlabs) : 0;
+      const cutSlabsNum = canvasCutSlabs ?? 0;
       
       // Calculate effective area for regular slabs (subtract frame area if applicable)
       const frameAreaM2 = addFrameBoard && frameResults ? frameResults.totalFrameAreaM2 : 0;
@@ -519,37 +730,40 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       
       console.log('Main task hours:', mainTaskHours);
       
-      // Calculate hours for cutting slabs based on time estimator
+      const isPorcelain = (selectedSlabType.name || '').toLowerCase().includes('slab') && 
+        !(selectedSlabType.name || '').toLowerCase().includes('sandstone');
+      const cuttingTaskName = isPorcelain ? 'cutting porcelain' : 'cutting sandstones';
+      const cuttingTask = cuttingTasks.find(task => 
+        (task.name || '').toLowerCase().includes(cuttingTaskName)
+      );
+      const hoursPerCut = cuttingTask?.estimated_hours ?? (isPorcelain ? 6 : 4) / 60;
+
       let cuttingHours = 0;
-      let cuttingTask = null;
-      let cuttingTaskName = '';
-      if (cutSlabsNum > 0) {
-        // Find the appropriate cutting task based on slab type
-        const isPorcelain = (selectedSlabType.name || '').toLowerCase().includes('slab') && 
-          !(selectedSlabType.name || '').toLowerCase().includes('sandstone');
-        
-        cuttingTaskName = isPorcelain ? 'cutting porcelain' : 'cutting sandstones';
-        cuttingTask = cuttingTasks.find(task => 
-          (task.name || '').toLowerCase().includes(cuttingTaskName)
-        );
-        
-        console.log('Cutting task:', cuttingTask);
-        
-        if (cuttingTask && cuttingTask.estimated_hours !== undefined && cuttingTask.estimated_hours !== null) {
-          // If estimated_hours is hours per cut, multiply by number of cuts
-          // For example, if estimated_hours is 0.065 hours per cut, and cuts is 10, then total hours is 0.65
-          cuttingHours = cutSlabsNum * cuttingTask.estimated_hours;
-          console.log(`Cutting hours: ${cutSlabsNum} cuts × ${cuttingTask.estimated_hours} hours per cut = ${cuttingHours} hours`);
-        } else {
-          // Fallback to previous estimates if cutting task not found
-          const minutesPerCut = isPorcelain ? 6 : 4;
-          cuttingHours = (cutSlabsNum * minutesPerCut) / 60;
-          console.log(`Cutting hours (fallback): ${cutSlabsNum} cuts × ${minutesPerCut} minutes per cut = ${cuttingHours} hours`);
+      const cuttingBreakdownEntries: { task: string; hours: number; amount: number; unit: string; event_task_id?: string }[] = [];
+      if (canvasCutGroups.length > 0) {
+        for (const g of canvasCutGroups) {
+          const h = g.count * hoursPerCut;
+          cuttingHours += h;
+          cuttingBreakdownEntries.push({
+            task: `(${g.count}) cutting ${g.lengthCm}cm`,
+            hours: h,
+            amount: g.count,
+            unit: 'cuts',
+            event_task_id: cuttingTask?.id,
+          });
         }
+      } else if (cutSlabsNum > 0) {
+        cuttingHours = cutSlabsNum * hoursPerCut;
+        cuttingBreakdownEntries.push({
+          task: `(${cutSlabsNum}) ${cuttingTaskName}`,
+          hours: cuttingHours,
+          amount: cutSlabsNum,
+          unit: 'slabs',
+          event_task_id: cuttingTask?.id,
+        });
       }
       
-      // Calculate materials needed
-      const slabThicknessM = 0.02; // Standard slab thickness 2cm
+      // Calculate materials needed (slab thickness from user input)
       const totalDepthM = tape1ThicknessM + mortarThicknessM + slabThicknessM + soilExcessM;
       
       // Calculate soil to be dug out (area × total depth)
@@ -578,8 +792,9 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       // Convert cement volume to bags (1 bag = 25kg = ~0.0167 cubic meters)
       const cementBags = cementVolume / 0.0167;
       
-      // Get transport distance in meters
-      const transportDistanceMeters = parseFloat(materialTransportDistance) || 30;
+      // Get transport distance in meters (use project distance when in project mode)
+      const transportDistanceMeters = parseFloat(isInProjectCreating && propTransportDistance ? propTransportDistance : materialTransportDistance) || 30;
+
 
       // Calculate material transport times if "Calculate transport time" is checked
       let slabTransportTime = 0;
@@ -592,12 +807,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       // Calculate slab pieces based on area
       const slabPieces = areaNum * 2; // Approximate pieces
 
-      if (calculateTransport) {
+      if (effectiveCalculateTransport) {
         // Use selected transport carrier or default to wheelbarrow 0.125t
         let carrierSizeForTransport = 0.125;
         
-        if (selectedTransportCarrier) {
-          carrierSizeForTransport = selectedTransportCarrier["size (in tones)"] || 0.125;
+        if (effectiveSelectedTransportCarrier) {
+          carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
         }
         if (slabPieces > 0) {
           const slabResult = calculateMaterialTransportTime(slabPieces, carrierSizeForTransport, 'slabs', transportDistanceMeters);
@@ -624,13 +839,13 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       let compactingTimeTotal = 0;
       let compactingCompactorName = '';
 
-      if (selectedCompactor && tape1ThicknessCm) {
+      if (effectiveCompactor && tape1ThicknessCm) {
         // Use tape1 thickness for compacting calculation in Slab Calculator (no sand layer)
         const compactingDepthCm = parseFloat(tape1ThicknessCm || '0');
         
         if (compactingDepthCm > 0) {
           // In Slab Calculator, we only compact type1 (tape1), not mortar
-          const compactingCalc = calculateCompactingTime(selectedCompactor, compactingDepthCm, 'type1');
+          const compactingCalc = calculateCompactingTime(effectiveCompactor, compactingDepthCm, 'type1');
           compactingTimeTotal = effectiveAreaM2 * compactingCalc.timePerM2 * compactingCalc.totalPasses;
           compactingCompactorName = compactingCalc.compactorTaskName;
         }
@@ -651,7 +866,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       }
       
       // Add slab transport if applicable
-      if (calculateTransport && slabTransportTime > 0) {
+      if (effectiveCalculateTransport && slabTransportTime > 0) {
         breakdown.push({
           task: 'transport slabs',
           hours: slabTransportTime,
@@ -662,7 +877,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       }
 
       // Add sand transport if applicable
-      if (calculateTransport && sandTransportTime > 0) {
+      if (effectiveCalculateTransport && sandTransportTime > 0) {
         breakdown.push({
           task: 'transport sand',
           hours: sandTransportTime,
@@ -673,7 +888,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       }
 
       // Add cement transport if applicable
-      if (calculateTransport && cementTransportTime > 0) {
+      if (effectiveCalculateTransport && cementTransportTime > 0) {
         breakdown.push({
           task: 'transport cement',
           hours: cementTransportTime,
@@ -683,18 +898,10 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         });
       }
       
-      // Only add cutting task if it has hours
       if (cuttingHours > 0) {
-        const isPorcelain = selectedSlabType.name.toLowerCase().includes('slab') && 
-                           !selectedSlabType.name.toLowerCase().includes('sandstone');
-        const displayCuttingTaskName = isPorcelain ? 'cutting porcelain' : 'cutting sandstones';
-        breakdown.push({ 
-          task: cuttingTaskName || displayCuttingTaskName,
-          event_task_id: cuttingTask?.id,
-          hours: cuttingHours,
-          amount: cutSlabsNum,
-          unit: 'slabs'
-        });
+        for (const e of cuttingBreakdownEntries) {
+          breakdown.push(e);
+        }
       }
       
       // Add grouting method if selected
@@ -729,11 +936,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         // Try to find dimension pattern like "600x600" or "600 x 600"
         const match = name.match(/(\d+)\s*x\s*(\d+)/i);
         if (match) {
-          // Dimensions are in mm, convert to meters
-          const dim1Mm = parseInt(match[1]);
-          const dim2Mm = parseInt(match[2]);
-          const dim1M = dim1Mm / 1000;
-          const dim2M = dim2Mm / 1000;
+          const d1 = parseInt(match[1], 10);
+          const d2 = parseInt(match[2], 10);
+          // Values >= 100 are typically mm (e.g. 600x600), values < 100 are cm (e.g. 90x60)
+          const inMm = d1 >= 100 && d2 >= 100;
+          const dim1M = inMm ? d1 / 1000 : d1 / 100;
+          const dim2M = inMm ? d2 / 1000 : d2 / 100;
           return dim1M * dim2M;
         }
         // Default to 0.36 m² (600x600mm) if can't extract
@@ -1043,6 +1251,13 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     }
   }, [totalHours, materials, taskBreakdown, area, selectedSlabId, taskTemplates, onResultsChange]);
 
+  // Recalculate when project settings (transport, equipment) change
+  useEffect(() => {
+    if (recalculateTrigger > 0 && isInProjectCreating) {
+      void calculate();
+    }
+  }, [recalculateTrigger]);
+
   // Scroll to results when they appear
   useEffect(() => {
     if (materials.length > 0 && resultsRef.current) {
@@ -1061,160 +1276,158 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
   }, [materials]);
 
   // Only show slab-related templates in the dropdown
-  const slabTypeOptions = taskTemplates.filter((t: SlabType) => t.name.toLowerCase().includes('laying slabs'));
+  const slabTypeOptions = taskTemplates.filter((tpl: SlabType) => tpl.name.toLowerCase().includes('laying slabs'));
+  const selectedSlabName = slabTypeOptions.find((tpl: SlabType) => tpl.id?.toString() === selectedSlabId)?.name ?? '';
+  const selectedGroutingName = groutingMethods.find((m: { id?: string | number; name?: string }) => (m.id?.toString() || String(m.id)) === selectedGroutingId)?.name ?? '';
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold">{t('calculator:slab_installation_calculator_title')}</h2>
-      <p className="text-sm text-gray-600">
-        Calculate materials, time, and costs for slab installation projects.
-      </p>
-      
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_area_m2')}</label>
-          <input
-            type="number"
-            value={area}
-            onChange={(e) => setArea(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_area_m2')}
-            min="0"
-            step="0.01"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_type1_thickness_cm')}</label>
-          <input
-            type="number"
-            value={tape1ThicknessCm}
-            onChange={(e) => setTape1ThicknessCm(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_thickness')}
-            min="0"
-            step="0.5"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_thickness_cm')}</label>
-          <input
-            type="number"
-            value={mortarThicknessCm}
-            onChange={(e) => setMortarThicknessCm(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_thickness')}
-            min="0"
-            step="0.5"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_additional_soil_depth')}</label>
-          <input
-            type="number"
-            value={soilExcessCm}
-            onChange={(e) => setSoilExcessCm(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_depth_cm')}
-            min="0"
-            step="0.5"
-          />
-          <p className="text-xs text-gray-500 mt-1">{t('calculator:additional_depth_info')}</p>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:slab_type_label')}</label>
-          <select
-            value={selectedSlabId}
-            onChange={(e) => {
-              const value = e.target.value;
-              console.log('Selected slab ID:', value);
-              setSelectedSlabId(value);
-            }}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-select"
-            disabled={isLoading}
-          >
-            <option value="">Select slab type</option>
-            {slabTypeOptions.length > 0 && slabTypeOptions.map((type: SlabType) => (
-              <option key={type.id} value={type.id.toString()}>
-                {type.name}
-              </option>
-            ))}
-          </select>
-          {isLoading && <p className="text-sm text-gray-500 mt-1">{t('calculator:loading_slab_types')}</p>}
-          {fetchError && <p className="text-sm text-red-500 mt-1">{t('calculator:error_loading_slab_types')}</p>}
-          <p className="text-sm text-gray-500 mt-1">{t('calculator:selected_id')} {selectedSlabId}</p>
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_number_of_cuts')}</label>
-          <input
-            type="number"
-            value={cutSlabs}
-            onChange={(e) => setCutSlabs(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_number_cuts')}
-            min="0"
-            step="1"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:grouting_method')}</label>
-          <select
-            value={selectedGroutingId}
-            onChange={e => setSelectedGroutingId(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-select"
-            disabled={isLoadingGrouting}
-          >
-            <option value="">Select grouting method</option>
-            {groutingMethods.map((method) => (
-              <option key={method.id || method.name} value={method.id || ''}>{method.name || 'Unknown'}</option>
-            ))}
-          </select>
-          {isLoadingGrouting && <p className="text-sm text-gray-500 mt-1">{t('calculator:loading_grouting_methods_ellipsis')}</p>}
-          <p className="text-xs text-red-600 mt-1">{t('calculator:grouting_method_note_info')}</p>
-        </div>
-        
-        {/* Compactor Type Selection */}
-        <CompactorSelector 
-          selectedCompactor={selectedCompactor}
-          onCompactorChange={setSelectedCompactor}
-        />
-        
-        <div>
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={addFrameBoard}
-              onChange={(e) => setAddFrameBoard(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      {!compactForPath && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs }}>
+            <Badge color={colors.accentBlue}>DEFAULT</Badge>
+          </div>
+          <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display, letterSpacing: '0.3px', margin: `${spacing.md}px 0 ${spacing.sm}px` }}>
+            {t('calculator:slab_installation_calculator_title')}
+          </h2>
+          <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, lineHeight: 1.5 }}>
+            Calculate materials, time, and costs for slab installation projects.
+          </p>
+        </>
+      )}
+
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+          {!compactForPath && (
+            <TextInput
+              label={t('calculator:input_area_m2')}
+              value={area}
+              onChange={setArea}
+              placeholder={t('calculator:placeholder_enter_area_m2')}
+              unit="m²"
             />
-            <span className="text-sm font-medium text-gray-700">{t('calculator:add_frame_board_from_slabs')}</span>
-          </label>
-          {addFrameBoard && (
-            <button
-              onClick={() => setIsFrameModalOpen(true)}
-              style={{
-                ...getButtonStyle(currentTheme, 'primary'),
-                marginTop: '0.5rem',
-                fontSize: '0.875rem',
+          )}
+          <TextInput
+            label={t('calculator:input_type1_thickness_cm')}
+            value={tape1ThicknessCm}
+            onChange={setTape1ThicknessCm}
+            placeholder={t('calculator:placeholder_enter_thickness')}
+            unit="cm"
+          />
+          <TextInput
+            label={t('calculator:input_thickness_cm')}
+            value={mortarThicknessCm}
+            onChange={setMortarThicknessCm}
+            placeholder={t('calculator:placeholder_enter_thickness')}
+            unit="cm"
+          />
+          <TextInput
+            label={t('calculator:input_slab_thickness_cm')}
+            value={slabThicknessCm}
+            onChange={setSlabThicknessCm}
+            placeholder={t('calculator:placeholder_enter_thickness')}
+            unit="cm"
+          />
+        </div>
+
+        {!compactForPath && !isInProjectCreating && (
+          <TextInput
+            label={t('calculator:input_additional_soil_depth')}
+            value={soilExcessCm}
+            onChange={setSoilExcessCm}
+            placeholder={t('calculator:placeholder_enter_depth_cm')}
+            unit="cm"
+            helperText={t('calculator:additional_depth_info')}
+          />
+        )}
+        
+        {!compactForPath && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+            <SelectDropdown
+              label={t('calculator:slab_type_label')}
+              value={selectedSlabName}
+              options={slabTypeOptions.map((type: SlabType) => type.name)}
+              onChange={(name) => {
+                const t = slabTypeOptions.find((x: SlabType) => x.name === name);
+                setSelectedSlabId(t?.id?.toString() ?? '');
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimaryHover;
+              placeholder={t('calculator:select_slab_type_placeholder')}
+              helperText={isLoading ? t('calculator:loading_slab_types') : fetchError ? t('calculator:error_loading_slab_types') : undefined}
+            />
+            <SelectDropdown
+              label={t('calculator:grouting_method')}
+              value={selectedGroutingName}
+              options={groutingMethods.map((m: { name?: string }) => m.name || 'Unknown')}
+              onChange={(name) => {
+                const m = groutingMethods.find((x: { name?: string }) => (x.name || '') === name);
+                setSelectedGroutingId(m?.id?.toString() ?? '');
               }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimary;
-              }}
-            >
+              placeholder={t('calculator:select_grouting_method_placeholder')}
+              helperText={t('calculator:grouting_method_note_info')}
+            />
+          </div>
+        )}
+        
+        {/* Compactor Type Selection - hidden in project mode (set in project card) and path mode */}
+        {!isInProjectCreating && !compactForPath && (
+          <CompactorSelector 
+            selectedCompactor={selectedCompactor}
+            onCompactorChange={setSelectedCompactor}
+          />
+        )}
+        
+        {!compactForPath && (
+        <div style={{ borderTop: `1px solid ${colors.borderLight}`, paddingTop: spacing.xl, marginTop: spacing.xs, marginBottom: spacing["3xl"] }}>
+          <Checkbox
+            label={t('calculator:add_frame_board_from_slabs')}
+            checked={addFrameBoard}
+            onChange={setAddFrameBoard}
+          />
+          {addFrameBoard && isInProjectCreating && (
+            <div className="mt-2 space-y-2">
+              <div className="flex flex-wrap gap-3 items-center">
+                <label className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">{t('calculator:piece_length_cm_label') || 'Piece length (cm)'}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={framePieceLengthCm}
+                    onChange={(e) => setFramePieceLengthCm(e.target.value)}
+                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
+                  />
+                </label>
+                <label className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600">{t('calculator:piece_width_cm_label') || 'Piece width (cm)'}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={framePieceWidthCm}
+                    onChange={(e) => setFramePieceWidthCm(e.target.value)}
+                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
+                  />
+                </label>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600">{t('calculator:frame_joint_type_label')}</label>
+                <select
+                  value={frameJointType}
+                  onChange={(e) => setFrameJointType(e.target.value as 'butt' | 'miter45')}
+                  className="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                >
+                  <option value="butt">{t('calculator:frame_joint_butt')}</option>
+                  <option value="miter45">{t('calculator:frame_joint_miter45')}</option>
+                </select>
+              </div>
+            </div>
+          )}
+          {addFrameBoard && !isInProjectCreating && (
+            <Button onClick={() => setIsFrameModalOpen(true)} variant="primary" style={{ marginTop: spacing.lg, fontSize: fontSizes.md }}>
               Configure Frame Slabs
-            </button>
+            </Button>
           )}
           {frameResults && (
-            <div className="mt-2 p-3 bg-gray-50 rounded-md border border-gray-200">
-              <p className="text-sm text-gray-800">
+            <div style={{ marginTop: spacing.md, padding: spacing.base, background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>
+              <p style={{ fontSize: fontSizes.base, color: colors.textSecondary, fontFamily: fonts.body }}>
                 <strong>{frameResults.frameSlabsName}:</strong> {frameResults.totalFrameSlabs} pieces, {frameResults.totalHours.toFixed(2)} hours
                 <br />
                 <strong>Frame Area:</strong> {frameResults.totalFrameAreaM2.toFixed(2)} m²
@@ -1222,35 +1435,17 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
             </div>
           )}
         </div>
+        )}
         
-        {!isInProjectCreating && (
-          <div className="mt-4">
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={calculateDigging}
-                onChange={(e) => setCalculateDigging(e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_digging_preparation')}</span>
-            </label>
-          </div>
+        {!isInProjectCreating && !compactForPath && (
+          <>
+            <Checkbox label={t('calculator:calculate_digging_preparation')} checked={calculateDigging} onChange={setCalculateDigging} />
+            <Checkbox label={t('calculator:calculate_transport_time')} checked={calculateTransport} onChange={setCalculateTransport} />
+          </>
         )}
 
-        <div className="mt-4">
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={calculateTransport}
-              onChange={(e) => setCalculateTransport(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time')}</span>
-          </label>
-        </div>
-
         {/* Equipment Selection */}
-        {calculateDigging && (
+        {!compactForPath && calculateDigging && (
           <div className="grid grid-cols-2 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:excavation_machinery')}</label>
@@ -1321,7 +1516,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         )}
 
         {/* Transport Distance for Soil and Tape1 */}
-        {calculateDigging && selectedCarrier && (
+        {!isInProjectCreating && !compactForPath && calculateDigging && selectedCarrier && (
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
             <input
@@ -1341,7 +1536,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         )}
 
         {/* Transport Carrier Selection */}
-        {calculateTransport && (
+        {!isInProjectCreating && calculateTransport && (
           <>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier')}</label>
@@ -1394,7 +1589,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         )}
 
         {/* Material Transport Distance */}
-        {calculateTransport && (
+        {!isInProjectCreating && calculateTransport && (
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
             <input
@@ -1410,119 +1605,107 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
           </div>
         )}
         
-        <button
+        <Button
           onClick={calculate}
           disabled={isLoading}
-          style={{
-            ...getButtonStyle(currentTheme, 'primary'),
-            width: '100%',
-            opacity: isLoading ? 0.6 : 1,
-          }}
-          onMouseEnter={(e) => {
-            if (!isLoading) {
-              e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimaryHover;
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!isLoading) {
-              e.currentTarget.style.backgroundColor = currentTheme.colors.buttonPrimary;
-            }
-          }}
+          variant="primary"
+          fullWidth
         >
           {isLoading ? t('calculator:loading_in_progress') : t('calculator:calculate_button')}
-        </button>
+        </Button>
         
         {calculationError && (
-          <div className="p-3 bg-red-900/90 border border-red-600 rounded-lg text-white">
+          <div style={{ padding: spacing.base, background: 'rgba(239,68,68,0.15)', border: `1px solid ${colors.red}`, borderRadius: radii.lg, color: colors.textPrimary }}>
             {calculationError}
           </div>
         )}
         
         {totalHours !== null && (
-          <div className="mt-6 space-y-4" ref={resultsRef}>
-            <div>
-              <h3 className="text-lg font-medium">{t('calculator:total_labor_hours_label')} <span className="text-blue-600">{totalHours.toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
-              
-              <div className="mt-2">
-                <h4 className="font-medium text-gray-700 mb-2">{t('calculator:task_breakdown_label')}</h4>
-                <ul className="space-y-1 pl-5 list-disc">
-                  {taskBreakdown.map((task: { task: string; hours: number }, index: number) => (
-                    <li key={index} className="text-sm">
-                      <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours
-                    </li>
-                  ))}
-                </ul>
+          <div style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }} ref={resultsRef}>
+            <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg }}>
+                <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                  {t('calculator:total_labor_hours_label')}
+                </span>
+                <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                  {totalHours.toFixed(2)}
+                </span>
+                <span style={{ fontSize: fontSizes.md, color: colors.accentBlue, fontFamily: fonts.body, fontWeight: fontWeights.medium }}>
+                  {t('calculator:hours_abbreviation')}
+                </span>
               </div>
-            </div>
+            </Card>
             
-            <div>
-              <h3 className="font-medium mb-2">{t('calculator:materials_required_label')}</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Material
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Quantity
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Unit
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Price per Unit
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total Price
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {materials.map((material, index) => (
-                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.amount.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.unit}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.total_price ? `£${material.total_price.toFixed(2)}` : 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                
-                {/* Add total price row */}
-                <div className="mt-4 text-right pr-6">
-                  <p className="text-sm font-medium">
-                    Total Cost: {
-                      materials.some(m => m.total_price !== null) 
-                        ? `£${materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}`
-                        : 'N/A'
-                    }
-                  </p>
-                </div>
+            <Card>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+                {t('calculator:task_breakdown_label')}
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+                {taskBreakdown.map((task: { task: string; hours: number }, index: number) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                      background: colors.bgSubtle,
+                      borderRadius: radii.lg,
+                      border: `1px solid ${colors.borderLight}`,
+                    }}
+                  >
+                    <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>
+                      {translateTaskName(task.task, t)}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                      <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>
+                        {task.hours.toFixed(2)}
+                      </span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>hrs</span>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
+            </Card>
+            
+            <DataTable
+              columns={[
+                { key: 'name', label: 'MATERIAL', width: '2fr' },
+                { key: 'quantity', label: 'QUANTITY', width: '1fr' },
+                { key: 'unit', label: 'UNIT', width: '1fr' },
+                { key: 'price', label: 'PRICE/UNIT', width: '1fr' },
+                { key: 'total', label: 'TOTAL', width: '1fr' },
+              ]}
+              rows={materials.map((m) => ({
+                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{m.name}</span>,
+                quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.amount.toFixed(2)}</span>,
+                unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
+                price: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : 'N/A'}</span>,
+                total: <span style={{ fontSize: fontSizes.md, fontWeight: fontWeights.bold, color: colors.textSecondary }}>{m.total_price ? `£${m.total_price.toFixed(2)}` : 'N/A'}</span>,
+              }))}
+              footer={
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: spacing.md }}>
+                  <span style={{ fontSize: fontSizes.base, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                    Total Cost:
+                  </span>
+                  <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display }}>
+                    {materials.some(m => m.total_price !== null)
+                      ? `£${materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}`
+                      : 'N/A'}
+                  </span>
+                </div>
+              }
+            />
           </div>
         )}
-      </div>
+      </Card>
       
       {/* Slab Frame Calculator Modal */}
       <SlabFrameCalculator
         isOpen={isFrameModalOpen}
         onClose={() => setIsFrameModalOpen(false)}
         onResultsChange={(results) => setFrameResults(results)}
-        selectedSlabType={selectedSlabId ? taskTemplates.find(type => type.id.toString() === selectedSlabId) as any : null}
+        selectedSlabType={selectedSlabTypeForFrame}
         cuttingTasks={cuttingTasks as any}
       />
     </div>

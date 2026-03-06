@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateMaterialName, translateMaterialDescription } from '../../../lib/translationMap';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
 import { Package, Plus, Pencil, X, Search, Trash2 } from 'lucide-react';
@@ -12,6 +13,7 @@ interface Material {
   description: string | null;
   unit: string;
   price: number | null;
+  is_deletable?: boolean;
   created_at: string;
 }
 
@@ -21,7 +23,7 @@ interface SetupMaterialsProps {
 }
 
 const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = false }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'material', 'units']);
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
@@ -30,6 +32,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [selectedMaterial, setSelectedMaterial] = useState<Material | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearch = useDebounce(searchInput, 300);
@@ -60,7 +63,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
     enabled: !!companyId
   });
 
-  // Add material mutation
+  // Add material mutation (user-created materials are deletable)
   const addMaterialMutation = useMutation({
     mutationFn: async (material: typeof newMaterial) => {
       const { error } = await supabase
@@ -70,6 +73,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
           description: material.description || null,
           unit: material.unit,
           price: material.price ? parseFloat(material.price) : null,
+          is_deletable: true,
           company_id: companyId
         }]);
       if (error) throw error;
@@ -81,17 +85,21 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
     }
   });
 
-  // Edit material mutation
+  // Edit material mutation (system materials: only price can be updated)
   const editMaterialMutation = useMutation({
     mutationFn: async (material: Material) => {
+      const isSystem = material.is_deletable === false;
+      const updatePayload = isSystem
+        ? { price: material.price }
+        : {
+            name: material.name,
+            description: material.description,
+            unit: material.unit,
+            price: material.price
+          };
       const { error } = await supabase
         .from('materials')
-        .update({
-          name: material.name,
-          description: material.description,
-          unit: material.unit,
-          price: material.price
-        })
+        .update(updatePayload)
         .eq('id', material.id)
         .eq('company_id', companyId);
       if (error) throw error;
@@ -103,9 +111,12 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
     }
   });
 
-  // Delete material mutation
+  // Delete material mutation (system materials cannot be deleted)
   const deleteMaterialMutation = useMutation({
     mutationFn: async (material: Material) => {
+      if (material.is_deletable === false) {
+        throw new Error(t('form:system_material_cannot_delete'));
+      }
       const { error } = await supabase
         .from('materials')
         .delete()
@@ -118,6 +129,10 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
       setShowEditModal(false);
       setShowDeleteConfirm(false);
       setSelectedMaterial(null);
+      setDeleteError(null);
+    },
+    onError: (error: Error) => {
+      setDeleteError(error.message);
     }
   });
 
@@ -247,7 +262,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
               </div>
 
               <button
-                onClick={handleAddMaterial}
+                onClick={handleSubmit}
                 disabled={!newMaterial.name || !newMaterial.unit || addMaterialMutation.isPending}
                 className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
@@ -327,9 +342,10 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
                     className="text-blue-600 hover:text-blue-800"
                   >
                     {material.name}
+                    {material.is_deletable === false && <span className="ml-1 text-xs text-amber-600" title={t('form:system_material_price_only_hint')}>🔒</span>}
                   </button>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">{material.unit}</td>
+                <td className="px-6 py-4 whitespace-nowrap">{translateUnit(material.unit, t)}</td>
                 <td className="px-6 py-4 whitespace-nowrap">{formatPrice(material.price)}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-right">
                   <button
@@ -369,6 +385,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
               >
                 <div className="min-w-0 font-medium text-gray-900 text-xs break-words" title={material.name}>
                   {material.name}
+                  {material.is_deletable === false && <span className="ml-0.5 text-amber-600">🔒</span>}
                 </div>
                 <div className="text-gray-600 text-xs text-center truncate">{material.unit}</div>
                 <div className="text-gray-900 text-xs text-right">{formatPrice(material.price)}</div>
@@ -463,22 +480,29 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
         </div>
       )}
 
-      {/* Edit Material Modal */}
+      {/* Edit Material Modal (system materials: only price editable) */}
       {showEditModal && selectedMaterial && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg max-w-sm w-full p-4 space-y-3">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">{t('form:edit_material_heading')}</h3>
+              <h3 className="text-lg font-semibold">
+                {selectedMaterial.is_deletable === false ? t('form:edit_material_price_heading') : t('form:edit_material_heading')}
+              </h3>
               <button
                 onClick={() => {
                   setShowEditModal(false);
                   setSelectedMaterial(null);
+                  setDeleteError(null);
                 }}
                 className="p-2 hover:bg-gray-100 rounded-full transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {selectedMaterial.is_deletable === false && (
+              <p className="text-sm text-white bg-red-600 p-2 rounded">{t('form:system_material_price_only_hint')}</p>
+            )}
 
             <div className="space-y-4">
               <div>
@@ -489,6 +513,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
                   onChange={(e) => setSelectedMaterial(prev => ({ ...prev!, name: e.target.value }))}
                   className="mt-1"
                   placeholder={t('form:enter_material_name')}
+                  disabled={selectedMaterial.is_deletable === false}
+                  readOnly={selectedMaterial.is_deletable === false}
                 />
               </div>
 
@@ -500,6 +526,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
                   rows={3}
                   className="mt-1"
                   placeholder={t('form:enter_material_description')}
+                  disabled={selectedMaterial.is_deletable === false}
+                  readOnly={selectedMaterial.is_deletable === false}
                 />
               </div>
 
@@ -511,6 +539,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
                   onChange={(e) => setSelectedMaterial(prev => ({ ...prev!, unit: e.target.value }))}
                   className="mt-1"
                   placeholder={t('form:unit_examples')}
+                  disabled={selectedMaterial.is_deletable === false}
+                  readOnly={selectedMaterial.is_deletable === false}
                 />
               </div>
 
@@ -518,7 +548,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
                 <label className="block text-sm font-medium text-gray-700">{t('form:price_optional_label')}</label>
                 <input
                   type="number"
-                  value={selectedMaterial.price || ''}
+                  value={selectedMaterial.price ?? ''}
                   onChange={(e) => setSelectedMaterial(prev => ({ ...prev!, price: e.target.value ? parseFloat(e.target.value) : null }))}
                   className="mt-1"
                   placeholder={t('form:price_per_unit_placeholder')}
@@ -528,21 +558,26 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
               </div>
             </div>
 
-            <div className="grid grid-cols-[2fr_1fr] gap-2">
+            <div className="flex gap-2">
               <button
                 onClick={handleEdit}
-                disabled={!selectedMaterial.name || !selectedMaterial.unit || editMaterialMutation.isPending}
-                className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                disabled={
+                  (selectedMaterial.is_deletable !== false && (!selectedMaterial.name || !selectedMaterial.unit)) ||
+                  editMaterialMutation.isPending
+                }
+                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
                 {editMaterialMutation.isPending ? t('form:saving_changes_text') : t('form:save_changes_button_text')}
               </button>
-              <button
-                onClick={() => setShowDeleteConfirm(true)}
-                className="bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
-                title={t('form:delete_material_title')}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {selectedMaterial.is_deletable !== false && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
+                  title={t('form:delete_material_title')}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -552,6 +587,9 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
       {showDeleteConfirm && selectedMaterial && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
           <div className="bg-white rounded-lg max-w-sm w-full p-4 shadow-xl">
+            {deleteError && (
+              <p className="text-red-600 text-sm mb-3">{deleteError}</p>
+            )}
             <p className="text-gray-900 font-medium mb-3">
               {t('form:delete_confirmation_message')}
             </p>
@@ -562,7 +600,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
             )}
             <div className="flex gap-3 justify-end">
               <button
-                onClick={() => setShowDeleteConfirm(false)}
+                onClick={() => { setShowDeleteConfirm(false); setDeleteError(null); }}
                 className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >
                 {t('form:no_button')}
@@ -589,7 +627,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
           <div className="bg-white rounded-lg max-w-sm w-full p-4">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-xl font-semibold text-gray-900">{selectedMaterial.name}</h3>
+                <h3 className="text-xl font-semibold text-gray-900">{translateMaterialName(selectedMaterial.name, t)}</h3>
                 <p className="text-sm text-gray-500 mt-1">{t('form:added_on_date', { date: new Date(selectedMaterial.created_at).toLocaleDateString() })}</p>
               </div>
               <button
@@ -604,17 +642,17 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
             </div>
 
             <div className="space-y-4">
-              {selectedMaterial.description && (
+              {translateMaterialDescription(selectedMaterial.name, selectedMaterial.description, t) && (
                 <div>
                   <h4 className="text-sm font-medium text-gray-700">{t('form:description_label')}</h4>
-                  <p className="mt-1 text-gray-600">{selectedMaterial.description}</p>
+                  <p className="mt-1 text-gray-600">{translateMaterialDescription(selectedMaterial.name, selectedMaterial.description, t)}</p>
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <h4 className="text-sm font-medium text-gray-700">{t('form:unit_label')}</h4>
-                  <p className="mt-1 text-gray-900">{selectedMaterial.unit}</p>
+                  <p className="mt-1 text-gray-900">{translateUnit(selectedMaterial.unit, t)}</p>
                 </div>
                 <div>
                   <h4 className="text-sm font-medium text-gray-700">{t('form:price_label')}</h4>

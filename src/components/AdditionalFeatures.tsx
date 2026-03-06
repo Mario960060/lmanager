@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName, translateMaterialName, translateUnit } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import { Plus, X, CheckSquare, Clock, Package } from 'lucide-react';
 import Modal from './Modal';
+import DatePicker from './DatePicker';
 import { useAuthStore } from '../lib/store';
 import UnspecifiedMaterialModal from './UnspecifiedMaterialModal';
 
@@ -58,7 +60,7 @@ interface MaterialTemplate {
 }
 
 const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
-  const { t } = useTranslation(['common', 'utilities', 'form', 'project', 'event']);
+  const { t } = useTranslation(['common', 'utilities', 'form', 'project', 'event', 'calculator', 'material', 'units']);
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
@@ -535,7 +537,7 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                   {task.materials && task.materials.length > 0 && (
                     <p className="text-sm text-gray-600 mt-2">
                       <Package className="w-4 h-4 inline mr-1" />
-                      {t('event:materials_label_colon')} {task.materials.map(m => `${m.material} (${m.quantity} ${m.unit})`).join(', ')}
+                      {t('event:materials_label_colon')} {task.materials.map(m => `${translateMaterialName(m.material, t)} (${m.quantity} ${translateUnit(m.unit, t)})`).join(', ')}
                     </p>
                   )}
                   <div className="mt-3 space-y-3">
@@ -660,22 +662,20 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('event:start_date_label')}</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={taskDetails.start_date}
-                  onChange={(e) => setTaskDetails({ ...taskDetails, start_date: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  onChange={(v) => setTaskDetails({ ...taskDetails, start_date: v })}
+                  className="mt-1"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">{t('event:end_date_label')}</label>
-                <input
-                  type="date"
+                <DatePicker
                   value={taskDetails.end_date}
-                  onChange={(e) => setTaskDetails({ ...taskDetails, end_date: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  min={taskDetails.start_date}
+                  onChange={(v) => setTaskDetails({ ...taskDetails, end_date: v })}
+                  minDate={taskDetails.start_date}
+                  className="mt-1"
                 />
               </div>
             </div>
@@ -683,7 +683,7 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 {t('event:quantity_label_parentheses')} {selectedTaskTemplate && taskTemplates.find(t => t.id === selectedTaskTemplate)?.unit ? 
-                  `(${taskTemplates.find(t => t.id === selectedTaskTemplate)?.unit})` : ''}
+                  `(${translateUnit(taskTemplates.find(t => t.id === selectedTaskTemplate)?.unit || '', t)})` : ''}
               </label>
               <input
                 type="number"
@@ -734,11 +734,11 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                         }}
                         className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                       >
-                        <option value="">Select material</option>
+                        <option value="">{t('calculator:select_material_placeholder')}</option>
                         <option value="other" className="font-medium text-blue-600">{t('common:other_custom_material')}</option>
                         {materialTemplates.map(template => (
                           <option key={template.id} value={template.name}>
-                            {template.name} ({template.unit})
+                            {translateMaterialName(template.name, t)} ({template.unit})
                           </option>
                         ))}
                       </select>
@@ -801,7 +801,7 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                 <option value="">{t('event:select_material_placeholder')}</option>
                 {materialTemplates.map(template => (
                   <option key={template.id} value={template.id}>
-                    {template.name} ({template.unit})
+                    {translateMaterialName(template.name, t)} ({template.unit})
                   </option>
                 ))}
                 <option value="other">{t('event:other_custom_material')}</option>

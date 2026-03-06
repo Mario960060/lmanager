@@ -820,6 +820,61 @@ export type Database = {
           },
         ]
       }
+      plans: {
+        Row: {
+          id: string
+          company_id: string
+          created_by: string | null
+          title: string
+          canvas_data_compressed: string
+          event_id: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          created_by?: string | null
+          title: string
+          canvas_data_compressed: string
+          event_id?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          created_by?: string | null
+          title?: string
+          canvas_data_compressed?: string
+          event_id?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plans_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plans_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hours_entries: {
         Row: {
           company_id: string | null
@@ -1045,6 +1100,44 @@ export type Database = {
             columns: ["material_id"]
             isOneToOne: false
             referencedRelation: "materials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      material_usage_thickness_defaults: {
+        Row: {
+          calculator_id: string
+          company_id: string
+          created_at: string
+          id: string
+          thickness_key: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          calculator_id: string
+          company_id: string
+          created_at?: string
+          id?: string
+          thickness_key: string
+          updated_at?: string
+          value?: number
+        }
+        Update: {
+          calculator_id?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          thickness_key?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_usage_thickness_defaults_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]

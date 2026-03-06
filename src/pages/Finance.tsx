@@ -5,6 +5,8 @@ import { show403Modal } from '../components/Error403Modal';
 import { DollarSign, FileText, Calculator } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import PageInfoModal from '../components/PageInfoModal';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
+import { Button, Card, Badge } from '../themes/uiComponents';
 import WorkPricingModal from '../pages/finance/WorkPricingModal';
 
 const Finance = () => {
@@ -36,23 +38,26 @@ const Finance = () => {
   ];
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["6xl"], fontFamily: fonts.body }}>
       <BackButton />
-      <div className="flex items-center">
-        <h1 className="text-3xl font-bold text-gray-900">{t('common:finance_title')}</h1>
-        <PageInfoModal description="" quickTips={[]} />
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <h1 style={{ fontSize: fontSizes["3xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('common:finance_title')}</h1>
+        <PageInfoModal
+          description={t('common:finance_info_description')}
+          title={t('common:finance_info_title')}
+          quickTips={[]}
+        />
       </div>
-      <div className="grid md:grid-cols-3 gap-6">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: spacing["6xl"] }}>
         {sections.map((section) => (
-          <div key={section.title} className="bg-white rounded-lg shadow-lg p-6">
-            <div className="flex items-center mb-4">
-              <section.icon className="w-6 h-6 text-blue-600 mr-3" />
-              <h2 className="text-xl font-semibold">{section.title}</h2>
+          <Card key={section.title}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+              <section.icon style={{ width: 24, height: 24, color: colors.accentBlue, marginRight: spacing.base }} />
+              <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{section.title}</h2>
             </div>
-            <p className="text-gray-600 mb-4">{section.description}</p>
+            <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"] }}>{section.description}</p>
             {section.button ? (
-              <button
-                className="inline-block px-3 py-1 bg-blue-600 text-white rounded-full text-sm font-medium"
+              <Button
                 onClick={() => {
                   if (!hasFinanceAccess) {
                     show403Modal();
@@ -62,13 +67,11 @@ const Finance = () => {
                 }}
               >
                 {t('common:work_pricing')}
-              </button>
+              </Button>
             ) : (
-              <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                {section.status}
-              </span>
+              <Badge color={colors.accentBlue}>{section.status}</Badge>
             )}
-          </div>
+          </Card>
         ))}
       </div>
 

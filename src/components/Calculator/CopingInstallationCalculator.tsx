@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName } from '../../lib/translationMap';
+import { translateTaskName, translateUnit } from '../../lib/translationMap';
 
 interface TaskTemplate {
   id: string;
@@ -66,7 +66,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
   setTransportDistance: propSetTransportDistance,
   carriers: propCarriers = []
 }: CopingInstallationCalculatorProps) => {
-  const { t } = useTranslation(['calculator', 'utilities', 'common']);
+  const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
   const [wallLength, setWallLength] = useState<string>('');
   const [slabLength, setSlabLength] = useState<string>('90');
@@ -80,6 +80,11 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
   const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
   const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
   const [carriersLocal, setCarriersLocal] = useState<DiggingEquipment[]>([]);
+
+  const effectiveCalculateTransport = isInProjectCreating ? (propCalculateTransport ?? false) : calculateTransport;
+  const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
+  const effectiveTransportDistance = isInProjectCreating && propTransportDistance ? propTransportDistance : transportDistance;
+
   const [results, setResults] = useState<{
     numberOfSlabs: number;
     totalCuts: number;
@@ -107,25 +112,6 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
     propTransportDistance
   ]);
 
-  // Sync local state back to parent when in ProjectCreating
-  useEffect(() => {
-    if (isInProjectCreating && propSetCalculateTransport) {
-      propSetCalculateTransport(calculateTransport);
-    }
-  }, [calculateTransport, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetSelectedTransportCarrier) {
-      propSetSelectedTransportCarrier(selectedTransportCarrier);
-    }
-  }, [selectedTransportCarrier, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetTransportDistance) {
-      propSetTransportDistance(transportDistance);
-    }
-  }, [transportDistance, isInProjectCreating]);
-
   // Add equipment fetching
   useEffect(() => {
     const fetchEquipment = async () => {
@@ -148,10 +134,10 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
       }
     };
     
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       fetchEquipment();
     }
-  }, [calculateTransport]);
+  }, [effectiveCalculateTransport]);
 
   // Fetch all task templates (for tile installation - same approach as TileInstallationCalculator)
   const { data: taskTemplates = [] }: UseQueryResult<TaskTemplate[]> = useQuery({
@@ -383,16 +369,16 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
     let copingTransportTime = 0;
     let adhesiveTransportTime = 0;
 
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       let carrierSizeForTransport = 0.125;
       
-      if (selectedTransportCarrier) {
-        carrierSizeForTransport = selectedTransportCarrier["size (in tones)"] || 0.125;
+      if (effectiveSelectedTransportCarrier) {
+        carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
       }
 
       // Calculate coping transport
       if (numberOfSlabs > 0) {
-        const copingResult = calculateMaterialTransportTime(numberOfSlabs, carrierSizeForTransport, 'slabs', parseFloat(transportDistance) || 30);
+        const copingResult = calculateMaterialTransportTime(numberOfSlabs, carrierSizeForTransport, 'slabs', parseFloat(effectiveTransportDistance) || 30);
         copingTransportTime = copingResult.totalTransportTime;
       }
 
@@ -404,7 +390,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
       }
       const bagsNeeded = Math.max(1, Math.ceil(adhesiveNeeded / bagSize));
       if (bagsNeeded > 0) {
-        const adhesiveResult = calculateMaterialTransportTime(bagsNeeded, carrierSizeForTransport, 'cement', parseFloat(transportDistance) || 30);
+        const adhesiveResult = calculateMaterialTransportTime(bagsNeeded, carrierSizeForTransport, 'cement', parseFloat(effectiveTransportDistance) || 30);
         adhesiveTransportTime = adhesiveResult.totalTransportTime;
       }
 
@@ -571,7 +557,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
           onChange={(e) => setApply45DegreeCut(e.target.checked)}
           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
-        <span className="text-sm font-medium text-gray-700">45 degree cut on corners</span>
+        <span className="text-sm font-medium text-gray-700">{t('calculator:degree_cut_corners')}</span>
       </label>
 
       <div>
@@ -582,7 +568,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-select"
           disabled={isLoadingGrouting}
         >
-          <option value="">Select grouting method</option>
+          <option value="">{t('calculator:select_grouting_method_placeholder')}</option>
           {groutingMethods.map((method: any) => (
             <option key={method.id} value={method.id}>{method.name}</option>
           ))}
@@ -591,18 +577,20 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
         <p className="text-xs text-red-600 mt-1">{t('calculator:grouting_method_note')}</p>
       </div>
 
-      <label className="flex items-center space-x-2">
-        <input
-          type="checkbox"
-          checked={calculateTransport}
-          onChange={(e) => setCalculateTransport(e.target.checked)}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-        <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-      </label>
+      {!isInProjectCreating && (
+        <label className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={calculateTransport}
+            onChange={(e) => setCalculateTransport(e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
+        </label>
+      )}
 
       {/* Transport Carrier Selection */}
-      {calculateTransport && (
+      {!isInProjectCreating && calculateTransport && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier_label')}</label>
           <div className="space-y-2">
@@ -715,7 +703,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
                     <tr key={idx}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.name}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.amount}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.unit}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{translateUnit(material.unit, t)}</td>
                     </tr>
                   ))}
                 </tbody>

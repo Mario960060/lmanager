@@ -2,16 +2,14 @@ import React, { startTransition, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../lib/store';
 import { show403Modal } from '../components/Error403Modal';
-import { 
-  Users, 
-  UserMinus,
-  X
-} from 'lucide-react';
+import { Users, UserMinus, X } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import PageInfoModal from '../components/PageInfoModal';
 import UserAuthorizationModal from '../components/ProjectManagement/UserAuthorizationModal';
 import DeleteUserModal from '../components/ProjectManagement/DeleteUserModal';
 import { RLSPermissionsTable } from '../data/RLSTable';
+import { Spinner, Button, Card } from '../themes';
+import { colors, spacing, radii, fontSizes, fontWeights } from '../themes/designTokens';
 
 const CompanyPanel = () => {
   const { t } = useTranslation(['common', 'dashboard']);
@@ -47,80 +45,79 @@ const CompanyPanel = () => {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div style={{ maxWidth: 960, margin: '0 auto', padding: spacing['6xl'], display: 'flex', flexDirection: 'column', gap: spacing['6xl'] }}>
       <BackButton />
-      <div className="flex justify-between items-center gap-4">
-        <div className="flex items-center">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('common:company_panel_title')}</h1>
-          <PageInfoModal description="" quickTips={[]} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: spacing['4xl'], flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+          <h1 style={{ fontSize: fontSizes['3xl'], fontWeight: fontWeights.bold, color: colors.textPrimary, margin: 0 }}>
+            {t('common:company_panel_title')}
+          </h1>
+          <PageInfoModal
+            description={t('common:company_panel_info_description')}
+            title={t('common:company_panel_info_title')}
+            quickTips={[]}
+          />
         </div>
-        <button
-          onClick={handlePermissionsTableClick}
-          className="shrink-0 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors text-sm font-medium"
-        >
+        <Button variant="secondary" onClick={handlePermissionsTableClick}>
           {t('common:permissions_table')}
-        </button>
+        </Button>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* User Authorization */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <Users className="w-6 h-6 text-purple-600 mr-3" />
-            <h2 className="text-xl font-semibold">{t('common:user_authorization')}</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: spacing['6xl'] }}>
+        <Card padding={`${spacing['6xl']}px`}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing['4xl'], gap: spacing.lg }}>
+            <Users style={{ width: 24, height: 24, color: colors.purple }} />
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textSecondary, margin: 0 }}>
+              {t('common:user_authorization')}
+            </h2>
           </div>
-          <p className="text-gray-600 mb-4">
+          <p style={{ color: colors.textMuted, marginBottom: spacing['4xl'], fontSize: fontSizes.base, lineHeight: 1.5 }}>
             {t('common:user_authorization_desc')}
           </p>
-          <button
-            onClick={handleUserAuthClick}
-            className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors"
-          >
+          <Button variant="primary" fullWidth onClick={handleUserAuthClick} style={{ background: `linear-gradient(135deg, ${colors.purple}, ${colors.purpleLight})` }}>
             {t('common:manage_users')}
-          </button>
-        </div>
+          </Button>
+        </Card>
 
-        {/* Delete User */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <UserMinus className="w-6 h-6 text-red-600 mr-3" />
-            <h2 className="text-xl font-semibold">{t('common:delete_user')}</h2>
+        <Card padding={`${spacing['6xl']}px`}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing['4xl'], gap: spacing.lg }}>
+            <UserMinus style={{ width: 24, height: 24, color: colors.red }} />
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textSecondary, margin: 0 }}>
+              {t('common:delete_user')}
+            </h2>
           </div>
-          <p className="text-gray-600 mb-4">
+          <p style={{ color: colors.textMuted, marginBottom: spacing['4xl'], fontSize: fontSizes.base, lineHeight: 1.5 }}>
             {t('common:delete_user_desc')}
           </p>
-          <button
-            onClick={handleDeleteUserClick}
-            className="w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition-colors"
-          >
+          <Button variant="primary" fullWidth onClick={handleDeleteUserClick} style={{ background: `linear-gradient(135deg, ${colors.red}, ${colors.redLight})` }}>
             {t('common:delete_user')}
-          </button>
-        </div>
+          </Button>
+        </Card>
       </div>
 
       {/* Modals */}
       {showUserAuthorization && (
-        <Suspense fallback={<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"><div className="bg-white dark:bg-slate-800 rounded-lg p-8 animate-pulse">Loading...</div></div>}>
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: colors.bgModalBackdrop, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ background: colors.bgCard, padding: 32, borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}><Spinner size={32} /><span style={{ color: colors.textMuted }}>{t('common:loading')}</span></div></div>}>
           <UserAuthorizationModal onClose={() => setShowUserAuthorization(false)} />
         </Suspense>
       )}
       {showDeleteUser && (
-        <Suspense fallback={<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"><div className="bg-white dark:bg-slate-800 rounded-lg p-8 animate-pulse">Loading...</div></div>}>
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: colors.bgModalBackdrop, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ background: colors.bgCard, padding: 32, borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}><Spinner size={32} /><span style={{ color: colors.textMuted }}>{t('common:loading')}</span></div></div>}>
           <DeleteUserModal onClose={() => setShowDeleteUser(false)} />
         </Suspense>
       )}
       {showPermissionsTable && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex flex-col items-center p-4">
-          <div className="w-full max-w-7xl flex justify-end mb-2">
+        <div style={{ position: 'fixed', inset: 0, background: colors.bgModalBackdrop, zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: spacing['4xl'] }}>
+          <div style={{ width: '100%', maxWidth: 1280, display: 'flex', justifyContent: 'flex-end', marginBottom: spacing.sm }}>
             <button
               onClick={() => setShowPermissionsTable(false)}
-              className="p-2 rounded-full bg-slate-700 hover:bg-slate-600 text-white transition-colors"
+              style={{ padding: spacing.md, borderRadius: radii.full, background: colors.bgElevated, color: colors.textPrimary, border: `1px solid ${colors.borderDefault}`, cursor: 'pointer' }}
               aria-label={t('common:close')}
             >
-              <X className="w-5 h-5" />
+              <X style={{ width: 20, height: 20 }} />
             </button>
           </div>
-          <div className="w-full max-w-7xl max-h-[90vh] overflow-auto rounded-lg shadow-2xl">
+          <div style={{ width: '100%', maxWidth: 1280, maxHeight: '90vh', overflow: 'auto', borderRadius: radii.lg, boxShadow: '0 16px 48px rgba(0,0,0,0.5)' }}>
             <RLSPermissionsTable />
           </div>
         </div>

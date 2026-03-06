@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type PermValue = "y" | "n" | "-" | "c";
 type Category = "tasks" | "events" | "materials" | "other";
@@ -36,12 +37,12 @@ const data: TableRow[] = [
   { name: "invoices", category: "other", user: ["n","n","n","n"], leader: ["n","n","n","n"], pm: ["y","y","y","n"] },
 ];
 
-const filters: { label: string; value: Filter }[] = [
-  { label: "Wszystkie", value: "all" },
-  { label: "Zadania", value: "tasks" },
-  { label: "Zdarzenia", value: "events" },
-  { label: "Materiały", value: "materials" },
-  { label: "Inne", value: "other" },
+const getFilters = (t: (key: string) => string): { label: string; value: Filter }[] => [
+  { label: t("common:rls_filter_all"), value: "all" },
+  { label: t("common:rls_filter_tasks"), value: "tasks" },
+  { label: t("common:rls_filter_events"), value: "events" },
+  { label: t("common:rls_filter_materials"), value: "materials" },
+  { label: t("common:rls_filter_other"), value: "other" },
 ];
 
 /* ── Original HTML color palette ── */
@@ -133,13 +134,13 @@ function PermCell({ value, tooltip }: { value: PermValue; tooltip?: string }) {
 
 /* ── RoleColumns ── */
 
-const deleteTooltips: Record<string, string> = {
-  user: "Tylko własne wpisy z tego samego dnia",
-  leader: "Pełne DELETE",
-  pm: "Pełne DELETE",
-};
+const getDeleteTooltips = (t: (key: string) => string): Record<string, string> => ({
+  user: t("common:rls_delete_tooltip_user"),
+  leader: t("common:rls_delete_tooltip_leader"),
+  pm: t("common:rls_delete_tooltip_pm"),
+});
 
-function RoleColumns({ perms, role }: { perms: [PermValue, PermValue, PermValue, PermValue]; role: "user" | "leader" | "pm" }) {
+function RoleColumns({ perms, role, t, deleteTooltips }: { perms: [PermValue, PermValue, PermValue, PermValue]; role: "user" | "leader" | "pm"; t: (key: string) => string; deleteTooltips: Record<string, string> }) {
   return (
     <>
       {perms.map((p, i) => (
@@ -175,14 +176,24 @@ const codeStyle = (color: string, bg: string): React.CSSProperties => ({
 const crudLabels = ["S", "I", "U", "D"] as const;
 
 export function RLSPermissionsTable() {
+  const { t } = useTranslation("common");
   const [activeFilter, setActiveFilter] = useState<Filter>("all");
 
+  const filters = getFilters(t);
+  const deleteTooltips = getDeleteTooltips(t);
   const filtered = activeFilter === "all" ? data : data.filter((r) => r.category === activeFilter);
 
   const roles = [
-    { label: "USER", color: c.roleUser },
-    { label: "TEAM LEADER", color: c.roleLeader },
-    { label: "PROJECT MANAGER", color: c.rolePm },
+    { label: t("rls_role_user"), color: c.roleUser },
+    { label: t("rls_role_leader"), color: c.roleLeader },
+    { label: t("rls_role_pm"), color: c.rolePm },
+  ];
+
+  const legendItems = [
+    { icon: "✓", labelKey: "rls_legend_access", bg: c.greenBg, fg: c.green, bd: c.greenBorder },
+    { icon: "✗", labelKey: "rls_legend_no_access", bg: c.redBg, fg: c.red, bd: c.redBorder },
+    { icon: "–", labelKey: "rls_legend_no_policy", bg: c.yellowBg, fg: c.yellow, bd: c.yellowBorder },
+    { icon: "✓*", labelKey: "rls_legend_conditional", bg: c.blueBg, fg: c.blue, bd: c.blueBorder },
   ];
 
   return (
@@ -192,24 +203,19 @@ export function RLSPermissionsTable() {
         {/* Header */}
         <div style={{ marginBottom: 40 }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.5px", marginBottom: 8, background: `linear-gradient(135deg, ${c.text} 0%, ${c.textMuted} 100%)`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-            RLS Permissions Matrix
+            {t("rls_matrix_title")}
           </h1>
-          <p style={{ color: c.textMuted, fontSize: 14 }}>Row Level Security — uprawnienia po migracji</p>
+          <p style={{ color: c.textMuted, fontSize: 14 }}>{t("rls_matrix_subtitle")}</p>
         </div>
 
         {/* Legend */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: 32, padding: "16px 20px", background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12 }}>
-          {[
-            { icon: "✓", label: "Dostęp", bg: c.greenBg, fg: c.green, bd: c.greenBorder },
-            { icon: "✗", label: "Brak dostępu", bg: c.redBg, fg: c.red, bd: c.redBorder },
-            { icon: "–", label: "Brak polityki", bg: c.yellowBg, fg: c.yellow, bd: c.yellowBorder },
-            { icon: "✓*", label: "Warunkowy", bg: c.blueBg, fg: c.blue, bd: c.blueBorder },
-          ].map((item) => (
-            <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: c.textMuted, fontFamily: "'JetBrains Mono', monospace" }}>
+          {legendItems.map((item) => (
+            <div key={item.labelKey} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: c.textMuted, fontFamily: "'JetBrains Mono', monospace" }}>
               <span style={{ width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, background: item.bg, color: item.fg, border: `1px solid ${item.bd}` }}>
                 {item.icon}
               </span>
-              {item.label}
+              {t(item.labelKey)}
             </div>
           ))}
         </div>
@@ -247,7 +253,7 @@ export function RLSPermissionsTable() {
             <thead>
               <tr>
                 <th rowSpan={2} style={{ textAlign: "left", paddingLeft: 20, paddingBottom: 12, verticalAlign: "bottom", color: c.textMuted, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", background: c.surface }}>
-                  Tabela
+                  {t("rls_table_header")}
                 </th>
                 {roles.map((role, idx) => (
                   <th key={role.label} colSpan={4} style={{ padding: "16px 8px 4px", textAlign: "center", background: c.surface, borderLeft: idx > 0 ? `1px solid ${c.borderLight}` : undefined }}>
@@ -297,9 +303,9 @@ export function RLSPermissionsTable() {
                       </span>
                     )}
                   </td>
-                  <RoleColumns perms={row.user} role="user" />
-                  <RoleColumns perms={row.leader} role="leader" />
-                  <RoleColumns perms={row.pm} role="pm" />
+                  <RoleColumns perms={row.user} role="user" t={t} deleteTooltips={deleteTooltips} />
+                  <RoleColumns perms={row.leader} role="leader" t={t} deleteTooltips={deleteTooltips} />
+                  <RoleColumns perms={row.pm} role="pm" t={t} deleteTooltips={deleteTooltips} />
                 </tr>
               ))}
             </tbody>
@@ -309,14 +315,14 @@ export function RLSPermissionsTable() {
         {/* Notes */}
         <div style={{ marginTop: 24, padding: "16px 20px", background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12 }}>
           <h3 style={{ fontSize: 13, fontWeight: 600, color: c.textMuted, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-            Uwagi
+            {t("rls_notes_title")}
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
-              <><strong>S</strong> = SELECT, <strong>I</strong> = INSERT, <strong>U</strong> = UPDATE, <strong>D</strong> = DELETE</>,
-              <><code style={codeStyle(c.blue, c.blueBg)}>✓*</code> DELETE — User: tylko własne wpisy z tego samego dnia (<code style={codeStyle(c.blue, c.blueBg)}>Europe/Warsaw</code>); Team Leader / PM: pełne DELETE</>,
-              <>Tabele oznaczone <code style={codeStyle(c.yellow, c.yellowBg)}>READONLY</code> mają tylko SELECT i INSERT dla wszystkich ról</>,
-              <><code style={codeStyle(c.blue, c.blueBg)}>invoices</code> — dostęp wyłącznie dla Project Manager (SELECT, INSERT, UPDATE)</>,
+              t("rls_notes_crud"),
+              t("rls_notes_conditional_delete"),
+              t("rls_notes_readonly"),
+              t("rls_notes_invoices"),
             ].map((content, i) => (
               <p key={i} style={{ fontSize: 13, color: c.textMuted, paddingLeft: 16, position: "relative", lineHeight: 1.6 }}>
                 <span style={{ position: "absolute", left: 0, color: c.textDim, fontWeight: 700 }}>›</span>

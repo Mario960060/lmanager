@@ -3,10 +3,24 @@
  * 
  * Te zmienne są dynamicznie aktualizowane przez ThemeContext
  * Mogą być użyte w CSS/SCSS lub bezpośrednio w inline styles
+ * 
+ * Mapped to designTokens.ts for consistency:
+ * --color-primary → colors.accentBlueDark
+ * --color-bg-primary → colors.bgApp
+ * --color-bg-secondary → colors.bgMain
+ * --color-bg-tertiary → colors.bgSidebar
+ * --color-input-bg → colors.bgInput
+ * --color-button-primary-text → colors.textOnAccent
  */
 
 :root {
-  /* ========== COLORS - Dark Theme Default ========== */
+  /* Fallbacks before ThemeContext applies — dark theme defaults */
+  --bg-app: #0c1220;
+  --text-primary: #f1f5f9;
+  --accent-r: 59;
+  --accent-g: 130;
+  --accent-b: 246;
+  /* ========== COLORS - Dark Theme Default (legacy, may be overwritten) ========== */
   
   /* Primary Colors */
   --color-primary: #2563EB;
@@ -19,10 +33,10 @@
   --color-secondary-hover: #4B5563;
   --color-secondary-light: #9CA3AF;
   
-  /* Background Colors */
-  --color-bg-primary: #111827;
-  --color-bg-secondary: #1F2937;
-  --color-bg-tertiary: #374151;
+  /* Background Colors - aligned with designTokens */
+  --color-bg-primary: #0c1220;
+  --color-bg-secondary: #0f172a;
+  --color-bg-tertiary: #111827;
   --color-bg-hover: #4B5563;
   
   /* Text Colors */
@@ -122,8 +136,8 @@
  */
 
 body {
-  background-color: var(--color-bg-primary);
-  color: var(--color-text-primary);
+  background-color: var(--bg-app);
+  color: var(--text-primary);
   transition: background-color var(--duration-normal) var(--easing-default),
               color var(--duration-normal) var(--easing-default);
 }

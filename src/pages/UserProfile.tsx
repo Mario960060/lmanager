@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { useNavigate } from 'react-router-dom';
-import { User, LogOut, Save, AlertCircle, Loader2, BarChart, ClipboardList, Package, FileText, Truck } from 'lucide-react';
+import { User, LogOut, Save, AlertCircle, BarChart, ClipboardList, Package, FileText, Truck } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import PageInfoModal from '../components/PageInfoModal';
 import TaskPerformanceModal from '../components/TaskPerformanceModal';
@@ -13,6 +13,8 @@ import MaterialAddedModal from '../components/MaterialAddedModal';
 import AdditionalMaterialsModal from '../components/AdditionalMaterialsModal';
 import DayNotesModal from '../components/DayNotesModal';
 import CheckWeeklyHoursModal from '../components/CheckWeeklyHoursModal';
+import { Spinner, Button } from '../themes/uiComponents';
+import { colors } from '../themes/designTokens';
 
 const UserProfile = () => {
   const { t } = useTranslation(['common', 'dashboard', 'form']);
@@ -95,7 +97,7 @@ const UserProfile = () => {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
     },
     onError: (error: any) => {
-      setError(error.message || 'Failed to update name');
+      setError(error.message || t('common:failed_update_name'));
     }
   });
 
@@ -206,7 +208,7 @@ const UserProfile = () => {
     },
     onError: (error: any) => {
       console.error('❌ Abandon team error:', error);
-      setError(error.message || 'Failed to leave team');
+      setError(error.message || t('common:failed_leave_team'));
     }
   });
 
@@ -293,7 +295,11 @@ const UserProfile = () => {
       <div className="flex items-center mb-6">
         <BackButton />
         <h1 className="text-2xl font-bold ml-2">{t('common:user_profile_title')}</h1>
-        <PageInfoModal description="" quickTips={[]} />
+        <PageInfoModal
+          description={t('common:profile_info_description')}
+          title={t('common:profile_info_title')}
+          quickTips={[]}
+        />
       </div>
 
       {/* User Info Card */}
@@ -313,34 +319,25 @@ const UserProfile = () => {
                     className="border rounded-md px-3 py-2 text-lg font-medium dark:bg-gray-700 dark:border-gray-600"
                     placeholder={t('common:enter_your_name')}
                   />
-                  <button
-                    onClick={handleUpdateName}
-                    className="ml-2 p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-                    disabled={updateNameMutation.isPending}
-                  >
+                  <Button variant="primary" onClick={handleUpdateName} disabled={updateNameMutation.isPending} style={{ padding: 8, marginLeft: 8 }}>
                     {updateNameMutation.isPending ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <Spinner size={20} />
                     ) : (
                       <Save className="h-5 w-5" />
                     )}
-                  </button>
+                  </Button>
                 </div>
               ) : (
                 <h2 className="text-xl font-semibold">{profile?.full_name || t('common:user_fallback')}</h2>
               )}
               <p className="text-gray-600 dark:text-gray-400">{profile?.email}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-500">{t('common:role')}: {profile?.role}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-500">{t('common:role')}: {profile?.role ? t(`common:role_${profile.role === 'Team_Leader' ? 'team_leader' : profile.role.toLowerCase()}`) : '-'}</p>
             </div>
           </div>
           
           <div>
             {!isEditing && (
-              <button
-                onClick={() => setIsEditing(true)}
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
-              >
-                {t('common:change_name')}
-              </button>
+              <Button variant="primary" onClick={() => setIsEditing(true)}>{t('common:change_name')}</Button>
             )}
           </div>
         </div>
@@ -360,22 +357,14 @@ const UserProfile = () => {
 
         {/* First row of buttons - original style */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-          <button
-            onClick={handleAbandonTeamClick}
-            disabled={isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending}
-            className="px-4 py-3 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 transition-colors disabled:opacity-50 flex items-center justify-center"
-          >
-            {(isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending) && <Loader2 className="h-5 w-5 mr-2 animate-spin" />}
+          <Button variant="primary" fullWidth onClick={handleAbandonTeamClick} disabled={isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: `linear-gradient(135deg, ${colors.amber}, ${colors.orangeLight})` }}>
+            {(isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending) && <Loader2 className="h-5 w-5 animate-spin" />}
             {(isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending) ? (isAdmin ? t('common:deleting_company') : t('common:leaving')) : (isAdmin ? t('common:delete_company') : t('common:abandon_team'))}
-          </button>
-          
-          <button
-            onClick={handleLogout}
-            className="px-4 py-3 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors flex items-center justify-center"
-          >
-            <LogOut className="h-5 w-5 mr-2" />
+          </Button>
+          <Button variant="danger" fullWidth onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <LogOut className="h-5 w-5" />
             {t('common:logout')}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -390,9 +379,7 @@ const UserProfile = () => {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             {t('common:check_weekly_hours_desc')}
           </p>
-          <button className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">
-            {t('common:check_hours')}
-          </button>
+          <Button variant="primary" fullWidth>{t('common:check_hours')}</Button>
         </div>
 
         {/* Task Performance Card */}
@@ -421,12 +408,7 @@ const UserProfile = () => {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             {t('common:additional_tasks_desc')}
           </p>
-          <button
-            onClick={() => setShowAdditionalTasksModal(true)}
-            className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
-          >
-            {t('common:view_tasks')}
-          </button>
+          <Button variant="success" fullWidth onClick={() => setShowAdditionalTasksModal(true)}>{t('common:view_tasks')}</Button>
         </div>
 
         {/* Material Added Card */}
@@ -438,12 +420,7 @@ const UserProfile = () => {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             {t('common:material_added_desc')}
           </p>
-          <button
-            onClick={() => setShowMaterialAddedModal(true)}
-            className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors"
-          >
-            {t('common:view_materials')}
-          </button>
+          <Button variant="primary" fullWidth onClick={() => setShowMaterialAddedModal(true)} style={{ background: `linear-gradient(135deg, ${colors.purple}, ${colors.purpleLight})` }}>{t('common:view_materials')}</Button>
         </div>
 
         {/* Additional Materials Card */}
@@ -455,12 +432,7 @@ const UserProfile = () => {
           <p className="text-gray-600 dark:text-gray-400 mb-4">
             {t('common:additional_materials_desc')}
           </p>
-          <button
-            onClick={() => setShowAdditionalMaterialsModal(true)}
-            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            {t('common:view_materials')}
-          </button>
+          <Button variant="primary" fullWidth onClick={() => setShowAdditionalMaterialsModal(true)}>{t('common:view_materials')}</Button>
         </div>
 
         {/* Day Notes Card */}
@@ -506,41 +478,32 @@ const UserProfile = () => {
         <CheckWeeklyHoursModal open={showCheckWeeklyHoursModal} onClose={() => setShowCheckWeeklyHoursModal(false)} />
       )}
 
-      {/* Abandon Team Confirmation Modal */}
+      {/* Abandon Team / Delete Company Confirmation Modal */}
       {showAbandonConfirmation && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold dark:text-white mb-4">
+            {isAdmin && (
+              <div className="flex items-center gap-2 mb-4 p-3 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded-lg">
+                <AlertCircle className="h-5 w-5 flex-shrink-0" />
+                <span className="text-sm font-medium">{t('common:delete_company_confirm_msg')}</span>
+              </div>
+            )}
+            <h3 className={`text-lg font-semibold dark:text-white ${isAdmin ? 'mb-6' : 'mb-4'}`}>
               {isAdmin ? t('common:delete_company_confirm') : t('common:leave_team_confirm')}
             </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              {isAdmin 
-                ? t('common:delete_company_confirm_msg')
-                : t('common:leave_team_confirm_msg')
-              }
-            </p>
+            {!isAdmin && (
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                {t('common:leave_team_confirm_msg')}
+              </p>
+            )}
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowAbandonConfirmation(false)}
-                disabled={isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
-              >
+              <Button variant="secondary" style={{ flex: 1 }} onClick={() => setShowAbandonConfirmation(false)} disabled={isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending}>
                 {isAdmin ? t('common:no_keep_company') : t('common:no_stay')}
-              </button>
-              <button
-                onClick={() => {
-                  if (isAdmin) {
-                    deleteCompanyMutation.mutate();
-                  } else {
-                    abandonTeamMutation.mutate();
-                  }
-                }}
-                disabled={isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending}
-                className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-              >
-                {(isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
+              </Button>
+              <Button variant="danger" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={() => { if (isAdmin) deleteCompanyMutation.mutate(); else abandonTeamMutation.mutate(); }} disabled={isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending}>
+                {(isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending) && <Spinner size={16} />}
                 {isAdmin ? t('common:yes_delete') : t('common:yes_leave')}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName, translateTaskDescription, translateUnit } from '../../../lib/translationMap';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
 import { Clock, X, Search, Info, Trash2, Settings, Save } from 'lucide-react';
@@ -20,7 +21,7 @@ interface SetupTasksProps {
 }
 
 const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'calculator']);
   const queryClient = useQueryClient();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [taskSearch, setTaskSearch] = useState('');
@@ -258,7 +259,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                         className="w-full p-1 border rounded text-sm"
                       />
                     ) : (
-                      task.name
+                      translateTaskName(task.name, t)
                     )}
                   </td>
                   <td className="text-sm text-gray-500 px-2 py-2 md:px-4">
@@ -270,7 +271,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                         className="w-full p-1 border rounded text-sm"
                       />
                     ) : (
-                      task.description
+                      translateTaskDescription(task.description, t)
                     )}
                   </td>
                   <td className="text-sm text-gray-500 px-2 py-2 md:px-4">
@@ -282,7 +283,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                         className="w-full p-1 border rounded text-sm"
                       />
                     ) : (
-                      task.unit
+                      translateUnit(task.unit, t)
                     )}
                   </td>
                   <td className="text-sm text-gray-500 px-2 py-2 md:px-4 whitespace-nowrap">
@@ -471,7 +472,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                           className="w-full p-1 border rounded text-sm"
                         />
                       ) : (
-                        task.name
+                        translateTaskName(task.name, t)
                       )}
                     </td>
                     <td className="text-sm text-gray-500 px-2 py-2 md:px-4">
@@ -483,7 +484,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                           className="w-full p-1 border rounded text-sm"
                         />
                       ) : (
-                        task.description
+                        translateTaskDescription(task.description, t)
                       )}
                     </td>
                     <td className="text-sm text-gray-500 px-2 py-2 md:px-4">

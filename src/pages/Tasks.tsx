@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName, translateTaskDescription } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { Loader2, X, Wrench, Package, Pencil, Info } from 'lucide-react';
+import { X, Wrench, Package, Pencil, Info } from 'lucide-react';
 import PageInfoModal from '../components/PageInfoModal';
 import BackButton from '../components/BackButton';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
+import { Button, Card, Modal, TextInput, Label, Spinner } from '../themes/uiComponents';
 
 interface Task {
   id: string;
@@ -207,378 +210,220 @@ const TaskRequirements = () => {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: fonts.body }}>
+        <Spinner size={32} />
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["6xl"], fontFamily: fonts.body }}>
       <BackButton />
-      <div className="flex justify-between items-center md:flex-row flex-col">
-        <div className="flex items-center">
-          <h1 className="text-3xl font-bold text-gray-900">{t('utilities:task_requirements_title')}</h1>
-          <PageInfoModal description="" quickTips={[]} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexDirection: 'column' }} className="md:flex-row">
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <h1 style={{ fontSize: fontSizes["3xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('utilities:task_requirements_title')}</h1>
+          <PageInfoModal
+            description={t('form:task_requirements_info_description')}
+            title={t('form:task_requirements_info_title')}
+            quickTips={[]}
+          />
         </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="md:flex hidden bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-        >
+        <Button variant="accent" color={colors.accentBlue} icon="📋" onClick={() => setShowAddModal(true)} className="md:flex hidden">
           {t('utilities:add_task_requirements')}
-        </button>
+        </Button>
       </div>
 
-      {/* Mobile Button */}
-      <button
-        onClick={() => setShowAddModal(true)}
-        className="md:hidden w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-      >
+      {/* Mobile Button - compact, not full width */}
+      <Button variant="accent" color={colors.accentBlue} icon="📋" onClick={() => setShowAddModal(true)} style={{ alignSelf: 'flex-start' }} className="md:hidden">
         {t('utilities:add_task_requirements')}
-      </button>
+      </Button>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: spacing["6xl"] }}>
         {tasks.map((task) => (
-          <div
-            key={task.id}
-            className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow"
-          >
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
+          <Card key={task.id} style={{ transition: 'box-shadow 0.2s' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ flex: 1 }}>
                 <button
                   onClick={() => handleTaskClick(task)}
-                  className="group flex items-center text-xl font-semibold text-gray-900 hover:text-blue-600"
+                  style={{ display: 'flex', alignItems: 'center', fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                 >
-                  {task.name}
-                  <Info className="w-4 h-4 ml-2 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  {translateTaskName(task.name, t)}
+                  <Info style={{ width: 16, height: 16, marginLeft: spacing.sm }} />
                 </button>
-                <p className="text-gray-600 mt-2 line-clamp-2">{task.description}</p>
+                <p style={{ color: colors.textDim, fontFamily: fonts.body, marginTop: spacing.sm, margin: `${spacing.sm} 0 0 0`, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{task.description}</p>
               </div>
               <button
                 onClick={() => handleEditClick(task)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors ml-2"
+                style={{ padding: spacing.sm, background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', marginLeft: spacing.sm }}
                 title={t('utilities:edit_task')}
               >
-                <Pencil className="w-5 h-5 text-blue-600" />
+                <Pencil style={{ width: 20, height: 20, color: colors.accentBlue }} />
               </button>
             </div>
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center text-sm text-blue-600">
-                <Wrench className="w-4 h-4 mr-2" />
+            <div style={{ marginTop: spacing["5xl"], display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+              <div style={{ display: 'flex', alignItems: 'center', fontSize: fontSizes.base, color: colors.accentBlue }}>
+                <Wrench style={{ width: 16, height: 16, marginRight: spacing.sm }} />
                 <span>{t('utilities:tools')}: {task.tools.length}</span>
               </div>
-              <div className="flex items-center text-sm text-green-600">
-                <Package className="w-4 h-4 mr-2" />
+              <div style={{ display: 'flex', alignItems: 'center', fontSize: fontSizes.base, color: colors.green }}>
+                <Package style={{ width: 16, height: 16, marginRight: spacing.sm }} />
                 <span>{t('utilities:required_materials')}: {task.materials.length}</span>
               </div>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
 
       {/* Quick Details Modal */}
-      {showDetailsModal && selectedTask && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-lg w-full p-6">
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-xl font-semibold text-gray-900">{selectedTask.name}</h2>
-              <button
-                onClick={() => {
-                  setShowDetailsModal(false);
-                  setSelectedTask(null);
-                }}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      <Modal
+        open={!!(showDetailsModal && selectedTask)}
+        onClose={() => { setShowDetailsModal(false); setSelectedTask(null); }}
+        title={selectedTask?.name ?? ''}
+        width={512}
+      >
+        {selectedTask && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+            <div>
+              <h3 style={{ fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.textSecondary, marginBottom: spacing.sm, fontFamily: fonts.body }}>{t('utilities:description')}</h3>
+              <p style={{ color: colors.textDim, fontFamily: fonts.body }}>{translateTaskDescription(selectedTask.description, t)}</p>
             </div>
-
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-2">{t('utilities:description')}</h3>
-                <p className="text-gray-600">{selectedTask.description}</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing["6xl"] }}>
+              <div style={{ background: `${colors.accentBlue}15`, padding: spacing["5xl"], borderRadius: radii.lg }}>
+                <h3 style={{ fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.accentBlue, marginBottom: spacing.sm, fontFamily: fonts.body }}>{t('utilities:required_tools')}</h3>
+                <ul style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, margin: 0, padding: 0, listStyle: 'none' }}>
+                  {selectedTask.tools.map((tool, index) => (
+                    <li key={index} style={{ display: 'flex', alignItems: 'center', fontFamily: fonts.body }}>
+                      <Wrench style={{ width: 16, height: 16, marginRight: spacing.sm, flexShrink: 0 }} />
+                      <span style={{ fontSize: fontSizes.base }}>{tool}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                {/* Tools Section */}
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="text-sm font-medium text-blue-900 mb-2">{t('utilities:required_tools')}</h3>
-                  <ul className="space-y-2">
-                    {selectedTask.tools.map((tool, index) => (
-                      <li key={index} className="flex items-center text-blue-800">
-                        <Wrench className="w-4 h-4 mr-2 flex-shrink-0" />
-                        <span className="text-sm">{tool}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Materials Section */}
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <h3 className="text-sm font-medium text-green-900 mb-2">{t('utilities:required_materials')}</h3>
-                  <ul className="space-y-2">
-                    {selectedTask.materials.map((material, index) => (
-                      <li key={index} className="flex items-center text-green-800">
-                        <Package className="w-4 h-4 mr-2 flex-shrink-0" />
-                        <span className="text-sm">{material}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              <div style={{ background: `${colors.green}15`, padding: spacing["5xl"], borderRadius: radii.lg }}>
+                <h3 style={{ fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.green, marginBottom: spacing.sm, fontFamily: fonts.body }}>{t('utilities:required_materials')}</h3>
+                <ul style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, margin: 0, padding: 0, listStyle: 'none' }}>
+                  {selectedTask.materials.map((material, index) => (
+                    <li key={index} style={{ display: 'flex', alignItems: 'center', fontFamily: fonts.body }}>
+                      <Package style={{ width: 16, height: 16, marginRight: spacing.sm, flexShrink: 0 }} />
+                      <span style={{ fontSize: fontSizes.base }}>{material}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
 
       {/* Add Task Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
-            <div className="p-6 border-b">
-              <div className="flex justify-between items-start">
-                <h2 className="text-2xl font-semibold text-gray-900">{t('utilities:add_new_task_requirements')}</h2>
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 overflow-y-auto flex-1">
-              <div className="space-y-4">
+      <Modal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title={t('utilities:add_new_task_requirements')}
+        width={672}
+        footer={
+          <Button
+            onClick={handleSubmit}
+            disabled={addTaskMutation.isPending || !newTask.name || !newTask.description}
+            style={{ width: '100%' }}
+          >
+            {addTaskMutation.isPending ? t('utilities:adding') : t('utilities:add_task_requirements')}
+          </Button>
+        }
+      >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["5xl"], overflowY: 'auto' }}>
+                <TextInput label={t('utilities:task_name')} value={newTask.name} onChange={(v) => setNewTask(prev => ({ ...prev, name: v }))} placeholder={t('utilities:enter_task_name')} />
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('utilities:task_name')}</label>
-                  <input
-                    type="text"
-                    value={newTask.name}
-                    onChange={(e) => setNewTask(prev => ({ ...prev, name: e.target.value }))}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    placeholder={t('utilities:enter_task_name')}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('utilities:description')}</label>
+                  <Label>{t('utilities:description')}</Label>
                   <textarea
                     value={newTask.description}
                     onChange={(e) => setNewTask(prev => ({ ...prev, description: e.target.value }))}
                     rows={3}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     placeholder={t('utilities:enter_task_description')}
+                    style={{ width: '100%', padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base, marginTop: spacing.xs }}
                   />
                 </div>
-
-                {/* Tools Section */}
                 <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium text-gray-700">{t('utilities:required_tools')}</label>
-                    <button
-                      type="button"
-                      onClick={() => handleAddTool()}
-                      className="text-sm text-blue-600 hover:text-blue-700"
-                    >
-                      {t('utilities:add_tool')}
-                    </button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+                    <Label>{t('utilities:required_tools')}</Label>
+                    <button type="button" onClick={() => handleAddTool()} style={{ fontSize: fontSizes.base, color: colors.accentBlue, background: 'none', border: 'none', cursor: 'pointer', fontFamily: fonts.body }}>{t('utilities:add_tool')}</button>
                   </div>
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, maxHeight: 192, overflowY: 'auto' }}>
                     {newTask.tools.map((tool, index) => (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={tool}
-                          onChange={(e) => handleToolChange(index, e.target.value)}
-                          className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          placeholder={t('utilities:enter_tool_name')}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTool(index)}
-                          className="p-2 text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
+                      <div key={index} style={{ display: 'flex', gap: spacing.sm }}>
+                        <input type="text" value={tool} onChange={(e) => handleToolChange(index, e.target.value)} placeholder={t('utilities:enter_tool_name')} style={{ flex: 1, padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base }} />
+                        <button type="button" onClick={() => handleRemoveTool(index)} style={{ padding: spacing.sm, color: colors.red, background: 'none', border: 'none', cursor: 'pointer' }}><X style={{ width: 20, height: 20 }} /></button>
                       </div>
                     ))}
                   </div>
                 </div>
-
-                {/* Materials Section */}
                 <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium text-gray-700">{t('utilities:required_materials')}</label>
-                    <button
-                      type="button"
-                      onClick={() => handleAddMaterial()}
-                      className="text-sm text-blue-600 hover:text-blue-700"
-                    >
-                      {t('utilities:add_material')}
-                    </button>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+                    <Label>{t('utilities:required_materials')}</Label>
+                    <button type="button" onClick={() => handleAddMaterial()} style={{ fontSize: fontSizes.base, color: colors.accentBlue, background: 'none', border: 'none', cursor: 'pointer', fontFamily: fonts.body }}>{t('utilities:add_material')}</button>
                   </div>
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, maxHeight: 192, overflowY: 'auto' }}>
                     {newTask.materials.map((material, index) => (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={material}
-                          onChange={(e) => handleMaterialChange(index, e.target.value)}
-                          className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          placeholder={t('utilities:enter_material_name')}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveMaterial(index)}
-                          className="p-2 text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
+                      <div key={index} style={{ display: 'flex', gap: spacing.sm }}>
+                        <input type="text" value={material} onChange={(e) => handleMaterialChange(index, e.target.value)} placeholder={t('utilities:enter_material_name')} style={{ flex: 1, padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base }} />
+                        <button type="button" onClick={() => handleRemoveMaterial(index)} style={{ padding: spacing.sm, color: colors.red, background: 'none', border: 'none', cursor: 'pointer' }}><X style={{ width: 20, height: 20 }} /></button>
                       </div>
                     ))}
                   </div>
                 </div>
-              </div>
             </div>
-
-            <div className="p-6 border-t bg-gray-50">
-              <button
-                onClick={handleSubmit}
-                disabled={addTaskMutation.isPending || !newTask.name || !newTask.description}
-                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                {addTaskMutation.isPending ? t('utilities:adding') : t('utilities:add_task_requirements')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Edit Task Modal */}
-      {showEditModal && editingTask && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
-            <div className="p-6 border-b">
-              <div className="flex justify-between items-start">
-                <h2 className="text-2xl font-semibold text-gray-900">{t('utilities:edit_task_requirements')}</h2>
-                <button
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setEditingTask(null);
-                  }}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+      <Modal
+        open={!!(showEditModal && editingTask)}
+        onClose={() => { setShowEditModal(false); setEditingTask(null); }}
+        title={t('utilities:edit_task_requirements')}
+        width={672}
+        footer={
+          <Button onClick={handleEdit} disabled={editTaskMutation.isPending || !editingTask?.name || !editingTask?.description} style={{ width: '100%' }}>
+            {editTaskMutation.isPending ? t('utilities:saving') : t('utilities:save_changes')}
+          </Button>
+        }
+      >
+        {editingTask && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["5xl"], overflowY: 'auto' }}>
+            <TextInput label={t('utilities:task_name')} value={editingTask.name} onChange={(v) => setEditingTask(prev => prev ? { ...prev, name: v } : null)} placeholder={t('utilities:enter_task_name')} />
+            <div>
+              <Label>{t('utilities:description')}</Label>
+              <textarea value={editingTask.description} onChange={(e) => setEditingTask(prev => prev ? { ...prev, description: e.target.value } : null)} rows={3} placeholder={t('utilities:enter_task_description')} style={{ width: '100%', padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base, marginTop: spacing.xs }} />
+            </div>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+                <Label>{t('utilities:required_tools')}</Label>
+                <button type="button" onClick={() => handleAddTool(true)} style={{ fontSize: fontSizes.base, color: colors.accentBlue, background: 'none', border: 'none', cursor: 'pointer', fontFamily: fonts.body }}>{t('utilities:add_tool')}</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, maxHeight: 192, overflowY: 'auto' }}>
+                {editingTask.tools.map((tool, index) => (
+                  <div key={index} style={{ display: 'flex', gap: spacing.sm }}>
+                    <input type="text" value={tool} onChange={(e) => handleToolChange(index, e.target.value, true)} placeholder={t('utilities:enter_tool_name')} style={{ flex: 1, padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base }} />
+                    <button type="button" onClick={() => handleRemoveTool(index, true)} style={{ padding: spacing.sm, color: colors.red, background: 'none', border: 'none', cursor: 'pointer' }}><X style={{ width: 20, height: 20 }} /></button>
+                  </div>
+                ))}
               </div>
             </div>
-
-            <div className="p-6 overflow-y-auto flex-1">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('utilities:task_name')}</label>
-                  <input
-                    type="text"
-                    value={editingTask.name}
-                    onChange={(e) => setEditingTask(prev => ({ ...prev!, name: e.target.value }))}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    placeholder={t('utilities:enter_task_name')}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('utilities:description')}</label>
-                  <textarea
-                    value={editingTask.description}
-                    onChange={(e) => setEditingTask(prev => ({ ...prev!, description: e.target.value }))}
-                    rows={3}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    placeholder={t('utilities:enter_task_description')}
-                  />
-                </div>
-
-                {/* Tools Section */}
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium text-gray-700">{t('utilities:required_tools')}</label>
-                    <button
-                      type="button"
-                      onClick={() => handleAddTool(true)}
-                      className="text-sm text-blue-600 hover:text-blue-700"
-                    >
-                      {t('utilities:add_tool')}
-                    </button>
-                  </div>
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                    {editingTask.tools.map((tool, index) => (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={tool}
-                          onChange={(e) => handleToolChange(index, e.target.value, true)}
-                          className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          placeholder={t('utilities:enter_tool_name')}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveTool(index, true)}
-                          className="p-2 text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Materials Section */}
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-sm font-medium text-gray-700">{t('utilities:required_materials')}</label>
-                    <button
-                      type="button"
-                      onClick={() => handleAddMaterial(true)}
-                      className="text-sm text-blue-600 hover:text-blue-700"
-                    >
-                      {t('utilities:add_material')}
-                    </button>
-                  </div>
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                    {editingTask.materials.map((material, index) => (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={material}
-                          onChange={(e) => handleMaterialChange(index, e.target.value, true)}
-                          className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                          placeholder={t('utilities:enter_material_name')}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveMaterial(index, true)}
-                          className="p-2 text-red-600 hover:text-red-700"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+                <Label>{t('utilities:required_materials')}</Label>
+                <button type="button" onClick={() => handleAddMaterial(true)} style={{ fontSize: fontSizes.base, color: colors.accentBlue, background: 'none', border: 'none', cursor: 'pointer', fontFamily: fonts.body }}>{t('utilities:add_material')}</button>
               </div>
-            </div>
-
-            <div className="p-6 border-t bg-gray-50">
-              <button
-                onClick={handleEdit}
-                disabled={editTaskMutation.isPending || !editingTask.name || !editingTask.description}
-                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                {editTaskMutation.isPending ? t('utilities:saving') : t('utilities:save_changes')}
-              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, maxHeight: 192, overflowY: 'auto' }}>
+                {editingTask.materials.map((material, index) => (
+                  <div key={index} style={{ display: 'flex', gap: spacing.sm }}>
+                    <input type="text" value={material} onChange={(e) => handleMaterialChange(index, e.target.value, true)} placeholder={t('utilities:enter_material_name')} style={{ flex: 1, padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base }} />
+                    <button type="button" onClick={() => handleRemoveMaterial(index, true)} style={{ padding: spacing.sm, color: colors.red, background: 'none', border: 'none', cursor: 'pointer' }}><X style={{ width: 20, height: 20 }} /></button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 };

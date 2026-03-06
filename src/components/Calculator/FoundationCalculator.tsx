@@ -4,10 +4,44 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName } from '../../lib/translationMap';
+import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import {
+  colors,
+  fonts,
+  fontSizes,
+  fontWeights,
+  spacing,
+  radii,
+  gradients,
+} from '../../themes/designTokens';
+import {
+  TextInput,
+  SelectDropdown,
+  Checkbox,
+  Button,
+  Card,
+  Label,
+  DataTable,
+} from '../../themes/uiComponents';
 
 interface FoundationCalculatorProps {
   onResultsChange?: (results: any) => void;
+  onInputsChange?: (inputs: Record<string, any>) => void;
+  isInProjectCreating?: boolean;
+  initialLength?: number;
+  savedInputs?: Record<string, any>;
+  calculateTransport?: boolean;
+  setCalculateTransport?: (value: boolean) => void;
+  selectedTransportCarrier?: any;
+  setSelectedTransportCarrier?: (value: any) => void;
+  transportDistance?: string;
+  setTransportDistance?: (value: string) => void;
+  carriers?: any[];
+  selectedExcavator?: any;
+  recalculateTrigger?: number;
+  /** From Project Card Equipment tab — used when isInProjectCreating, inputs hidden */
+  projectSoilType?: 'clay' | 'sand' | 'rock';
+  projectDiggingMethod?: 'shovel' | 'small' | 'medium' | 'large';
 }
 
 interface TaskTemplate {
@@ -24,20 +58,50 @@ interface DiggingEquipment {
   "size (in tones)": number | null;
 }
 
-const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsChange }) => {
-  const { t } = useTranslation(['calculator', 'utilities', 'common']);
+const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({
+  onResultsChange,
+  onInputsChange,
+  isInProjectCreating = false,
+  initialLength,
+  savedInputs = {},
+  calculateTransport: propCalculateTransport,
+  selectedTransportCarrier: propSelectedTransportCarrier,
+  transportDistance: propTransportDistance,
+  carriers: propCarriers = [],
+  selectedExcavator: propSelectedExcavator,
+  recalculateTrigger = 0,
+  projectSoilType: propProjectSoilType,
+  projectDiggingMethod: propProjectDiggingMethod,
+}) => {
+  const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
   
   // Input states
-  const [length, setLength] = useState<string>('');
-  const [width, setWidth] = useState<string>('');
-  const [depthCm, setDepthCm] = useState<string>('');
-  const [diggingMethod, setDiggingMethod] = useState<'shovel' | 'small' | 'medium' | 'large'>('shovel');
-  const [soilType, setSoilType] = useState<'clay' | 'sand' | 'rock'>('clay');
+  const initLength = savedInputs?.length != null ? String(savedInputs.length) : (initialLength != null ? initialLength.toFixed(3) : '');
+  const [length, setLength] = useState<string>(initLength);
+  useEffect(() => {
+    if (savedInputs?.length != null) setLength(String(savedInputs.length));
+    else if (initialLength != null && isInProjectCreating) setLength(initialLength.toFixed(3));
+  }, [savedInputs?.length, initialLength, isInProjectCreating]);
+  const [width, setWidth] = useState<string>(savedInputs?.width ?? '');
+  const [depthCm, setDepthCm] = useState<string>(savedInputs?.depthCm ?? '');
+  const [diggingMethod, setDiggingMethod] = useState<'shovel' | 'small' | 'medium' | 'large'>(savedInputs?.diggingMethod ?? 'shovel');
+  const [soilType, setSoilType] = useState<'clay' | 'sand' | 'rock'>(savedInputs?.soilType ?? 'clay');
+  const effectiveDiggingMethod = isInProjectCreating && propProjectDiggingMethod ? propProjectDiggingMethod : diggingMethod;
+  const effectiveSoilType = isInProjectCreating && propProjectSoilType ? propProjectSoilType : soilType;
+  useEffect(() => {
+    if (onInputsChange && isInProjectCreating) {
+      onInputsChange({ length, width, depthCm, diggingMethod: effectiveDiggingMethod, soilType: effectiveSoilType });
+    }
+  }, [length, width, depthCm, effectiveDiggingMethod, effectiveSoilType, onInputsChange, isInProjectCreating]);
   const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
   const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
   const [transportDistance, setTransportDistance] = useState<string>('30');
   const [carriersLocal, setCarriersLocal] = useState<DiggingEquipment[]>([]);
+  const effectiveCalculateTransport = isInProjectCreating ? (propCalculateTransport ?? false) : calculateTransport;
+  const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
+  const effectiveTransportDistance = isInProjectCreating && propTransportDistance ? propTransportDistance : transportDistance;
+  const carriers = propCarriers && propCarriers.length > 0 ? propCarriers : carriersLocal;
 
   // Result states
   const [totalHours, setTotalHours] = useState<number | null>(null);
@@ -163,10 +227,10 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsCh
       }
     };
     
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       fetchEquipment();
     }
-  }, [calculateTransport]);
+  }, [effectiveCalculateTransport]);
 
   const getTaskHours = (method: 'shovel' | 'small' | 'medium' | 'large', baseHours: number): number => {
     const taskMap = {
@@ -247,14 +311,14 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsCh
       const timeWithDimensions = timeBaseManual * dimensionAdjustment;
 
       // 4. Get final time using task template or fallback
-      const excavationHours = getTaskHours(diggingMethod, timeWithDimensions);
+      const excavationHours = getTaskHours(effectiveDiggingMethod, timeWithDimensions);
 
       // 5. Calculate material weight (excavated soil)
-      const soilDensity = SOIL_DENSITY[soilType];
+      const soilDensity = SOIL_DENSITY[effectiveSoilType];
       const excavatedSoilTonnes = actualVolume * soilDensity;
       
       // Calculate loose volume after excavation (soil expands)
-      const looseVolumeCoefficient = LOOSE_VOLUME_COEFFICIENT[soilType];
+      const looseVolumeCoefficient = LOOSE_VOLUME_COEFFICIENT[effectiveSoilType];
       const looseVolume = actualVolume * looseVolumeCoefficient;
 
       // 6. Calculate concrete components
@@ -267,16 +331,16 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsCh
       const aggregateTonnes = aggregateKg / 1000;
 
       // Get transport distance in meters
-      const transportDistanceMeters = parseFloat(transportDistance) || 30;
+      const transportDistanceMeters = parseFloat(effectiveTransportDistance) || 30;
 
       // Calculate material transport times if "Calculate transport time" is checked
       let soilTransportTime = 0;
 
-      if (calculateTransport) {
+      if (effectiveCalculateTransport) {
         let carrierSizeForTransport = 0.125;
         
-        if (selectedTransportCarrier) {
-          carrierSizeForTransport = selectedTransportCarrier["size (in tones)"] || 0.125;
+        if (effectiveSelectedTransportCarrier) {
+          carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
         }
 
         // Calculate soil transport
@@ -297,7 +361,7 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsCh
       ];
 
       // Add transport task if applicable
-      if (calculateTransport && soilTransportTime > 0) {
+      if (effectiveCalculateTransport && soilTransportTime > 0) {
         breakdown.push({
           task: 'transport soil',
           hours: soilTransportTime,
@@ -309,7 +373,7 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsCh
       // Build materials list
       const materialsList = [
         { 
-          name: `Excavated ${soilType.charAt(0).toUpperCase() + soilType.slice(1)} Soil (loose volume)`, 
+          name: `Excavated ${effectiveSoilType.charAt(0).toUpperCase() + effectiveSoilType.slice(1)} Soil (loose volume)`, 
           amount: looseVolume * soilDensity, 
           unit: 'tonnes',
           price_per_unit: null,
@@ -339,7 +403,7 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsCh
           amount: actualVolume,
           unit: 'm³',
           hours_worked: hours,
-          diggingMethod: diggingMethod,
+          diggingMethod: effectiveDiggingMethod,
           excavatedSoilTonnes: materialExcavatedTonnes,
           materials: materialsList.map(material => ({
             name: material.name,
@@ -354,6 +418,13 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsCh
       console.error(error);
     }
   };
+
+  // Recalculate when project settings (transport, equipment) change
+  useEffect(() => {
+    if (recalculateTrigger > 0 && isInProjectCreating) {
+      calculate();
+    }
+  }, [recalculateTrigger]);
 
   const clearAll = () => {
     setLength('');
@@ -371,238 +442,194 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({ onResultsCh
   };
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold">{t('calculator:foundation_calculator_title_alt')}</h2>
-      <p className="text-sm text-gray-600">
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, marginBottom: spacing.sm }}>
+        {t('calculator:foundation_calculator_title_alt')}
+      </h2>
+      <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, lineHeight: 1.5 }}>
         Calculate excavation time, excavated soil volume, and concrete materials required for foundation work.
       </p>
 
-      <div className="space-y-4">
-        {/* Excavation Dimensions */}
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_m')}</label>
-            <input
-              type="number"
-              value={length}
-              onChange={(e) => setLength(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder={t('calculator:placeholder_enter_length_m')}
-              min="0"
-              step="0.1"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_width_m')}</label>
-            <input
-              type="number"
-              value={width}
-              onChange={(e) => setWidth(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder={t('calculator:placeholder_enter_width')}
-              min="0"
-              step="0.1"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_depth_in_cm')}</label>
-            <input
-              type="number"
-              value={depthCm}
-              onChange={(e) => setDepthCm(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder={t('calculator:placeholder_enter_depth_cm')}
-              min="0"
-              step="1"
-            />
-          </div>
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+          <TextInput label={t('calculator:input_length_m')} value={length} onChange={setLength} placeholder={t('calculator:placeholder_enter_length_m')} unit="m" />
+          <TextInput label={t('calculator:input_width_m')} value={width} onChange={setWidth} placeholder={t('calculator:placeholder_enter_width')} unit="m" />
+          <TextInput label={t('calculator:input_depth_in_cm')} value={depthCm} onChange={setDepthCm} placeholder={t('calculator:placeholder_enter_depth_cm')} unit="cm" />
         </div>
 
-        {/* Digging Method */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:digging_method')}</label>
-          <select
-            value={diggingMethod}
-            onChange={(e) => setDiggingMethod(e.target.value as any)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="shovel">Shovel (Manual)</option>
-            <option value="small">Small Excavator (1-3t)</option>
-            <option value="medium">Medium Excavator (3-7t)</option>
-            <option value="large">Large Excavator (7+t)</option>
-          </select>
-        </div>
+        {!isInProjectCreating && (
+          <>
+            <SelectDropdown
+              label={t('calculator:digging_method')}
+              value={diggingMethod === 'shovel' ? 'Shovel (Manual)' : diggingMethod === 'small' ? 'Small Excavator (1-3t)' : diggingMethod === 'medium' ? 'Medium Excavator (3-7t)' : 'Large Excavator (7+t)'}
+              options={['Shovel (Manual)', 'Small Excavator (1-3t)', 'Medium Excavator (3-7t)', 'Large Excavator (7+t)']}
+              onChange={(val) => setDiggingMethod(val.includes('Shovel') ? 'shovel' : val.includes('Small') ? 'small' : val.includes('Medium') ? 'medium' : 'large')}
+              placeholder={t('calculator:digging_method')}
+            />
+            <SelectDropdown
+              label={t('calculator:soil_type')}
+              value={soilType === 'clay' ? t('calculator:soil_type_clay') : soilType === 'sand' ? t('calculator:soil_type_sand') : t('calculator:soil_type_rock')}
+              options={[t('calculator:soil_type_clay'), t('calculator:soil_type_sand'), t('calculator:soil_type_rock')]}
+              onChange={(val) => setSoilType(val === t('calculator:soil_type_sand') ? 'sand' : val === t('calculator:soil_type_rock') ? 'rock' : 'clay')}
+              placeholder={t('calculator:soil_type')}
+            />
+          </>
+        )}
 
-        {/* Soil Type */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:soil_type')}</label>
-          <select
-            value={soilType}
-            onChange={(e) => setSoilType(e.target.value as any)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="clay">Clay</option>
-            <option value="sand">Sand</option>
-            <option value="rock">Rock</option>
-          </select>
-        </div>
+        {!isInProjectCreating && (
+          <Checkbox label={t('calculator:calculate_transport_time_label')} checked={calculateTransport} onChange={setCalculateTransport} />
+        )}
 
-        <label className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            checked={calculateTransport}
-            onChange={(e) => setCalculateTransport(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-        </label>
-
-        {/* Transport Carrier Selection */}
-        {calculateTransport && (
+        {!isInProjectCreating && effectiveCalculateTransport && (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier')}</label>
-              <div className="space-y-2">
-                <div 
-                  className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded"
+              <Label>{t('calculator:transport_carrier')}</Label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: spacing.md,
+                    cursor: 'pointer',
+                    borderRadius: radii.lg,
+                    border: `2px dashed ${colors.borderInput}`,
+                    background: effectiveSelectedTransportCarrier === null ? colors.bgHover : 'transparent',
+                  }}
                   onClick={() => setSelectedTransportCarrier(null)}
                 >
-                  <div className={`w-4 h-4 rounded-full border mr-2 ${
-                    selectedTransportCarrier === null 
-                      ? 'border-gray-400' 
-                      : 'border-gray-400'
-                  }`}>
-                    <div className={`w-2 h-2 rounded-full m-0.5 ${
-                      selectedTransportCarrier === null 
-                        ? 'bg-gray-400' 
-                        : 'bg-transparent'
-                    }`}></div>
+                  <div style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: radii.full,
+                    border: `2px solid ${colors.borderMedium}`,
+                    marginRight: spacing.md,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    {effectiveSelectedTransportCarrier === null && (
+                      <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.textSubtle }} />
+                    )}
                   </div>
-                  <div>
-                    <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
-                  </div>
+                  <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{t('calculator:default_wheelbarrow')}</span>
                 </div>
-                {carriersLocal.length > 0 && carriersLocal.map((carrier) => (
-                  <div 
+                {carriers.length > 0 && carriers.map((carrier) => (
+                  <div
                     key={carrier.id}
-                    className="flex items-center p-2 cursor-pointer"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: spacing.md,
+                      cursor: 'pointer',
+                      borderRadius: radii.lg,
+                      background: effectiveSelectedTransportCarrier?.id === carrier.id ? colors.bgHover : 'transparent',
+                    }}
                     onClick={() => setSelectedTransportCarrier(carrier)}
                   >
-                    <div className={`w-4 h-4 rounded-full border mr-2 ${
-                      selectedTransportCarrier?.id === carrier.id 
-                        ? 'border-gray-400' 
-                        : 'border-gray-400'
-                    }`}>
-                      <div className={`w-2 h-2 rounded-full m-0.5 ${
-                        selectedTransportCarrier?.id === carrier.id 
-                          ? 'bg-gray-400' 
-                          : 'bg-transparent'
-                      }`}></div>
+                    <div style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: radii.full,
+                      border: `2px solid ${colors.borderMedium}`,
+                      marginRight: spacing.md,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      {effectiveSelectedTransportCarrier?.id === carrier.id && (
+                        <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.textSubtle }} />
+                      )}
                     </div>
                     <div>
-                      <span className="text-gray-800">{carrier.name}</span>
-                      <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
+                      <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{carrier.name}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({carrier["size (in tones)"]} tons)</span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
-              <input
-                type="number"
-                value={transportDistance}
-                onChange={(e) => setTransportDistance(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:placeholder_enter_transport_distance')}
-                min="0"
-                step="1"
-              />
-            </div>
+            <TextInput
+              label={t('calculator:transport_distance_label')}
+              value={transportDistance}
+              onChange={setTransportDistance}
+              placeholder={t('calculator:placeholder_enter_transport_distance')}
+            />
           </>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex gap-2 pt-4">
-          <button
-            onClick={calculate}
-            disabled={!length || !width || !depthCm}
-            className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-300"
-          >
+        <div style={{ display: 'flex', gap: spacing.md, paddingTop: spacing.xl }}>
+          <Button onClick={calculate} variant="primary" disabled={!length || !width || !depthCm} style={{ flex: 1 }}>
             {t('calculator:calculate_button')}
-          </button>
-          <button
-            onClick={clearAll}
-            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700"
-          >
+          </Button>
+          <Button onClick={clearAll} variant="secondary">
             {t('calculator:clear_button')}
-          </button>
+          </Button>
         </div>
 
-        {/* Error Message */}
         {calculationError && (
-          <div className="p-3 bg-red-900/90 border border-red-600 rounded-lg text-white">
+          <div style={{ padding: spacing.base, background: 'rgba(239,68,68,0.15)', border: `1px solid ${colors.red}`, borderRadius: radii.lg, color: colors.textPrimary, marginTop: spacing.xl }}>
             {calculationError}
           </div>
         )}
 
-        {/* Results */}
         {totalHours !== null && (
-          <div ref={resultsRef} className="mt-6 space-y-4">
-            <div>
-              <h3 className="text-lg font-medium">{t('calculator:total_labor_hours_label')} <span className="text-blue-600">{totalHours.toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
-              
-              <div className="mt-2">
-                <h4 className="font-medium text-gray-700 mb-2">{t('calculator:task_breakdown_label')}</h4>
-                <ul className="space-y-1 pl-5 list-disc">
-                  {taskBreakdown.map((task: any, index: number) => (
-                    <li key={index} className="text-sm">
-                      <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours ({task.amount} {task.unit})
-                    </li>
-                  ))}
-                </ul>
+          <div ref={resultsRef} style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
+            <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg }}>
+                <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                  {t('calculator:total_labor_hours_label')}
+                </span>
+                <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                  {totalHours.toFixed(2)}
+                </span>
+                <span style={{ fontSize: fontSizes.md, color: colors.accentBlue, fontFamily: fonts.body, fontWeight: fontWeights.medium }}>
+                  {t('calculator:hours_abbreviation')}
+                </span>
               </div>
-            </div>
-            
-            <div>
-              <h3 className="font-medium mb-2">{t('calculator:materials_required_label')}</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Material
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Quantity
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Unit
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {materials.map((material, index) => (
-                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {material.name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {material.amount.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {material.unit}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            </Card>
+            <Card>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+                {t('calculator:task_breakdown_label')}
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+                {taskBreakdown.map((task: any, index: number) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                      background: colors.bgSubtle,
+                      borderRadius: radii.lg,
+                      border: `1px solid ${colors.borderLight}`,
+                    }}
+                  >
+                    <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>
+                      {translateTaskName(task.task, t)} ({task.amount} {translateUnit(task.unit, t)})
+                    </span>
+                    <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>
+                      {task.hours.toFixed(2)} hrs
+                    </span>
+                  </div>
+                ))}
               </div>
-            </div>
+            </Card>
+            <DataTable
+              columns={[
+                { key: 'name', label: 'MATERIAL', width: '2fr' },
+                { key: 'quantity', label: 'QUANTITY', width: '1fr' },
+                { key: 'unit', label: 'UNIT', width: '1fr' },
+              ]}
+              rows={materials.map((m) => ({
+                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{m.name}</span>,
+                quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.amount.toFixed(2)}</span>,
+                unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
+              }))}
+            />
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 };

@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Search, X } from 'lucide-react';
 import { format } from 'date-fns';
+import { pl } from 'date-fns/locale';
 
 interface Equipment {
   id: string;
@@ -22,7 +23,8 @@ interface CalendarEquipmentModalProps {
 }
 
 const CalendarEquipmentModal: React.FC<CalendarEquipmentModalProps> = ({ eventId, date, onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t, i18n } = useTranslation(['common', 'form', 'utilities', 'event', 'calculator']);
+  const dateLocale = i18n.language === 'pl' ? pl : undefined;
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const [equipmentSearch, setEquipmentSearch] = useState('');
@@ -132,7 +134,7 @@ const CalendarEquipmentModal: React.FC<CalendarEquipmentModalProps> = ({ eventId
           <div>
             <h2 className="text-xl font-semibold">{t('event:require_equipment')}</h2>
             <p className="text-sm text-gray-600 mt-1">
-              {t('event:for_label')}: {format(date, 'MMMM d, yyyy')}
+              {t('event:for_label')}: {format(date, 'MMMM d, yyyy', { locale: dateLocale })}
             </p>
           </div>
           <button

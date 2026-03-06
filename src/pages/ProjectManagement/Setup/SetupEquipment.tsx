@@ -3,8 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
-import { Loader2, X, Plus, Pencil, Info, Wrench, Truck, Search, AlertCircle } from 'lucide-react';
+import { X, Plus, Pencil, Info, Wrench, Truck, Search, AlertCircle } from 'lucide-react';
 import { releaseEquipment } from '../../../lib/equipmentService';
+import DatePicker from '../../../components/DatePicker';
+import { Spinner, Button } from '../../../themes/uiComponents';
 
 interface Equipment {
   id: string;
@@ -470,7 +472,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <Spinner size={32} />
       </div>
     );
   }
@@ -493,13 +495,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
           <p>{t('form:equipment_management_description')}</p>
         </div>
         
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          {t('form:add_equipment_button')}
-        </button>
+        <Button variant="primary" fullWidth onClick={() => setShowAddModal(true)} icon="+" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <Plus className="w-4 h-4" />
+            {t('form:add_equipment_button')}
+          </Button>
 
         {/* Machines Section */}
         <div>
@@ -596,13 +595,9 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                 />
               </div>
 
-              <button
-                onClick={handleAddEquipment}
-                disabled={!newEquipment.name || addEquipmentMutation.isPending}
-                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
+              <Button variant="primary" fullWidth onClick={handleAddEquipment} disabled={!newEquipment.name || addEquipmentMutation.isPending}>
                 {addEquipmentMutation.isPending ? t('form:adding_in_progress') : t('form:add_equipment_button')}
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -1013,25 +1008,23 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                   <>
                     <div>
                       <label className="block text-sm font-medium text-gray-700">{t('form:start_date_label')}</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={equipmentUsage.start_date}
-                        onChange={(e) => setEquipmentUsage(prev => ({ ...prev, start_date: e.target.value }))}
-                        min={selectedProject.start_date}
-                        max={selectedProject.end_date}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        onChange={(v) => setEquipmentUsage(prev => ({ ...prev, start_date: v }))}
+                        minDate={selectedProject.start_date}
+                        maxDate={selectedProject.end_date}
+                        className="mt-1"
                       />
                     </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700">{t('form:end_date_label')}</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={equipmentUsage.end_date}
-                        onChange={(e) => setEquipmentUsage(prev => ({ ...prev, end_date: e.target.value }))}
-                        min={equipmentUsage.start_date || selectedProject.start_date}
-                        max={selectedProject.end_date}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        onChange={(v) => setEquipmentUsage(prev => ({ ...prev, end_date: v }))}
+                        minDate={equipmentUsage.start_date || selectedProject.start_date}
+                        maxDate={selectedProject.end_date}
+                        className="mt-1"
                       />
                     </div>
                   </>

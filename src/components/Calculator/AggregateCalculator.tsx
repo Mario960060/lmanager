@@ -1,6 +1,20 @@
 import * as React from 'react';
-import { useState, useEffect, useRef, ChangeEvent } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  colors,
+  fonts,
+  fontSizes,
+  fontWeights,
+  spacing,
+  radii,
+} from '../../themes/designTokens';
+import {
+  TextInput,
+  SelectDropdown,
+  Button,
+  Card,
+} from '../../themes/uiComponents';
 
 interface Material {
   name: string;
@@ -108,64 +122,31 @@ const AggregateCalculator: React.FC<AggregateCalculatorProps> = ({ onResultsChan
   }, [result]);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:input_select_material')}</label>
-        <select
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
+        <SelectDropdown
+          label={t('calculator:input_select_material')}
           value={selectedMaterial.name}
-          onChange={(e: ChangeEvent<HTMLSelectElement>) =>
-            setSelectedMaterial(materials.find((m) => m.name === e.target.value) || materials[0])
-          }
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600"
-        >
-          {materials.map((material) => (
-            <option key={material.name} value={material.name}>
-              {material.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_m')}</label>
-        <input
-          type="number"
-          value={length}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => setLength(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600"
+          options={materials.map((m) => m.name)}
+          onChange={(val) => setSelectedMaterial(materials.find((m) => m.name === val) || materials[0])}
+          placeholder={t('calculator:input_select_material')}
         />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:input_width_m')}</label>
-        <input
-          type="number"
-          value={width}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => setWidth(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:input_depth_cm')}</label>
-        <input
-          type="number"
-          value={depth}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => setDepth(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600"
-          placeholder={t('calculator:placeholder_enter_depth_cm')}
-        />
-      </div>
-      <button
-        onClick={calculate}
-        className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
-      >
-        {t('calculator:calculate_button')}
-      </button>
-      {result !== null && (
-        <div ref={resultsRef} className="mt-4 p-4 bg-gray-100 rounded-md">
-          <p className="text-gray-900">
-            Required Mass: <span className="font-bold">{result} tonnes</span>
-          </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+          <TextInput label={t('calculator:input_length_m')} value={length} onChange={setLength} placeholder="0" unit="m" />
+          <TextInput label={t('calculator:input_width_m')} value={width} onChange={setWidth} placeholder="0" unit="m" />
+          <TextInput label={t('calculator:input_depth_cm')} value={depth} onChange={setDepth} placeholder={t('calculator:placeholder_enter_depth_cm')} unit="cm" />
         </div>
-      )}
+        <Button onClick={calculate} variant="primary" fullWidth>
+          {t('calculator:calculate_button')}
+        </Button>
+        {result !== null && (
+          <div ref={resultsRef} style={{ marginTop: spacing.xl, padding: spacing.base, background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>
+            <p style={{ fontSize: fontSizes.base, color: colors.textPrimary, fontFamily: fonts.body }}>
+              Required Mass: <span style={{ fontWeight: fontWeights.bold }}>{result} tonnes</span>
+            </p>
+          </div>
+        )}
+      </Card>
     </div>
   );
 };

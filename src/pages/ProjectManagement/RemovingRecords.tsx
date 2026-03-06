@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { format } from 'date-fns';
+import { pl } from 'date-fns/locale';
 import { supabase } from '../../lib/supabase';
 import { X, Trash2, Check, AlertCircle, Search, FileText, User, Calendar, Info } from 'lucide-react';
+import { Spinner, Button } from '../../themes/uiComponents';
+import { colors } from '../../themes/designTokens';
 
 // Admin modals for record management
 import AdminTaskPerformanceModal from './AdminTaskPerformanceModal';
@@ -25,7 +29,7 @@ interface DeletionRequest {
 }
 
 const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
-  const { t } = useTranslation(['common', 'utilities', 'dashboard']);
+  const { t, i18n } = useTranslation(['common', 'utilities', 'dashboard', 'form']);
   const [showRequests, setShowRequests] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -220,34 +224,35 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
   };
 
   // Format date for display
+  const dateLocale = i18n.language === 'pl' ? pl : undefined;
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+    return format(new Date(dateString), 'MMM d, yyyy HH:mm', { locale: dateLocale });
   };
 
   // Extract key details from record_details for preview
   const getRecordSummary = (details: any) => {
-    if (!details) return 'No details available';
+    if (!details) return t('form:record_summary_no_details');
     
     // Try to extract the most relevant information
     const summary = [];
     
     if (details.project) {
-      summary.push(`Project: ${details.project}`);
+      summary.push(`${t('form:record_summary_project')}: ${details.project}`);
     }
     
     if (details.description) {
-      summary.push(`Description: ${details.description}`);
+      summary.push(`${t('form:record_summary_description')}: ${details.description}`);
     }
     
     if (details.material) {
-      summary.push(`Material: ${details.material}`);
+      summary.push(`${t('form:record_summary_material')}: ${details.material}`);
     }
     
     if (details.date) {
-      summary.push(`Date: ${details.date}`);
+      summary.push(`${t('form:record_summary_date')}: ${details.date}`);
     }
     
-    return summary.length > 0 ? summary.join(' | ') : 'See details below';
+    return summary.length > 0 ? summary.join(' | ') : t('form:request_summary');
   };
 
   return (
@@ -274,50 +279,18 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
             // Initial screen with buttons
             <div className="space-y-6">
               {/* Approve Removals button */}
-              <button
-                onClick={() => setShowRequests(true)}
-                className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-              >
-                <FileText className="w-5 h-5 mr-2" />
+              <Button variant="primary" fullWidth onClick={() => setShowRequests(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <FileText className="w-5 h-5" />
                 {t('form:approve_removal_requests')}
-              </button>
+              </Button>
               
               {/* Admin record management buttons */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button
-                  onClick={() => setShowTaskPerformanceModal(true)}
-                  className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
-                >
-                  {t('form:delete_task_performance_records_btn')}
-                </button>
-                
-                <button
-                  onClick={() => setShowMaterialAddedModal(true)}
-                  className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
-                >
-                  {t('form:delete_material_added_records_btn')}
-                </button>
-                
-                <button
-                  onClick={() => setShowAdditionalTasksModal(true)}
-                  className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
-                >
-                  {t('form:delete_additional_tasks_records_btn')}
-                </button>
-                
-                <button
-                  onClick={() => setShowAdditionalMaterialsModal(true)}
-                  className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center"
-                >
-                  {t('form:delete_additional_materials_records_btn')}
-                </button>
-                
-                <button
-                  onClick={() => setShowDayNotesModal(true)}
-                  className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center md:col-span-2"
-                >
-                  {t('form:delete_day_notes_records_btn')}
-                </button>
+                <Button variant="danger" fullWidth onClick={() => setShowTaskPerformanceModal(true)}>{t('form:delete_task_performance_records_btn')}</Button>
+                <Button variant="danger" fullWidth onClick={() => setShowMaterialAddedModal(true)}>{t('form:delete_material_added_records_btn')}</Button>
+                <Button variant="danger" fullWidth onClick={() => setShowAdditionalTasksModal(true)}>{t('form:delete_additional_tasks_records_btn')}</Button>
+                <Button variant="danger" fullWidth onClick={() => setShowAdditionalMaterialsModal(true)}>{t('form:delete_additional_materials_records_btn')}</Button>
+                <Button variant="danger" fullWidth onClick={() => setShowDayNotesModal(true)} style={{ gridColumn: '1 / -1' }}>{t('form:delete_day_notes_records_btn')}</Button>
               </div>
             </div>
           ) : showRequests ? (
@@ -339,20 +312,17 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
               
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-semibold">{t('form:deletion_requests_title')}</h3>
-                <button 
-                  onClick={() => refetch()}
-                  className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm flex items-center"
-                >
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <Button variant="primary" onClick={() => refetch()} style={{ padding: '4px 12px', fontSize: 13 }}>
+                  <svg className="w-4 h-4" style={{ marginRight: 4 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
                   {t('form:refresh')}
-                </button>
+                </Button>
               </div>
               
               {isLoading ? (
                 <div className="flex justify-center p-6">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
+                  <Spinner size={32} color={colors.red} />
                 </div>
               ) : filteredRequests.length > 0 ? (
                 <div className="space-y-6">
@@ -369,27 +339,25 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
                               {getRecordSummary(request.record_details)}
                             </div>
                           </div>
-                          <div className="flex space-x-2">
-                            <button
+                          <div className="flex gap-2">
+                            <Button
+                              variant="success"
                               onClick={() => approveDeletion.mutate(request.id)}
-                              className={`px-3 py-1 text-white rounded flex items-center ${
-                                approveDeletion.isPending ? 'bg-gray-400' : 'bg-green-600 hover:bg-green-700'
-                              }`}
                               disabled={approveDeletion.isPending || rejectDeletion.isPending}
+                              style={{ padding: '4px 12px', fontSize: 13 }}
                             >
-                              <Check className="w-4 h-4 mr-1" />
+                              <Check className="w-4 h-4" style={{ marginRight: 4 }} />
                               {approveDeletion.isPending ? t('form:approving') : t('form:approve')}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                              variant="secondary"
                               onClick={() => rejectDeletion.mutate(request.id)}
-                              className={`px-3 py-1 text-white rounded flex items-center ${
-                                rejectDeletion.isPending ? 'bg-gray-400' : 'bg-gray-600 hover:bg-gray-700'
-                              }`}
                               disabled={approveDeletion.isPending || rejectDeletion.isPending}
+                              style={{ padding: '4px 12px', fontSize: 13 }}
                             >
-                              <X className="w-4 h-4 mr-1" />
+                              <X className="w-4 h-4" style={{ marginRight: 4 }} />
                               {rejectDeletion.isPending ? t('form:rejecting') : t('form:reject')}
-                            </button>
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -441,12 +409,9 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
               )}
               
               <div className="mt-6 flex justify-center">
-                <button
-                  onClick={() => setShowRequests(false)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
+                <Button variant="secondary" onClick={() => setShowRequests(false)}>
                   {t('form:back')}
-                </button>
+                </Button>
               </div>
             </>
           ) : null}

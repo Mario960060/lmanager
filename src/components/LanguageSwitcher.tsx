@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Globe } from 'lucide-react';
+import { colors, spacing, radii, fontSizes, fontWeights, shadows } from '../themes/designTokens';
 
 /**
  * Language Switcher Component
@@ -18,17 +19,33 @@ export const LanguageSwitcher: React.FC = () => {
   const currentLang = languages.find((lang) => lang.code === i18n.language) || languages[0];
 
   return (
-    <div className="relative">
+    <div style={{ position: 'relative' }}>
       <button
         onClick={() => setShowDropdown(!showDropdown)}
-        className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-lg transition-colors"
+        style={{
+          display: 'flex', alignItems: 'center', padding: `${spacing.sm}px ${spacing.md}px`,
+          fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textPrimary,
+          background: 'transparent', border: 'none', borderRadius: radii.lg, cursor: 'pointer',
+        }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
       >
-        <Globe className="w-4 h-4 mr-2" />
+        <Globe style={{ width: 16, height: 16, marginRight: spacing.sm }} />
         <span>{currentLang.name}</span>
       </button>
 
       {showDropdown && (
-        <div className="absolute bottom-full right-0 mb-2 w-40 bg-white dark:bg-gray-700 rounded-lg shadow-lg z-50 border border-gray-200 dark:border-gray-600">
+        <div
+          style={{
+            position: 'absolute', bottom: '100%', right: 0, marginBottom: spacing.sm,
+            width: 160, zIndex: 50,
+            background: colors.bgElevated,
+            border: `1px solid ${colors.borderDefault}`,
+            borderRadius: radii.lg,
+            boxShadow: shadows.xl,
+            overflow: 'hidden',
+          }}
+        >
           {languages.map((lang) => (
             <button
               key={lang.code}
@@ -36,14 +53,29 @@ export const LanguageSwitcher: React.FC = () => {
                 i18n.changeLanguage(lang.code);
                 setShowDropdown(false);
               }}
-              className={`w-full text-left px-4 py-2 text-sm flex items-center gap-2 transition-colors ${
-                i18n.language === lang.code
-                  ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100 font-medium'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
-              }`}
+              style={{
+                width: '100%', textAlign: 'left', padding: `${spacing.md}px ${spacing.lg}px`,
+                fontSize: fontSizes.sm, display: 'flex', alignItems: 'center', gap: spacing.sm,
+                background: i18n.language === lang.code ? colors.accentBlueBg : 'transparent',
+                color: i18n.language === lang.code ? colors.textPrimary : colors.textMuted,
+                fontWeight: i18n.language === lang.code ? fontWeights.medium : fontWeights.normal,
+                border: 'none', cursor: 'pointer',
+              }}
+              onMouseEnter={(e) => {
+                if (i18n.language !== lang.code) {
+                  (e.currentTarget as HTMLElement).style.background = colors.bgHover;
+                  (e.currentTarget as HTMLElement).style.color = colors.textPrimary;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (i18n.language !== lang.code) {
+                  (e.currentTarget as HTMLElement).style.background = 'transparent';
+                  (e.currentTarget as HTMLElement).style.color = colors.textMuted;
+                }
+              }}
             >
               <span>{lang.name}</span>
-              {i18n.language === lang.code && <span className="ml-auto">✓</span>}
+              {i18n.language === lang.code && <span style={{ marginLeft: 'auto', color: colors.accentBlue }}>✓</span>}
             </button>
           ))}
         </div>

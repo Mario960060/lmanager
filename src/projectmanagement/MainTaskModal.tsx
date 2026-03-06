@@ -43,7 +43,7 @@ const MainTaskModal: React.FC<MainTaskModalProps> = ({
       const selectedSubType = selectedGroup?.subTypes.find(s => s.type === selectedSubCalculator);
       
       // Use the calculator's provided name or fall back to the selected type's label
-      const taskName = results.name || selectedSubType?.label || 'Main Task';
+      const taskName = results.name || selectedSubType?.label || t('project:main_task_fallback');
       
       onAddTask({
         name: taskName,
@@ -103,7 +103,7 @@ const MainTaskModal: React.FC<MainTaskModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium bg-gray-800 text-gray-300 rounded-md hover:bg-gray-700 transition-colors"
             >
-              Cancel
+              {t('project:cancel_button_label')}
             </button>
           </div>
         </div>

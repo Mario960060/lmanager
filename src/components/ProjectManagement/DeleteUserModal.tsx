@@ -10,7 +10,7 @@ interface DeleteUserModalProps {
 }
 
 const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
   const queryClient = useQueryClient();
   const { profile } = useAuthStore();
   const [userSearch, setUserSearch] = useState('');

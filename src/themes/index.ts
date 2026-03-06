@@ -1,28 +1,66 @@
 // src/themes/index.ts
-// Centralne exporty dla systemu tematów
+// Design system + theme switcher (ThemeProvider/useTheme).
+// DEPRECATED: themeUtils, getCardStyle, getButtonStyle etc. — use designTokens + uiComponents instead.
 
-export { ThemeProvider, useTheme, getThemeClass } from './ThemeContext';
-export { themes, getTheme, getAllThemes, getThemeIds } from './themeDefinitions';
-export type { Theme, ThemeColors, ThemeAnimations, ThemeEffects } from './themeDefinitions';
+export { ThemeProvider, useTheme } from './ThemeContext';
+export { themes, getTheme, getAllThemes, getThemeIds, applyTheme } from './themeDefinitions';
+export type { ThemeConfig } from './themeDefinitions';
+
+// Design system — tokens + UI components (używaj TYLKO tego do budowy UI)
 export {
-  getButtonPrimaryClass,
-  getButtonPrimaryBgStyle,
-  getButtonPrimaryHoverStyle,
-  getCardStyle,
-  getModalOverlayStyle,
-  getModalStyle,
-  getInputStyle,
-  getInputFocusStyle,
-  getTableHeaderStyle,
-  getTableRowStyle,
-  getTextStyle,
-  getStatusColor,
-  getStatusStyle,
-  getBorderStyle,
-  getShadowStyle,
-  getTransitionStyle,
-  getCardWithShadowStyle,
-  getButtonStyle,
-  getHoverStyle,
-  getButtonHoverStyle,
-} from './themeUtils';
+  colors,
+  fonts,
+  fontSizes,
+  fontWeights,
+  spacing,
+  radii,
+  shadows,
+  gradients,
+  transitions,
+  opacity,
+  animationKeyframes,
+  layout,
+  globalStyles,
+  NAV_ITEMS,
+  accentAlpha,
+} from './designTokens';
+export {
+  GlobalStyles,
+  AppShell,
+  Sidebar,
+  PageHeader,
+  NavBtn,
+  Card,
+  SectionHeader,
+  Modal,
+  Accordion,
+  TextInput,
+  SelectDropdown,
+  Checkbox,
+  ChipToggle,
+  Label,
+  HelperText,
+  Badge,
+  StatusBadge,
+  InfoBanner,
+  SummaryBar,
+  DataTable,
+  Button,
+  EventCard,
+  DayColumn,
+  EmptyState,
+  ExpandableSection,
+  StatCard,
+  Spinner,
+  BackButton,
+  NumberInput,
+  Textarea,
+  RadioGroup,
+  Tabs,
+  Stepper,
+  Tooltip,
+  AlertBanner,
+  ConfirmDialog,
+  Skeleton,
+  Dropdown,
+} from './uiComponents';

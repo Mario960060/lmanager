@@ -4,12 +4,20 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName } from '../../lib/translationMap';
+import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { colors, fontSizes, radii, spacing } from '../../themes/designTokens';
+import { Button } from '../../themes/uiComponents';
 
 interface FenceCalculatorProps {
   fenceType: 'vertical' | 'horizontal';
   onResultsChange?: (results: any) => void;
+  onInputsChange?: (inputs: Record<string, any>) => void;
   isInProjectCreating?: boolean;
+  initialLength?: number;
+  savedInputs?: Record<string, any>;
+  /** Canvas Object Card mode — compact UI with segment support */
+  canvasMode?: boolean;
+  canvasLength?: number;
   calculateTransport?: boolean;
   setCalculateTransport?: (value: boolean) => void;
   selectedTransportCarrier?: any;
@@ -18,6 +26,7 @@ interface FenceCalculatorProps {
   setTransportDistance?: (value: string) => void;
   carriers?: any[];
   selectedExcavator?: any;
+  recalculateTrigger?: number;
 }
 
 interface Material {
@@ -49,7 +58,12 @@ interface DiggingEquipment {
 const FenceCalculator: React.FC<FenceCalculatorProps> = ({ 
   fenceType, 
   onResultsChange,
+  onInputsChange,
   isInProjectCreating = false,
+  initialLength,
+  savedInputs = {},
+  canvasMode = false,
+  canvasLength,
   calculateTransport: propCalculateTransport,
   setCalculateTransport: propSetCalculateTransport,
   selectedTransportCarrier: propSelectedTransportCarrier,
@@ -57,24 +71,54 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
   transportDistance: propTransportDistance,
   setTransportDistance: propSetTransportDistance,
   carriers: propCarriers = [],
-  selectedExcavator: propSelectedExcavator
+  selectedExcavator: propSelectedExcavator,
+  recalculateTrigger = 0
 }) => {
   const { t } = useTranslation(['calculator', 'utilities', 'common']);
   const companyId = useAuthStore(state => state.getCompanyId());
-  console.log(`FenceCalculator.tsx: Received fenceType=${fenceType}`);
 
-  const [length, setLength] = useState('');
-  const [height, setHeight] = useState('');
-  const [slatWidth, setSlatWidth] = useState('10');
-  const [slatLength, setSlatLength] = useState('180');
-  const [postmixPerPost, setPostmixPerPost] = useState<string>('');
+  const segmentLengths: number[] = savedInputs?.segmentLengths ?? [];
+  const totalLengthCanvas = canvasLength ?? (segmentLengths.length > 0 ? segmentLengths.reduce((a, b) => a + b, 0) : 0);
+  const initLength = savedInputs?.length != null ? String(savedInputs.length) : (initialLength != null ? initialLength.toFixed(3) : (totalLengthCanvas > 0 ? totalLengthCanvas.toFixed(3) : ''));
+  const [length, setLength] = useState(initLength);
+  const [height, setHeight] = useState(savedInputs?.height ?? '');
+  const [fenceConfigMode, setFenceConfigMode] = useState<'single' | 'segments'>(segmentLengths.length > 1 ? 'segments' : 'single');
+  useEffect(() => {
+    if (savedInputs?.length != null) setLength(String(savedInputs.length));
+    else if (initialLength != null && isInProjectCreating) setLength(initialLength.toFixed(3));
+    else if (totalLengthCanvas > 0 && segmentLengths.length <= 1) setLength(totalLengthCanvas.toFixed(3));
+  }, [savedInputs?.length, initialLength, isInProjectCreating, totalLengthCanvas, segmentLengths.length]);
+  useEffect(() => {
+    if (segmentLengths.length > 1) setFenceConfigMode('segments');
+  }, [segmentLengths.length]);
+  const [slatWidth, setSlatWidth] = useState(savedInputs?.slatWidth ?? '10');
+  const [slatLength, setSlatLength] = useState(savedInputs?.slatLength ?? '180');
+  const [postmixPerPost, setPostmixPerPost] = useState<string>(savedInputs?.postmixPerPost ?? '');
+  const lastInputsSentRef = useRef<string>('');
+  useEffect(() => {
+    if (!onInputsChange || !isInProjectCreating) return;
+    const inputs: Record<string, any> = { length, height, slatWidth, slatLength, postmixPerPost };
+    if (canvasMode && fenceConfigMode === 'single' && totalLengthCanvas > 0) {
+      inputs.segmentLengths = [totalLengthCanvas];
+    } else if (segmentLengths.length > 0) {
+      inputs.segmentLengths = segmentLengths;
+    }
+    const key = JSON.stringify(inputs);
+    if (lastInputsSentRef.current === key) return;
+    lastInputsSentRef.current = key;
+    onInputsChange(inputs);
+  }, [length, height, slatWidth, slatLength, postmixPerPost, segmentLengths, fenceConfigMode, canvasMode, totalLengthCanvas, onInputsChange, isInProjectCreating]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [totalHours, setTotalHours] = useState<number | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
   const [taskBreakdown, setTaskBreakdown] = useState<TaskBreakdown[]>([]);
+  const [segmentResults, setSegmentResults] = useState<Array<{ lengthM: number; rails: number; slats: number; remainderCm: number; posts: number }>>([]);
   const [transportDistance, setTransportDistance] = useState<string>('30');
   const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
   const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
+  const effectiveCalculateTransport = isInProjectCreating ? (propCalculateTransport ?? false) : calculateTransport;
+  const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
+  const effectiveTransportDistance = isInProjectCreating && propTransportDistance ? propTransportDistance : transportDistance;
   const [carriersLocal, setCarriersLocal] = useState<DiggingEquipment[]>([]);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -95,25 +139,6 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
     propTransportDistance
   ]);
 
-  // Sync local state back to parent when in ProjectCreating
-  useEffect(() => {
-    if (isInProjectCreating && propSetCalculateTransport) {
-      propSetCalculateTransport(calculateTransport);
-    }
-  }, [calculateTransport, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetSelectedTransportCarrier) {
-      propSetSelectedTransportCarrier(selectedTransportCarrier);
-    }
-  }, [selectedTransportCarrier, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetTransportDistance) {
-      propSetTransportDistance(transportDistance);
-    }
-  }, [transportDistance, isInProjectCreating]);
-
   // Fetch task template for fence installation
   const { data: layingTask, isLoading } = useQuery({
     queryKey: ['fence_laying_task', fenceType, companyId],
@@ -131,7 +156,6 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
         return null;
       }
       
-      console.log(`Found fence laying task: ${taskName}`);
       return data;
     },
     enabled: !!companyId
@@ -173,10 +197,10 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
       }
     };
     
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       fetchEquipment();
     }
-  }, [calculateTransport]);
+  }, [effectiveCalculateTransport]);
 
   const fetchMaterialPrices = async (materials: Material[]): Promise<Material[]> => {
     try {
@@ -227,8 +251,6 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
   };
 
   const calculate = async () => {
-    console.log(`FenceCalculator.tsx: calculate called with fenceType=${fenceType}`);
-
     if (!length || !height) {
       setCalculationError(t('calculator:fill_all_required_fields'));
       return;
@@ -244,23 +266,49 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
       return;
     }
 
-    let posts = Math.ceil(l / 180) + 1; // One post every 1.8m (180cm) + 1 extra post
-    posts = Math.max(posts, 2); // Minimum 2 posts
+    // Segment lengths: from canvas (single or segments) or single length input
+    const segLengths: number[] = (canvasMode && fenceConfigMode === 'single' && totalLengthCanvas > 0)
+      ? [totalLengthCanvas]
+      : (segmentLengths.length > 0 ? segmentLengths : [l / 100]);
 
+    let posts = 0;
     let slatsNeeded = 0;
     let fenceRails = 0;
-    let slatsPerLength = 0;
+    const segResults: Array<{ lengthM: number; rails: number; slats: number; remainderCm: number; posts: number }> = [];
 
-    if (fenceType === 'vertical') {
-      console.log('FenceCalculator.tsx: Performing vertical fence calculation');
-      fenceRails = Math.ceil((l * 3) / 360); // 3 rows of rails, 360cm each
-      slatsNeeded = Math.ceil(l / (slatW + 2)) * Math.ceil(1 / slatL); // Total slats needed
-    } else {
-      console.log('FenceCalculator.tsx: Performing horizontal fence calculation');
-      let slatsPerRow = Math.ceil(h / (slatW + 2)); // Horizontal slats needed per row
-      slatsPerLength = Math.ceil(l / slatL); // How many slats fit across the length
-      slatsNeeded = slatsPerRow * slatsPerLength; // Total slats needed
+    const POST_SPACING_M = 1.8;
+
+    for (let i = 0; i < segLengths.length; i++) {
+      const segLenM = segLengths[i] ?? l / 100;
+      const segLenCm = segLenM * 100;
+
+      // Posts: 1 at each segment end (shared at vertices). Intermediate posts: every 1.8m
+      const intermediatePosts = Math.max(0, Math.ceil(segLenM / POST_SPACING_M) - 1);
+      const isLast = i === segLengths.length - 1;
+      const segPosts = (isLast ? 2 : 1) + intermediatePosts; // start + (end if last) + intermediates
+      posts += segPosts;
+
+      // Rails: 3 rows per run, 360cm (3.6m) per rail
+      const segRails = Math.ceil((segLenM * 3) / 3.6);
+      fenceRails += segRails;
+
+      let segSlats: number;
+      let remainderCm: number;
+
+      if (fenceType === 'vertical') {
+        segSlats = Math.ceil(segLenCm / (slatW + 2)) * Math.ceil(h / slatL);
+        remainderCm = segLenCm % (slatW + 2);
+      } else {
+        segSlats = Math.ceil(segLenCm / slatL) * Math.ceil(h / (slatW + 2));
+        remainderCm = segLenCm % slatL;
+      }
+
+      slatsNeeded += segSlats;
+      segResults.push({ lengthM: segLenM, rails: segRails, slats: segSlats, remainderCm, posts: segPosts });
     }
+
+    posts = Math.max(posts, segLengths.length + 1);
+    setSegmentResults(segResults);
 
     const postmix = parseFloat(postmixPerPost) || 0;
     const totalPostmix = posts * postmix;
@@ -327,11 +375,11 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
     let slatTransportTime = 0;
     let postmixTransportTime = 0;
 
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       let carrierSizeForTransport = 0.125;
       
-      if (selectedTransportCarrier) {
-        carrierSizeForTransport = selectedTransportCarrier["size (in tones)"] || 0.125;
+      if (effectiveSelectedTransportCarrier) {
+        carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
       }
 
       // Calculate posts transport - each post carried individually (on foot)
@@ -340,7 +388,7 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
         const postsPerTrip = 1; // 1 post per person per trip
         const trips = Math.ceil(posts / postsPerTrip);
         const postCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(transportDistance) || 30) * 2 / postCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / postCarrySpeed;
         postTransportTime = trips * timePerTrip;
         
         if (postTransportTime > 0) {
@@ -360,7 +408,7 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
         const slatsPerTrip = fenceType === 'vertical' ? 15 : 2;
         const trips = Math.ceil(slatsNeeded / slatsPerTrip);
         const slatCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(transportDistance) || 30) * 2 / slatCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / slatCarrySpeed;
         slatTransportTime = trips * timePerTrip;
         
         if (slatTransportTime > 0) {
@@ -375,7 +423,7 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
 
       // Calculate postmix transport (it's bags like cement)
       if (totalPostmix > 0) {
-        const postmixResult = calculateMaterialTransportTime(totalPostmix, carrierSizeForTransport, 'cement', parseFloat(transportDistance) || 30);
+        const postmixResult = calculateMaterialTransportTime(totalPostmix, carrierSizeForTransport, 'cement', parseFloat(effectiveTransportDistance) || 30);
         postmixTransportTime = postmixResult.totalTransportTime;
         if (postmixTransportTime > 0) {
           breakdown.push({
@@ -410,6 +458,13 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
     setTaskBreakdown(breakdown);
     setCalculationError(null);
   };
+
+  // Recalculate when project settings (transport, equipment) change
+  useEffect(() => {
+    if (recalculateTrigger > 0 && isInProjectCreating) {
+      void calculate();
+    }
+  }, [recalculateTrigger]);
 
   // Add useEffect to notify parent of result changes
   useEffect(() => {
@@ -467,6 +522,39 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
         Calculate materials, time, and costs for {fenceType} fence installation projects.
       </p>
 
+      {canvasMode && segmentLengths.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: colors.textWarm, marginBottom: 6 }}>{t('calculator:fence_configuration_label')}</div>
+          <div style={{ display: 'flex', background: colors.bgDeep, borderRadius: radii.md, border: `1px solid ${colors.bgDeepBorder}`, padding: 3, gap: 3 }}>
+            <button
+              type="button"
+              disabled={segmentLengths.length > 1}
+              onClick={() => segmentLengths.length <= 1 && setFenceConfigMode('single')}
+              title={segmentLengths.length > 1 ? 'Remove segments to use single length' : undefined}
+              style={{
+                flex: 1, padding: '9px 12px', borderRadius: 6, border: 'none', background: fenceConfigMode === 'single' ? colors.greenBg : 'transparent',
+                color: segmentLengths.length > 1 ? colors.textDisabled : (fenceConfigMode === 'single' ? colors.green : colors.textLabel), fontWeight: 600, fontSize: fontSizes.md, cursor: segmentLengths.length > 1 ? 'not-allowed' : 'pointer', opacity: segmentLengths.length > 1 ? 0.5 : 1
+              }}
+            >
+              Single length
+            </button>
+            <button
+              type="button"
+              onClick={() => setFenceConfigMode('segments')}
+              style={{
+                flex: 1, padding: '9px 12px', borderRadius: 6, border: 'none', background: fenceConfigMode === 'segments' ? 'rgba(34, 197, 94, 0.1)' : 'transparent',
+                color: fenceConfigMode === 'segments' ? colors.green : colors.textLabel, fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer'
+              }}
+            >
+              Segments ({segmentLengths.length})
+            </button>
+          </div>
+          <div style={{ fontSize: fontSizes.sm, color: colors.textLabel, marginTop: 6 }}>
+            Total length: <strong style={{ color: colors.textPrimaryLight }}>{totalLengthCanvas.toFixed(3)} m</strong>
+          </div>
+        </div>
+      )}
+
       <div>
         <label className="block text-sm font-medium text-gray-700">{t('calculator:input_fence_length_m')}</label>
         <input
@@ -475,6 +563,7 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
           onChange={(e) => setLength(e.target.value)}
           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           placeholder={t('calculator:placeholder_enter_length_m')}
+          readOnly={canvasMode && fenceConfigMode === 'single' && totalLengthCanvas > 0}
         />
       </div>
 
@@ -529,18 +618,20 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
         />
       </div>
 
-      <label className="flex items-center space-x-2">
-        <input
-          type="checkbox"
-          checked={calculateTransport}
-          onChange={(e) => setCalculateTransport(e.target.checked)}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-        <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-      </label>
+      {!isInProjectCreating && (
+        <label className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={calculateTransport}
+            onChange={(e) => setCalculateTransport(e.target.checked)}
+            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
+        </label>
+      )}
 
       {/* Transport Carrier Selection */}
-      {calculateTransport && (
+      {!isInProjectCreating && calculateTransport && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier')}</label>
           <div className="space-y-2">
@@ -603,13 +694,9 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
           </div>
         )}
 
-      <button
-        onClick={calculate}
-        disabled={isLoading}
-        className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-300"
-      >
+      <Button variant="accent" color={colors.accentBlue} onClick={calculate} disabled={isLoading}>
         {isLoading ? t('calculator:loading_in_progress') : t('calculator:calculate_button')}
-      </button>
+      </Button>
 
       {calculationError && (
         <div className="mt-4 p-4 bg-red-900/90 border border-red-600 rounded-lg text-white">
@@ -619,6 +706,31 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
 
       {totalHours !== null && (
         <div className="mt-6 space-y-4" ref={resultsRef}>
+          {segmentResults.length > 1 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textCool, marginBottom: 8 }}>Fence segments</div>
+              <div style={{ background: colors.bgDeep, border: `1px solid ${colors.bgDeepBorder}`, borderRadius: radii.lg, overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 70px 70px 80px 70px', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel, textTransform: 'uppercase' }}>
+                  <span>#</span>
+                  <span>{t('calculator:length_label')}</span>
+                  <span style={{ textAlign: 'center' }}>{t('calculator:rails_label')}</span>
+                  <span style={{ textAlign: 'center' }}>{t('calculator:slats_label')}</span>
+                  <span style={{ textAlign: 'center' }}>{t('calculator:remainder_label')}</span>
+                  <span style={{ textAlign: 'center' }}>{t('calculator:posts_label')}</span>
+                </div>
+                {segmentResults.map((seg, idx) => (
+                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 70px 70px 80px 70px', alignItems: 'center', padding: '10px 12px', borderBottom: idx < segmentResults.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', background: idx % 2 === 1 ? 'rgba(255,255,255,0.022)' : undefined, fontSize: '0.82rem' }}>
+                    <span style={{ fontWeight: 600, color: colors.textLabel }}>{idx + 1}</span>
+                    <span style={{ fontWeight: 600, color: colors.textPrimaryLight }}>{seg.lengthM.toFixed(2)} m</span>
+                    <span style={{ textAlign: 'center', color: colors.textPrimaryLight }}>{seg.rails}</span>
+                    <span style={{ textAlign: 'center', color: colors.textPrimaryLight }}>{seg.slats}</span>
+                    <span style={{ textAlign: 'center', color: seg.remainderCm > 0 ? colors.amber : colors.textLabel }}>{seg.remainderCm.toFixed(0)} cm</span>
+                    <span style={{ textAlign: 'center', color: colors.textPrimaryLight }}>{seg.posts}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div>
             <h3 className="text-lg font-medium">{t('calculator:total_labor_hours_label')} <span className="text-blue-600">{totalHours.toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
             
@@ -667,7 +779,7 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
                         {material.amount.toFixed(2)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {material.unit}
+                        {translateUnit(material.unit, t)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                           {material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}

@@ -25,6 +25,8 @@ import {
 import BackButton from '../../components/BackButton';
 import PageInfoModal from '../../components/PageInfoModal';
 import Modal from '../../components/Modal';
+import { Button, Card } from '../../themes';
+import { colors, spacing, radii, fontSizes, fontWeights } from '../../themes/designTokens';
 import SetupTasks from './Setup/SetupTasks';
 import SetupEquipment from './Setup/SetupEquipment';
 import SetupMaterials from './Setup/SetupMaterials';
@@ -396,151 +398,119 @@ const SetupPage = () => {
     }
   };
   
+  const cardStyle = { padding: `${spacing['6xl']}px` };
+  const cardTitleStyle = { display: 'flex', alignItems: 'center', marginBottom: spacing['4xl'], gap: spacing.lg };
+  const cardDescStyle = { color: colors.textMuted, marginBottom: spacing['4xl'], fontSize: fontSizes.base, lineHeight: 1.5 };
+  const h2Style = { fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textSecondary, margin: 0 };
+
   return (
-    <div className="container mx-auto px-4 py-6 space-y-6 max-w-full relative min-h-screen pb-20">
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: spacing['6xl'], paddingBottom: 80, minHeight: '100vh' }}>
       <BackButton />
-      <div className="text-center mb-8">
-        <div className="flex items-center">
-          <h1 className="text-3xl font-bold text-gray-900">{t('form:setup_welcome_title')}</h1>
-          <PageInfoModal description="" quickTips={[]} />
+      <div style={{ textAlign: 'center', marginBottom: spacing['8xl'] }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
+          <h1 style={{ fontSize: fontSizes['3xl'], fontWeight: fontWeights.bold, color: colors.textPrimary, margin: 0 }}>
+            {t('form:setup_welcome_title')}
+          </h1>
+          <PageInfoModal
+            description={t('form:setup_page_info_description')}
+            title={t('form:setup_page_info_title')}
+            quickTips={[]}
+          />
         </div>
-        <p className="text-xl text-gray-600">{t('form:setup_page_title')}</p>
+        <p style={{ fontSize: fontSizes.xl, color: colors.textMuted }}>{t('form:setup_page_title')}</p>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Tasks Card */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <Clock className="w-6 h-6 text-blue-600 mr-3" />
-            <h2 className="text-xl font-semibold">{t('form:setup_tasks_label')}</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: spacing['6xl'] }}>
+        <Card padding={cardStyle.padding}>
+          <div style={cardTitleStyle}>
+            <Clock style={{ width: 24, height: 24, color: colors.accentBlue }} />
+            <h2 style={h2Style}>{t('form:setup_tasks_label')}</h2>
           </div>
-          <p className="text-gray-600 mb-4">
-            {t('form:setup_tasks_description')}
-          </p>
-          <button
-            onClick={() => handleSetupAction(() => setShowTasksModal(true))}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
-          >
+          <p style={cardDescStyle}>{t('form:setup_tasks_description')}</p>
+          <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowTasksModal(true))}>
             {t('form:manage_tasks_button')}
-          </button>
-        </div>
+          </Button>
+        </Card>
         
-        {/* Materials Card */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <Package className="w-6 h-6 text-green-600 mr-3" />
-            <h2 className="text-xl font-semibold">{t('form:setup_materials_label')}</h2>
+        <Card padding={cardStyle.padding}>
+          <div style={cardTitleStyle}>
+            <Package style={{ width: 24, height: 24, color: colors.green }} />
+            <h2 style={h2Style}>{t('form:setup_materials_label')}</h2>
           </div>
-          <p className="text-gray-600 mb-4">
-            {t('form:setup_materials_description')}
-          </p>
-          <button
-            onClick={() => handleSetupAction(() => setShowMaterialsModal(true))}
-            className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
-          >
+          <p style={cardDescStyle}>{t('form:setup_materials_description')}</p>
+          <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowMaterialsModal(true))} style={{ background: `linear-gradient(135deg, ${colors.green}, #16a34a)` }}>
             {t('form:manage_materials_button')}
-          </button>
-        </div>
+          </Button>
+        </Card>
         
-        {/* Equipment Card */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <Wrench className="w-6 h-6 text-purple-600 mr-3" />
-            <h2 className="text-xl font-semibold">{t('form:setup_equipment_label')}</h2>
+        <Card padding={cardStyle.padding}>
+          <div style={cardTitleStyle}>
+            <Wrench style={{ width: 24, height: 24, color: colors.purple }} />
+            <h2 style={h2Style}>{t('form:setup_equipment_label')}</h2>
           </div>
-          <p className="text-gray-600 mb-4">
-            {t('form:setup_equipment_description')}
-          </p>
-          <button
-            onClick={() => handleSetupAction(() => setShowEquipmentModal(true))}
-            className="w-full bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors"
-          >
+          <p style={cardDescStyle}>{t('form:setup_equipment_description')}</p>
+          <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowEquipmentModal(true))} style={{ background: `linear-gradient(135deg, ${colors.purple}, ${colors.purpleLight})` }}>
             {t('form:manage_equipment_button')}
-          </button>
-        </div>
+          </Button>
+        </Card>
         
-        {/* Excavators & Dumpers/Barrows Card */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <Truck className="w-6 h-6 text-orange-600 mr-3" />
-            <h2 className="text-xl font-semibold">{t('form:setup_excavators_dumpers_label')}</h2>
+        <Card padding={cardStyle.padding}>
+          <div style={cardTitleStyle}>
+            <Truck style={{ width: 24, height: 24, color: colors.orange }} />
+            <h2 style={h2Style}>{t('form:setup_excavators_dumpers_label')}</h2>
           </div>
-          <p className="text-gray-600 mb-4">
-            {t('form:setup_excavators_description')}
-          </p>
-          <button
-            onClick={() => handleSetupAction(() => setShowDiggingModal(true))}
-            className="w-full bg-orange-600 text-white py-2 px-4 rounded-lg hover:bg-orange-700 transition-colors"
-          >
+          <p style={cardDescStyle}>{t('form:setup_excavators_description')}</p>
+          <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowDiggingModal(true))} style={{ background: `linear-gradient(135deg, ${colors.orange}, ${colors.orangeLight})` }}>
             {t('form:manage_excavators_dumpers_button')}
-          </button>
-        </div>
+          </Button>
+        </Card>
         
-        {/* Material Usage Card */}
-        <div className="bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex items-center mb-4">
-            <Package className="w-6 h-6 text-indigo-600 mr-3" />
-            <h2 className="text-xl font-semibold">{t('form:setup_material_usage_label')}</h2>
+        <Card padding={cardStyle.padding}>
+          <div style={cardTitleStyle}>
+            <Package style={{ width: 24, height: 24, color: colors.accentBlue }} />
+            <h2 style={h2Style}>{t('form:setup_material_usage_label')}</h2>
           </div>
-          <p className="text-gray-600 mb-4">
-            {t('form:setup_material_usage_description')}
-          </p>
-          <button
-            onClick={() => handleSetupAction(() => setShowMaterialUsageModal(true))}
-            className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors"
-          >
+          <p style={cardDescStyle}>{t('form:setup_material_usage_description')}</p>
+          <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowMaterialUsageModal(true))}>
             {t('form:manage_material_usage_button')}
-          </button>
-        </div>
+          </Button>
+        </Card>
       </div>
       
-      {/* Help Section - Floating Version with Triangle Pattern Links */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <div className="bg-white rounded-lg shadow-lg p-3">
-          <div className="flex flex-col items-center">
-            <h2 className="text-lg font-semibold mb-2">{t('form:setup_need_help_label')}</h2>
-            <button 
-              onClick={() => setShowContactInfo(!showContactInfo)}
-              className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700 text-sm"
-            >
+      <div style={{ position: 'fixed', bottom: spacing['6xl'], right: spacing['6xl'], zIndex: 50 }}>
+        <Card padding={`${spacing.lg}px`}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: spacing.sm }}>
+            <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textSecondary, margin: 0 }}>
+              {t('form:setup_need_help_label')}
+            </h2>
+            <Button onClick={() => setShowContactInfo(!showContactInfo)}>
               {t('form:contact_us_button')}
-            </button>
+            </Button>
           </div>
           
           {showContactInfo && (
             <>
-              {/* Top Link */}
-              <div className="absolute bottom-full right-1/2 transform translate-x-1/2 mb-4 bg-white p-2 rounded-lg shadow-lg">
-                <div className="flex items-center space-x-2">
-                  <ExternalLink className="w-4 h-4 text-gray-600" />
-                  <a href="https://www.123.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">
-                    {t('form:contact_website_label')}
-                  </a>
+              <div style={{ position: 'absolute', bottom: '100%', right: '50%', transform: 'translateX(50%)', marginBottom: spacing.md, background: colors.bgCard, padding: spacing.sm, borderRadius: radii.lg, boxShadow: '0 4px 16px rgba(0,0,0,0.2)', border: `1px solid ${colors.borderDefault}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+                  <ExternalLink style={{ width: 16, height: 16, color: colors.textMuted }} />
+                  <a href="https://www.123.com" target="_blank" rel="noopener noreferrer" style={{ color: colors.accentBlue, fontSize: fontSizes.sm, textDecoration: 'none' }}>{t('form:contact_website_label')}</a>
                 </div>
               </div>
-              
-              {/* Left Link */}
-              <div className="absolute right-full bottom-1/2 transform translate-y-1/2 mr-4 bg-white p-2 rounded-lg shadow-lg">
-                <div className="flex items-center space-x-2">
-                  <ExternalLink className="w-4 h-4 text-gray-600" />
-                  <a href="https://www.instagram.com/aitomatic_future/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm">
-                    {t('form:contact_instagram_label')}
-                  </a>
+              <div style={{ position: 'absolute', right: '100%', bottom: '50%', transform: 'translateY(50%)', marginRight: spacing.md, background: colors.bgCard, padding: spacing.sm, borderRadius: radii.lg, boxShadow: '0 4px 16px rgba(0,0,0,0.2)', border: `1px solid ${colors.borderDefault}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+                  <ExternalLink style={{ width: 16, height: 16, color: colors.textMuted }} />
+                  <a href="https://www.instagram.com/aitomatic_future/" target="_blank" rel="noopener noreferrer" style={{ color: colors.accentBlue, fontSize: fontSizes.sm, textDecoration: 'none' }}>{t('form:contact_instagram_label')}</a>
                 </div>
               </div>
-              
-              {/* Top-Left Link */}
-              <div className="absolute right-full bottom-full mr-4 mb-4 bg-white p-2 rounded-lg shadow-lg">
-                <div className="flex items-center space-x-2">
-                  <ExternalLink className="w-4 h-4 text-gray-600" />
-                  <a href="mailto:asdasd@gmail.com" className="text-blue-600 hover:underline text-sm">
-                    {t('form:contact_email_label')}
-                  </a>
+              <div style={{ position: 'absolute', right: '100%', bottom: '100%', marginRight: spacing.md, marginBottom: spacing.md, background: colors.bgCard, padding: spacing.sm, borderRadius: radii.lg, boxShadow: '0 4px 16px rgba(0,0,0,0.2)', border: `1px solid ${colors.borderDefault}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+                  <ExternalLink style={{ width: 16, height: 16, color: colors.textMuted }} />
+                  <a href="mailto:asdasd@gmail.com" style={{ color: colors.accentBlue, fontSize: fontSizes.sm, textDecoration: 'none' }}>{t('form:contact_email_label')}</a>
                 </div>
               </div>
             </>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Modals */}

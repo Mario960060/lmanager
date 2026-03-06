@@ -636,7 +636,7 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
   if (!stairResult) return null;
 
   return (
-    <div className="mt-8 bg-gray-800 p-6 rounded-lg text-white">
+     <div className="mt-8 bg-gray-800 p-6 rounded-lg text-white">
       <h3 className="text-xl font-semibold text-white mb-4">
         {t('calculator:slab_requirements_for_stairs')} - U-Shape
       </h3>

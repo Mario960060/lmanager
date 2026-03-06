@@ -1,5 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import {
+  colors,
+  fonts,
+  fontSizes,
+  fontWeights,
+  spacing,
+  radii,
+  gradients,
+} from '../../themes/designTokens';
+import {
+  TextInput,
+  Button,
+  Card,
+  DataTable,
+} from '../../themes/uiComponents';
 
 interface CalculatorProps {
   type: 'slab' | 'general';
@@ -101,109 +116,88 @@ const MortarCalculator: React.FC<CalculatorProps> = ({ type, onResultsChange }) 
   }, [result]);
 
   return (
-    <div className="space-y-4">
-      {type === 'slab' ? (
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_mortar_area_m2')}</label>
-          <input
-            type="number"
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
+        {type === 'slab' ? (
+          <TextInput
+            label={t('calculator:input_mortar_area_m2')}
             value={area}
-            onChange={(e) => setArea(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            onChange={setArea}
+            placeholder="0"
+            unit="m²"
           />
-        </div>
-      ) : (
-        <>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_m')}</label>
-            <input
-              type="number"
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+            <TextInput
+              label={t('calculator:input_length_m')}
               value={length}
-              onChange={(e) => setLength(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              onChange={setLength}
+              placeholder="0"
+              unit="m"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_width_m')}</label>
-            <input
-              type="number"
+            <TextInput
+              label={t('calculator:input_width_m')}
               value={width}
-              onChange={(e) => setWidth(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              onChange={setWidth}
+              placeholder="0"
+              unit="m"
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_mortar_height_cm')}</label>
-            <input
-              type="number"
+            <TextInput
+              label={t('calculator:input_mortar_height_cm')}
               value={thickness}
-              onChange={(e) => setThickness(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              onChange={setThickness}
+              placeholder="0"
+              unit="cm"
             />
           </div>
-        </>
-      )}
+        )}
 
-      <button
-        onClick={calculate}
-        className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
-      >
-        {t('calculator:calculate_button')}
-      </button>
+        <Button onClick={calculate} variant="primary" fullWidth>
+          {t('calculator:calculate_button')}
+        </Button>
 
-      {result && (
-        <div ref={resultsRef} className="mt-6 space-y-4 bg-gray-800 p-4 rounded-md">
-          <div>
-            <h3 className="text-lg font-medium text-white">{t('calculator:total_volume_label')} <span className="text-blue-400">{result.volume} m³</span></h3>
-            <p className="text-sm text-gray-300 mt-1">(Approximately {(result.volume * 1.5).toFixed(2)} tonnes)</p>
+        {result && (
+          <div ref={resultsRef} style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
+            <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                  {t('calculator:total_volume_label')}
+                </span>
+                <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                  {result.volume} m³
+                </span>
+                <span style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>
+                  (Approximately {(result.volume * 1.5).toFixed(2)} tonnes)
+                </span>
+              </div>
+            </Card>
+            <Card>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+                {t('calculator:materials_required_label')}
+              </h3>
+              <DataTable
+                columns={[
+                  { key: 'name', label: 'MATERIAL', width: '2fr' },
+                  { key: 'quantity', label: 'QUANTITY', width: '1fr' },
+                  { key: 'unit', label: 'UNIT', width: '1fr' },
+                ]}
+                rows={[
+                  {
+                    name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Cement</span>,
+                    quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{result.cementBags}</span>,
+                    unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>bags (25kg each)</span>,
+                  },
+                  {
+                    name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Sand</span>,
+                    quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{result.sand.toFixed(2)}</span>,
+                    unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>kg</span>,
+                  },
+                ]}
+              />
+            </Card>
           </div>
-          
-          <div>
-            <h3 className="font-medium mb-2 text-white">{t('calculator:materials_required_label')}</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-700">
-                <thead className="bg-gray-900">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Material
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Quantity
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Unit
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700">
-                  <tr className="bg-gray-800">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      Cement
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      {result.cementBags}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      bags (25kg each)
-                    </td>
-                  </tr>
-                  <tr className="bg-gray-900">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      Sand
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      {result.sand.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                      kg
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </Card>
     </div>
   );
 };

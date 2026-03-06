@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
+import { pl } from 'date-fns/locale';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { X, Plus, Package, AlertCircle, Wrench } from 'lucide-react';
+import { Plus, Package, AlertCircle, Wrench } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CalendarMaterialModal from './CalendarMaterialModal';
 import CalendarEquipmentModal from './CalendarEquipmentModal';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
+import { Modal, Button } from '../themes/uiComponents';
 
 interface Event {
   id: string;
@@ -34,7 +37,8 @@ interface DayDetailsModalProps {
 }
 
 const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipment, onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t, i18n } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const dateLocale = i18n.language === 'pl' ? pl : undefined;
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
@@ -210,59 +214,33 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col">
-        <div className="p-6 border-b flex justify-between items-start">
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-900">
-              {format(date, 'MMMM d, yyyy')}
-            </h2>
-            <p className="text-sm text-gray-600 mt-1">
-              {events.length} {t('event:events_label')}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+    <>
+    <Modal open={true} onClose={onClose} title={format(date, 'MMMM d, yyyy')} width={896}>
+        <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, margin: `0 0 ${spacing["6xl"]} 0` }}>
+          {events.length} {t('event:events_label')}
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["8xl"], overflowY: 'auto' }}>
           {/* Events Section */}
           {events.length > 0 && (
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('event:events_label')}</h3>
-              <div className="space-y-4">
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, marginBottom: spacing["5xl"], fontFamily: fonts.display }}>{t('event:events_label')}</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
                 {events.map(event => (
-                  <div key={event.id} className="bg-gray-50 p-4 rounded-lg">
-                    <div className="flex flex-col space-y-3">
+                  <div key={event.id} style={{ background: colors.bgSubtle, padding: spacing["5xl"], borderRadius: radii.lg }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.base }}>
                       <div>
-                        <h4 className="font-medium text-blue-600 hover:text-blue-800 cursor-pointer"
-                            onClick={() => navigate(`/events/${event.id}`)}>
-                          {event.title}
-                        </h4>
-                        <p className="text-sm text-gray-600 mt-1">{event.description}</p>
+                        <h4 style={{ fontWeight: fontWeights.medium, color: colors.accentBlue, cursor: 'pointer', fontFamily: fonts.body }} onClick={() => navigate(`/events/${event.id}`)}>{event.title}</h4>
+                        <p style={{ fontSize: fontSizes.base, color: colors.textDim, marginTop: spacing.xs, fontFamily: fonts.body }}>{event.description}</p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => handleAddMaterial(event.id)}
-                          className="inline-flex items-center px-3 py-1.5 bg-green-600 text-white rounded-full text-sm hover:bg-green-700 transition-colors"
-                        >
-                          <Package className="w-4 h-4 mr-1" />
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.sm }}>
+                        <Button variant="accent" color={colors.green} onClick={() => handleAddMaterial(event.id)}>
+                          <Package style={{ width: 16, height: 16, marginRight: spacing.xs }} />
                           {t('event:add_material')}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedEventForEquipment(event.id);
-                            setShowEquipmentModal(true);
-                          }}
-                          className="inline-flex items-center px-3 py-1.5 bg-amber-600 text-white rounded-full text-sm hover:bg-amber-700 transition-colors"
-                        >
-                          <Wrench className="w-4 h-4 mr-1" />
+                        </Button>
+                        <Button variant="accent" color={colors.orange} onClick={() => { setSelectedEventForEquipment(event.id); setShowEquipmentModal(true); }}>
+                          <Wrench style={{ width: 16, height: 16, marginRight: spacing.xs }} />
                           {t('event:require_equipment')}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -273,36 +251,26 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
 
           {/* Materials Needed Section - Grouped by Project */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-red-600" />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing["5xl"] }}>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, display: 'flex', alignItems: 'center', gap: spacing.sm, fontFamily: fonts.display }}>
+                <AlertCircle style={{ width: 16, height: 16, color: colors.red }} />
                 {t('event:required_materials')}
-                <span className="text-2xl font-bold text-red-600">{materials.length}</span>
+                <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold, color: colors.red }}>{materials.length}</span>
               </h3>
             </div>
-            <div className="space-y-6">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
               {events.map(event => {
                 const eventMaterials = materialsByProject[event.id] || [];
                 if (eventMaterials.length === 0) return null;
-
                 return (
-                  <div key={event.id} className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="font-medium text-blue-600 mb-3 hover:text-blue-800 cursor-pointer"
-                        onClick={() => navigate(`/events/${event.id}`)}>
-                      {event.title}
-                    </h4>
-                    <div className="space-y-3">
+                  <div key={event.id} style={{ background: colors.bgSubtle, padding: spacing["5xl"], borderRadius: radii.lg }}>
+                    <h4 style={{ fontWeight: fontWeights.medium, color: colors.accentBlue, marginBottom: spacing.base, cursor: 'pointer', fontFamily: fonts.body }} onClick={() => navigate(`/events/${event.id}`)}>{event.title}</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.base }}>
                       {eventMaterials.map(material => (
-                        <div key={material.id} className="flex items-center justify-between py-2">
-                          <div className="flex items-center">
-                            <div className="ml-3">
-                              <p className="text-sm font-medium text-gray-900">
-                                {material.material} - {material.quantity}
-                              </p>
-                              {material.notes && (
-                                <p className="text-sm text-gray-500">{material.notes}</p>
-                              )}
-                            </div>
+                        <div key={material.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${spacing.sm} 0` }}>
+                          <div>
+                            <p style={{ fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.textPrimary, fontFamily: fonts.body }}>{material.material} - {material.quantity}</p>
+                            {material.notes && <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body }}>{material.notes}</p>}
                           </div>
                         </div>
                       ))}
@@ -310,47 +278,36 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
                   </div>
                 );
               })}
-
               {Object.keys(materialsByProject).length === 0 && (
-                <p className="text-gray-500 text-center py-4">
-                  {t('event:no_materials_needed_today')}
-                </p>
+                <p style={{ color: colors.textDim, textAlign: 'center', padding: spacing["5xl"], fontFamily: fonts.body }}>{t('event:no_materials_needed_today')}</p>
               )}
             </div>
           </div>
 
           {/* Required Equipment Section - Grouped by Project */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Wrench className="w-4 h-4 text-amber-600" />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing["5xl"] }}>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, display: 'flex', alignItems: 'center', gap: spacing.sm, fontFamily: fonts.display }}>
+                <Wrench style={{ width: 16, height: 16, color: colors.orange }} />
                 {t('event:required_equipment')}
-                <span className="text-2xl font-bold text-amber-600">{calendarEquipment.length}</span>
+                <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold, color: colors.orange }}>{calendarEquipment.length}</span>
               </h3>
             </div>
-            <div className="space-y-6">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
               {events.map(event => {
                 const eventEquipment = equipmentByProject[event.id] || [];
                 if (eventEquipment.length === 0) return null;
-
                 return (
-                  <div key={event.id} className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="font-medium text-blue-600 mb-3 hover:text-blue-800 cursor-pointer"
-                        onClick={() => navigate(`/events/${event.id}`)}>
-                      {event.title}
-                    </h4>
-                    <div className="space-y-3">
+                  <div key={event.id} style={{ background: colors.bgSubtle, padding: spacing["5xl"], borderRadius: radii.lg }}>
+                    <h4 style={{ fontWeight: fontWeights.medium, color: colors.accentBlue, marginBottom: spacing.base, cursor: 'pointer', fontFamily: fonts.body }} onClick={() => navigate(`/events/${event.id}`)}>{event.title}</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.base }}>
                       {eventEquipment.map(equipment => (
-                        <div key={equipment.id} className="flex items-center justify-between py-2">
-                          <div className="flex items-center">
-                            <Wrench className="w-5 h-5 text-gray-500" />
-                            <div className="ml-3">
-                              <p className="text-sm font-medium text-gray-900">
-                                {equipment.equipment?.name} - {equipment.quantity} {equipment.quantity > 1 ? t('event:units_label') : t('event:unit_singular')}
-                              </p>
-                              {equipment.notes && (
-                                <p className="text-sm text-gray-500">{equipment.notes}</p>
-                              )}
+                        <div key={equipment.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${spacing.sm} 0` }}>
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <Wrench style={{ width: 20, height: 20, color: colors.textDim, marginRight: spacing.base }} />
+                            <div>
+                              <p style={{ fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.textPrimary, fontFamily: fonts.body }}>{equipment.equipment?.name} - {equipment.quantity} {equipment.quantity > 1 ? t('event:units_label') : t('event:unit_singular')}</p>
+                              {equipment.notes && <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body }}>{equipment.notes}</p>}
                             </div>
                           </div>
                         </div>
@@ -359,103 +316,62 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
                   </div>
                 );
               })}
-
               {Object.keys(equipmentByProject).length === 0 && (
-                <p className="text-gray-500 text-center py-4">
-                  {t('event:no_equipment_required_today')}
-                </p>
+                <p style={{ color: colors.textDim, textAlign: 'center', padding: spacing["5xl"], fontFamily: fonts.body }}>{t('event:no_equipment_required_today')}</p>
               )}
             </div>
           </div>
 
           {/* Notes Section */}
           <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">{t('event:notes_label')}</h3>
-              <button
-                onClick={() => setShowNoteForm(true)}
-                className="flex items-center text-sm text-blue-600 hover:text-blue-700"
-              >
-                <Plus className="w-4 h-4 mr-1" />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display }}>{t('event:notes_label')}</h3>
+              <button onClick={() => setShowNoteForm(true)} style={{ display: 'flex', alignItems: 'center', fontSize: fontSizes.base, color: colors.accentBlue, background: 'none', border: 'none', cursor: 'pointer', fontFamily: fonts.body }}>
+                <Plus style={{ width: 16, height: 16, marginRight: spacing.xs }} />
                 {t('event:add_note')}
               </button>
             </div>
 
             {showNoteForm && (
-              <div className="bg-gray-50 p-4 rounded-lg mb-4 space-y-4">
+              <div style={{ background: colors.bgSubtle, padding: spacing["5xl"], borderRadius: radii.lg, marginBottom: spacing["5xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('event:event_label')}</label>
-                  <select
-                    value={selectedEvent || ''}
-                    onChange={(e) => setSelectedEvent(e.target.value)}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  >
+                  <label style={{ display: 'block', fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.textSecondary, fontFamily: fonts.body }}>{t('event:event_label')}</label>
+                  <select value={selectedEvent || ''} onChange={(e) => setSelectedEvent(e.target.value)} style={{ marginTop: spacing.xs, width: '100%', padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base }}>
                     <option value="">{t('event:select_event')}</option>
-                    {events.map(event => (
-                      <option key={event.id} value={event.id}>{event.title}</option>
-                    ))}
+                    {events.map(event => (<option key={event.id} value={event.id}>{event.title}</option>))}
                   </select>
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('event:note_label')}</label>
-                  <textarea
-                    value={noteContent}
-                    onChange={(e) => setNoteContent(e.target.value)}
-                    rows={3}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    placeholder={t('event:enter_note')}
-                  />
+                  <label style={{ display: 'block', fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.textSecondary, fontFamily: fonts.body }}>{t('event:note_label')}</label>
+                  <textarea value={noteContent} onChange={(e) => setNoteContent(e.target.value)} rows={3} placeholder={t('event:enter_note')} style={{ marginTop: spacing.xs, width: '100%', padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base }} />
                 </div>
-
-                <div className="flex justify-end space-x-3">
-                  <button
-                    onClick={() => setShowNoteForm(false)}
-                    className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
-                  >
-                    {t('common:cancel')}
-                  </button>
-                  <button
-                    onClick={handleAddNote}
-                    disabled={!selectedEvent || !noteContent.trim() || addNoteMutation.isPending}
-                    className="px-4 py-2 text-sm text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50"
-                  >
-                    {addNoteMutation.isPending ? t('event:adding') : t('event:add_note')}
-                  </button>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: spacing.base }}>
+                  <Button variant="secondary" onClick={() => setShowNoteForm(false)}>{t('common:cancel')}</Button>
+                  <Button onClick={handleAddNote} disabled={!selectedEvent || !noteContent.trim() || addNoteMutation.isPending}>{addNoteMutation.isPending ? t('event:adding') : t('event:add_note')}</Button>
                 </div>
               </div>
             )}
 
-            <div className="space-y-4">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
               {notes.map(note => (
-                <div key={note.id} className="bg-gray-50 md:bg-gray-50 bg-red-50 p-4 rounded-lg">
-                  <div className="flex justify-between items-start">
+                <div key={note.id} style={{ background: colors.bgSubtle, padding: spacing["5xl"], borderRadius: radii.lg }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <p className="text-sm text-gray-600">
-                        {t('event:event_label')}: <span 
-                          className="text-blue-600 hover:text-blue-800 cursor-pointer"
-                          onClick={() => navigate(`/events/${note.event_id}`)}
-                        >
-                          {note.events?.title}
-                        </span>
+                      <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body }}>
+                        {t('event:event_label')}: <span style={{ color: colors.accentBlue, cursor: 'pointer' }} onClick={() => navigate(`/events/${note.event_id}`)}>{note.events?.title}</span>
                       </p>
-                      <p className="text-gray-900 mt-1">{note.content}</p>
+                      <p style={{ color: colors.textPrimary, marginTop: spacing.xs, fontFamily: fonts.body }}>{note.content}</p>
                     </div>
-                    <span className="text-xs text-gray-500">
-                      {format(new Date(note.created_at), 'MMM d, h:mm a')}
-                    </span>
+                    <span style={{ fontSize: fontSizes.xs, color: colors.textDim }}>{format(new Date(note.created_at), 'MMM d, h:mm a', { locale: dateLocale })}</span>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    {t('event:added_by')} {note.profiles?.full_name}
-                  </p>
+                  <p style={{ fontSize: fontSizes.xs, color: colors.textDim, marginTop: spacing.sm, fontFamily: fonts.body }}>{t('event:added_by')} {note.profiles?.full_name}</p>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      </div>
+    </Modal>
 
-      {/* Calendar Material Modal */}
       {showMaterialModal && selectedEventForMaterial && (
         <CalendarMaterialModal
           eventId={selectedEventForMaterial}
@@ -467,7 +383,6 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
         />
       )}
 
-      {/* Calendar Equipment Modal */}
       {showEquipmentModal && selectedEventForEquipment && (
         <CalendarEquipmentModal
           eventId={selectedEventForEquipment}
@@ -478,7 +393,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
           }}
         />
       )}
-    </div>
+    </>
   );
 };
 

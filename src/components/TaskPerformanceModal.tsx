@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { Clock, ChevronDown, ChevronUp, Loader2, Search, X, CheckCircle, Trash2 } from 'lucide-react';
+import { Clock, ChevronDown, ChevronUp, Search, X, CheckCircle, Trash2 } from 'lucide-react';
+import { Spinner, Button } from '../themes/uiComponents';
 
 interface TaskPerformanceModalProps {
   onClose: () => void;
@@ -35,25 +37,9 @@ const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
           <strong>{t('common:type_label')}:</strong> {recordType}<br />
           <strong>{t('common:name_label')}:</strong> {recordName}
         </p>
-        <div className="flex justify-end space-x-3">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onCancel();
-            }}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            {t('common:no')}
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onConfirm();
-            }}
-            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-          >
-            {t('common:yes')}
-          </button>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={(e) => { e.stopPropagation(); onCancel(); }}>{t('common:no')}</Button>
+          <Button variant="danger" onClick={(e) => { e.stopPropagation(); onConfirm(); }}>{t('common:yes')}</Button>
         </div>
       </div>
     </div>
@@ -61,7 +47,7 @@ const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
 };
 
 const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'event', 'calculator']);
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [expandedTaskId, setExpandedTaskId] = React.useState<string | null>(null);
@@ -122,12 +108,12 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
           // Add event titles to the entries
           return data.map(entry => ({
             ...entry,
-            eventTitle: entry.event_id ? eventTitleMap.get(entry.event_id) || 'Unknown Project' : 'Unknown Project'
+            eventTitle: entry.event_id ? eventTitleMap.get(entry.event_id) || t('common:unknown_project') : t('common:unknown_project')
           }));
         }
       }
       
-      return data;
+      return data.map(entry => ({ ...entry, eventTitle: t('common:unknown_project') }));
     },
     enabled: !!user?.id
   });
@@ -145,10 +131,10 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
           record_id: recordId,
           record_type: 'task_progress_entries',
           record_details: {
-            task: entry.tasks_done?.name || 'Unknown Task',
-            project: entry.eventTitle || 'Unknown Project',
-            amount: `${entry.amount_completed} ${entry.tasks_done?.unit || 'units'}`,
-            hours: `${entry.hours_spent} hours`,
+            task: entry.tasks_done?.name || t('common:unknown_task'),
+            project: entry.eventTitle || t('common:unknown_project'),
+            amount: `${entry.amount_completed} ${entry.tasks_done?.unit || t('common:units')}`,
+            hours: `${entry.hours_spent} ${t('event:hours')}`,
             date: new Date(entry.created_at).toLocaleDateString()
           },
           status: 'pending'
@@ -205,7 +191,7 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
       
       const taskName = entry.tasks_done.name;
       const eventTasksId = entry.event_tasks_id;
-      const unit = entry.tasks_done.unit || 'units';
+      const unit = entry.tasks_done.unit || t('common:units');
       const eventTitle = entry.eventTitle || 'Unknown Project';
       
       if (!taskGroups[eventTasksId]) {
@@ -293,7 +279,7 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
           <div className="flex-1 overflow-y-auto p-4">
             {isLoadingProgress ? (
               <div className="flex justify-center p-6">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                <Spinner size={32} />
               </div>
             ) : filteredTaskPerformance.length > 0 ? (
               <div className="space-y-4">
@@ -305,7 +291,7 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
                     >
                       <div>
                         <h3 className="font-medium text-gray-900 dark:text-gray-100">
-                          {task.taskName}
+                          {translateTaskName(task.taskName, t)}
                         </h3>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
                           {t('event:project_label')}: {task.eventTitle}
@@ -317,7 +303,7 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
                           </div>
                           <div>
                             <span className="text-sm text-gray-500 dark:text-gray-400">{t('event:total_hours')}:</span>
-                            <span className="ml-2 font-medium">{task.totalHours.toFixed(2)} hrs</span>
+                            <span className="ml-2 font-medium">{task.totalHours.toFixed(2)} {t('common:hrs_abbr')}</span>
                           </div>
                         </div>
                       </div>
@@ -352,7 +338,7 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
                                   </td>
                                   <td className="text-right py-2 px-4">{entry.hours.toFixed(2)} hrs</td>
                                   <td className="text-right py-2 px-4">
-                                    {entry.efficiency.toFixed(2)} {task.unit}/hr
+                                    {entry.efficiency.toFixed(2)} {task.unit}/{t('common:hrs_abbr')}
                                   </td>
                                   <td className="text-right py-2 px-4">
                                     <button
@@ -360,7 +346,7 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
                                         e.stopPropagation();
                                         handleDeleteClick(
                                           entry.id,
-                                          `${task.taskName} (${entry.date})`
+                                          `${translateTaskName(task.taskName, t)} (${entry.date})`
                                         );
                                       }}
                                       className="text-red-600 hover:text-red-800 font-medium flex items-center ml-auto"
@@ -423,12 +409,9 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
               {t('event:deletion_request_sent')}
             </p>
             <div className="flex justify-end">
-              <button
-                onClick={() => setShowRequestSent(false)}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
+              <Button variant="primary" onClick={() => setShowRequestSent(false)}>
                 {t('common:close')}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

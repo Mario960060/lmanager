@@ -2,19 +2,22 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft } from 'lucide-react';
+import { Button } from '../themes/uiComponents';
+import { spacing } from '../themes/designTokens';
 
 const BackButton = () => {
   const { t } = useTranslation(['common']);
   const navigate = useNavigate();
 
   return (
-    <button
+    <Button
+      variant="secondary"
       onClick={() => navigate(-1)}
-      className="absolute top-6 right-6 inline-flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+      style={{ position: 'absolute', top: spacing["6xl"], right: spacing["6xl"], display: 'inline-flex', alignItems: 'center', gap: spacing.sm }}
     >
-      <ArrowLeft className="w-4 h-4 mr-2" />
+      <ArrowLeft style={{ width: 16, height: 16 }} />
       {t('common:back')}
-    </button>
+    </Button>
   );
 }
 

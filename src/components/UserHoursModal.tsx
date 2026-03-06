@@ -1,13 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName, translateMaterialName } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import TaskProgressModal from './TaskProgressModal';
 import { format } from 'date-fns';
 import { useAuthStore } from '../lib/store';
-import Modal from './Modal';
 import { Plus, X, ChevronRight, Search, Trash2 } from 'lucide-react';
 import UnspecifiedMaterialModal from './UnspecifiedMaterialModal';
+import DatePicker from './DatePicker';
+import {
+  Modal, Card, SectionHeader, EmptyState, Button, Label, TextInput, Textarea, SelectDropdown,
+  ConfirmDialog, colors, spacing, radii, fontSizes, fontWeights, fonts, layout, transitions, shadows,
+} from '../themes';
 
 interface TaskTemplate {
   id: string;
@@ -24,7 +29,7 @@ interface AdditionalTaskMaterial {
 }
 
 const UserHoursPage: React.FC = () => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'event', 'calculator', 'material']);
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
   const queryClient = useQueryClient();
@@ -533,32 +538,28 @@ const UserHoursPage: React.FC = () => {
 
   // ---------- RENDER HELPERS ----------
 
-  const SectionTitle = ({ label }: { label: string }) => (
-    <div className="flex items-center gap-2 mb-2.5">
-      <span className="text-[13px] font-bold text-gray-400 uppercase tracking-wider">{label}</span>
-      <div className="flex-1 h-px bg-gray-700" />
-    </div>
-  );
-
   const renderFolderTasks = (folderTasks: any[]) => (
-    <div className="space-y-1 mt-1">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, marginTop: spacing.sm }}>
       {folderTasks.map((task: any) => (
         <div
           key={task.id}
-          className="flex items-center justify-between px-3.5 py-3 bg-gray-50 rounded-lg border border-transparent hover:border-gray-200 active:bg-gray-100 transition-colors gap-3"
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '12px 16px', background: colors.bgCardInner, border: `1px solid ${colors.borderDefault}`,
+            borderRadius: radii.xl, gap: spacing.lg, transition: transitions.fast,
+          }}
         >
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium leading-tight">{task.name}</div>
-            <div className="text-[11px] text-gray-500 mt-0.5">
-              {task.amount} &middot; est. {task.hours_worked || 0}h
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary, lineHeight: 1.2 }}>
+              {translateTaskName(task.name, t)}
+            </div>
+            <div style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, marginTop: 2 }}>
+              {task.amount} &middot; {t('common:est_abbr')} {task.hours_worked || 0}h
             </div>
           </div>
-          <button
-            className="bg-blue-600 text-white text-[13px] font-semibold px-3.5 py-2 rounded-md whitespace-nowrap hover:bg-blue-700 active:scale-[0.96] transition-all flex-shrink-0"
-            onClick={() => { setProgressTask(task); setShowProgressModal(true); }}
-          >
-            {t('event:add_task', { defaultValue: 'Dodaj' })}
-          </button>
+          <Button variant="primary" onClick={() => { setProgressTask(task); setShowProgressModal(true); }} style={{ fontSize: fontSizes.base, padding: '8px 16px' }}>
+            {t('event:add_task', { defaultValue: 'Dodaj Zadanie' })}
+          </Button>
         </div>
       ))}
     </div>
@@ -567,55 +568,61 @@ const UserHoursPage: React.FC = () => {
   // ---------- RENDER ----------
 
   return (
-    <div className="min-h-screen bg-gray-800">
-      <div className="max-w-5xl mx-auto min-h-screen relative">
-        {/* Sticky Header */}
-        <header className="sticky top-0 z-40 bg-gray-800/85 backdrop-blur-xl border-b border-gray-700 px-4 md:px-6 py-3">
-          <h1 className="text-xl font-bold tracking-tight">{t('event:add_hours_progress')}</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{formattedDate}</p>
+    <div style={{ minHeight: '100vh', background: colors.bgMain }}>
+      <div style={{ maxWidth: layout.maxContentWidth, margin: '0 auto', minHeight: '100vh', position: 'relative', padding: layout.contentPadding }}>
+        {/* Header */}
+        <header style={{ marginBottom: spacing["6xl"] }}>
+          <h1 style={{ fontSize: fontSizes["3xl"], fontWeight: fontWeights.extrabold, fontFamily: fonts.display, color: colors.textPrimary, letterSpacing: '0.5px', margin: 0 }}>
+            {t('event:add_hours_progress')}
+          </h1>
+          <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, marginTop: 4 }}>
+            {formattedDate}
+          </p>
         </header>
 
-        {/* Content */}
-        <div className="px-4 md:px-6 pt-4 pb-24">
-          {/* Controls Grid - 3 cols on desktop */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('common:date')}</span>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                className="!rounded-lg !text-[15px] !py-2.5 !px-3"
+        {/* Filter Bar */}
+        <Card padding={`${spacing["4xl"]}px ${spacing["5xl"]}px`} style={{ marginBottom: spacing["6xl"] }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: 20, alignItems: 'center' }}>
+            <div>
+              <Label style={{ marginBottom: 6 }}>{t('common:date')}</Label>
+              <DatePicker value={selectedDate} onChange={setSelectedDate} />
+            </div>
+            <div>
+              <Label style={{ marginBottom: 6 }}>{t('event:project_label')}</Label>
+              <SelectDropdown
+                value={selectedProject ? projects.find((p: any) => p.id === selectedProject)?.title || '' : ''}
+                options={projects.map((p: any) => p.title)}
+                onChange={(val) => {
+                  const proj = projects.find((p: any) => p.title === val);
+                  setSelectedProject(proj?.id || '');
+                }}
+                placeholder={t('event:select_project')}
               />
             </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('event:project_label')}</span>
-              <select
-                value={selectedProject}
-                onChange={e => setSelectedProject(e.target.value)}
-                className="!rounded-lg !text-[15px] !py-2.5 !px-3 !pr-9"
-              >
-                <option value="">{t('event:select_project')}</option>
-                {projects.map((proj: any) => (
-                  <option key={proj.id} value={proj.id}>{proj.title}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-span-2 flex flex-col gap-1">
-              <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">{t('event:search_tasks')}</span>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            <div>
+              <Label style={{ marginBottom: 6 }}>{t('event:search_tasks')}</Label>
+              <div style={{
+                display: 'flex', alignItems: 'center',
+                background: colors.bgInput, border: `1px solid ${colors.borderInput}`,
+                borderRadius: radii.xl, overflow: 'hidden',
+              }}>
+                <Search style={{ paddingLeft: 12, width: 16, height: 16, color: colors.textFaint, flexShrink: 0 }} />
                 <input
                   type="text"
                   value={taskSearch}
                   onChange={e => setTaskSearch(e.target.value)}
-                  className="!pl-9 !rounded-lg !text-[15px] !py-2.5"
                   placeholder={t('event:search_tasks_placeholder', { defaultValue: 'np. piasek, krawężniki...' })}
+                  style={{
+                    flex: 1, padding: '12px 14px', background: 'transparent', border: 'none',
+                    color: colors.textSecondary, fontSize: fontSizes.md, fontFamily: fonts.body, outline: 'none',
+                  }}
                 />
                 {taskSearch && (
                   <button
                     onClick={() => setTaskSearch('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-gray-100 w-6 h-6 rounded-full flex items-center justify-center text-gray-500 text-sm min-h-0 min-w-0"
+                    style={{ padding: 8, background: 'transparent', color: colors.textFaint, border: 'none', cursor: 'pointer', fontSize: 14 }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textFaint; }}
                   >
                     ×
                   </button>
@@ -623,195 +630,187 @@ const UserHoursPage: React.FC = () => {
               </div>
             </div>
           </div>
+        </Card>
 
-          {/* Two-column layout on desktop: tasks left, entries right */}
-          <div className="flex flex-col lg:flex-row lg:gap-6">
-            {/* Left column: Tasks + Additional Tasks */}
-            <div className="flex-1 min-w-0">
-              {/* Tasks Section */}
-              <SectionTitle label={t('event:tasks_label')} />
+        {/* Two-column layout */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          {/* Left column: Tasks + Additional Tasks */}
+          <div style={{ minWidth: 0 }}>
+            <SectionHeader title={t('event:tasks_label')} style={{ marginBottom: spacing.lg }} />
 
-              {isTasksLoading || isFoldersLoading ? (
-                <div className="text-center text-gray-500 py-4 text-sm">{t('event:loading_tasks')}</div>
-              ) : (
-                <div className="space-y-2">
-                  {folders.map((folder: any) => (
-                    (!taskSearch || tasksByFolder[folder.id]?.length > 0) ? (
-                      <div key={folder.id} className="rounded-lg overflow-hidden">
-                        <button
-                          className="w-full flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3.5 py-2.5 cursor-pointer select-none transition-colors hover:bg-gray-50 active:bg-gray-50 min-h-0"
-                          onClick={() => toggleFolder(folder.id)}
-                        >
-                          <div className="flex items-center gap-2.5 font-semibold text-sm">
-                            <ChevronRight className={`w-[18px] h-[18px] text-gray-500 flex-shrink-0 transition-transform duration-300 ${expandedFolders.includes(folder.id) ? 'rotate-90' : ''}`} />
-                            <span>{folder.name}</span>
-                          </div>
-                          <span className="bg-blue-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                            {tasksByFolder[folder.id]?.length || 0}
-                          </span>
-                        </button>
-                        {expandedFolders.includes(folder.id) && tasksByFolder[folder.id]?.length > 0 && (
-                          renderFolderTasks(tasksByFolder[folder.id])
-                        )}
-                      </div>
-                    ) : null
-                  ))}
-
-                  {/* Unorganized tasks */}
-                  {(tasksByFolder['unorganized'] || []).length > 0 && (!taskSearch || tasksByFolder['unorganized']?.length > 0) && (
-                    <div className="rounded-lg overflow-hidden">
+            {isTasksLoading || isFoldersLoading ? (
+              <div style={{ textAlign: 'center', color: colors.textDim, padding: spacing["6xl"], fontSize: fontSizes.sm }}>{t('event:loading_tasks')}</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+                {folders.map((folder: any) => (
+                  (!taskSearch || tasksByFolder[folder.id]?.length > 0) ? (
+                    <div key={folder.id} style={{ borderRadius: radii["2xl"], overflow: 'hidden' }}>
                       <button
-                        className="w-full flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3.5 py-2.5 cursor-pointer select-none transition-colors hover:bg-gray-50 active:bg-gray-50 min-h-0"
-                        onClick={() => toggleFolder('unorganized')}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          background: colors.bgCard, border: `1px solid ${colors.borderDefault}`,
+                          borderRadius: radii["2xl"], padding: '12px 16px', cursor: 'pointer', borderLeft: '3px solid transparent',
+                          transition: transitions.fast,
+                        }}
+                        onClick={() => toggleFolder(folder.id)}
                       >
-                        <div className="flex items-center gap-2.5 font-semibold text-sm">
-                          <ChevronRight className={`w-[18px] h-[18px] text-gray-500 flex-shrink-0 transition-transform duration-300 ${expandedFolders.includes('unorganized') ? 'rotate-90' : ''}`} />
-                          <span>{t('event:other_tasks')}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md, fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary }}>
+                          <ChevronRight style={{ width: 18, height: 18, color: colors.textFaint, flexShrink: 0, transform: expandedFolders.includes(folder.id) ? 'rotate(90deg)' : 'none', transition: 'transform 0.3s' }} />
+                          <span>{folder.name}</span>
                         </div>
-                        <span className="bg-blue-600 text-white text-[11px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                          {tasksByFolder['unorganized']?.length || 0}
+                        <span style={{ background: colors.accentBlue, color: '#fff', fontSize: fontSizes.sm, fontWeight: fontWeights.bold, padding: '2px 8px', borderRadius: radii.full, minWidth: 22, textAlign: 'center' }}>
+                          {tasksByFolder[folder.id]?.length || 0}
                         </span>
                       </button>
-                      {expandedFolders.includes('unorganized') && (
-                        renderFolderTasks(tasksByFolder['unorganized'])
+                      {expandedFolders.includes(folder.id) && tasksByFolder[folder.id]?.length > 0 && (
+                        <div style={{ padding: spacing.sm, background: colors.bgCard, border: `1px solid ${colors.borderDefault}`, borderTop: 'none', borderRadius: `0 0 ${radii["2xl"]}px ${radii["2xl"]}px` }}>
+                          {renderFolderTasks(tasksByFolder[folder.id])}
+                        </div>
                       )}
                     </div>
-                  )}
+                  ) : null
+                ))}
 
-                  {taskSearch && Object.values(tasksByFolder).every(t => t.length === 0) && (
-                    <div className="bg-gray-50 p-4 rounded-lg text-gray-500 text-center text-[13px] border border-dashed border-gray-200">
-                      {t('event:no_tasks_found_matching', { defaultValue: `No tasks found matching "${taskSearch}"` }).replace('{query}', taskSearch)}
-                    </div>
-                  )}
-                  {!taskSearch && folders.length === 0 && (tasksByFolder['unorganized'] || []).length === 0 && (
-                    <div className="bg-gray-50 p-4 rounded-lg text-gray-500 text-center text-[13px] border border-dashed border-gray-200">
-                      {t('event:no_tasks_for_project')}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Divider */}
-              <div className="h-px bg-gray-700 my-5" />
-
-              {/* Additional Tasks */}
-              <div>
-                <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3.5 py-2.5 mb-2">
-                  <div className="flex items-center gap-2 font-semibold text-sm">
-                    <Plus className="w-4 h-4" />
-                    <span>{t('event:additional_tasks')}</span>
-                  </div>
-                  <button
-                    onClick={() => setShowTaskModal(true)}
-                    disabled={!selectedProject}
-                    className="inline-flex items-center gap-1 bg-blue-600 text-white text-[13px] font-semibold px-3 py-1.5 rounded-md hover:bg-blue-700 active:scale-[0.96] transition-all min-h-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    {t('event:add_task')}
-                  </button>
-                </div>
-                {isAdditionalTasksLoading ? (
-                  <div className="text-center text-gray-500 py-4 text-sm">{t('event:loading_additional_tasks')}</div>
-                ) : (
-                  <div className="space-y-1">
-                    {filteredAdditionalTasks.map((task: any) => (
-                      <div
-                        key={task.id}
-                        className="flex items-center justify-between px-3.5 py-3 bg-gray-50 rounded-lg border border-transparent hover:border-gray-200 active:bg-gray-100 transition-colors gap-3"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium leading-tight">{task.description}</div>
-                          <div className="text-[11px] text-gray-500 mt-0.5">
-                            {task.quantity || 0} &middot; {task.hours_spent || 0}h / {task.hours_needed || 0}h
-                          </div>
-                          {task.additional_task_materials?.length > 0 && (
-                            <div className="text-[11px] text-gray-500 mt-0.5">
-                              {task.additional_task_materials.map((m: { material: string; quantity: number; unit: string }) => `${m.material} (${m.quantity} ${m.unit})`).join(', ')}
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          className="bg-blue-600 text-white text-[13px] font-semibold px-3.5 py-2 rounded-md whitespace-nowrap hover:bg-blue-700 active:scale-[0.96] transition-all flex-shrink-0"
-                          onClick={() => {
-                            setSelectedAdditionalTask(task);
-                            setProgressDetails({ progress: '', hoursWorked: '', notes: '' });
-                            setShowAdditionalTaskProgressModal(true);
-                          }}
-                        >
-                          {t('event:add_task', { defaultValue: 'Dodaj' })}
-                        </button>
+                {(tasksByFolder['unorganized'] || []).length > 0 && (!taskSearch || tasksByFolder['unorganized']?.length > 0) && (
+                  <div style={{ borderRadius: radii["2xl"], overflow: 'hidden' }}>
+                    <button
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        background: colors.bgCard, border: `1px solid ${colors.borderDefault}`,
+                        borderRadius: radii["2xl"], padding: '12px 16px', cursor: 'pointer',
+                        transition: transitions.fast,
+                      }}
+                      onClick={() => toggleFolder('unorganized')}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md, fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary }}>
+                        <ChevronRight style={{ width: 18, height: 18, color: colors.textFaint, flexShrink: 0, transform: expandedFolders.includes('unorganized') ? 'rotate(90deg)' : 'none', transition: 'transform 0.3s' }} />
+                        <span>{t('event:other_tasks')}</span>
                       </div>
-                    ))}
-                    {filteredAdditionalTasks.length === 0 && (
-                      <div className="text-center py-6 text-[13px] text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                        {t('event:no_additional_tasks_for_project', { defaultValue: t('event:no_additional_tasks') })}
+                      <span style={{ background: colors.accentBlue, color: '#fff', fontSize: fontSizes.sm, fontWeight: fontWeights.bold, padding: '2px 8px', borderRadius: radii.full, minWidth: 22, textAlign: 'center' }}>
+                        {tasksByFolder['unorganized']?.length || 0}
+                      </span>
+                    </button>
+                    {expandedFolders.includes('unorganized') && (
+                      <div style={{ padding: spacing.sm, background: colors.bgCard, border: `1px solid ${colors.borderDefault}`, borderTop: 'none', borderRadius: `0 0 ${radii["2xl"]}px ${radii["2xl"]}px` }}>
+                        {renderFolderTasks(tasksByFolder['unorganized'])}
                       </div>
                     )}
                   </div>
                 )}
+
+                {taskSearch && Object.values(tasksByFolder).every(t => t.length === 0) && (
+                  <EmptyState icon="🔍" title={t('event:no_tasks_found_matching', { defaultValue: `Nie znaleziono zadań dla "${taskSearch}"` }).replace('{query}', taskSearch)} style={{ background: colors.bgCard, border: `1px solid ${colors.borderDefault}` }} />
+                )}
+                {!taskSearch && folders.length === 0 && (tasksByFolder['unorganized'] || []).length === 0 && (
+                  <EmptyState icon="📋" title={t('event:no_tasks_for_project')} style={{ background: colors.bgCard, border: `1px solid ${colors.borderDefault}` }} />
+                )}
               </div>
-            </div>
+            )}
 
-            {/* Right column: Today's Entries (sidebar on desktop) */}
-            <div className="lg:w-80 xl:w-96 flex-shrink-0 mt-5 lg:mt-0">
-              {/* Divider - mobile only */}
-              <div className="h-px bg-gray-700 mb-5 lg:hidden" />
-
-              <div className="lg:sticky lg:top-16">
-                <SectionTitle label={t('event:todays_entries', { defaultValue: 'Dzisiejsze wpisy' })} />
-
-                {allTodayEntries.length === 0 ? (
-                  <div className="text-center py-6 text-[13px] text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                    {t('event:no_entries_today', { defaultValue: 'Brak wpisów na ten dzień' })}
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {allTodayEntries.map((entry) => (
-                      <div
-                        key={`${entry.type}-${entry.id}`}
-                        className="flex items-center gap-3 px-3.5 py-2.5 bg-gray-50 rounded-lg border border-gray-200 transition-colors"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-medium truncate">{entry.taskName}</p>
-                          <div className="flex gap-2.5 items-center text-[11px] text-gray-500 mt-0.5">
-                            <span>{entry.meta}</span>
-                            <span>&middot;</span>
-                            <span>{entry.time}</span>
-                          </div>
+            <div style={{ marginTop: spacing["6xl"] }}>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                background: colors.bgCard, border: `1px solid ${colors.borderDefault}`,
+                borderRadius: radii["2xl"], padding: '12px 16px', marginBottom: spacing.sm,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary }}>
+                  <Plus style={{ width: 16, height: 16 }} />
+                  <span>+ {t('event:additional_tasks')}</span>
+                </div>
+                <Button variant="accent" color={colors.accentBlue} icon="+" onClick={() => setShowTaskModal(true)} disabled={!selectedProject}>
+                  {t('event:add_task')}
+                </Button>
+              </div>
+              {isAdditionalTasksLoading ? (
+                <div style={{ textAlign: 'center', color: colors.textDim, padding: spacing["6xl"], fontSize: fontSizes.sm }}>{t('event:loading_additional_tasks')}</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+                  {filteredAdditionalTasks.map((task: any) => (
+                    <div
+                      key={task.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 16px', background: colors.bgCardInner, border: `1px solid ${colors.borderDefault}`,
+                        borderRadius: radii.xl, gap: spacing.lg, transition: transitions.fast,
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary }}>{translateTaskName(task.description ?? '', t)}</div>
+                        <div style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, marginTop: 2 }}>
+                          {task.quantity || 0} &middot; {task.hours_spent || 0}h / {task.hours_needed || 0}h
                         </div>
-                        <span className="bg-gray-100 text-blue-600 text-xs font-bold px-2 py-0.5 rounded-md whitespace-nowrap">
-                          {entry.hours}h
-                        </span>
-                        {isToday && (
-                          <button
-                            onClick={() => setDeleteTarget({
-                              id: entry.id,
-                              type: entry.type,
-                              name: entry.taskName,
-                              taskId: entry.type === 'additional' ? (entry as any).taskId : undefined
-                            })}
-                            className="bg-gray-100 text-red-500 w-8 h-8 flex items-center justify-center rounded-md hover:bg-red-50 active:scale-[0.92] transition-all flex-shrink-0 min-h-0 min-w-0"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        {task.additional_task_materials?.length > 0 && (
+                          <div style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body, marginTop: 2 }}>
+                            {task.additional_task_materials.map((m: { material: string; quantity: number; unit: string }) => `${translateMaterialName(m.material, t)} (${m.quantity} ${m.unit})`).join(', ')}
+                          </div>
                         )}
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                {allTodayEntries.length > 0 && (
-                  <div className="text-center py-3">
-                    <span className="text-[13px] text-gray-500">
-                      {t('event:total_today', { defaultValue: 'Łącznie dzisiaj:' })}
-                    </span>
-                    <span className="text-[15px] font-bold text-blue-600 ml-1.5">
-                      {parseFloat(totalTodayHours.toFixed(1))}h
-                    </span>
-                  </div>
-                )}
-              </div>
+                      <Button variant="primary" onClick={() => { setSelectedAdditionalTask(task); setProgressDetails({ progress: '', hoursWorked: '', notes: '' }); setShowAdditionalTaskProgressModal(true); }} style={{ fontSize: fontSizes.base, padding: '8px 16px' }}>
+                        {t('event:add_task', { defaultValue: 'Dodaj Zadanie' })}
+                      </Button>
+                    </div>
+                  ))}
+                  {filteredAdditionalTasks.length === 0 && (
+                    <EmptyState icon="📝" title={t('event:no_additional_tasks_for_project', { defaultValue: t('event:no_additional_tasks') })} style={{ background: colors.bgCard, border: `1px solid ${colors.borderDefault}` }} />
+                  )}
+                </div>
+              )}
             </div>
+          </div>
+
+          {/* Right column: Today's Entries */}
+          <div style={{ minWidth: 0 }}>
+            <SectionHeader title={t('event:todays_entries', { defaultValue: 'Dzisiejsze wpisy' })} style={{ marginBottom: spacing.lg }} />
+
+            {allTodayEntries.length === 0 ? (
+              <EmptyState icon="📭" title={t('event:no_entries_today', { defaultValue: 'Brak wpisów na ten dzień' })} style={{ background: colors.bgCard, border: `1px solid ${colors.borderDefault}` }} />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+                {allTodayEntries.map((entry) => (
+                  <div
+                    key={`${entry.type}-${entry.id}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: spacing.lg,
+                      padding: '12px 16px', background: colors.bgCard, border: `1px solid ${colors.borderDefault}`,
+                      borderRadius: radii.xl,
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{translateTaskName(entry.taskName, t)}</p>
+                      <div style={{ display: 'flex', gap: spacing.sm, alignItems: 'center', fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, marginTop: 2 }}>
+                        <span>{entry.meta}</span>
+                        <span>&middot;</span>
+                        <span>{entry.time}</span>
+                      </div>
+                    </div>
+                    <span style={{ background: 'rgba(34,197,94,0.15)', color: colors.greenLight, fontSize: fontSizes.sm, fontWeight: fontWeights.bold, padding: '2px 8px', borderRadius: radii.md, whiteSpace: 'nowrap' }}>
+                      {entry.hours}h
+                    </span>
+                    {isToday && (
+                      <button
+                        onClick={() => setDeleteTarget({ id: entry.id, type: entry.type, name: entry.taskName, taskId: entry.type === 'additional' ? (entry as any).taskId : undefined })}
+                        style={{ width: 28, height: 28, borderRadius: radii.md, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', color: colors.textFaint, border: 'none', cursor: 'pointer', flexShrink: 0 }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.red; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textFaint; }}
+                      >
+                        <Trash2 style={{ width: 16, height: 16 }} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {allTodayEntries.length > 0 && (
+              <div style={{ textAlign: 'center', padding: spacing.lg, marginTop: spacing.lg }}>
+                <span style={{ fontSize: fontSizes.md, color: colors.textDim, fontFamily: fonts.body }}>
+                  {t('event:total_today', { defaultValue: 'Łącznie dzisiaj:' })}{' '}
+                </span>
+                <span style={{ fontSize: fontSizes.md, fontWeight: fontWeights.bold, color: colors.green }}>
+                  {parseFloat(totalTodayHours.toFixed(1))}h
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -830,61 +829,48 @@ const UserHoursPage: React.FC = () => {
       )}
 
       {/* Progress Modal for additional tasks */}
-      {showAdditionalTaskProgressModal && selectedAdditionalTask && (
-        <Modal title={t('event:update_additional_task_progress')} onClose={() => { setShowAdditionalTaskProgressModal(false); setSelectedAdditionalTask(null); }}>
-          <div className="space-y-4">
-            <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-600">{t('event:current_progress')}</span>
-                <span className="font-semibold">{selectedAdditionalTask.progress || 0}%</span>
+      <Modal
+        open={!!(showAdditionalTaskProgressModal && selectedAdditionalTask)}
+        onClose={() => { setShowAdditionalTaskProgressModal(false); setSelectedAdditionalTask(null); }}
+        title={t('event:update_additional_task_progress')}
+        width={520}
+      >
+        {selectedAdditionalTask && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+            <div style={{ background: colors.bgCardInner, padding: '16px 20px', borderRadius: radii["2xl"], border: `1px solid ${colors.borderDefault}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontSizes.base }}>
+                <span style={{ color: colors.textDim, fontFamily: fonts.body }}>{t('event:current_progress')}</span>
+                <span style={{ fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.body }}>{selectedAdditionalTask.progress || 0}%</span>
               </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-600">{t('event:hours_worked_label')}</span>
-                <span className="font-semibold">{selectedAdditionalTask.hours_spent || 0} / {selectedAdditionalTask.hours_needed || 0}h</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: fontSizes.base, marginTop: spacing.sm }}>
+                <span style={{ color: colors.textDim, fontFamily: fonts.body }}>{t('event:hours_worked_label')}</span>
+                <span style={{ fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.body }}>{selectedAdditionalTask.hours_spent || 0} / {selectedAdditionalTask.hours_needed || 0}h</span>
               </div>
-              <div className="w-full h-1.5 bg-gray-200 rounded-full mt-2 overflow-hidden">
-                <div
-                  className="h-full bg-blue-600 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(selectedAdditionalTask.progress || 0, 100)}%` }}
-                />
+              <div style={{ width: '100%', height: 3, background: colors.borderDefault, borderRadius: 2, marginTop: spacing.sm, overflow: 'hidden' }}>
+                <div style={{ height: '100%', background: colors.accentBlue, borderRadius: 2, width: `${Math.min(selectedAdditionalTask.progress || 0, 100)}%`, transition: 'width 0.5s' }} />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:progress_percentage')}</label>
-              <input
-                type="number"
-                value={progressDetails.progress}
-                onChange={e => setProgressDetails(prev => ({ ...prev, progress: e.target.value }))}
-                min="0"
-                max="100"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder={t('event:enter_progress_percentage')}
-              />
+              <Label>{t('event:progress_percentage')}</Label>
+              <TextInput type="text" value={progressDetails.progress} onChange={v => setProgressDetails(prev => ({ ...prev, progress: v }))} placeholder={t('event:enter_progress_percentage')} />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:hours_worked_label')}</label>
-              <input
-                type="number"
-                value={progressDetails.hoursWorked}
-                onChange={e => setProgressDetails(prev => ({ ...prev, hoursWorked: e.target.value }))}
-                min="0"
-                step="0.5"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder={t('event:enter_hours_worked')}
-              />
-              <div className="flex gap-1.5 mt-2">
+              <Label>{t('event:hours_worked_label')}</Label>
+              <TextInput type="text" value={progressDetails.hoursWorked} onChange={v => setProgressDetails(prev => ({ ...prev, hoursWorked: v }))} placeholder={t('event:enter_hours_worked')} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: spacing.sm }}>
                 {[1, 2, 4, 8].map(h => (
                   <button
                     key={h}
                     type="button"
                     onClick={() => setProgressDetails(prev => ({ ...prev, hoursWorked: h.toString() }))}
-                    className={`flex-1 py-1.5 text-[13px] font-semibold rounded-md border transition-colors min-h-0 ${
-                      progressDetails.hoursWorked === h.toString()
-                        ? 'bg-blue-600 bg-opacity-10 border-blue-600 text-blue-600'
-                        : 'bg-gray-50 border-gray-200 text-gray-500'
-                    }`}
+                    style={{
+                      padding: 10, borderRadius: radii.lg, border: `1px solid ${progressDetails.hoursWorked === h.toString() ? colors.accentBlue : colors.borderDefault}`,
+                      background: progressDetails.hoursWorked === h.toString() ? colors.accentBlueBg : colors.bgCardInner,
+                      color: progressDetails.hoursWorked === h.toString() ? colors.accentBlue : colors.textMuted,
+                      fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.body, cursor: 'pointer', transition: transitions.fast,
+                    }}
                   >
                     {h}h
                   </button>
@@ -893,19 +879,13 @@ const UserHoursPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                {t('event:notes_optional')} <span className="font-normal text-gray-500">({t('event:optional_label', { defaultValue: 'opcjonalne' })})</span>
-              </label>
-              <textarea
-                value={progressDetails.notes}
-                onChange={e => setProgressDetails(prev => ({ ...prev, notes: e.target.value }))}
-                rows={2}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder={t('event:add_notes_progress', { defaultValue: 'Dodaj uwagi...' })}
-              />
+              <Label>{t('event:notes_optional')} <span style={{ fontWeight: fontWeights.normal, color: colors.textFaint }}>({t('event:optional_label', { defaultValue: 'opcjonalne' })})</span></Label>
+              <Textarea value={progressDetails.notes} onChange={v => setProgressDetails(prev => ({ ...prev, notes: v }))} placeholder={t('event:add_notes_progress', { defaultValue: 'Dodaj uwagi...' })} />
             </div>
 
-            <button
+            <Button
+              variant="primary"
+              fullWidth
               onClick={async () => {
                 if (!user?.id || !selectedAdditionalTask?.id || !progressDetails.progress || !progressDetails.hoursWorked) return;
                 setIsUpdating(true);
@@ -951,171 +931,111 @@ const UserHoursPage: React.FC = () => {
                 }
               }}
               disabled={isUpdating || !progressDetails.progress || !progressDetails.hoursWorked}
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-xl font-bold text-[15px] hover:bg-blue-700 transition-colors disabled:opacity-40 active:scale-[0.98]"
             >
               {isUpdating ? t('event:updating') : t('event:update_progress')}
-            </button>
+            </Button>
           </div>
-        </Modal>
-      )}
+        )}
+      </Modal>
 
       {/* Add Additional Task Modal */}
-      {showTaskModal && (
-        <Modal title={t('event:add_additional_task')} onClose={() => setShowTaskModal(false)}>
-          <div className="space-y-4">
+      <Modal open={showTaskModal} onClose={() => setShowTaskModal(false)} title={t('event:add_additional_task')} width={560}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:task_type')}</label>
+              <Label>{t('event:task_type')}</Label>
               <select
                 value={selectedTaskTemplate}
-                onChange={(e) => handleTaskTemplateChange(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                onChange={e => handleTaskTemplateChange(e.target.value)}
+                style={{
+                  width: '100%', padding: `${spacing.xl}px ${spacing["2xl"]}px`, background: colors.bgInput,
+                  border: `1px solid ${colors.borderInput}`, borderRadius: radii.xl, color: colors.textSecondary,
+                  fontSize: fontSizes.md, fontFamily: fonts.body, outline: 'none',
+                }}
               >
                 <option value="">{t('event:select_task_type')}</option>
                 {taskTemplates.map((template: any) => (
-                  <option key={template.id} value={template.id}>{template.name}</option>
+                  <option key={template.id} value={template.id}>{translateTaskName(template.name, t)}</option>
                 ))}
                 <option value="other">{t('event:other_custom_task')}</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:task_description')}</label>
-              <textarea
-                value={taskDetails.description}
-                onChange={(e) => setTaskDetails({ ...taskDetails, description: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                rows={3}
-                placeholder={t('event:describe_task')}
-              />
+              <Label>{t('event:task_description')}</Label>
+              <Textarea value={taskDetails.description} onChange={v => setTaskDetails({ ...taskDetails, description: v })} rows={3} placeholder={t('event:describe_task')} />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing["6xl"] }}>
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('event:start_date')}</label>
-                <input
-                  type="date"
-                  value={taskDetails.start_date}
-                  onChange={(e) => setTaskDetails({ ...taskDetails, start_date: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                />
+                <Label>{t('event:start_date')}</Label>
+                <DatePicker value={taskDetails.start_date} onChange={v => setTaskDetails({ ...taskDetails, start_date: v })} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('event:end_date')}</label>
-                <input
-                  type="date"
-                  value={taskDetails.end_date}
-                  onChange={(e) => setTaskDetails({ ...taskDetails, end_date: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  min={taskDetails.start_date}
-                />
+                <Label>{t('event:end_date')}</Label>
+                <DatePicker value={taskDetails.end_date} onChange={v => setTaskDetails({ ...taskDetails, end_date: v })} minDate={taskDetails.start_date} />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                {t('event:quantity_label')} {selectedTaskTemplate && taskTemplates.find((t: any) => t.id === selectedTaskTemplate)?.unit ?
-                  `(${taskTemplates.find((t: any) => t.id === selectedTaskTemplate)?.unit})` : ''}
-              </label>
-              <input
-                type="number"
-                value={taskDetails.quantity}
-                onChange={(e) => handleQuantityChange(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                placeholder={t('event:enter_quantity')}
-                min="0"
-                step="0.5"
-              />
+              <Label>{t('event:quantity_label')} {selectedTaskTemplate && taskTemplates.find((t: any) => t.id === selectedTaskTemplate)?.unit ? `(${taskTemplates.find((t: any) => t.id === selectedTaskTemplate)?.unit})` : ''}</Label>
+              <TextInput type="text" value={taskDetails.quantity} onChange={v => handleQuantityChange(v)} placeholder={t('event:enter_quantity')} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:hours_needed_auto_calculated', { defaultValue: t('event:hours_needed') })}</label>
-              <input
-                type="number"
-                value={taskDetails.hours_needed}
-                readOnly
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50"
-                placeholder={t('event:hours_calculated')}
-              />
+              <Label>{t('event:hours_needed_auto_calculated', { defaultValue: t('event:hours_needed') })}</Label>
+              <div style={{
+                padding: `${spacing.xl}px ${spacing["2xl"]}px`, background: colors.bgSubtle,
+                border: `1px solid ${colors.borderDefault}`, borderRadius: radii.xl, color: colors.textSecondary,
+                fontSize: fontSizes.md, fontFamily: fonts.body,
+              }}>
+                {taskDetails.hours_needed || t('event:hours_calculated')}
+              </div>
             </div>
             <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-gray-700">{t('event:materials_needed')}</label>
-                <button
-                  type="button"
-                  onClick={handleAddMaterial}
-                  className="text-sm text-blue-600 hover:text-blue-700 min-h-0 min-w-0"
-                >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+                <Label>{t('event:materials_needed')}</Label>
+                <button type="button" onClick={handleAddMaterial} style={{ fontSize: fontSizes.sm, color: colors.accentBlue, background: 'none', border: 'none', cursor: 'pointer' }}>
                   {t('event:add_material_button')}
                 </button>
               </div>
-              <div className="space-y-3">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
                 {taskDetails.materials.map((material: any, index: number) => (
-                  <div key={index} className="flex gap-2 items-start">
-                    <div className="flex-1">
+                  <div key={index} style={{ display: 'flex', gap: spacing.sm, alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
                       <select
                         value={material.material}
                         onChange={(e) => {
-                          if (e.target.value === 'other') {
-                            setSelectedMaterialIndex(index);
-                            setShowUnspecifiedMaterialModal(true);
-                            return;
-                          }
+                          if (e.target.value === 'other') { setSelectedMaterialIndex(index); setShowUnspecifiedMaterialModal(true); return; }
                           handleMaterialChange(index, 'material', e.target.value);
                         }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        style={{ width: '100%', padding: `${spacing.xl}px ${spacing["2xl"]}px`, background: colors.bgInput, border: `1px solid ${colors.borderInput}`, borderRadius: radii.xl, color: colors.textSecondary, fontSize: fontSizes.md, fontFamily: fonts.body }}
                       >
                         <option value="">{t('event:select_material')}</option>
-                        <option value="other" className="font-medium text-blue-600">{t('event:other_custom_material')}</option>
+                        <option value="other">{t('event:other_custom_material')}</option>
                         {materialTemplates.map((template: any) => (
-                          <option key={template.id} value={template.name}>
-                            {template.name} ({template.unit})
-                          </option>
+                          <option key={template.id} value={template.name}>{translateMaterialName(template.name, t)} ({template.unit})</option>
                         ))}
                       </select>
                     </div>
-                    <div className="w-24">
-                      <input
-                        type="number"
-                        value={material.quantity}
-                        onChange={(e) => handleMaterialChange(index, 'quantity', e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        placeholder={t('event:qty_label', { defaultValue: t('event:qty_placeholder') })}
-                        min="0"
-                        step="0.01"
-                      />
+                    <div style={{ width: 96 }}>
+                      <TextInput value={material.quantity} onChange={v => handleMaterialChange(index, 'quantity', v)} placeholder={t('event:qty_placeholder')} style={{ marginBottom: 0 }} />
                     </div>
-                    <div className="w-24">
-                      <input
-                        type="text"
-                        value={material.unit}
-                        onChange={(e) => handleMaterialChange(index, 'unit', e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                        placeholder={t('event:unit_label')}
-                        readOnly={!!material.material && material.material !== 'other'}
-                      />
+                    <div style={{ width: 96 }}>
+                      <TextInput value={material.unit} onChange={v => handleMaterialChange(index, 'unit', v)} placeholder={t('event:unit_label')} style={{ marginBottom: 0 }} />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveMaterial(index)}
-                      className="mt-1 text-red-600 hover:text-red-700 min-h-0 min-w-0"
-                    >
-                      <X className="w-5 h-5" />
+                    <button type="button" onClick={() => handleRemoveMaterial(index)} style={{ padding: spacing.sm, color: colors.red, background: 'none', border: 'none', cursor: 'pointer', marginTop: spacing.xl }}>
+                      <X style={{ width: 20, height: 20 }} />
                     </button>
                   </div>
                 ))}
                 {taskDetails.materials.length === 0 && (
-                  <div className="text-center py-4 text-[12px] text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                  <div style={{ textAlign: 'center', padding: spacing["6xl"], fontSize: fontSizes.sm, color: colors.textDim, background: colors.bgCard, borderRadius: radii.lg, border: `1px dashed ${colors.borderDefault}` }}>
                     {t('event:no_additional_materials_yet', { defaultValue: 'Brak dodanych materiałów' })}
                   </div>
                 )}
               </div>
             </div>
-            <button
-              onClick={handleTaskSubmit}
-              disabled={addTaskMutation.isPending || !selectedProject || !companyId}
-              className="w-full bg-blue-600 text-white py-3 px-4 rounded-xl font-bold text-[15px] hover:bg-blue-700 transition-colors disabled:opacity-40 active:scale-[0.98] disabled:cursor-not-allowed"
-            >
+            <Button variant="primary" fullWidth onClick={handleTaskSubmit} disabled={addTaskMutation.isPending || !selectedProject || !companyId}>
               {addTaskMutation.isPending ? t('event:adding') : t('event:add_task')}
-            </button>
+            </Button>
           </div>
         </Modal>
-      )}
 
       {showUnspecifiedMaterialModal && (
         <UnspecifiedMaterialModal
@@ -1137,46 +1057,29 @@ const UserHoursPage: React.FC = () => {
             }));
             setShowUnspecifiedMaterialModal(false);
           }}
-          projects={selectedProject ? [{ id: selectedProject, title: 'Current Project' }] : []}
+          projects={selectedProject ? [{ id: selectedProject, title: t('event:current_project') }] : []}
         />
       )}
 
-      {/* Delete Confirmation Dialog */}
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-6" onClick={() => setDeleteTarget(null)}>
-          <div
-            className="bg-white border border-gray-200 rounded-xl p-6 max-w-[300px] w-full text-center animate-in"
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 className="text-base font-bold mb-2">{t('event:confirm_deletion_title', { defaultValue: 'Usunąć wpis?' })}</h3>
-            <p className="text-[13px] text-gray-600 mb-5 leading-relaxed">
-              {t('event:delete_entry_confirm', { defaultValue: `Czy na pewno chcesz usunąć wpis "${deleteTarget.name}"?` })}
-            </p>
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="bg-gray-50 border border-gray-200 rounded-lg py-2.5 text-sm font-semibold transition-colors active:bg-gray-100"
-              >
-                {t('event:cancel')}
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                className="bg-red-500 text-white border-none rounded-lg py-2.5 text-sm font-semibold transition-colors active:bg-red-600 active:scale-[0.96]"
-              >
-                {t('event:delete_action', { defaultValue: 'Usuń' })}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+        title={t('event:confirm_deletion_title', { defaultValue: 'Usunąć wpis?' })}
+        message={deleteTarget ? t('event:delete_entry_confirm', { defaultValue: `Czy na pewno chcesz usunąć wpis "${deleteTarget.name}"?` }) : ''}
+        confirmLabel={t('event:delete_action', { defaultValue: 'Usuń' })}
+        cancelLabel={t('event:cancel')}
+        variant="danger"
+      />
 
       {/* Toast */}
       <div
-        className={`fixed bottom-6 left-1/2 z-[200] bg-green-500 text-white px-6 py-3 rounded-xl text-sm font-semibold shadow-lg whitespace-nowrap transition-all duration-300 ${
-          toastVisible
-            ? '-translate-x-1/2 translate-y-0 opacity-100'
-            : '-translate-x-1/2 translate-y-24 opacity-0 pointer-events-none'
-        }`}
+        style={{
+          position: 'fixed', bottom: 24, left: '50%', transform: toastVisible ? 'translate(-50%, 0)' : 'translate(-50%, 96px)',
+          zIndex: 200, background: colors.green, color: '#fff', padding: `${spacing.lg}px ${spacing["6xl"]}px`,
+          borderRadius: radii.xl, fontSize: fontSizes.sm, fontWeight: fontWeights.semibold, boxShadow: shadows.lg,
+          whiteSpace: 'nowrap', transition: 'all 0.3s', opacity: toastVisible ? 1 : 0, pointerEvents: toastVisible ? 'auto' : 'none',
+        }}
       >
         ✓ {toastMessage}
       </div>

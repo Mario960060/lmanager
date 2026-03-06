@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { X, Search, CheckCircle, AlertCircle, Plus, Loader2 } from 'lucide-react';
+import { X, Search, CheckCircle, AlertCircle, Plus } from 'lucide-react';
+import { Spinner, Button } from '../../themes/uiComponents';
 
 interface CompanyMember {
   id: string;
@@ -363,21 +364,13 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
               </p>
 
               <div className="flex gap-3 pt-4">
-                <button
-                  onClick={() => setShowAddUserModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
-                  disabled={inviteUserMutation.isPending}
-                >
+                <Button variant="secondary" style={{ flex: 1 }} onClick={() => setShowAddUserModal(false)} disabled={inviteUserMutation.isPending}>
                   {t('event:cancel_button')}
-                </button>
-                <button
-                  onClick={handleInviteUser}
-                  disabled={inviteUserMutation.isPending}
-                  className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {inviteUserMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                </Button>
+                <Button variant="primary" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={handleInviteUser} disabled={inviteUserMutation.isPending}>
+                  {inviteUserMutation.isPending && <Spinner size={16} />}
                   {inviteUserMutation.isPending ? t('event:adding_user') : t('event:add_user_final')}
-                </button>
+                </Button>
               </div>
             </div>
           </div>

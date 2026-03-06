@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -16,10 +16,14 @@ import Type1AggregateCalculator from '../components/Calculator/Type1AggregateCal
 import SoilExcavationCalculator from '../components/Calculator/SoilExcavationCalculator';
 import PavingCalculator from '../components/Calculator/PavingCalculator';
 import ArtificialGrassCalculator from '../components/Calculator/ArtificialGrassCalculator';
+import NaturalTurfCalculator from '../components/Calculator/NaturalTurfCalculator';
 import WallFinishCalculator from '../components/Calculator/TileInstallationCalculator';
 import CopingInstallationCalculator from '../components/Calculator/CopingInstallationCalculator';
 import FoundationCalculator from '../components/Calculator/FoundationCalculator';
 import DeckCalculator from '../components/Calculator/DeckCalculator';
+import GroundworkLinearCalculator from '../components/Calculator/GroundworkLinearCalculator';
+import { getFoundationDiggingMethodFromExcavator } from './canvacreator/GroundworkLinearCalculator';
+import { getCalculatorInputDefaults } from '../lib/materialUsageDefaults';
 import VenetianFenceCalculator from '../components/Calculator/VenetianFenceCalculator';
 import CompositeFenceCalculator from '../components/Calculator/CompositeFenceCalculator';
 
@@ -36,6 +40,7 @@ interface CalculatorModalProps {
   setTransportDistance?: (value: string) => void;
   carriers?: any[];
   selectedExcavator?: any;
+  selectedCarrier?: any;
   mode?: 'ProjectCreating' | 'AddTask'; // ProjectCreating or AddTask mode
   eventId?: string; // Event ID for AddTask mode
 }
@@ -53,6 +58,7 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
   setTransportDistance,
   carriers = [],
   selectedExcavator,
+  selectedCarrier,
   mode = 'ProjectCreating',
   eventId
 }) => {
@@ -63,6 +69,11 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
   const calculatorContainerRef = useRef<HTMLDivElement>(null);
   const [calculatorResults, setCalculatorResults] = useState<any>(null);
   const [fetchedCarriers, setFetchedCarriers] = useState<any[]>([]);
+
+  const pavingDefaults = useMemo(() => getCalculatorInputDefaults('paving', companyId), [companyId]);
+  const slabDefaults = useMemo(() => getCalculatorInputDefaults('slab', companyId), [companyId]);
+  const concreteSlabsDefaults = useMemo(() => getCalculatorInputDefaults('concreteSlabs', companyId), [companyId]);
+  const grassDefaults = useMemo(() => getCalculatorInputDefaults('grass', companyId), [companyId]);
 
   // Fetch carriers for both digging and materials in AddTask mode
   React.useEffect(() => {
@@ -133,6 +144,7 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
   });
 
   const renderCalculator = () => {
+    const derivedDiggingMethod = getFoundationDiggingMethodFromExcavator(selectedExcavator);
     const commonProps = {
       onResultsChange: setCalculatorResults,
       isInProjectCreating: true,
@@ -143,7 +155,9 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
       transportDistance,
       setTransportDistance,
       carriers: activeCarriers,
-      selectedExcavator
+      selectedExcavator,
+      selectedCarrier,
+      projectDiggingMethod: derivedDiggingMethod,
     };
 
     switch (calculatorType) {
@@ -157,7 +171,7 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
             return null;
         }
       case 'paving':
-        return <PavingCalculator {...commonProps} />;
+        return <PavingCalculator {...commonProps} savedInputs={pavingDefaults} />;
       case 'wall':
         if (calculatorSubType === 'sleeper') {
           return <SleeperWallCalculator {...commonProps} />;
@@ -166,7 +180,9 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
       case 'kerbs':
         return <KerbsEdgesAndSetsCalculator type={calculatorSubType as 'kl' | 'rumbled' | 'flat' | 'sets'} {...commonProps} />;
       case 'slab':
-        return <SlabCalculator {...commonProps} />;
+        return <SlabCalculator {...commonProps} savedInputs={slabDefaults} />;
+      case 'concreteSlabs':
+        return <ConcreteSlabsCalculator {...commonProps} savedInputs={concreteSlabsDefaults} />;
       case 'fence':
         if (calculatorSubType === 'venetian') {
           return <VenetianFenceCalculator {...commonProps} />;
@@ -183,7 +199,9 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
         }
         return <StairCalculator {...commonProps} />;
       case 'grass':
-        return <ArtificialGrassCalculator {...commonProps} />;
+        return <ArtificialGrassCalculator {...commonProps} savedInputs={grassDefaults} />;
+      case 'turf':
+        return <NaturalTurfCalculator {...commonProps} />;
       case 'tile':
         if (calculatorSubType === 'coping') {
           return <CopingInstallationCalculator {...commonProps} />;
@@ -191,6 +209,8 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
         return <WallFinishCalculator {...commonProps} />;
       case 'foundation':
         return <FoundationCalculator {...commonProps} />;
+      case 'groundwork':
+        return <GroundworkLinearCalculator type={calculatorSubType as 'drainage' | 'canalPipe' | 'waterPipe' | 'cable'} {...commonProps} selectedExcavator={selectedExcavator} />;
       case 'deck':
         return <DeckCalculator {...commonProps} />;
       default:

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { translateMaterialName, translateUnit } from '../lib/translationMap';
 import Modal from './Modal';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -15,7 +16,7 @@ interface MaterialProgressModalProps {
 }
 
 const MaterialProgressModal: React.FC<MaterialProgressModalProps> = ({ material, onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'event', 'material', 'units']);
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const [deliveredAmount, setDeliveredAmount] = useState('');
@@ -96,7 +97,10 @@ const MaterialProgressModal: React.FC<MaterialProgressModalProps> = ({ material,
 
         <div className="p-6 space-y-4">
           <div className="bg-gray-700 p-4 rounded-lg">
-            <h3 className="text-lg font-semibold text-white">{material.name || t('event:unknown_material')}</h3>
+            <h3 className="text-lg font-semibold text-white">{translateMaterialName(material.name, t) || t('event:unknown_material')}</h3>
+            {translateMaterialDescription(material.name, (material as { description?: string | null }).description, t) && (
+              <p className="text-sm text-gray-400 mt-1">{translateMaterialDescription(material.name, (material as { description?: string | null }).description, t)}</p>
+            )}
             <p className="text-sm text-gray-400">{t('event:unit_label')}: {material.unit}</p>
           </div>
 
@@ -123,7 +127,7 @@ const MaterialProgressModal: React.FC<MaterialProgressModalProps> = ({ material,
                 placeholder={t('event:enter_amount_delivered')}
               />
               <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                <span className="text-gray-400 sm:text-sm">{material.unit}</span>
+                <span className="text-gray-400 sm:text-sm">{translateUnit(material.unit, t)}</span>
               </div>
             </div>
           </div>
@@ -146,7 +150,7 @@ const MaterialProgressModal: React.FC<MaterialProgressModalProps> = ({ material,
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-300">{t('event:currently_delivered')}:</span>
-              <span className="text-sm font-medium text-white">{parseFloat(totalDelivered.toFixed(2))} {material.unit}</span>
+              <span className="text-sm font-medium text-white">{parseFloat(totalDelivered.toFixed(2))} {translateUnit(material.unit, t)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-300">{t('event:remaining')}:</span>
@@ -169,7 +173,7 @@ const MaterialProgressModal: React.FC<MaterialProgressModalProps> = ({ material,
                 {deliveries.map((delivery, index) => (
                   <div key={index} className="text-sm text-gray-300 bg-gray-700 p-2 rounded">
                     <div className="flex justify-between">
-                      <span>{delivery.amount} {material.unit}</span>
+                      <span>{delivery.amount} {translateUnit(material.unit, t)}</span>
                       <span>{new Date(delivery.delivery_date).toLocaleDateString()}</span>
                     </div>
                     {delivery.notes && (

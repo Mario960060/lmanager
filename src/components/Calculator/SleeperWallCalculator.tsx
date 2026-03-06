@@ -4,11 +4,14 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName } from '../../lib/translationMap';
+import { translateTaskName, translateUnit } from '../../lib/translationMap';
 
 interface SleeperWallCalculatorProps {
   onResultsChange?: (results: CalculationResult) => void;
+  onInputsChange?: (inputs: Record<string, any>) => void;
   isInProjectCreating?: boolean;
+  initialLength?: number;
+  savedInputs?: Record<string, any>;
   calculateTransport?: boolean;
   setCalculateTransport?: (value: boolean) => void;
   selectedTransportCarrier?: any;
@@ -17,6 +20,7 @@ interface SleeperWallCalculatorProps {
   setTransportDistance?: (value: string) => void;
   carriers?: any[];
   selectedExcavator?: any;
+  recalculateTrigger?: number;
 }
 
 interface Material {
@@ -96,7 +100,10 @@ const SLEEPER_DIMENSIONS = {
 
 const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({ 
   onResultsChange,
+  onInputsChange,
   isInProjectCreating = false,
+  initialLength,
+  savedInputs = {},
   calculateTransport: propCalculateTransport,
   setCalculateTransport: propSetCalculateTransport,
   selectedTransportCarrier: propSelectedTransportCarrier,
@@ -104,14 +111,25 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
   transportDistance: propTransportDistance,
   setTransportDistance: propSetTransportDistance,
   carriers: propCarriers = [],
-  selectedExcavator: propSelectedExcavator
+  selectedExcavator: propSelectedExcavator,
+  recalculateTrigger = 0
 }) => {
   // Input states
   const { t } = useTranslation(['calculator', 'utilities', 'common']);
   const companyId = useAuthStore(state => state.getCompanyId());
-  const [length, setLength] = useState('');
-  const [height, setHeight] = useState('');
-  const [postMethod, setPostMethod] = useState<'concrete' | 'direct'>('concrete');
+  const initLength = savedInputs?.length != null ? String(savedInputs.length) : (initialLength != null ? initialLength.toFixed(3) : '');
+  const [length, setLength] = useState(initLength);
+  const [height, setHeight] = useState(savedInputs?.height ?? '');
+  useEffect(() => {
+    if (savedInputs?.length != null) setLength(String(savedInputs.length));
+    else if (initialLength != null && isInProjectCreating) setLength(initialLength.toFixed(3));
+  }, [savedInputs?.length, initialLength, isInProjectCreating]);
+  const [postMethod, setPostMethod] = useState<'concrete' | 'direct'>(savedInputs?.postMethod ?? 'concrete');
+  useEffect(() => {
+    if (onInputsChange && isInProjectCreating) {
+      onInputsChange({ length, height, postMethod });
+    }
+  }, [length, height, postMethod, onInputsChange, isInProjectCreating]);
   
   // Result states
   const [result, setResult] = useState<InternalCalculationResult | null>(null);
@@ -121,6 +139,9 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
   const [transportDistance, setTransportDistance] = useState<string>('30');
   const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
   const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
+  const effectiveCalculateTransport = isInProjectCreating ? (propCalculateTransport ?? false) : calculateTransport;
+  const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
+  const effectiveTransportDistance = isInProjectCreating && propTransportDistance ? propTransportDistance : transportDistance;
   const [carriersLocal, setCarriersLocal] = useState<DiggingEquipment[]>([]);
   const resultsRef = useRef<HTMLDivElement>(null);
 
@@ -140,25 +161,6 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
     propSelectedTransportCarrier,
     propTransportDistance
   ]);
-
-  // Sync local state back to parent when in ProjectCreating
-  useEffect(() => {
-    if (isInProjectCreating && propSetCalculateTransport) {
-      propSetCalculateTransport(calculateTransport);
-    }
-  }, [calculateTransport, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetSelectedTransportCarrier) {
-      propSetSelectedTransportCarrier(selectedTransportCarrier);
-    }
-  }, [selectedTransportCarrier, isInProjectCreating]);
-
-  useEffect(() => {
-    if (isInProjectCreating && propSetTransportDistance) {
-      propSetTransportDistance(transportDistance);
-    }
-  }, [transportDistance, isInProjectCreating]);
 
   // Add equipment fetching
   useEffect(() => {
@@ -182,10 +184,10 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
       }
     };
     
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       fetchEquipment();
     }
-  }, [calculateTransport]);
+  }, [effectiveCalculateTransport]);
 
   // Fetch task templates for sleeper wall building
   const { data: taskTemplates = [] } = useQuery<TaskTemplate[]>({
@@ -422,11 +424,11 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
     let postTransportTime = 0;
     let postmixTransportTime = 0;
 
-    if (calculateTransport) {
+    if (effectiveCalculateTransport) {
       let carrierSizeForTransport = 0.125;
       
-      if (selectedTransportCarrier) {
-        carrierSizeForTransport = selectedTransportCarrier["size (in tones)"] || 0.125;
+      if (effectiveSelectedTransportCarrier) {
+        carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
       }
 
       // Calculate sleepers transport - on foot, 1 per trip
@@ -434,7 +436,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
         const sleepersPerTrip = 1; // 1 sleeper per person per trip
         const trips = Math.ceil(totalSleepers / sleepersPerTrip);
         const sleeperCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(transportDistance) || 30) * 2 / sleeperCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / sleeperCarrySpeed;
         sleeperTransportTime = trips * timePerTrip;
         
         if (sleeperTransportTime > 0) {
@@ -452,7 +454,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
         const postsPerTrip = 1; // 1 post per person per trip
         const trips = Math.ceil(totalPosts / postsPerTrip);
         const postCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(transportDistance) || 30) * 2 / postCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / postCarrySpeed;
         postTransportTime = trips * timePerTrip;
         
         if (postTransportTime > 0) {
@@ -468,7 +470,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
       // Calculate postmix transport - bags via carrier
       const postmixBags = totalPosts * 2;
       if (postmixBags > 0) {
-        const postmixResult = calculateMaterialTransportTime(postmixBags, carrierSizeForTransport, 'cement', parseFloat(transportDistance) || 30);
+        const postmixResult = calculateMaterialTransportTime(postmixBags, carrierSizeForTransport, 'cement', parseFloat(effectiveTransportDistance) || 30);
         postmixTransportTime = postmixResult.totalTransportTime;
         
         if (postmixTransportTime > 0) {
@@ -546,6 +548,13 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
       onResultsChange(formattedResults);
     }
   };
+
+  // Recalculate when project settings (transport, equipment) change
+  useEffect(() => {
+    if (recalculateTrigger > 0 && isInProjectCreating) {
+      void calculate();
+    }
+  }, [recalculateTrigger]);
 
   // Add useEffect to notify parent of result changes
   useEffect(() => {
@@ -654,18 +663,20 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
           </div>
         </div>
 
-        <label className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            checked={calculateTransport}
-            onChange={(e) => setCalculateTransport(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span className="text-sm font-medium text-gray-700">{t('calculator:input_calculate_transport_time')}</span>
-        </label>
+        {!isInProjectCreating && (
+          <label className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              checked={calculateTransport}
+              onChange={(e) => setCalculateTransport(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span className="text-sm font-medium text-gray-700">{t('calculator:input_calculate_transport_time')}</span>
+          </label>
+        )}
 
         {/* Transport Carrier Selection */}
-        {calculateTransport && (
+        {!isInProjectCreating && calculateTransport && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:input_transport_carrier_optional')}</label>
             <div className="space-y-2">
@@ -809,7 +820,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
                           {material.amount.toFixed(2)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.unit}
+                          {translateUnit(material.unit, t)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                           {material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}

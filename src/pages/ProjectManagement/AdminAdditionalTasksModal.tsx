@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { translateTaskName, translateMaterialName } from '../../lib/translationMap';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { X, Trash2, ChevronDown, ChevronUp, User, Calendar, AlertCircle } from 'lucide-react';
+import { Spinner, Button } from '../../themes/uiComponents';
+import { colors } from '../../themes/designTokens';
 
 interface AdditionalTaskRecord {
   id: string;
@@ -42,7 +45,7 @@ interface AdminAdditionalTasksModalProps {
 }
 
 const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'calculator', 'material']);
   const queryClient = useQueryClient();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [expandedUsers, setExpandedUsers] = useState<string[]>([]);
@@ -214,7 +217,7 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
         <div className="flex-1 overflow-y-auto p-4">
           {isLoading ? (
             <div className="flex justify-center p-6">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
+              <Spinner size={32} color={colors.red} />
             </div>
           ) : isError ? (
             <div className="flex flex-col items-center justify-center py-10">
@@ -264,7 +267,7 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
                           <div className="flex justify-between">
                             <div className="flex-1">
                               <h3 className="font-medium text-blue-600 dark:text-blue-400">
-                                {record.description || t('event:unnamed_task')}
+                                {translateTaskName(record.description ?? '', t) || t('event:unnamed_task')}
                               </h3>
                               <div className="mt-1 text-sm">
                                 <div className="flex items-center text-gray-500">
@@ -279,7 +282,7 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
                                 {record.additional_task_materials && record.additional_task_materials.length > 0 && (
                                   <div className="mt-1">
                                     <span className="font-medium">{t('event:materials_label')}:</span>{' '}
-                                    {record.additional_task_materials.map((m) => `${m.material} (${m.quantity} ${m.unit})`).join(', ')}
+                                    {record.additional_task_materials.map((m) => `${translateMaterialName(m.material, t)} (${m.quantity} ${m.unit})`).join(', ')}
                                   </div>
                                 )}
                                 {record.description && (
@@ -330,7 +333,7 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
                             <button
                               onClick={() => setDeleteConfirmation({
                                 recordId: record.id,
-                                recordName: record.description || 'this task'
+                                recordName: translateTaskName(record.description ?? '', t) || t('common:this_task')
                               })}
                               className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-full self-start ml-4"
                             >
@@ -356,20 +359,11 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
             <p className="mb-6">
               {t('event:delete_record_confirmation')}
             </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setDeleteConfirmation(null)}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-              >
-                {t('form:cancel')}
-              </button>
-              <button
-                onClick={() => deleteRecord.mutate(deleteConfirmation.recordId)}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-                disabled={deleteRecord.isPending}
-              >
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setDeleteConfirmation(null)}>{t('form:cancel')}</Button>
+              <Button variant="danger" onClick={() => deleteRecord.mutate(deleteConfirmation.recordId)} disabled={deleteRecord.isPending}>
                 {deleteRecord.isPending ? t('event:deleting_action') : t('event:delete_action')}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -3,6 +3,22 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
+import {
+  colors,
+  fonts,
+  fontSizes,
+  fontWeights,
+  spacing,
+  radii,
+  gradients,
+} from '../../themes/designTokens';
+import {
+  TextInput,
+  SelectDropdown,
+  Button,
+  Card,
+  Label,
+} from '../../themes/uiComponents';
 
 // Define types for our equipment
 interface DiggingEquipment {
@@ -28,6 +44,13 @@ const SoilExcavationCalculator: React.FC<SoilExcavationCalculatorProps> = ({ onR
   const [length, setLength] = useState<string>('');
   const [width, setWidth] = useState<string>('');
   const [depth, setDepth] = useState<string>('');
+  const [soilType, setSoilType] = useState<'clay' | 'sand' | 'rock'>('clay');
+
+  const SOIL_DENSITY: Record<'clay' | 'sand' | 'rock', number> = {
+    clay: 1.5,
+    sand: 1.6,
+    rock: 2.2,
+  };
   
   // State for equipment selection
   const [selectedExcavator, setSelectedExcavator] = useState<DiggingEquipment | null>(null);
@@ -102,8 +125,8 @@ const SoilExcavationCalculator: React.FC<SoilExcavationCalculatorProps> = ({ onR
       // Calculate volume in cubic meters
       const volumeInCubicMeters = l * w * (d / 100);
       
-      // Convert to tons (1 cubic meter = 1.5 tons)
-      return volumeInCubicMeters * 1.5;
+      // Convert to tons using soil type density
+      return volumeInCubicMeters * SOIL_DENSITY[soilType];
     }
   };
 
@@ -256,201 +279,126 @@ const SoilExcavationCalculator: React.FC<SoilExcavationCalculatorProps> = ({ onR
   }, [result]);
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-gray-800">{t('calculator:soil_excavation_calculator_title')}</h2>
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display }}>
+        {t('calculator:soil_excavation_calculator_title')}
+      </h2>
       
-      {/* Calculation Method */}
-      <div>
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`}>
         <p 
-          className="text-blue-600 cursor-pointer hover:underline mb-2"
+          style={{ color: colors.accentBlue, cursor: 'pointer', marginBottom: spacing.md, fontSize: fontSizes.base, fontFamily: fonts.body }}
           onClick={() => setCalculationMethod(calculationMethod === 'direct' ? 'area' : 'direct')}
         >
           {calculationMethod === 'direct' ? t('calculator:calculate_by_area') : t('calculator:calculate_by_weight')}
         </p>
         
         {calculationMethod === 'direct' ? (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('calculator:soil_weight_label')}</label>
-            <input
-              type="number"
-              value={tons}
-              onChange={(e) => setTons(e.target.value)}
-              className="w-full p-2 border rounded-md"
-              placeholder={t('calculator:enter_weight_tons')}
-              min="0"
-              step="0.1"
-            />
-          </div>
+          <TextInput
+            label={t('calculator:soil_weight_label')}
+            value={tons}
+            onChange={setTons}
+            placeholder={t('calculator:enter_weight_tons')}
+            unit="tons"
+          />
         ) : (
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('calculator:length_m_label')}</label>
-              <input
-                type="number"
-                value={length}
-                onChange={(e) => setLength(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:length_placeholder')}
-                min="0"
-                step="0.01"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('calculator:width_m_label')}</label>
-              <input
-                type="number"
-                value={width}
-                onChange={(e) => setWidth(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:width_placeholder')}
-                min="0"
-                step="0.01"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('calculator:depth_cm_label')}</label>
-              <input
-                type="number"
-                value={depth}
-                onChange={(e) => setDepth(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:depth_placeholder')}
-                min="0"
-                step="0.01"
-              />
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: `0 ${spacing.base}` }}>
+            <TextInput label={t('calculator:length_m_label')} value={length} onChange={setLength} placeholder={t('calculator:length_placeholder')} unit="m" />
+            <TextInput label={t('calculator:width_m_label')} value={width} onChange={setWidth} placeholder={t('calculator:width_placeholder')} unit="m" />
+            <TextInput label={t('calculator:depth_cm_label')} value={depth} onChange={setDepth} placeholder={t('calculator:depth_placeholder')} unit="cm" />
           </div>
         )}
-      </div>
-      
-      {/* Equipment Selection - Only Excavator */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:select_excavator_label')}</label>
-        <div className="space-y-2">
-          {excavators.length === 0 ? (
-            <p className="text-gray-500">{t('calculator:no_excavators_found')}</p>
-          ) : (
-            excavators.map((excavator) => (
-              <div 
-                key={excavator.id}
-                className="flex items-center p-2 cursor-pointer hover:bg-gray-50 rounded-md"
-                onClick={() => setSelectedExcavator(excavator)}
-              >
-                <div className={`w-4 h-4 rounded-full border mr-2 ${
-                  selectedExcavator?.id === excavator.id 
-                    ? 'border-blue-600' 
-                    : 'border-gray-400'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full m-0.5 ${
-                    selectedExcavator?.id === excavator.id 
-                      ? 'bg-blue-600' 
-                      : 'bg-transparent'
-                  }`}></div>
-                </div>
-                <div>
-                  <span className="text-gray-800">{excavator.name}</span>
-                  <span className="text-sm text-gray-600 ml-2">({excavator["size (in tones)"]} tons)</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-      
-      {/* Carrier Selection */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:select_carrier_optional_label')}</label>
-        <div className="space-y-2">
-          <div 
-            className="flex items-center p-2 cursor-pointer hover:bg-gray-50 rounded-md"
-            onClick={() => setSelectedCarrier(null)}
-          >
-            <div className={`w-4 h-4 rounded-full border mr-2 ${
-              !selectedCarrier 
-                ? 'border-blue-600' 
-                : 'border-gray-400'
-            }`}>
-              <div className={`w-2 h-2 rounded-full m-0.5 ${
-                !selectedCarrier 
-                  ? 'bg-blue-600' 
-                  : 'bg-transparent'
-              }`}></div>
-            </div>
-            <span className="text-gray-800">{t('calculator:no_transport_needed')}</span>
-          </div>
-          {carriers.length === 0 ? (
-            <p className="text-gray-500">{t('calculator:no_carriers_found')}</p>
-          ) : (
-            carriers.map((carrier) => (
-              <div 
-                key={carrier.id}
-                className="flex items-center p-2 cursor-pointer hover:bg-gray-50 rounded-md"
-                onClick={() => setSelectedCarrier(carrier)}
-              >
-                <div className={`w-4 h-4 rounded-full border mr-2 ${
-                  selectedCarrier?.id === carrier.id 
-                    ? 'border-blue-600' 
-                    : 'border-gray-400'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full m-0.5 ${
-                    selectedCarrier?.id === carrier.id 
-                      ? 'bg-blue-600' 
-                      : 'bg-transparent'
-                  }`}></div>
-                </div>
-                <div>
-                  <span className="text-gray-800">{carrier.name}</span>
-                  <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
 
-      {/* Transport Distance */}
-      {selectedCarrier && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {t('calculator:distance_meters_label')}
-          </label>
-          <input
-            type="number"
-            value={transportDistance}
-            onChange={(e) => setTransportDistance(e.target.value)}
-            className="w-full p-2 border rounded-md"
-            placeholder={t('calculator:distance_placeholder')}
-            min="0"
-            step="1"
+        {calculationMethod === 'area' && (
+          <SelectDropdown
+            label={t('calculator:soil_type')}
+            value={soilType === 'clay' ? t('calculator:soil_type_clay') : soilType === 'sand' ? t('calculator:soil_type_sand') : t('calculator:soil_type_rock')}
+            options={[t('calculator:soil_type_clay'), t('calculator:soil_type_sand'), t('calculator:soil_type_rock')]}
+            onChange={(val) => setSoilType(val === t('calculator:soil_type_clay') ? 'clay' : val === t('calculator:soil_type_sand') ? 'sand' : 'rock')}
+            placeholder={t('calculator:soil_type')}
           />
-          <p className="text-xs text-gray-500 mt-1">
-            Set to 0 for no transporting
-          </p>
-        </div>
-      )}
-      
-      {/* Calculate Button */}
-      <button
-        onClick={calculateTime}
-        className="w-full bg-blue-600 text-white py-3 rounded-md hover:bg-blue-700 transition-colors"
-      >
-        Calculate Time
-      </button>
-      
-      {/* Results */}
-      {result && (
-        <div ref={resultsRef} className="mt-4 p-6 bg-gray-100 rounded-md">
-          <h3 className="text-lg font-semibold mb-2">{t('calculator:estimated_time_label')}</h3>
-          <div className="space-y-2">
-            <p>{t('calculator:total_soil_label')} <span className="font-medium">{result.totalTons.toFixed(2)} {t('calculator:tons_suffix')}</span></p>
-            <p>{t('calculator:excavation_time_label')} <span className="font-medium">{formatTime(result.excavationTime)}</span></p>
-            {result.transportTime > 0 && (
-              <p>{t('calculator:transport_time_label')} <span className="font-medium">{formatTime(result.transportTime)}</span></p>
+        )}
+        
+        <div>
+          <Label>{t('calculator:select_excavator_label')}</Label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
+            {excavators.length === 0 ? (
+              <p style={{ fontSize: fontSizes.base, color: colors.textDim }}>{t('calculator:no_excavators_found')}</p>
+            ) : (
+              excavators.map((excavator) => (
+                <div key={excavator.id} style={{ display: 'flex', alignItems: 'center', padding: spacing.md, cursor: 'pointer', borderRadius: radii.lg, background: selectedExcavator?.id === excavator.id ? colors.bgHover : 'transparent' }} onClick={() => setSelectedExcavator(excavator)}>
+                  <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedExcavator?.id === excavator.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {selectedExcavator?.id === excavator.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                  </div>
+                  <div>
+                    <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{excavator.name}</span>
+                    <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({excavator["size (in tones)"]} tons)</span>
+                  </div>
+                </div>
+              ))
             )}
-            <p className="pt-2 border-t border-gray-300">{t('calculator:total_time')} <span className="font-medium">{formatTime(result.totalTime)}</span></p>
           </div>
         </div>
-      )}
+        
+        <div>
+          <Label>{t('calculator:select_carrier_optional_label')}</Label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: spacing.md, cursor: 'pointer', borderRadius: radii.lg, background: !selectedCarrier ? colors.bgHover : 'transparent' }} onClick={() => setSelectedCarrier(null)}>
+              <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${!selectedCarrier ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {!selectedCarrier && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+              </div>
+              <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{t('calculator:no_transport_needed')}</span>
+            </div>
+            {carriers.length === 0 ? (
+              <p style={{ fontSize: fontSizes.base, color: colors.textDim }}>{t('calculator:no_carriers_found')}</p>
+            ) : (
+              carriers.map((carrier) => (
+                <div key={carrier.id} style={{ display: 'flex', alignItems: 'center', padding: spacing.md, cursor: 'pointer', borderRadius: radii.lg, background: selectedCarrier?.id === carrier.id ? colors.bgHover : 'transparent' }} onClick={() => setSelectedCarrier(carrier)}>
+                  <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedCarrier?.id === carrier.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {selectedCarrier?.id === carrier.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                  </div>
+                  <div>
+                    <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{carrier.name}</span>
+                    <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({carrier["size (in tones)"]} tons)</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {selectedCarrier && (
+          <TextInput
+            label={t('calculator:distance_meters_label')}
+            value={transportDistance}
+            onChange={setTransportDistance}
+            placeholder={t('calculator:distance_placeholder')}
+            unit="m"
+            helperText="Set to 0 for no transporting"
+          />
+        )}
+        
+        <Button onClick={calculateTime} variant="primary" fullWidth>
+          Calculate Time
+        </Button>
+        
+        {result && (
+          <div ref={resultsRef} style={{ marginTop: spacing["5xl"] }}>
+            <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, marginBottom: spacing.md, color: colors.textSecondary, fontFamily: fonts.display }}>
+                {t('calculator:estimated_time_label')}
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:total_soil_label')} <span style={{ fontWeight: fontWeights.medium }}>{result.totalTons.toFixed(2)} {t('calculator:tons_suffix')}</span></p>
+                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:excavation_time_label')} <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.excavationTime)}</span></p>
+                {result.transportTime > 0 && (
+                  <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:transport_time_label')} <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.transportTime)}</span></p>
+                )}
+                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body, paddingTop: spacing.md, borderTop: `1px solid ${colors.borderLight}` }}>{t('calculator:total_time')} <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.totalTime)}</span></p>
+              </div>
+            </Card>
+          </div>
+        )}
+      </Card>
     </div>
   );
 };

@@ -181,6 +181,19 @@ export const materialCapacity = {
     3: 3,
     5: 5,
     10: 10
+  },
+
+  // Natural turf rolls (2m x 0.5m = 1 m² per roll) - pieces
+  turfRolls: {
+    0.1: 5,
+    0.125: 6,
+    0.15: 7,
+    0.3: 15,
+    0.5: 25,
+    1: 50,
+    3: 150,
+    5: 250,
+    10: 500
   }
 };
 

@@ -11,6 +11,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    setupFiles: ['src/tests/setup.ts'],
   },
   optimizeDeps: {
     exclude: ['lucide-react'],

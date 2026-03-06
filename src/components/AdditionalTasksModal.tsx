@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName, translateMaterialName } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { Loader2, Search, X, ClipboardList, Trash2, Plus } from 'lucide-react';
+import { Search, X, ClipboardList, Trash2, Plus } from 'lucide-react';
 import { Database } from '../types/supabase';
+import { Spinner, Button } from '../themes/uiComponents';
 
 interface AdditionalTask {
   id: string;
@@ -68,25 +70,13 @@ const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
           <strong>{t('common:type_label')}:</strong> {recordType}<br />
           <strong>{t('common:name_label')}:</strong> {recordName}
         </p>
-        <div className="flex justify-end space-x-3">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onCancel();
-            }}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={(e) => { e.stopPropagation(); onCancel(); }}>
             {t('common:no')}
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onConfirm();
-            }}
-            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-          >
+          </Button>
+          <Button variant="danger" onClick={(e) => { e.stopPropagation(); onConfirm(); }}>
             {t('common:yes')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -94,7 +84,7 @@ const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
 };
 
 const AdditionalTasksModal: React.FC<AdditionalTasksModalProps> = ({ eventId, onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'event', 'calculator', 'material']);
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [searchTerm, setSearchTerm] = useState('');
@@ -394,13 +384,13 @@ const AdditionalTasksModal: React.FC<AdditionalTasksModalProps> = ({ eventId, on
                   <div key={task.id} className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1">
-                        <h3 className="text-lg font-semibold">{task.description}</h3>
+                        <h3 className="text-lg font-semibold">{translateTaskName(task.description ?? '', t)}</h3>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
                           {t('event:project_label')}: {task.events?.title}
                         </p>
                       </div>
                       <button
-                        onClick={() => handleDeleteClick(task.id, task.description || t('event:unnamed_task'))}
+                        onClick={() => handleDeleteClick(task.id, translateTaskName(task.description ?? '', t) || t('event:unnamed_task'))}
                         className="text-red-600 hover:text-red-700 p-1"
                       >
                         <Trash2 className="h-5 w-5" />
@@ -444,7 +434,7 @@ const AdditionalTasksModal: React.FC<AdditionalTasksModalProps> = ({ eventId, on
                         <div className="space-y-1">
                           {task.additional_task_materials.map((material, index) => (
                             <p key={index} className="text-sm text-gray-600 dark:text-gray-400">
-                              {material.material}: {material.quantity} {material.unit}
+                              {translateMaterialName(material.material, t)}: {material.quantity} {material.unit}
                             </p>
                           ))}
                         </div>
@@ -459,7 +449,7 @@ const AdditionalTasksModal: React.FC<AdditionalTasksModalProps> = ({ eventId, on
                 )}
                 {isLoading && (
                   <div className="text-center py-8">
-                    <Loader2 className="h-8 w-8 animate-spin mx-auto text-blue-600" />
+                    <Spinner size={32} style={{ margin: '0 auto' }} />
                   </div>
                 )}
               </div>
@@ -472,13 +462,10 @@ const AdditionalTasksModal: React.FC<AdditionalTasksModalProps> = ({ eventId, on
 
           {/* Add Task Button - Fixed at bottom */}
           <div className="p-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800">
-            <button
-              onClick={() => {/* Your add task logic */}}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-            >
-              <Plus className="w-5 h-5 mr-2" />
+            <Button variant="primary" fullWidth onClick={() => {}}>
+              <Plus className="w-5 h-5" style={{ marginRight: 8 }} />
               {t('event:add_task')}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -518,12 +505,9 @@ const AdditionalTasksModal: React.FC<AdditionalTasksModalProps> = ({ eventId, on
               {t('event:deletion_request_sent')}
             </p>
             <div className="flex justify-end">
-              <button
-                onClick={() => setShowRequestSent(false)}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
+              <Button variant="primary" onClick={() => setShowRequestSent(false)}>
                 {t('common:close')}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -532,7 +516,7 @@ const AdditionalTasksModal: React.FC<AdditionalTasksModalProps> = ({ eventId, on
       {/* Progress update form */}
       {showProgressForm && selectedTask && (
         <div>
-          <h3 className="font-medium mb-3">{t('event:update_progress')}: {selectedTask.name}</h3>
+          <h3 className="font-medium mb-3">{t('event:update_progress')}: {translateTaskName(selectedTask.name, t)}</h3>
           
           <div className="mb-3">
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -577,15 +561,17 @@ const AdditionalTasksModal: React.FC<AdditionalTasksModalProps> = ({ eventId, on
             />
           </div>
           
-          <div className="flex space-x-2">
-            <button
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              style={{ flex: 1 }}
               onClick={updateProgress}
               disabled={!progress || !hoursWorked || parseFloat(progress) < 0 || parseFloat(progress) > 100 || parseFloat(hoursWorked) < 0}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md flex-1 hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
               {t('event:save_progress')}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary"
               onClick={() => {
                 setShowProgressForm(false);
                 setSelectedTask(null);
@@ -593,10 +579,9 @@ const AdditionalTasksModal: React.FC<AdditionalTasksModalProps> = ({ eventId, on
                 setHoursWorked('');
                 setNotes('');
               }}
-              className="bg-gray-300 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-400 transition-colors"
             >
               {t('common:cancel')}
-            </button>
+            </Button>
           </div>
         </div>
       )}

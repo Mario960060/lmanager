@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName, translateMaterialName, translateMaterialDescription, translateUnit } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Database } from '../lib/database.types';
@@ -12,6 +13,13 @@ import TaskProgressModal from '../components/TaskProgressModal';
 import MaterialProgressModal from '../components/MaterialProgressModal';
 import HoursWorkedModal from '../components/HoursWorkedModal';
 import AdditionalFeatures from '../components/AdditionalFeatures';
+import DatePicker from '../components/DatePicker';
+import {
+  Card,
+  Button,
+  CollapsibleCard,
+} from '../themes/uiComponents';
+import { colors, spacing, fonts, fontSizes, fontWeights, radii, transitions } from '../themes/designTokens';
 
 type Event = Database['public']['Tables']['events']['Row'];
 type TaskDone = Database['public']['Tables']['tasks_done']['Row'];
@@ -20,6 +28,7 @@ type MaterialDelivered = Database['public']['Tables']['materials_delivered']['Ro
   total_amount: number;
   name: string;
   units?: Set<string>;
+  description?: string | null;
 };
 type EquipmentUsage = {
   id: string;
@@ -50,7 +59,7 @@ type TaskFolder = {
 };
 
 const EventDetails = () => {
-  const { t } = useTranslation(['common', 'dashboard', 'utilities', 'project', 'event']);
+  const { t } = useTranslation(['common', 'dashboard', 'utilities', 'project', 'event', 'calculator', 'material', 'units']);
   const { id } = useParams();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -985,7 +994,7 @@ const EventDetails = () => {
                 <div className="flex justify-between mb-1">
                   <span className="text-xs font-medium text-gray-700">{t('event:hours_progress')}</span>
                   <div className="text-xs">
-                    <span className={`${getProgressTextColor(folderHoursPercent)}`}>
+                    <span style={getProgressTextStyle(folderHoursPercent)}>
                       {parseFloat(folderHoursPercent.toFixed(1))}%
                     </span>
                     <span className="text-gray-500 ml-2">
@@ -994,10 +1003,9 @@ const EventDetails = () => {
                   </div>
                 </div>
                 <div className="w-full bg-gray-600 rounded-full h-2 border border-gray-500">
-                  <div
-                    className={`h-2 rounded-full transition-all duration-300 ${getProgressColor(folderHoursPercent)}`}
-                    style={{ width: `${Math.min(folderHoursPercent, 100)}%` }}
-                  ></div>
+                    <div
+                      style={{ height: 8, borderRadius: radii.pill, transition: 'all 0.3s', width: `${Math.min(folderHoursPercent, 100)}%`, ...getProgressBarStyle(folderHoursPercent) }}
+                    />
                 </div>
               </div>
 
@@ -1029,7 +1037,8 @@ const EventDetails = () => {
               {folderTasks.map(task => {
                 const [amount, ...unitParts] = task.amount.split(' ');
                 const totalAmount = parseFloat(amount);
-                const unit = unitParts.join(' ');
+                const unit = task.unit || unitParts.join(' ');
+                const displayTotal = task.unit ? `${totalAmount} ${translateUnit(task.unit, t)}` : task.amount;
                 const percentComplete = (task.progress_completed / totalAmount) * 100;
                 const taskHoursPercent = (task.hours_spent / task.hours_worked) * 100;
 
@@ -1040,18 +1049,18 @@ const EventDetails = () => {
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-gray-900 truncate">{task.name}</h4>
+                        <h4 className="font-medium text-gray-900 truncate">{translateTaskName(task.name ?? '', t)}</h4>
                         <div className="flex flex-col sm:flex-row sm:items-center mt-1 space-y-2 sm:space-y-0 sm:space-x-4">
                   <p className="text-sm text-gray-600">
-                            Progress: {parseFloat(task.progress_completed.toFixed(2))} {unit} / {task.amount}
+                            {t('event:progress_label_short')} {parseFloat(task.progress_completed.toFixed(2))} {unit} / {displayTotal}
                             <span className="ml-2 font-medium text-green-600">
                               ({parseFloat(percentComplete.toFixed(2))}%)
                     </span>
                   </p>
                           <div className="flex justify-between items-center w-full sm:w-auto">
                   <p className="text-sm text-gray-600">
-                              Hours: {parseFloat(task.hours_spent.toFixed(2))} / {parseFloat(task.hours_worked.toFixed(2))}
-                              <span className={`ml-2 font-medium ${getProgressTextColor(taskHoursPercent)}`}>
+                              {t('event:hours_label_short')} {parseFloat(task.hours_spent.toFixed(2))} / {parseFloat(task.hours_worked.toFixed(2))}
+                              <span style={{ marginLeft: spacing.md, fontWeight: fontWeights.medium, ...getProgressTextStyle(taskHoursPercent) }}>
                                 ({parseFloat(taskHoursPercent.toFixed(2))}%)
                     </span>
                   </p>
@@ -1090,15 +1099,14 @@ const EventDetails = () => {
                           <div>
                             <div className="flex justify-between mb-1">
                               <span className="text-xs font-medium text-gray-700">{t('event:hours_progress')}</span>
-                              <span className={`text-xs ${getProgressTextColor(taskHoursPercent)}`}>
+                              <span style={{ fontSize: fontSizes.xs, ...getProgressTextStyle(taskHoursPercent) }}>
                                 {parseFloat(taskHoursPercent.toFixed(1))}%
                         </span>
                             </div>
                             <div className="w-full bg-gray-200 rounded-full h-1.5">
-                              <div
-                                className={`h-1.5 rounded-full transition-all duration-300 ${getProgressColor(taskHoursPercent)}`}
-                                style={{ width: `${Math.min(taskHoursPercent, 100)}%` }}
-                              ></div>
+                                <div
+                                  style={{ height: 6, borderRadius: radii.pill, transition: 'all 0.3s', width: `${Math.min(taskHoursPercent, 100)}%`, ...getProgressBarStyle(taskHoursPercent) }}
+                                />
                             </div>
                           </div>
                         </div>
@@ -1167,30 +1175,26 @@ const EventDetails = () => {
   const hoursProgress = totalEstimatedHours > 0 ? (totalHours / totalEstimatedHours) * 100 : 0;
 
   // Determine progress color based on percentage
-  const getProgressColor = (percent: number): string => {
-    if (percent <= 90) return 'bg-blue-600';
-    if (percent <= 110) return 'bg-green-600';
-    return 'bg-red-600';
-  };
+  const getProgressBarStyle = (percent: number): React.CSSProperties => ({
+    background: percent <= 90 ? colors.accentBlue : percent <= 110 ? colors.green : colors.red,
+  });
 
-  const getProgressTextColor = (percent: number): string => {
-    if (percent <= 90) return 'text-blue-600';
-    if (percent <= 110) return 'text-green-600';
-    return 'text-red-600';
-  };
+  const getProgressTextStyle = (percent: number): React.CSSProperties => ({
+    color: percent <= 90 ? colors.accentBlue : percent <= 110 ? colors.green : colors.red,
+  });
 
-  const getStatusColor = (status: string) => {
+  const getStatusStyle = (status: string): React.CSSProperties => {
     switch (status) {
       case 'planned':
-        return 'bg-gray-600 text-white';
+        return { background: colors.textDim, color: colors.textOnAccent };
       case 'scheduled':
-        return 'bg-blue-600 text-white';
+        return { background: colors.accentBlue, color: colors.textOnAccent };
       case 'in_progress':
-        return 'bg-amber-600 text-white';
+        return { background: colors.orange, color: colors.textOnAccent };
       case 'finished':
-        return 'bg-green-600 text-white';
+        return { background: colors.green, color: colors.textOnAccent };
       default:
-        return 'bg-gray-600 text-white';
+        return { background: colors.textDim, color: colors.textOnAccent };
     }
   };
 
@@ -1347,29 +1351,29 @@ const EventDetails = () => {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-8">
-      <div className="flex justify-between items-center">
+    <div style={{ padding: spacing["6xl"], maxWidth: 1280, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <BackButton />
       </div>
       {/* Header Section */}
-      <div className="grid grid-cols-2 gap-6">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing["3xl"] }}>
         {/* Project Info */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h1 className="text-2xl font-bold mb-2">{event.title}</h1>
-          <p className="text-gray-600">
+        <Card>
+          <h1 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold, marginBottom: spacing.md, color: colors.textPrimary, fontFamily: fonts.display }}>{event.title}</h1>
+          <p style={{ color: colors.textDim, fontFamily: fonts.body, fontSize: fontSizes.base }}>
             {event.start_date && format(new Date(event.start_date), 'MMM dd, yyyy')} - {event.end_date && format(new Date(event.end_date), 'MMM dd, yyyy')}
           </p>
-          <div className="mt-4">
+          <div style={{ marginTop: spacing["4xl"] }}>
             {event.status === 'finished' ? (
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor('finished')}`}>
+              <span style={{ padding: '4px 12px', borderRadius: radii.pill, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, ...getStatusStyle('finished') }}>
                 {t('event:finished')}
               </span>
             ) : (
-              <div className="space-y-2">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
                 <select
                   value={event.status}
                   onChange={(e) => handleStatusChange(e.target.value)}
-                  className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(event.status)}`}
+                  style={{ padding: '4px 12px', borderRadius: radii.pill, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, border: `1px solid ${colors.borderDefault}`, cursor: 'pointer', ...getStatusStyle(event.status) }}
                 >
                   <option value="planned">{t('event:planned')}</option>
                   <option value="scheduled">{t('event:scheduled')}</option>
@@ -1377,92 +1381,78 @@ const EventDetails = () => {
                   <option value="finished">{t('event:finished')}</option>
                 </select>
                 {statusError && (
-                  <p className="text-sm text-red-600">{statusError}</p>
+                  <p style={{ fontSize: fontSizes.sm, color: colors.red, fontFamily: fonts.body }}>{statusError}</p>
                 )}
               </div>
             )}
             {updateEventStatusMutation.isPending && (
-              <span className="text-sm text-gray-500 ml-2">{t('event:updating_status')}</span>
+              <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md, fontFamily: fonts.body }}>{t('event:updating_status')}</span>
             )}
           </div>
-        </div>
+        </Card>
 
         {/* Progress Summary */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <div className="flex items-center mb-4">
-            <CheckCircle2 className="w-5 h-5 text-green-500 mr-2" />
-            <h2 className="font-semibold text-lg">{t('event:progress_title')}</h2>
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["4xl"] }}>
+            <CheckCircle2 style={{ width: 20, height: 20, color: colors.green, marginRight: spacing.md }} />
+            <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display }}>{t('event:progress_title')}</h2>
           </div>
-          <div className="space-y-4">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["4xl"] }}>
             {/* Hours Progress */}
             <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-sm font-medium text-gray-700">{t('event:hours_progress')}</span>
-                <div className="flex items-center">
-                  <span className={`text-sm font-medium ${getProgressTextColor(hoursProgress)}`}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+                <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, fontFamily: fonts.body }}>{t('event:hours_progress')}</span>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, ...getProgressTextStyle(hoursProgress) }}>
                     {parseFloat(totalHours.toFixed(2))} / {parseFloat(totalEstimatedHours.toFixed(2))} {t('event:hours_label')}
                   </span>
-                  <span className={`ml-2 text-sm font-medium ${getProgressTextColor(hoursProgress)}`}>
+                  <span style={{ marginLeft: spacing.md, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, ...getProgressTextStyle(hoursProgress) }}>
                     ({parseFloat(hoursProgress.toFixed(2))}%)
                   </span>
                 </div>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div style={{ width: '100%', height: 10, background: colors.bgOverlay, borderRadius: radii.pill, overflow: 'hidden' }}>
                 <div
-                  className={`h-2.5 rounded-full transition-all duration-300 ${getProgressColor(hoursProgress)}`}
-                  style={{ width: `${Math.min(hoursProgress, 100)}%` }}
-                ></div>
+                  style={{ width: `${Math.min(hoursProgress, 100)}%`, height: '100%', borderRadius: radii.pill, transition: 'all 0.3s', ...getProgressBarStyle(hoursProgress) }}
+                />
               </div>
             </div>
 
             {/* Task Completion Progress */}
             <div>
-              <div className="flex justify-between mb-1">
-                <span className="text-sm font-medium text-gray-700">{t('event:task_completion')}</span>
-                <span className="text-sm font-medium text-green-600">
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+                <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, fontFamily: fonts.body }}>{t('event:task_completion')}</span>
+                <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.green, fontFamily: fonts.body }}>
                   {parseFloat(taskCompletionPercentage.toFixed(2))}%
                 </span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
+              <div style={{ width: '100%', height: 10, background: colors.bgOverlay, borderRadius: radii.pill, overflow: 'hidden' }}>
                 <div
-                  className="bg-green-600 h-2.5 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.min(taskCompletionPercentage, 100)}%` }}
-                ></div>
+                  style={{ width: `${Math.min(taskCompletionPercentage, 100)}%`, height: '100%', background: colors.green, borderRadius: radii.pill, transition: 'all 0.3s' }}
+                />
               </div>
             </div>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* Tasks Section */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div 
-          className="flex items-center justify-between cursor-pointer"
-          onClick={() => setExpandedSections(prev => ({ ...prev, tasks: !prev.tasks }))}
-        >
-          <h2 className="text-xl font-semibold">{t('event:tasks_title')}</h2>
-          <div className="flex items-center space-x-2">
-            {expandedSections.tasks && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowCreateFolderModal(true);
-                }}
-                className="flex items-center space-x-1 text-blue-600 hover:text-blue-800"
-              >
-                <FolderPlus className="w-4 h-4" />
-                <span className="text-sm">{t('event:new_folder')}</span>
-              </button>
-            )}
-          {expandedSections.tasks ? (
-            <ChevronUp className="w-6 h-6 text-gray-500" />
-          ) : (
-            <ChevronDown className="w-6 h-6 text-gray-500" />
-          )}
-          </div>
-        </div>
-        {expandedSections.tasks && (
-          <div className="mt-6 space-y-6">
+      <CollapsibleCard
+        title={t('event:tasks_title')}
+        open={expandedSections.tasks}
+        onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, tasks: open }))}
+        headerActions={expandedSections.tasks && (
+          <Button
+            variant="ghost"
+            onClick={() => setShowCreateFolderModal(true)}
+            style={{ padding: spacing.sm, fontSize: fontSizes.sm }}
+          >
+            <FolderPlus style={{ width: 16, height: 16, marginRight: spacing.xs }} />
+            {t('event:new_folder')}
+          </Button>
+        )}
+      >
+        <div style={{ marginTop: spacing["3xl"], display: 'flex', flexDirection: 'column', gap: spacing["3xl"] }}>
             {/* Render Folders - using recursive function for nested folders */}
             {renderFolders()}
 
@@ -1535,7 +1525,8 @@ const EventDetails = () => {
                       {unorganizedTasks.map(task => {
                         const [amount, ...unitParts] = task.amount.split(' ');
                         const totalAmount = parseFloat(amount);
-                        const unit = unitParts.join(' ');
+                        const unit = task.unit || unitParts.join(' ');
+                        const displayTotal = task.unit ? `${totalAmount} ${task.unit}` : task.amount;
                         const percentComplete = (task.progress_completed / totalAmount) * 100;
                         const taskHoursPercent = (task.hours_spent / task.hours_worked) * 100;
 
@@ -1546,10 +1537,10 @@ const EventDetails = () => {
                           >
                             <div className="flex flex-col sm:flex-row sm:items-start gap-4">
                               <div className="flex-1 min-w-0">
-                                <h4 className="font-medium text-gray-900 truncate">{task.name}</h4>
+                                <h4 className="font-medium text-gray-900 truncate">{translateTaskName(task.name ?? '', t)}</h4>
                                 <div className="flex flex-col sm:flex-row sm:items-center mt-1 space-y-2 sm:space-y-0 sm:space-x-4">
                                   <p className="text-sm text-gray-600">
-                                    {t('event:progress_label')} {parseFloat(task.progress_completed.toFixed(2))} {unit} / {task.amount}
+                                    {t('event:progress_label')} {parseFloat(task.progress_completed.toFixed(2))} {translateUnit(unit, t)} / {displayTotal}
                                     <span className="ml-2 font-medium text-green-600">
                                       ({parseFloat(percentComplete.toFixed(2))}%)
                                     </span>
@@ -1557,7 +1548,7 @@ const EventDetails = () => {
                                   <div className="flex justify-between items-center w-full sm:w-auto">
                                   <p className="text-sm text-gray-600">
                                     {t('event:hours_details_label')} {parseFloat(task.hours_spent.toFixed(2))} / {parseFloat(task.hours_worked.toFixed(2))}
-                                    <span className={`ml-2 font-medium ${getProgressTextColor(taskHoursPercent)}`}>
+                                    <span style={{ marginLeft: spacing.md, fontWeight: fontWeights.medium, ...getProgressTextStyle(taskHoursPercent) }}>
                                       ({parseFloat(taskHoursPercent.toFixed(2))}%)
                                     </span>
                                   </p>
@@ -1596,15 +1587,14 @@ const EventDetails = () => {
                                   <div>
                                     <div className="flex justify-between mb-1">
                                       <span className="text-xs font-medium text-gray-700">{t('event:hours_progress')}</span>
-                                      <span className={`text-xs ${getProgressTextColor(taskHoursPercent)}`}>
+                                      <span style={{ fontSize: fontSizes.xs, ...getProgressTextStyle(taskHoursPercent) }}>
                                         {parseFloat(taskHoursPercent.toFixed(1))}%
                                       </span>
                                     </div>
                                     <div className="w-full bg-gray-200 rounded-full h-1.5">
                                       <div
-                                        className={`h-1.5 rounded-full transition-all duration-300 ${getProgressColor(taskHoursPercent)}`}
-                                        style={{ width: `${Math.min(taskHoursPercent, 100)}%` }}
-                                      ></div>
+                                        style={{ height: 6, borderRadius: radii.pill, transition: 'all 0.3s', width: `${Math.min(taskHoursPercent, 100)}%`, ...getProgressBarStyle(taskHoursPercent) }}
+                                      />
                                     </div>
                                   </div>
                                 </div>
@@ -1644,8 +1634,7 @@ const EventDetails = () => {
                 </div>
               );
             })()}
-          </div>
-        )}
+        </div>
 
         {/* Context Menu */}
         {contextMenu && (
@@ -1790,7 +1779,7 @@ const EventDetails = () => {
             <div className="bg-white p-6 rounded-lg w-96">
               <h3 className="text-lg font-semibold mb-4">{t('event:move_task_to_folder')}</h3>
               <p className="text-sm text-gray-600 mb-4">
-                {t('event:moving_task')} <strong>{selectedTaskToMove.name}</strong>
+                {t('event:moving_task')} <strong>{translateTaskName(selectedTaskToMove.name ?? '', t)}</strong>
               </p>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 <button
@@ -1835,183 +1824,143 @@ const EventDetails = () => {
             </div>
           </div>
         )}
-      </div>
+      </CollapsibleCard>
 
       {/* Materials Section */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div 
-          className="flex items-center justify-between cursor-pointer"
-          onClick={() => setExpandedSections(prev => ({ ...prev, materials: !prev.materials }))}
-        >
-          <h2 className="text-xl font-semibold">{t('event:materials_title')}</h2>
-          {expandedSections.materials ? (
-            <ChevronUp className="w-6 h-6 text-gray-500" />
-          ) : (
-            <ChevronDown className="w-6 h-6 text-gray-500" />
-          )}
-        </div>
-        {expandedSections.materials && (
-          <div className="mt-6 space-y-4">
+      <CollapsibleCard
+        title={t('event:materials_title')}
+        open={expandedSections.materials}
+        onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, materials: open }))}
+      >
+        <div style={{ marginTop: spacing["3xl"], display: 'flex', flexDirection: 'column', gap: spacing["4xl"] }}>
             {materials.map(material => {
-              const totalDelivered = material.material_deliveries 
-                ? material.material_deliveries.reduce((sum, delivery) => sum + (delivery.amount || 0), 0)
+              const totalDelivered = material.material_deliveries
+                ? material.material_deliveries.reduce((sum: number, delivery: any) => sum + (delivery.amount || 0), 0)
                 : material.amount;
               const percentDelivered = (totalDelivered / material.total_amount) * 100;
               const isCompleted = percentDelivered >= 100;
-
               return (
                 <div
                   key={material.id}
-                  className="p-4 hover:bg-gray-50 transition-colors"
+                  style={{ padding: spacing["4xl"], transition: transitions.fast }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-medium text-gray-900 truncate">{material.name}</h4>
-                      <div className="flex flex-col sm:flex-row sm:items-center mt-1 space-y-2 sm:space-y-0 sm:space-x-4">
-                        <p className="text-sm text-gray-600">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["4xl"] }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <h4 style={{ fontWeight: fontWeights.medium, color: colors.textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: fonts.display }}>{translateMaterialName(material.name, t)}</h4>
+                      {translateMaterialDescription(material.name, material.description, t) && (
+                        <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body, marginTop: spacing.xs }}>{translateMaterialDescription(material.name, material.description, t)}</p>
+                      )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
+                        <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>
                           {t('event:amount_label')} {material.total_amount} {material.unit}
                         </p>
                         {material.material_deliveries && material.material_deliveries.length > 0 && (
-                          <p className="text-sm text-gray-600">
-                            {t('event:delivered_label')} {material.material_deliveries.reduce((acc, delivery) => acc + delivery.amount, 0)} {material.unit}
-                        <span className="ml-2 font-medium text-green-600">
-                              ({parseFloat(((material.material_deliveries.reduce((acc, delivery) => acc + delivery.amount, 0) / material.total_amount) * 100).toFixed(1))}%)
-                        </span>
-                      </p>
-                      )}
-                    </div>
+                          <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>
+                            {t('event:delivered_label')} {totalDelivered} {translateUnit(material.unit, t)}
+                            <span style={{ marginLeft: spacing.md, fontWeight: fontWeights.medium, color: colors.green }}>
+                              ({parseFloat(percentDelivered.toFixed(1))}%)
+                            </span>
+                          </p>
+                        )}
+                      </div>
 
                       {/* Material Progress Bar */}
-                      <div className="mt-3">
-                        <div className="flex justify-between mb-1">
-                          <span className="text-xs font-medium text-gray-700">{t('event:delivery_progress')}</span>
-                          <span className={`text-xs ${
-                            ((material.material_deliveries?.reduce((acc, delivery) => acc + delivery.amount, 0) || 0) / material.total_amount * 100) >= 100 
-                              ? 'text-green-600' 
-                              : 'text-blue-600'
-                          }`}>
-                            {parseFloat(((material.material_deliveries?.reduce((acc, delivery) => acc + delivery.amount, 0) || 0) / material.total_amount * 100).toFixed(1))}%
-                      </span>
+                      <div style={{ marginTop: spacing["2xl"] }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: spacing.sm }}>
+                          <span style={{ fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textMuted, fontFamily: fonts.body }}>{t('event:delivery_progress')}</span>
+                          <span style={{ fontSize: fontSizes.xs, color: isCompleted ? colors.green : colors.accentBlue, fontFamily: fonts.body }}>
+                            {parseFloat(percentDelivered.toFixed(1))}%
+                          </span>
                         </div>
-                        <div className="w-full bg-gray-600 rounded-full h-2 border border-gray-500">
+                        <div style={{ width: '100%', height: 8, background: colors.bgOverlay, borderRadius: radii.pill, overflow: 'hidden', border: `1px solid ${colors.borderDefault}` }}>
                           <div
-                            className={`h-2 rounded-full transition-all duration-300 ${
-                              ((material.material_deliveries?.reduce((acc, delivery) => acc + delivery.amount, 0) || 0) / material.total_amount * 100) >= 100 
-                                ? 'bg-green-600' 
-                                : 'bg-blue-600'
-                            }`}
-                            style={{ 
-                              width: `${Math.min(
-                                ((material.material_deliveries?.reduce((acc, delivery) => acc + delivery.amount, 0) || 0) / material.total_amount) * 100,
-                                100
-                              )}%` 
+                            style={{
+                              width: `${Math.min(percentDelivered, 100)}%`,
+                              height: '100%',
+                              background: isCompleted ? colors.green : colors.accentBlue,
+                              borderRadius: radii.pill,
+                              transition: 'all 0.3s',
                             }}
-                          ></div>
+                          />
                         </div>
                       </div>
 
                       {/* Update Progress Button */}
-                      <div className="mt-4 sm:mt-2">
-                      <button
-                        onClick={() => {
-                          setSelectedMaterial(material);
-                          setShowMaterialProgressModal(true);
-                        }}
-                          className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white py-1.5 px-3 rounded-md transition-colors text-sm whitespace-nowrap"
-                      >
-                        {t('event:update_progress')}
-                      </button>
+                      <div style={{ marginTop: spacing["4xl"] }}>
+                        <Button
+                          variant={isCompleted ? 'success' : 'primary'}
+                          onClick={() => { setSelectedMaterial(material); setShowMaterialProgressModal(true); }}
+                          style={{ padding: `${spacing.sm}px ${spacing["2xl"]}px`, fontSize: fontSizes.sm, whiteSpace: 'nowrap' }}
+                        >
+                          {isCompleted ? `✓ ${t('project:done')}` : t('event:update_progress')}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
                   </div>
                 </div>
               );
             })}
-          </div>
-        )}
-      </div>
+        </div>
+      </CollapsibleCard>
 
       {/* Equipment Section */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div 
-          className="flex items-center justify-between cursor-pointer"
-          onClick={() => setExpandedSections(prev => ({ ...prev, equipment: !prev.equipment }))}
-        >
-          <h2 className="text-xl font-semibold">{t('event:equipment_title')}</h2>
-          {expandedSections.equipment ? (
-            <ChevronUp className="w-6 h-6 text-gray-500" />
-          ) : (
-            <ChevronDown className="w-6 h-6 text-gray-500" />
-          )}
-        </div>
-        {expandedSections.equipment && (
-          <div className="mt-6 bg-gray-50 p-4 rounded-lg">
+      <CollapsibleCard
+        title={t('event:equipment_title')}
+        open={expandedSections.equipment}
+        onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, equipment: open }))}
+      >
+        <div style={{ marginTop: spacing["3xl"], padding: spacing["4xl"], background: colors.bgSubtle, borderRadius: radii.xl }}>
             {equipmentError && (
-              <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md flex items-center">
-                <AlertCircle className="w-5 h-5 mr-2" />
+              <div style={{ marginBottom: spacing["4xl"], padding: spacing["2xl"], background: colors.statusPaused.bg, border: `1px solid ${colors.statusPaused.border}`, borderRadius: radii.lg, display: 'flex', alignItems: 'center', color: colors.statusPaused.text }}>
+                <AlertCircle style={{ width: 20, height: 20, marginRight: spacing.md, flexShrink: 0 }} />
                 {equipmentError}
               </div>
             )}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-2">
-                <Wrench className="w-5 h-5 text-blue-600" />
-                <h3 className="text-lg font-semibold text-gray-900">{t('event:equipment_needed')}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing["4xl"] }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md }}>
+                <Wrench style={{ width: 20, height: 20, color: colors.accentBlue }} />
+                <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display }}>{t('event:equipment_needed')}</h3>
               </div>
-              <button
-                onClick={() => setShowAddEquipmentModal(true)}
-                className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
-              >
-                <Plus className="w-4 h-4 mr-1" />
+              <Button onClick={() => setShowAddEquipmentModal(true)} variant="primary" style={{ padding: `${spacing.md}px ${spacing["2xl"]}px`, fontSize: fontSizes.sm }}>
+                <Plus style={{ width: 16, height: 16, marginRight: spacing.sm }} />
                 {t('event:add_equipment')}
-              </button>
+              </Button>
             </div>
 
             {/* Equipment List */}
             {isEquipmentLoading ? (
-              <p className="text-center py-4">{t('event:loading_equipment')}</p>
+              <p style={{ textAlign: 'center', padding: spacing["4xl"], color: colors.textDim, fontFamily: fonts.body }}>{t('event:loading_equipment')}</p>
             ) : equipmentUsage.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">{t('event:no_equipment_added')}</p>
+              <p style={{ fontSize: fontSizes.sm, color: colors.textDim, textAlign: 'center', padding: spacing["4xl"], fontFamily: fonts.body }}>{t('event:no_equipment_added')}</p>
             ) : (
-              <div className="space-y-3">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["2xl"] }}>
                 {equipmentUsage.map(usage => (
-                  <div key={usage.id} className="flex items-center justify-between bg-white p-3 rounded border border-gray-200">
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">{usage.equipment.name}</p>
-                      <p className="text-sm text-gray-600">{t('event:quantity_label')} {usage.quantity}</p>
+                  <div key={usage.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: colors.bgCard, padding: spacing["2xl"], borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: fontWeights.medium, color: colors.textPrimary, fontFamily: fonts.display }}>{usage.equipment.name}</p>
+                      <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>{t('event:quantity_label')} {usage.quantity}</p>
                       {usage.start_date && usage.end_date && (
-                        <p className="text-xs text-gray-500">
+                        <p style={{ fontSize: fontSizes.xs, color: colors.textFaint, fontFamily: fonts.body }}>
                           {format(new Date(usage.start_date), 'MMM dd, yyyy')} - {format(new Date(usage.end_date), 'MMM dd, yyyy')}
                         </p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          setEditingEquipmentId(usage.id);
-                          setSelectedEquipmentToAdd(usage.equipment);
-                          setEquipmentQuantity(usage.quantity);
-                          setEquipmentStartDate(usage.start_date);
-                          setEquipmentEndDate(usage.end_date);
-                          setShowAddEquipmentModal(true);
-                        }}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setReleaseEquipmentConfirm({ id: usage.id, name: usage.equipment.name })}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <div style={{ display: 'flex', gap: spacing.md }}>
+                      <Button variant="ghost" onClick={() => { setEditingEquipmentId(usage.id); setSelectedEquipmentToAdd(usage.equipment); setEquipmentQuantity(usage.quantity); setEquipmentStartDate(usage.start_date); setEquipmentEndDate(usage.end_date); setShowAddEquipmentModal(true); }} style={{ padding: spacing.sm }}>
+                        <Pencil style={{ width: 16, height: 16 }} />
+                      </Button>
+                      <Button variant="ghost" color={colors.red} onClick={() => setReleaseEquipmentConfirm({ id: usage.id, name: usage.equipment.name })} style={{ padding: spacing.sm }}>
+                        <Trash2 style={{ width: 16, height: 16 }} />
+                      </Button>
                     </div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
-        )}
-      </div>
+        </div>
+      </CollapsibleCard>
 
       {/* Additional Features Section */}
       <AdditionalFeatures eventId={id!} />
@@ -2084,22 +2033,22 @@ const EventDetails = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:start_date')}</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={event?.start_date ? event.start_date.split('T')[0] : ''}
+                    onChange={() => {}}
                     disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600"
+                    className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
                   />
                   <p className="mt-1 text-xs text-gray-500">{t('event:event_start_date')}</p>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:end_date')}</label>
-                  <input
-                    type="date"
+                  <DatePicker
                     value={event?.end_date ? event.end_date.split('T')[0] : ''}
+                    onChange={() => {}}
                     disabled
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-600"
+                    className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
                   />
                   <p className="mt-1 text-xs text-gray-500">{t('event:event_end_date')}</p>
                 </div>

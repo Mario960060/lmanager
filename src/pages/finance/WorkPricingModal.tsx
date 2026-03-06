@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { translateTaskName, translateTaskDescription } from '../../lib/translationMap';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { supabase } from '../../lib/supabase';
@@ -11,7 +12,7 @@ interface InvoiceMakerModalProps {
 }
 
 const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'calculator']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'calculator', 'units', 'material']);
   const companyId = useAuthStore(state => state.getCompanyId());
   const [projects, setProjects] = useState<{ id: string; title: string }[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
@@ -269,7 +270,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
           className="absolute top-2 right-2 bg-white text-white text-3xl font-bold rounded-full w-10 h-10 md:w-12 md:h-12 flex items-center justify-center shadow-lg hover:bg-gray-300 transition"
           style={{ zIndex: 10 }}
           onClick={handleClose}
-          aria-label="Close"
+          aria-label={t('common:close')}
         >
           ×
         </button>
@@ -326,10 +327,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                   );
                   return (
                     <div key={idx} className="mb-4">
-                      <div className="font-semibold">{task.name}</div>
+                      <div className="font-semibold">{translateTaskName(task.name, t)}</div>
                       {/* Main Task Description */}
                       {task.description && (
-                        <div className="ml-2 mb-2 text-gray-600 text-sm italic">{task.description}</div>
+                        <div className="ml-2 mb-2 text-gray-600 text-sm italic">{translateTaskDescription(task.description, t)}</div>
                       )}
                       {/* Task Breakdown */}
                       {task.results?.taskBreakdown && task.results.taskBreakdown.length > 0 && (
@@ -344,11 +345,11 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
 
                               return (
                                 <li key={bIdx}>
-                                  {breakdown.name || breakdown.task} — 
+                                  {translateTaskName(breakdown.name || breakdown.task || '', t)} — 
                                   {typeof breakdown.amount === 'number'
                                     ? ` ${Number.isInteger(breakdown.amount) ? breakdown.amount : breakdown.amount.toFixed(1)}`
                                     : ` ${breakdown.amount}`
-                                  } {breakdown.unit}
+                                  } {translateUnit(breakdown.unit, t)}
                                   {showHours === 'all' && (
                                     <>
                                       {' — '}
@@ -423,11 +424,11 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                       <li key={idx}>
                         <div>
                           <span>
-                            {task.name} (
+                            {translateTaskName(task.name, t)} (
                               {typeof task.quantity === 'number'
                                 ? Number.isInteger(task.quantity) ? task.quantity : task.quantity.toFixed(1)
                                 : task.quantity
-                              } {task.unit}
+                              } {translateUnit(task.unit, t)}
                             )
                             {showPrices === 'all' && (
                               <>
@@ -438,7 +439,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                           </span>
                           {/* Minor Task Description */}
                           {task.description && (
-                            <div className="ml-2 text-gray-500 text-xs italic">{task.description}</div>
+                            <div className="ml-2 text-gray-500 text-xs italic">{translateTaskDescription(task.description, t)}</div>
                           )}
                         </div>
                       </li>
@@ -591,7 +592,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
 
                 {/* Show total of additional costs */}
                 <div className="font-bold mt-4">
-                  Additional costs total: <span className="text-green-500">
+                  {t('common:total_additional_costs')}: <span className="text-green-500">
                     £{additionalCosts.reduce((sum, c) => sum + c.pricePerUnit * c.quantity, 0).toFixed(2)}
                   </span>
                 </div>
@@ -677,7 +678,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                       <ul className="ml-6 mb-2">
                         {mainTasksWithTotal.map((task, idx) => (
                           <li key={idx}>
-                            {task.name} — <span className="font-semibold text-green-400">£{task.totalPrice.toFixed(2)}</span>
+                            {translateTaskName(task.name, t)} — <span className="font-semibold text-green-400">£{task.totalPrice.toFixed(2)}</span>
                           </li>
                         ))}
                       </ul>
@@ -688,7 +689,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                           <ul className="ml-6 mb-2">
                             {minorTasksWithTotal.map((task, idx) => (
                               <li key={idx}>
-                                {task.name} — <span className="font-semibold text-green-400">£{task.totalPrice.toFixed(2)}</span>
+                                {translateTaskName(task.name, t)} — <span className="font-semibold text-green-400">£{task.totalPrice.toFixed(2)}</span>
                               </li>
                             ))}
                           </ul>
@@ -731,7 +732,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                             ))}
                           </ul>
                           <div className="ml-6 font-semibold text-green-400">
-                            Total additional costs: £{additionalCosts.reduce((sum, c) => sum + c.pricePerUnit * c.quantity, 0).toFixed(2)}
+                            {t('common:total_additional_costs')}: £{additionalCosts.reduce((sum, c) => sum + c.pricePerUnit * c.quantity, 0).toFixed(2)}
                           </div>
                         </>
                       )}
@@ -793,18 +794,18 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                   className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold transition-colors"
                   onClick={handleSaveInvoice}
                 >
-                  Save
+                  {t('form:save')}
                 </button>
                 <button
                   className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-500 text-sm font-semibold transition-colors"
                   onClick={() => setEditMode(false)}
                 >
-                  Cancel
+                  {t('form:cancel')}
                 </button>
                 <button
                   className="bg-gray-700 text-gray-300 hover:text-white hover:bg-gray-600 text-xl font-bold rounded-lg w-9 h-9 flex items-center justify-center transition-colors ml-1 min-h-0 min-w-0"
                   onClick={() => setEditMode(false)}
-                  aria-label="Close"
+                  aria-label={t('common:close')}
                 >
                   ×
                 </button>
@@ -861,12 +862,12 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('common:breakdown_label')}</div>
                               {/* Column headers */}
                               <div className="hidden md:grid md:grid-cols-[2fr_1fr_80px_1fr_1fr_90px] gap-2 mb-1 px-1">
-                                <span className="text-[10px] text-gray-500 uppercase">Name</span>
-                                <span className="text-[10px] text-gray-500 uppercase">Amount</span>
-                                <span className="text-[10px] text-gray-500 uppercase">Unit</span>
-                                <span className="text-[10px] text-gray-500 uppercase">Hours</span>
-                                <span className="text-[10px] text-gray-500 uppercase">Price/hr</span>
-                                <span className="text-[10px] text-gray-500 uppercase text-right">Total</span>
+                                <span className="text-[10px] text-gray-500 uppercase">{t('common:name_label')}</span>
+                                <span className="text-[10px] text-gray-500 uppercase">{t('common:amount_label')}</span>
+                                <span className="text-[10px] text-gray-500 uppercase">{t('common:unit_label')}</span>
+                                <span className="text-[10px] text-gray-500 uppercase">{t('common:hours_label')}</span>
+                                <span className="text-[10px] text-gray-500 uppercase">{t('common:price_hr_label')}</span>
+                                <span className="text-[10px] text-gray-500 uppercase text-right">{t('common:total_label')}</span>
                               </div>
                               {(task.results.taskBreakdown || []).map((breakdown: any, bIdx: number) => {
                                 let amountValue = '';
@@ -887,7 +888,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                 return (
                                   <div key={bIdx} className="grid grid-cols-2 md:grid-cols-[2fr_1fr_80px_1fr_1fr_90px] gap-2 mb-2 items-center">
                                     <div className="col-span-2 md:col-span-1">
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Name</label>
+                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
                                       <input
                                         className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
                                         value={breakdown.name || breakdown.task || breakdown.title || ''}
@@ -900,7 +901,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Amount</label>
+                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:amount_label')}</label>
                                       <input
                                         type="number"
                                         className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
@@ -914,7 +915,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Unit</label>
+                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
                                       <input
                                         className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
                                         value={unitValue}
@@ -927,7 +928,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Hours</label>
+                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:hours_label')}</label>
                                       <input
                                         type="number"
                                         step="0.01"
@@ -946,7 +947,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Price/hr</label>
+                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:price_hr_label')}</label>
                                       <input
                                         type="number"
                                         step="0.01"
@@ -997,10 +998,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('common:materials_label')}</div>
                               {/* Column headers */}
                               <div className="hidden md:grid md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 mb-1 px-1">
-                                <span className="text-[10px] text-gray-500 uppercase">Name</span>
-                                <span className="text-[10px] text-gray-500 uppercase">Quantity</span>
+                                <span className="text-[10px] text-gray-500 uppercase">{t('common:name_label')}</span>
+                                <span className="text-[10px] text-gray-500 uppercase">{t('common:quantity_label')}</span>
                                 <span className="text-[10px] text-gray-500 uppercase">Unit</span>
-                                <span className="text-[10px] text-gray-500 uppercase">Price/unit</span>
+                                <span className="text-[10px] text-gray-500 uppercase">{t('common:price_per_unit_label')}</span>
                                 <span className="text-[10px] text-gray-500 uppercase text-right">Total</span>
                               </div>
                               {(task.results.materials || []).map((mat: any, mIdx: number) => {
@@ -1008,7 +1009,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                 return (
                                   <div key={mIdx} className="grid grid-cols-2 md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 mb-2 items-center">
                                     <div className="col-span-2 md:col-span-1">
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Name</label>
+                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
                                       <input
                                         className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
                                         value={mat.name}
@@ -1035,7 +1036,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Unit</label>
+                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
                                       <input
                                         className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
                                         value={mat.unit}
@@ -1048,7 +1049,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Price/unit</label>
+                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
                                       <input
                                         type="number"
                                         step="0.01"
@@ -1109,10 +1110,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
 
                   {/* Column headers */}
                   <div className="hidden md:grid md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 mb-1 px-1">
-                    <span className="text-[10px] text-gray-500 uppercase">Name</span>
-                    <span className="text-[10px] text-gray-500 uppercase">Quantity</span>
+                    <span className="text-[10px] text-gray-500 uppercase">{t('common:name_label')}</span>
+                    <span className="text-[10px] text-gray-500 uppercase">{t('common:quantity_label')}</span>
                     <span className="text-[10px] text-gray-500 uppercase">Unit</span>
-                    <span className="text-[10px] text-gray-500 uppercase">Price/unit</span>
+                    <span className="text-[10px] text-gray-500 uppercase">{t('common:price_per_unit_label')}</span>
                     <span className="text-[10px] text-gray-500 uppercase text-right">Total</span>
                   </div>
 
@@ -1123,7 +1124,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                         <div key={idx} className="border border-gray-600/50 rounded-lg p-3" style={{ backgroundColor: 'rgba(55, 65, 81, 0.3)' }}>
                           <div className="grid grid-cols-2 md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 items-center">
                             <div className="col-span-2 md:col-span-1">
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Name</label>
+                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
                               <input
                                 className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
                                 value={task.name}
@@ -1150,7 +1151,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Unit</label>
+                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
                               <input
                                 className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
                                 value={task.unit}
@@ -1163,7 +1164,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Price/unit</label>
+                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -1222,10 +1223,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
 
                   {/* Column headers */}
                   <div className="hidden md:grid md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 mb-1 px-1">
-                    <span className="text-[10px] text-gray-500 uppercase">Name</span>
-                    <span className="text-[10px] text-gray-500 uppercase">Quantity</span>
+                    <span className="text-[10px] text-gray-500 uppercase">{t('common:name_label')}</span>
+                    <span className="text-[10px] text-gray-500 uppercase">{t('common:quantity_label')}</span>
                     <span className="text-[10px] text-gray-500 uppercase">Unit</span>
-                    <span className="text-[10px] text-gray-500 uppercase">Price/unit</span>
+                    <span className="text-[10px] text-gray-500 uppercase">{t('common:price_per_unit_label')}</span>
                     <span className="text-[10px] text-gray-500 uppercase text-right">Total</span>
                   </div>
 
@@ -1235,7 +1236,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                       return (
                         <div key={idx} className="grid grid-cols-2 md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 items-center p-2 rounded-lg" style={{ backgroundColor: 'rgba(55, 65, 81, 0.3)' }}>
                           <div className="col-span-2 md:col-span-1">
-                            <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Name</label>
+                            <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
                             <input
                               className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
                               value={mat.name}
@@ -1262,7 +1263,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Unit</label>
+                            <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
                             <input
                               className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
                               value={mat.unit}
@@ -1275,7 +1276,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Price/unit</label>
+                            <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
                             <input
                               type="number"
                               step="0.01"
@@ -1321,9 +1322,9 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                 {additionalCosts.length > 0 && (
                   <>
                     <div className="hidden md:grid md:grid-cols-[2fr_1fr_1fr_auto] gap-2 mb-1 px-1">
-                      <span className="text-[10px] text-gray-500 uppercase">Name</span>
-                      <span className="text-[10px] text-gray-500 uppercase">Quantity</span>
-                      <span className="text-[10px] text-gray-500 uppercase">Price/unit</span>
+                      <span className="text-[10px] text-gray-500 uppercase">{t('common:name_label')}</span>
+                      <span className="text-[10px] text-gray-500 uppercase">{t('common:quantity_label')}</span>
+                      <span className="text-[10px] text-gray-500 uppercase">{t('common:price_per_unit_label')}</span>
                       <span className="text-[10px] text-gray-500 uppercase text-right">Total</span>
                     </div>
                     <div className="space-y-2">
@@ -1332,7 +1333,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                         return (
                           <div key={idx} className="grid grid-cols-2 md:grid-cols-[2fr_1fr_1fr_auto] gap-2 items-center p-2 rounded-lg" style={{ backgroundColor: 'rgba(55, 65, 81, 0.3)' }}>
                             <div className="col-span-2 md:col-span-1">
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Name</label>
+                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
                               <input
                                 className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
                                 value={cost.name}
@@ -1359,7 +1360,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Price/unit</label>
+                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -1394,7 +1395,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                   </>
                 )}
                 {additionalCosts.length === 0 && (
-                  <p className="text-gray-500 text-sm italic">No additional costs added.</p>
+                  <p className="text-gray-500 text-sm italic">{t('common:no_additional_costs_added')}</p>
                 )}
               </div>
 

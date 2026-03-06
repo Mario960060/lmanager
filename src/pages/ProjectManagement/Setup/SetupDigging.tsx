@@ -289,7 +289,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
     },
     onError: (error) => {
       console.error('Mutation error:', error);
-      alert(`Error adding equipment: ${error.message}`);
+      alert(t('form:error_adding_equipment', { error: error.message }));
     }
   });
 

@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Calculator as CalculatorIcon } from 'lucide-react';
 import PageInfoModal from '../components/PageInfoModal';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii, shadows } from '../themes/designTokens';
+import { useAuthStore } from '../lib/store';
+import { getCalculatorInputDefaults } from '../lib/materialUsageDefaults';
 import { useCalculatorMenu } from '../contexts/CalculatorMenuContext';
 import WallCalculator from '../components/Calculator/WallCalculator';
 import MortarCalculator from '../components/Calculator/MortarCalculator';
@@ -23,8 +26,11 @@ import StairCalculator from '../components/Calculator/StairCalculator';
 import LShapeStairCalculator from '../components/Calculator/LShapeStairCalculator';
 import UShapeStairCalculator from '../components/Calculator/Ushapestaircalculator';
 import SlabCalculator from '../components/Calculator/SlabCalculator';
+import ConcreteSlabsCalculator from '../components/Calculator/ConcreteSlabsCalculator';
+import NaturalTurfCalculator from '../components/Calculator/NaturalTurfCalculator';
+import GroundworkLinearCalculator from '../components/Calculator/GroundworkLinearCalculator';
 
-type CalculatorType = 'aggregate' | 'wall' | 'mortar' | 'time' | 'fence' | 'steps' | 'deck' | 'grass' | 'slab' | 'paving' | 'tile' | 'kerbs' | 'foundation';
+type CalculatorType = 'aggregate' | 'wall' | 'mortar' | 'time' | 'fence' | 'steps' | 'deck' | 'grass' | 'slab' | 'paving' | 'tile' | 'kerbs' | 'foundation' | 'groundwork' | 'turf';
 type SubCalculatorType = {
   aggregate: 'type1' | 'aggregate' | 'soil_excavation' | 'mortar';
   wall: 'brick' | 'block4' | 'block7' | 'sleeper';
@@ -34,7 +40,8 @@ type SubCalculatorType = {
   steps: 'standard' | 'l_shape' | 'u_shape';
   deck: 'standard';
   grass: 'coming_soon';
-  slab: 'default';
+  turf: 'default';
+  slab: 'default' | 'concreteSlabs';
   paving: 'default';
   tile: 'default' | 'coping';
   kerbs: 'kl' | 'rumbled' | 'flat' | 'sets';
@@ -43,9 +50,28 @@ type SubCalculatorType = {
 
 const CalculatorPage: React.FC = () => {
   const { t } = useTranslation(['calculator', 'common']);
+  const companyId = useAuthStore((s) => s.getCompanyId());
   const [activeCalculator, setActiveCalculator] = useState<CalculatorType | null>(null);
   const [activeSubType, setActiveSubType] = useState<string | null>(null);
   const { setShowCalculatorMenu, setKeepSidebarOpenFor, setSelectedCalculatorType, setSelectedSubType, setExpandedCategory } = useCalculatorMenu();
+
+  const pageInfoDescription = React.useMemo(() => {
+    if (!activeCalculator || !activeSubType) return t('calculator:info_description');
+    if (activeCalculator === 'steps') {
+      let desc = t('calculator:stairs_info_description');
+      if (activeSubType === 'standard') desc += t('calculator:stairs_open_info_section');
+      if (activeSubType === 'u_shape') desc += t('calculator:stairs_ushape_info_section');
+      return desc;
+    }
+    if (activeCalculator === 'slab' && activeSubType === 'default') return t('calculator:slab_info_description');
+    if (activeCalculator === 'kerbs') return t('calculator:kerbs_info_description');
+    return t('calculator:info_description');
+  }, [activeCalculator, activeSubType, t]);
+
+  const pavingDefaults = useMemo(() => getCalculatorInputDefaults('paving', companyId), [companyId]);
+  const slabDefaults = useMemo(() => getCalculatorInputDefaults('slab', companyId), [companyId]);
+  const concreteSlabsDefaults = useMemo(() => getCalculatorInputDefaults('concreteSlabs', companyId), [companyId]);
+  const grassDefaults = useMemo(() => getCalculatorInputDefaults('grass', companyId), [companyId]);
 
   // Calculator buttons are now handled by the sidebar in Layout.tsx
   
@@ -108,7 +134,7 @@ const CalculatorPage: React.FC = () => {
             return null;
         }
       case 'paving':
-        return <PavingCalculator key={calculatorKey} />;
+        return <PavingCalculator key={calculatorKey} savedInputs={pavingDefaults} />;
       case 'tile':
         if (activeSubType === 'coping') {
           return <CopingInstallationCalculator key={calculatorKey} />;
@@ -127,7 +153,9 @@ const CalculatorPage: React.FC = () => {
         }
         return <FenceCalculator key={calculatorKey} fenceType={activeSubType as 'vertical' | 'horizontal'} />;
       case 'slab':
-        return <SlabCalculator key={calculatorKey} />;
+        return activeSubType === 'concreteSlabs'
+          ? <ConcreteSlabsCalculator key={calculatorKey} savedInputs={concreteSlabsDefaults} />
+          : <SlabCalculator key={calculatorKey} savedInputs={slabDefaults} />;
       case 'steps':
         if (activeSubType === 'l_shape') {
           return <LShapeStairCalculator key={calculatorKey} />;
@@ -140,38 +168,48 @@ const CalculatorPage: React.FC = () => {
         console.log(`Calculator.tsx: Rendering DeckCalculator`);
         return <DeckCalculator key={calculatorKey} />;
       case 'grass':
-        return <ArtificialGrassCalculator key={calculatorKey} />;
+        return <ArtificialGrassCalculator key={calculatorKey} savedInputs={grassDefaults} />;
+      case 'turf':
+        return <NaturalTurfCalculator key={calculatorKey} />;
       case 'kerbs':
         return <KerbsEdgesAndSetsCalculator key={calculatorKey} type={activeSubType as SubCalculatorType['kerbs']} />;
       case 'foundation':
         return <FoundationCalculator key={calculatorKey} />;
+      case 'groundwork':
+        return <GroundworkLinearCalculator key={calculatorKey} type={activeSubType as SubCalculatorType['groundwork']} />;
       default:
         return null;
     }
   };
 
   return (
-    <div className="h-screen w-full overflow-hidden flex flex-col">
-      <div className="flex items-center px-6 py-4">
-        <CalculatorIcon className="w-8 h-8 text-gray-600 mr-3" />
-        <h1 className="text-3xl font-bold text-gray-900">{t('calculator:construction_calculator_title')}</h1>
-        <PageInfoModal description="" quickTips={[]} />
+    <div style={{ height: '100vh', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontFamily: fonts.body, background: colors.bgMain }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: `${spacing["5xl"]}px ${spacing["6xl"]}px` }}>
+        <CalculatorIcon style={{ width: spacing["8xl"], height: spacing["8xl"], color: colors.textDim, marginRight: spacing.lg }} />
+        <h1 style={{ fontSize: fontSizes["3xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>
+          {t('calculator:construction_calculator_title')}
+        </h1>
+        <PageInfoModal
+          description={pageInfoDescription}
+          title={t('calculator:info_title')}
+          quickTips={[]}
+        />
       </div>
 
-      <div className="flex flex-col flex-1 overflow-hidden px-6">
-        <div className="flex-1 overflow-y-auto" id="calculator-container">
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', padding: `0 ${spacing["6xl"]}px` }}>
+        <div style={{ flex: 1, overflowY: 'auto' }} id="calculator-container">
           {activeCalculator && activeSubType ? (
-            <div className="bg-gray-800 rounded-lg shadow-lg p-6 min-h-full w-full">
-              <h2 className="text-xl font-semibold text-white mb-6">
+            <div style={{ background: colors.bgCard, borderRadius: radii["3xl"], boxShadow: '0 4px 20px rgba(0,0,0,0.3)', padding: spacing["6xl"], minHeight: '100%', width: '100%' }}>
+              <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, marginBottom: spacing["6xl"] }}>
                 {activeSubType.charAt(0).toUpperCase() + activeSubType.slice(1).replace(/_/g, ' ')}
               </h2>
               {renderCalculator()}
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow-lg p-6 text-center text-gray-600 flex items-center justify-center min-h-[400px] w-full">
+            <div style={{ background: colors.bgCard, borderRadius: radii["3xl"], boxShadow: shadows.lg, padding: spacing["6xl"], textAlign: 'center', color: colors.textDim, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: spacing["9xl"] * 10, width: '100%' }}>
               <div>
-                <p className="text-xl mb-2">{t('calculator:select_calculator_message')}</p>
-                <p className="text-gray-500">{t('calculator:calculator_sidebar_hint')}</p>
+                <p style={{ fontSize: fontSizes["2xl"], marginBottom: spacing.md, color: colors.textMuted }}>{t('calculator:select_calculator_message')}</p>
+                <p style={{ color: colors.textFaint }}>{t('calculator:calculator_sidebar_hint')}</p>
               </div>
             </div>
           )}

@@ -1,6 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import {
+  colors,
+  fonts,
+  fontSizes,
+  fontWeights,
+  spacing,
+  radii,
+} from '../../themes/designTokens';
+import {
+  TextInput,
+  SelectDropdown,
+  Checkbox,
+  Button,
+  Card,
+  Label,
+} from '../../themes/uiComponents';
 
 const materials = [
   { name: 'Type 1 Aggregate', density: 2.1 },
@@ -82,159 +98,69 @@ const SandCalculator: React.FC<SandCalculatorProps> = ({ onResultsChange }) => {
 
     setResult(Number(mass.toFixed(2)));
     setVolume(volume.toFixed(2));
-
-    // Add useEffect to notify parent of result changes
-    useEffect(() => {
-      if (totalHours !== null && materials.length > 0) {
-        const formattedResults = {
-          name: 'Sand Delivery',
-          amount: parseFloat(volume) || 0,
-          hours_worked: totalHours,
-          transportTime: transportTime,
-          normalizedTransportTime: normalizedTransportTime,
-          materials: materials.map(material => ({
-            name: material.name,
-            quantity: mass,
-            unit: 'kg'
-          })),
-          taskBreakdown: taskBreakdown.map(task => ({
-            task: task.task,
-            hours: task.hours
-          }))
-        };
-
-        // Store results in data attribute
-        const calculatorElement = document.querySelector('[data-calculator-results]');
-        if (calculatorElement) {
-          calculatorElement.setAttribute('data-results', JSON.stringify(formattedResults));
-        }
-
-        // Notify parent component
-        if (onResultsChange) {
-          onResultsChange(formattedResults);
-        }
-      }
-    }, [totalHours, materials, taskBreakdown, volume, onResultsChange, transportTime, normalizedTransportTime]);
   };
 
   return (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:input_select_material')}</label>
-        <select
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
+        <SelectDropdown
+          label={t('calculator:input_select_material')}
           value={selectedMaterial.name}
-          onChange={(e) =>
-            setSelectedMaterial(materials.find((m) => m.name === e.target.value) || materials[0])
-          }
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600"
-        >
-          {materials.map((material) => (
-            <option key={material.name} value={material.name}>
-              {material.name}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_m')}</label>
-        <input
-          type="number"
-          value={length}
-          onChange={(e) => setLength(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600"
+          options={materials.map((m) => m.name)}
+          onChange={(val) => setSelectedMaterial(materials.find((m) => m.name === val) || materials[0])}
+          placeholder={t('calculator:input_select_material')}
         />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:input_width_m')}</label>
-        <input
-          type="number"
-          value={width}
-          onChange={(e) => setWidth(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:height_mm_label')}</label>
-        <input
-          type="number"
-          value={height}
-          onChange={(e) => setHeight(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600"
-        />
-      </div>
-      
-      <div className="mb-4">
-        <label className="inline-flex items-center">
-          <input
-            type="checkbox"
-            checked={calculateTransport}
-            onChange={(e) => setCalculateTransport(e.target.checked)}
-            className="rounded border-gray-300"
-          />
-          <span className="ml-2 text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-        </label>
-      </div>
-
-      {calculateTransport && (
-        <>
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_each_way_label')}</label>
-            <input
-              type="number"
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+          <TextInput label={t('calculator:input_length_m')} value={length} onChange={setLength} placeholder="0" unit="m" />
+          <TextInput label={t('calculator:input_width_m')} value={width} onChange={setWidth} placeholder="0" unit="m" />
+          <TextInput label={t('calculator:height_mm_label')} value={height} onChange={setHeight} placeholder="0" unit="mm" />
+        </div>
+        <Checkbox label={t('calculator:calculate_transport_time_label')} checked={calculateTransport} onChange={setCalculateTransport} />
+        {calculateTransport && (
+          <>
+            <TextInput
+              label={t('calculator:transport_distance_each_way_label')}
               value={transportDistance}
-              onChange={(e) => setTransportDistance(e.target.value)}
-              className="w-full p-2 border rounded-md"
+              onChange={setTransportDistance}
               placeholder={t('calculator:enter_transport_distance')}
-              min="0"
-              step="1"
             />
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_carrier_label')}</label>
-            <select
-              value={selectedTransportCarrier?.id || ''}
-              onChange={(e) => {
-                if (e.target.value === 'default') {
+            <SelectDropdown
+              label={t('calculator:transport_carrier_label')}
+              value={selectedTransportCarrier ? (selectedTransportCarrier.id === 'default' ? t('calculator:default_wheelbarrow') : `${selectedTransportCarrier["size (in tones)"]}t Carrier`) : ''}
+              options={[t('calculator:default_wheelbarrow'), ...carrierSpeeds.map(c => `${c.size}t Carrier`)]}
+              onChange={(val) => {
+                if (val === t('calculator:default_wheelbarrow')) {
                   setSelectedTransportCarrier({ id: 'default', name: '0.125t Wheelbarrow', 'size (in tones)': 0.125 });
-                } else if (e.target.value) {
-                  const carrier = carrierSpeeds.find(c => c.size.toString() === e.target.value);
-                  if (carrier) {
-                    setSelectedTransportCarrier({
-                      id: carrier.size.toString(),
-                      name: `${carrier.size}t Carrier`,
-                      'size (in tones)': carrier.size
-                    });
+                } else {
+                  const match = val.match(/^([\d.]+)t Carrier$/);
+                  if (match) {
+                    const size = parseFloat(match[1]);
+                    const carrier = carrierSpeeds.find(c => c.size === size);
+                    if (carrier) {
+                      setSelectedTransportCarrier({
+                        id: carrier.size.toString(),
+                        name: `${carrier.size}t Carrier`,
+                        'size (in tones)': carrier.size
+                      });
+                    }
                   }
                 }
               }}
-              className="w-full p-2 border rounded-md"
-            >
-              <option value="">-- Select Carrier --</option>
-              <option value="default">{t('calculator:default_wheelbarrow')}</option>
-              {carrierSpeeds.map(carrier => (
-                <option key={carrier.size} value={carrier.size.toString()}>
-                  {carrier.size}t Carrier
-                </option>
-              ))}
-            </select>
+              placeholder="-- Select Carrier --"
+            />
+          </>
+        )}
+        <Button onClick={calculate} variant="primary" fullWidth>
+          {t('calculator:calculate_button')}
+        </Button>
+        {result !== null && (
+          <div style={{ marginTop: spacing.xl, padding: spacing.base, background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>
+            <p style={{ fontSize: fontSizes.base, color: colors.textPrimary, fontFamily: fonts.body }}>
+              Required Mass: <span style={{ fontWeight: fontWeights.bold }}>{result} tonnes</span>
+            </p>
           </div>
-        </>
-      )}
-      
-      <button
-        onClick={calculate}
-        className="w-full bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 transition-colors"
-      >
-        {t('calculator:calculate_button')}
-      </button>
-      {result !== null && (
-        <div className="mt-4 p-4 bg-gray-100 rounded-md">
-          <p className="text-gray-900">
-            Required Mass: <span className="font-bold">{result} kg</span>
-          </p>
-        </div>
-      )}
+        )}
+      </Card>
     </div>
   );
 };

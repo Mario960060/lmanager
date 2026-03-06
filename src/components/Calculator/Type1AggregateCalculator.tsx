@@ -4,6 +4,21 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
+import {
+  colors,
+  fonts,
+  fontSizes,
+  fontWeights,
+  spacing,
+  radii,
+  gradients,
+} from '../../themes/designTokens';
+import {
+  TextInput,
+  Button,
+  Card,
+  Label,
+} from '../../themes/uiComponents';
 
 // Define types for our equipment
 interface DiggingEquipment {
@@ -302,191 +317,113 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
   }, [result]);
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-gray-800">{t('calculator:input_prep_calculator')}</h2>
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display }}>
+        {t('calculator:input_prep_calculator')}
+      </h2>
       
-      {/* Calculation Method */}
-      <div>
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`}>
         <p 
-          className="text-blue-600 cursor-pointer hover:underline mb-2"
+          style={{ color: colors.accentBlue, cursor: 'pointer', marginBottom: spacing.md, fontSize: fontSizes.base, fontFamily: fonts.body }}
           onClick={() => setCalculationMethod(calculationMethod === 'direct' ? 'area' : 'direct')}
         >
           {calculationMethod === 'direct' ? t('calculator:input_calculation_method_area') : t('calculator:input_calculation_method_weight')}
         </p>
         
         {calculationMethod === 'direct' ? (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('calculator:input_aggregate_weight_tons')}</label>
-            <input
-              type="number"
-              value={tons}
-              onChange={(e) => setTons(e.target.value)}
-              className="w-full p-2 border rounded-md"
-              placeholder={t('calculator:placeholder_enter_weight_tons')}
-              min="0"
-              step="0.1"
-            />
-          </div>
+          <TextInput
+            label={t('calculator:input_aggregate_weight_tons')}
+            value={tons}
+            onChange={setTons}
+            placeholder={t('calculator:placeholder_enter_weight_tons')}
+            unit="tons"
+          />
         ) : (
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('calculator:input_length_m')}</label>
-              <input
-                type="number"
-                value={length}
-                onChange={(e) => setLength(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:placeholder_enter_length')}
-                min="0"
-                step="0.01"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('calculator:input_width_m')}</label>
-              <input
-                type="number"
-                value={width}
-                onChange={(e) => setWidth(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:placeholder_enter_width')}
-                min="0"
-                step="0.01"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('calculator:input_depth_cm')}</label>
-              <input
-                type="number"
-                value={depth}
-                onChange={(e) => setDepth(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:placeholder_enter_depth_cm')}
-                min="0"
-                step="0.01"
-              />
-              <span className="text-xs text-gray-500">{t('calculator:message_enter_depth_cm')}</span>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: `0 ${spacing.base}` }}>
+            <TextInput label={t('calculator:input_length_m')} value={length} onChange={setLength} placeholder={t('calculator:placeholder_enter_length')} unit="m" />
+            <TextInput label={t('calculator:input_width_m')} value={width} onChange={setWidth} placeholder={t('calculator:placeholder_enter_width')} unit="m" />
+            <TextInput label={t('calculator:input_depth_cm')} value={depth} onChange={setDepth} placeholder={t('calculator:placeholder_enter_depth_cm')} unit="cm" helperText={t('calculator:message_enter_depth_cm')} />
           </div>
         )}
-      </div>
-      
-      {/* Equipment Selection */}
-      <div className="grid grid-cols-2 gap-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:input_excavation_machinery')}</label>
-          <div className="space-y-2">
-            {excavators.length === 0 ? (
-              <p className="text-gray-500">{t('calculator:input_no_excavators')}</p>
-            ) : (
-              excavators.map((excavator) => (
-                <div 
-                  key={excavator.id}
-                  className="flex items-center p-2 cursor-pointer hover:bg-gray-50 rounded-md"
-                  onClick={() => setSelectedExcavator(excavator)}
-                >
-                  <div className={`w-4 h-4 rounded-full border mr-2 ${
-                    selectedExcavator?.id === excavator.id 
-                      ? 'border-blue-600' 
-                      : 'border-gray-400'
-                  }`}>
-                    <div className={`w-2 h-2 rounded-full m-0.5 ${
-                      selectedExcavator?.id === excavator.id 
-                        ? 'bg-blue-600' 
-                        : 'bg-transparent'
-                    }`}></div>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing["6xl"], marginTop: spacing["5xl"] }}>
+          <div>
+            <Label>{t('calculator:input_excavation_machinery')}</Label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
+              {excavators.length === 0 ? (
+                <p style={{ fontSize: fontSizes.base, color: colors.textDim }}>{t('calculator:input_no_excavators')}</p>
+              ) : (
+                excavators.map((excavator) => (
+                  <div key={excavator.id} style={{ display: 'flex', alignItems: 'center', padding: spacing.md, cursor: 'pointer', borderRadius: radii.lg, background: selectedExcavator?.id === excavator.id ? colors.bgHover : 'transparent' }} onClick={() => setSelectedExcavator(excavator)}>
+                    <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedExcavator?.id === excavator.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {selectedExcavator?.id === excavator.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                    </div>
+                    <div>
+                      <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{excavator.name}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({excavator["size (in tones)"]} tons)</span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-gray-800">{excavator.name}</span>
-                    <span className="text-sm text-gray-600 ml-2">({excavator["size (in tones)"]} tons)</span>
+                ))
+              )}
+            </div>
+          </div>
+          <div>
+            <Label>{t('calculator:input_transport_carrier_for_aggregate')}</Label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
+              {carriers.length === 0 ? (
+                <p style={{ fontSize: fontSizes.base, color: colors.textDim }}>{t('calculator:input_no_carriers')}</p>
+              ) : (
+                carriers.map((carrier) => (
+                  <div key={carrier.id} style={{ display: 'flex', alignItems: 'center', padding: spacing.md, cursor: 'pointer', borderRadius: radii.lg, background: selectedCarrier?.id === carrier.id ? colors.bgHover : 'transparent' }} onClick={() => setSelectedCarrier(carrier)}>
+                    <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedCarrier?.id === carrier.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {selectedCarrier?.id === carrier.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                    </div>
+                    <div>
+                      <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{carrier.name}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({carrier["size (in tones)"]} tons)</span>
+                    </div>
                   </div>
-                </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
           </div>
         </div>
         
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:input_transport_carrier_for_aggregate')}</label>
-          <div className="space-y-2">
-            {carriers.length === 0 ? (
-              <p className="text-gray-500">{t('calculator:input_no_carriers')}</p>
-            ) : (
-              carriers.map((carrier) => (
-                <div 
-                  key={carrier.id}
-                  className="flex items-center p-2 cursor-pointer hover:bg-gray-50 rounded-md"
-                  onClick={() => setSelectedCarrier(carrier)}
-                >
-                  <div className={`w-4 h-4 rounded-full border mr-2 ${
-                    selectedCarrier?.id === carrier.id 
-                      ? 'border-blue-600' 
-                      : 'border-gray-400'
-                  }`}>
-                    <div className={`w-2 h-2 rounded-full m-0.5 ${
-                      selectedCarrier?.id === carrier.id 
-                        ? 'bg-blue-600' 
-                        : 'bg-transparent'
-                    }`}></div>
-                  </div>
-                  <div>
-                    <span className="text-gray-800">{carrier.name}</span>
-                    <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+        <div style={{ marginTop: spacing["6xl"] }}>
+          <CompactorSelector selectedCompactor={selectedCompactor} onCompactorChange={setSelectedCompactor} />
         </div>
-      </div>
-      
-      {/* Compactor Selection */}
-      <div className="mb-6">
-        <CompactorSelector 
-          selectedCompactor={selectedCompactor}
-          onCompactorChange={setSelectedCompactor}
-        />
-      </div>
-      
-      {/* Transport Distance */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_each_way_label')}</label>
-        <input
-          type="number"
+        
+        <TextInput
+          label={t('calculator:transport_distance_each_way_label')}
           value={transportDistance}
-          onChange={(e) => setTransportDistance(e.target.value)}
-          className="w-full p-2 border rounded-md"
+          onChange={setTransportDistance}
           placeholder={t('calculator:enter_transport_distance')}
-          min="0"
-          step="1"
+          helperText={t('calculator:set_to_zero_no_transport')}
         />
-      </div>
-      
-      {/* Calculate Button */}
-      <button
-        onClick={calculateTime}
-        className="w-full bg-blue-600 text-white py-3 rounded-md hover:bg-blue-700 transition-colors"
-      >
-        Calculate Time
-      </button>
-      
-      {/* Results */}
-      {result && (
-        <div ref={resultsRef} className="mt-4 p-6 bg-gray-100 rounded-md">
-          <h3 className="text-lg font-semibold mb-2">{t('calculator:estimated_time_label')}</h3>
-          <div className="space-y-2">
-            <p>Total Aggregate: <span className="font-medium">{result.totalTons.toFixed(2)} tons</span></p>
-            <p>Loading Time: <span className="font-medium">{formatTime(result.excavationTime)}</span></p>
-            <p>Transport Time: <span className="font-medium">{formatTime(result.transportTime)}</span></p>
-            <p>Compacting ({result.compactingCompactorName}, {result.compactingLayers} layers): <span className="font-medium">{formatTime(result.compactingTime)}</span></p>
-            <p className="text-lg">
-              Total Time: <span className="font-bold">
-                {formatTime(result.totalTime)}
-              </span>
-            </p>
-            <p className="text-sm text-gray-500 italic mt-2"></p>
+        
+        <Button onClick={calculateTime} variant="primary" fullWidth>
+          Calculate Time
+        </Button>
+        
+        {result && (
+          <div ref={resultsRef} style={{ marginTop: spacing["5xl"] }}>
+            <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, marginBottom: spacing.md, color: colors.textSecondary, fontFamily: fonts.display }}>
+                {t('calculator:estimated_time_label')}
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Total Aggregate: <span style={{ fontWeight: fontWeights.medium }}>{result.totalTons.toFixed(2)} tons</span></p>
+                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Loading Time: <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.excavationTime)}</span></p>
+                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Transport Time: <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.transportTime)}</span></p>
+                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Compacting ({result.compactingCompactorName}, {result.compactingLayers} layers): <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.compactingTime)}</span></p>
+                <p style={{ fontSize: fontSizes.lg, color: colors.textPrimary, fontFamily: fonts.display }}>
+                  Total Time: <span style={{ fontWeight: fontWeights.bold }}>{formatTime(result.totalTime)}</span>
+                </p>
+              </div>
+            </Card>
           </div>
-        </div>
-      )}
+        )}
+      </Card>
     </div>
   );
 };
