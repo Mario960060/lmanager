@@ -162,6 +162,8 @@ export default function MasterProject() {
   const [patternRotateInfo, setPatternRotateInfo] = useState<{ shapeIdx: number; type: "slab" | "cobblestone" | "grass"; center: Point; startAngle: number; startDirectionDeg: number } | null>(null);
   const [patternRotatePreview, setPatternRotatePreview] = useState<number | null>(null);
   const [showRestoredToast, setShowRestoredToast] = useState(false);
+  const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
+  const modeDropdownRef = useRef<HTMLDivElement>(null);
   const [shapesDropdownOpen, setShapesDropdownOpen] = useState(false);
   const shapesDropdownRef = useRef<HTMLDivElement>(null);
   const [pathDropdownOpen, setPathDropdownOpen] = useState(false);
@@ -182,6 +184,11 @@ export default function MasterProject() {
   const [recalculateTrigger, setRecalculateTrigger] = useState(0);
   const [geodesyEnabled, setGeodesyEnabled] = useState(false);
   const [showAllArcPoints, setShowAllArcPoints] = useState(false);
+
+  const isMobile = useMemo(() => typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0), []);
+  const pointRadiusEffective = isMobile ? POINT_RADIUS * 1.8 : POINT_RADIUS;
+  const edgeHitThresholdEffective = isMobile ? EDGE_HIT_THRESHOLD * 1.8 : EDGE_HIT_THRESHOLD;
+  const grassEdgeHitPxEffective = isMobile ? GRASS_EDGE_HIT_PX * 1.5 : GRASS_EDGE_HIT_PX;
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
   const [dismissedLayerHints, setDismissedLayerHints] = useState<Set<number>>(new Set());
   const [namePromptShapeIdx, setNamePromptShapeIdx] = useState<number | null>(null);
@@ -420,8 +427,9 @@ export default function MasterProject() {
   }, []);
 
   useEffect(() => {
-    if (!shapesDropdownOpen && !pathDropdownOpen && !linearDropdownOpen && !groundworkDropdownOpen && !stairsDropdownOpen) return;
+    if (!modeDropdownOpen && !shapesDropdownOpen && !pathDropdownOpen && !linearDropdownOpen && !groundworkDropdownOpen && !stairsDropdownOpen) return;
     const onOutside = (e: MouseEvent) => {
+      if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) setModeDropdownOpen(false);
       if (shapesDropdownRef.current && !shapesDropdownRef.current.contains(e.target as Node)) setShapesDropdownOpen(false);
       if (pathDropdownRef.current && !pathDropdownRef.current.contains(e.target as Node)) setPathDropdownOpen(false);
       if (linearDropdownRef.current && !linearDropdownRef.current.contains(e.target as Node)) setLinearDropdownOpen(false);
@@ -430,7 +438,7 @@ export default function MasterProject() {
     };
     document.addEventListener("mousedown", onOutside);
     return () => document.removeEventListener("mousedown", onOutside);
-  }, [shapesDropdownOpen, pathDropdownOpen, linearDropdownOpen, groundworkDropdownOpen, stairsDropdownOpen]);
+  }, [modeDropdownOpen, shapesDropdownOpen, pathDropdownOpen, linearDropdownOpen, groundworkDropdownOpen, stairsDropdownOpen]);
 
   useEffect(() => {
     if (projectSummaryContextMenu === null) return;
@@ -1621,7 +1629,7 @@ export default function MasterProject() {
 
   // ── Hit Tests (active layer only) ─────────────────────
   const hitTestPoint = useCallback((wp: Point): HitResult | null => {
-    const th = POINT_RADIUS / zoom + 4;
+    const th = pointRadiusEffective / zoom + 4;
     const r = th * (PIXELS_PER_METER / 80);
     if (selectedShapeIdx !== null && isOnActiveLayer(selectedShapeIdx) && passesViewFilter(shapes[selectedShapeIdx], viewFilter, activeLayer)) {
       const s = shapes[selectedShapeIdx];
@@ -1634,10 +1642,10 @@ export default function MasterProject() {
         if (distance(wp, shapes[si].points[pi]) < r) return { shapeIdx: si, pointIdx: pi };
     }
     return null;
-  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, viewFilter]);
+  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, viewFilter, pointRadiusEffective]);
 
   const hitTestHeightPoint = useCallback((wp: Point): { shapeIdx: number; heightPointIdx: number } | null => {
-    const th = (POINT_RADIUS * 1.2) / zoom + 4;
+    const th = (pointRadiusEffective * 1.2) / zoom + 4;
     const r = th * (PIXELS_PER_METER / 80);
     if (selectedShapeIdx !== null && isOnActiveLayer(selectedShapeIdx)) {
       const shape = shapes[selectedShapeIdx];
@@ -1658,10 +1666,10 @@ export default function MasterProject() {
       }
     }
     return null;
-  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx]);
+  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, pointRadiusEffective]);
 
   const hitTestEdge = useCallback((wp: Point): EdgeHitResult | null => {
-    const th = EDGE_HIT_THRESHOLD / zoom + 2;
+    const th = edgeHitThresholdEffective / zoom + 2;
     const r = th * (PIXELS_PER_METER / 80);
     const testEdge = (si: number, i: number) => {
       const pts = shapes[si].points;
@@ -1690,10 +1698,10 @@ export default function MasterProject() {
       }
     }
     return null;
-  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, viewFilter]);
+  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, viewFilter, edgeHitThresholdEffective]);
 
   const hitTestPointForScale = useCallback((wp: Point): HitResult | null => {
-    const th = POINT_RADIUS / zoom + 4;
+    const th = pointRadiusEffective / zoom + 4;
     const r = th * (PIXELS_PER_METER / 80);
     if (selectedShapeIdx !== null && isOnActiveLayerForScale(selectedShapeIdx) && passesViewFilter(shapes[selectedShapeIdx], viewFilter, activeLayer)) {
       const s = shapes[selectedShapeIdx];
@@ -1710,10 +1718,10 @@ export default function MasterProject() {
         if (distance(wp, s.points[pi]) < r) return { shapeIdx: si, pointIdx: pi };
     }
     return null;
-  }, [shapes, zoom, isOnActiveLayerForScale, selectedShapeIdx, viewFilter]);
+  }, [shapes, zoom, isOnActiveLayerForScale, selectedShapeIdx, viewFilter, pointRadiusEffective]);
 
   const hitTestEdgeForScale = useCallback((wp: Point): EdgeHitResult | null => {
-    const th = EDGE_HIT_THRESHOLD / zoom + 2;
+    const th = edgeHitThresholdEffective / zoom + 2;
     const r = th * (PIXELS_PER_METER / 80);
     const testEdge = (si: number, i: number) => {
       const pts = shapes[si].points;
@@ -1797,9 +1805,9 @@ export default function MasterProject() {
       }
       if (!shape.closed || shape.points.length < 3) continue;
       if (shape.calculatorType === "grass" && (shape.calculatorInputs?.vizPieces?.length ?? 0) > 0) {
-        const joinHit = hitTestGrassJoinEdge(wp, shape, GRASS_EDGE_HIT_PX / zoom);
+        const joinHit = hitTestGrassJoinEdge(wp, shape, grassEdgeHitPxEffective / zoom);
         if (joinHit) return { shapeIdx: si, type: "grass", grassJoinHit: joinHit };
-        const edgeHit = hitTestGrassPieceEdge(wp, shape, GRASS_EDGE_HIT_PX / zoom);
+        const edgeHit = hitTestGrassPieceEdge(wp, shape, grassEdgeHitPxEffective / zoom);
         if (edgeHit) return { shapeIdx: si, type: "grass" };
         const pieceIdx = hitTestGrassPiece(wp, shape);
         if (pieceIdx !== null) return { shapeIdx: si, type: "grass", grassPieceIdx: pieceIdx };
@@ -1815,7 +1823,7 @@ export default function MasterProject() {
       if (shape.calculatorType === "paving") return { shapeIdx: si, type: "cobblestone" };
     }
     return null;
-  }, [shapes, zoom, viewFilter]);
+  }, [shapes, zoom, viewFilter, grassEdgeHitPxEffective]);
 
   const hitTestOpenEnd = useCallback((wp: Point): OpenEndHit | null => {
     const th = SNAP_TO_LAST_RADIUS / zoom * (PIXELS_PER_METER / 80);
@@ -1829,7 +1837,7 @@ export default function MasterProject() {
     return null;
   }, [shapes, zoom, isOnActiveLayer, viewFilter]);
 
-  const arcHitThreshold = (POINT_RADIUS / zoom + 4) * (PIXELS_PER_METER / 80);
+  const arcHitThreshold = (pointRadiusEffective / zoom + 4) * (PIXELS_PER_METER / 80);
   const hitTestArcPointGlobal = useCallback((wp: Point): { shapeIdx: number; edgeIdx: number; arcPoint: ArcPoint } | null => {
     const testShape = (si: number) => {
       const s = shapes[si];
@@ -1905,7 +1913,7 @@ export default function MasterProject() {
         const patternHit = hitTestPattern(world);
         if (patternHit?.type === "grass") {
           const shape = shapes[patternHit.shapeIdx];
-          const edgeHit = hitTestGrassPieceEdge(world, shape, GRASS_EDGE_HIT_PX / zoom);
+          const edgeHit = hitTestGrassPieceEdge(world, shape, grassEdgeHitPxEffective / zoom);
           if (edgeHit) {
             saveHistory();
             const piece = (shape.calculatorInputs?.vizPieces as GrassPiece[])?.[edgeHit.pieceIdx];
@@ -2212,7 +2220,7 @@ export default function MasterProject() {
           setSelectedShapeIdx(patternHit.shapeIdx);
           if (patternHit.type === "grass") {
             const shape = shapes[patternHit.shapeIdx];
-            const edgeHit = hitTestGrassPieceEdge(world, shape, GRASS_EDGE_HIT_PX / zoom);
+            const edgeHit = hitTestGrassPieceEdge(world, shape, grassEdgeHitPxEffective / zoom);
             if (edgeHit) {
               saveHistory();
               const piece = (shape.calculatorInputs?.vizPieces as GrassPiece[])?.[edgeHit.pieceIdx];
@@ -3239,6 +3247,133 @@ export default function MasterProject() {
     gardenDragChildrenRef.current = [];
   }, [selectionRect, shapes, worldToScreen, dragInfo, mouseWorld, patternDragInfo, patternDragPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, shapeDragInfo, rotateInfo, scaleCorner, scaleEdge, isOnActiveLayer, zoom, draggingGrassPiece, grassNearEdge, grassScaleInfo, viewFilter, arcDragInfo]);
 
+  /** Touch support for mobile: map touch events to mouse handlers + pinch zoom */
+  const touchToMouseEvent = useCallback((touch: { clientX: number; clientY: number }, button: number, buttons: number): React.MouseEvent<HTMLCanvasElement> => {
+    return {
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      button,
+      buttons,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      target: canvasRef.current!,
+    } as unknown as React.MouseEvent<HTMLCanvasElement>;
+  }, []);
+
+  const pinchRef = useRef<{ dist: number; centerX: number; centerY: number; zoom: number; pan: { x: number; y: number } } | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressStartRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const contextMenuHandlerRef = useRef<((e: React.MouseEvent) => void) | null>(null);
+  const LONG_PRESS_MS = 500;
+  const LONG_PRESS_MOVE_THRESHOLD_PX = 8;
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const t0 = e.touches[0], t1 = e.touches[1];
+      const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+      const centerX = (t0.clientX + t1.clientX) / 2;
+      const centerY = (t0.clientY + t1.clientY) / 2;
+      pinchRef.current = { dist, centerX, centerY, zoom, pan: { x: pan.x, y: pan.y } };
+      return;
+    }
+    if (e.touches.length !== 1) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    if (isMobile) {
+      longPressStartRef.current = { clientX: t.clientX, clientY: t.clientY };
+      longPressTimerRef.current = setTimeout(() => {
+        longPressTimerRef.current = null;
+        const pos = longPressStartRef.current;
+        const onContextMenu = contextMenuHandlerRef.current;
+        if (pos && onContextMenu) {
+          handleMouseUp();
+          const synthetic = touchToMouseEvent(pos, 0, 0);
+          onContextMenu(synthetic);
+        }
+      }, LONG_PRESS_MS);
+    }
+    handleMouseDown(touchToMouseEvent({ clientX: t.clientX, clientY: t.clientY }, 0, 1));
+  }, [touchToMouseEvent, handleMouseDown, handleMouseUp, zoom, pan, isMobile]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      const pinch = pinchRef.current;
+      if (!pinch) return;
+      const t0 = e.touches[0], t1 = e.touches[1];
+      const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+      const centerX = (t0.clientX + t1.clientX) / 2;
+      const centerY = (t0.clientY + t1.clientY) / 2;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const r = canvas.getBoundingClientRect();
+      const sx = centerX - r.left, sy = centerY - r.top;
+      const ratio = dist / pinch.dist;
+      const nz = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinch.zoom * ratio));
+      const zoomRatio = nz / pinch.zoom;
+      const newPanX = sx - zoomRatio * (sx - pinch.pan.x);
+      const newPanY = sy - zoomRatio * (sy - pinch.pan.y);
+      setZoom(nz);
+      setPan({ x: newPanX, y: newPanY });
+      pinchRef.current = { dist, centerX, centerY, zoom: nz, pan: { x: newPanX, y: newPanY } };
+      return;
+    }
+    if (e.touches.length !== 1) return;
+    e.preventDefault();
+    if (isMobile && longPressTimerRef.current && longPressStartRef.current) {
+      const t = e.touches[0];
+      const dx = t.clientX - longPressStartRef.current.clientX;
+      const dy = t.clientY - longPressStartRef.current.clientY;
+      if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_THRESHOLD_PX) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+    }
+    const t = e.touches[0];
+    handleMouseMove(touchToMouseEvent({ clientX: t.clientX, clientY: t.clientY }, 0, 1));
+  }, [touchToMouseEvent, handleMouseMove, isMobile]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      return;
+    }
+    if (e.touches.length === 1) {
+      pinchRef.current = null;
+      e.preventDefault();
+      const t = e.touches[0];
+      handleMouseDown(touchToMouseEvent({ clientX: t.clientX, clientY: t.clientY }, 0, 1));
+      return;
+    }
+    const t = e.changedTouches[0];
+    if (!t) return;
+    e.preventDefault();
+    pinchRef.current = null;
+    if (isMobile && longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    handleMouseUp();
+  }, [handleMouseUp, handleMouseDown, touchToMouseEvent, isMobile]);
+
+  const handleTouchCancel = useCallback((e: React.TouchEvent) => {
+    if (!e.changedTouches[0]) return;
+    e.preventDefault();
+    pinchRef.current = null;
+    if (isMobile && longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    handleMouseUp();
+  }, [handleMouseUp, isMobile]);
+
+  useEffect(() => () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
   const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
     if (e.buttons & 4) return; // Środkowy przycisk wciśnięty – nie zoomuj podczas panowania
@@ -3375,7 +3510,7 @@ export default function MasterProject() {
     }
     if (activeLayer === 4) {
       // Larger hit radius for groundwork so PPM on segment reliably gives edge menu (Usuń segment)
-      const th = GRASS_EDGE_HIT_PX / zoom + 4;
+      const th = grassEdgeHitPxEffective / zoom + 4;
       const r = th * (PIXELS_PER_METER / 80);
       for (let si = shapes.length - 1; si >= 0; si--) {
         if (shapes[si].layer !== 2 || !isGroundworkLinear(shapes[si])) continue;
@@ -3401,7 +3536,7 @@ export default function MasterProject() {
       // Check edge hit first — so PPM on linear segment gives edge menu (Usuń segment), not shape menu
       // When on layer 3, hitTestEdge uses isOnActiveLayer which is false; so we manually check layer 2 linear shapes
       // Groundwork is hidden on layer 3, so exclude it from edge hit
-      const th = EDGE_HIT_THRESHOLD / zoom + 2;
+      const th = edgeHitThresholdEffective / zoom + 2;
       const r = th * (PIXELS_PER_METER / 80);
       for (let si = shapes.length - 1; si >= 0; si--) {
         if (shapes[si].layer !== 2 || !isLinearElement(shapes[si]) || isGroundworkLinear(shapes[si]) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
@@ -3502,6 +3637,8 @@ export default function MasterProject() {
       }
     }
   }, [getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestArcPointGlobal, hitTestEdge, hitTestShape, hitTestPattern, shapes, drawingShapeIdx, activeLayer, zoom, viewFilter]);
+
+  useEffect(() => { contextMenuHandlerRef.current = handleContextMenu; }, [handleContextMenu]);
 
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     if (activeLayer === 3 && selectedPattern) {
@@ -4494,7 +4631,7 @@ export default function MasterProject() {
   else if (activeLayer === 3 && selectedPattern?.type === "grass") {
     const shape = shapes[selectedPattern.shapeIdx];
     if (shape?.calculatorType === "grass" && shape.calculatorInputs?.vizPieces?.length > 0) {
-      const edgeHit = hitTestGrassPieceEdge(mouseWorld, shape, GRASS_EDGE_HIT_PX / zoom);
+      const edgeHit = hitTestGrassPieceEdge(mouseWorld, shape, grassEdgeHitPxEffective / zoom);
       if (edgeHit) cursor = "ew-resize";
     }
   }
@@ -4555,34 +4692,55 @@ export default function MasterProject() {
 
         {/* Row 2: Tools + Drawing + View filters + Delete + Counter */}
         <div className="toolbar-row">
-          {/* Cursor / mode tools */}
+          {/* Mode dropdown: Select, Draw, Scale, View */}
           <div className="tool-group">
-            <button type="button" className={`tool-btn ${mode === "select" && !drawingShapeIdx ? "active" : ""}`} onClick={() => { setDrawingShapeIdx(null); setMode("select"); }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
-                <path d="M13 13l6 6" />
-              </svg>
-              {t("project:toolbar_select")}
-            </button>
-            <button type="button" className={`tool-btn ${mode === "freeDraw" ? "active" : ""}`} onClick={() => { setMode("freeDraw"); setSelectedShapeIdx(null); }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" />
-                <circle cx="11" cy="11" r="2" />
-              </svg>
-              {t("project:toolbar_draw")}
-            </button>
-            <button type="button" className={`tool-btn ${mode === "scale" ? "active" : ""}`} onClick={() => { setDrawingShapeIdx(null); setMode("scale"); }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 3L3 21" /><path d="M21 3h-6" /><path d="M21 3v6" /><path d="M3 21h6" /><path d="M3 21v-6" />
-              </svg>
-              {t("project:toolbar_scale")}
-            </button>
-            <button type="button" className={`tool-btn ${mode === "move" ? "active" : ""}`} onClick={() => { setDrawingShapeIdx(null); setMode("move"); setSelectedShapeIdx(null); }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 9l-3 3 3 3" /><path d="M9 5l3-3 3 3" /><path d="M15 19l-3 3-3-3" /><path d="M19 9l3 3-3 3" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" />
-              </svg>
-              {t("project:toolbar_view")}
-            </button>
+            <div ref={modeDropdownRef} style={{ position: "relative" }}>
+              <button type="button" className={`dropdown-trigger ${modeDropdownOpen || mode === "select" || mode === "freeDraw" || mode === "scale" || mode === "move" ? "active" : ""}`} onClick={() => setModeDropdownOpen(v => !v)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  {mode === "freeDraw" && <><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" /><circle cx="11" cy="11" r="2" /></>}
+                  {mode === "scale" && <><path d="M21 3L3 21" /><path d="M21 3h-6" /><path d="M21 3v6" /><path d="M3 21h6" /><path d="M3 21v-6" /></>}
+                  {mode === "move" && <><path d="M5 9l-3 3 3 3" /><path d="M9 5l3-3 3 3" /><path d="M15 19l-3 3-3-3" /><path d="M19 9l3 3-3 3" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></>}
+                  {(mode === "select" || mode !== "freeDraw" && mode !== "scale" && mode !== "move") && <><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" /><path d="M13 13l6 6" /></>}
+                </svg>
+                {t("project:toolbar_mode")}
+                <svg className="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+              {modeDropdownOpen && (
+                <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 140 }}>
+                  {[
+                    { mode: "select" as const, key: "toolbar_select" },
+                    { mode: "freeDraw" as const, key: "toolbar_draw" },
+                    { mode: "scale" as const, key: "toolbar_scale" },
+                    { mode: "move" as const, key: "toolbar_view" },
+                  ].map(({ mode: m, key }) => (
+                    <button key={key} type="button"
+                      onClick={() => {
+                        if (m === "select") { setDrawingShapeIdx(null); setMode("select"); }
+                        else if (m === "freeDraw") { setMode("freeDraw"); setSelectedShapeIdx(null); }
+                        else if (m === "scale") { setDrawingShapeIdx(null); setMode("scale"); }
+                        else { setDrawingShapeIdx(null); setMode("move"); setSelectedShapeIdx(null); }
+                        setModeDropdownOpen(false);
+                      }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px",
+                        border: "none", background: (mode === m || (m === "select" && mode === "select" && !drawingShapeIdx)) ? "rgba(108,92,231,0.2)" : "transparent", color: "#dfe6f0",
+                        cursor: "pointer", fontSize: 13, fontFamily: "inherit", borderRadius: 4, textAlign: "left",
+                      }}
+                      onMouseEnter={(e) => { if (mode !== m && !(m === "select" && mode === "select")) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = (mode === m || (m === "select" && mode === "select" && !drawingShapeIdx)) ? "rgba(108,92,231,0.2)" : "transparent"; }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18, flexShrink: 0 }}>
+                        {m === "select" && <><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" /><path d="M13 13l6 6" /></>}
+                        {m === "freeDraw" && <><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" /><circle cx="11" cy="11" r="2" /></>}
+                        {m === "scale" && <><path d="M21 3L3 21" /><path d="M21 3h-6" /><path d="M21 3v6" /><path d="M3 21h6" /><path d="M3 21v-6" /></>}
+                        {m === "move" && <><path d="M5 9l-3 3 3 3" /><path d="M9 5l3-3 3 3" /><path d="M15 19l-3 3-3-3" /><path d="M19 9l3 3-3 3" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></>}
+                      </svg>
+                      {t(`project:${key}`)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="tb-sep" />
@@ -4833,9 +4991,10 @@ export default function MasterProject() {
       {/* Canvas + Summary */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
       <div ref={containerRef} style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-        <canvas ref={canvasRef} style={{ width: canvasSize.w, height: canvasSize.h, cursor, display: "block" }}
+        <canvas ref={canvasRef} style={{ width: canvasSize.w, height: canvasSize.h, cursor, display: "block", touchAction: "none" }}
           onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp} onContextMenu={handleContextMenu} onDoubleClick={handleDoubleClick} />
+          onMouseLeave={handleMouseUp} onContextMenu={handleContextMenu} onDoubleClick={handleDoubleClick}
+          onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onTouchCancel={handleTouchCancel} />
 
         {/* Porada + Skróty */}
         <div style={{ position: "absolute", bottom: 12, right: 12, zIndex: 40, display: "flex", gap: 6, alignItems: "center" }}>
