@@ -370,10 +370,13 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({
         });
       }
 
-      // Build materials list
+      // Build materials list (names use keys for translation in render)
+      const soilTypeKey = effectiveSoilType === 'clay' ? 'soil_type_clay' : effectiveSoilType === 'sand' ? 'soil_type_sand' : 'soil_type_rock';
       const materialsList = [
         { 
           name: `Excavated ${effectiveSoilType.charAt(0).toUpperCase() + effectiveSoilType.slice(1)} Soil (loose volume)`, 
+          materialKey: 'excavated_soil_loose_format' as const,
+          materialKeyParams: { type: t(`calculator:${soilTypeKey}`) },
           amount: looseVolume * soilDensity, 
           unit: 'tonnes',
           price_per_unit: null,
@@ -381,6 +384,7 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({
         },
         { 
           name: 'Aggregate (for concrete)', 
+          materialKey: 'aggregate_for_concrete' as const,
           amount: aggregateTonnes, 
           unit: 'tonnes',
           price_per_unit: null,
@@ -447,7 +451,7 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({
         {t('calculator:foundation_calculator_title_alt')}
       </h2>
       <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, lineHeight: 1.5 }}>
-        Calculate excavation time, excavated soil volume, and concrete materials required for foundation work.
+        {t('calculator:foundation_calculator_description')}
       </p>
 
       <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
@@ -461,9 +465,9 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({
           <>
             <SelectDropdown
               label={t('calculator:digging_method')}
-              value={diggingMethod === 'shovel' ? 'Shovel (Manual)' : diggingMethod === 'small' ? 'Small Excavator (1-3t)' : diggingMethod === 'medium' ? 'Medium Excavator (3-7t)' : 'Large Excavator (7+t)'}
-              options={['Shovel (Manual)', 'Small Excavator (1-3t)', 'Medium Excavator (3-7t)', 'Large Excavator (7+t)']}
-              onChange={(val) => setDiggingMethod(val.includes('Shovel') ? 'shovel' : val.includes('Small') ? 'small' : val.includes('Medium') ? 'medium' : 'large')}
+              value={diggingMethod === 'shovel' ? t('calculator:digging_method_shovel') : diggingMethod === 'small' ? t('calculator:digging_method_small') : diggingMethod === 'medium' ? t('calculator:digging_method_medium') : t('calculator:digging_method_large')}
+              options={[t('calculator:digging_method_shovel'), t('calculator:digging_method_small'), t('calculator:digging_method_medium'), t('calculator:digging_method_large')]}
+              onChange={(val) => setDiggingMethod(val === t('calculator:digging_method_shovel') ? 'shovel' : val === t('calculator:digging_method_small') ? 'small' : val === t('calculator:digging_method_medium') ? 'medium' : 'large')}
               placeholder={t('calculator:digging_method')}
             />
             <SelectDropdown
@@ -621,8 +625,8 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({
                 { key: 'quantity', label: 'QUANTITY', width: '1fr' },
                 { key: 'unit', label: 'UNIT', width: '1fr' },
               ]}
-              rows={materials.map((m) => ({
-                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{m.name}</span>,
+              rows={materials.map((m: any) => ({
+                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{m.materialKey ? t(`calculator:${m.materialKey}`, m.materialKeyParams || {}) : m.name}</span>,
                 quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.amount.toFixed(2)}</span>,
                 unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
               }))}

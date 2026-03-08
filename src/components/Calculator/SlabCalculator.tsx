@@ -28,7 +28,6 @@ import {
   Label,
   HelperText,
   DataTable,
-  Badge,
 } from '../../themes/uiComponents';
 import { computeSlabCuts, computePathSlabCuts, groupCutsByLength } from '../../projectmanagement/canvacreator/visualization/slabPattern';
 import { distance, PIXELS_PER_METER } from '../../projectmanagement/canvacreator/geometry';
@@ -160,6 +159,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
   });
   const taskTemplates = useMemo(() => taskTemplatesData ?? [], [taskTemplatesData]);
 
+  const [cutSlabs, setCutSlabs] = useState<string>(savedInputs?.cutSlabs ?? '');
   const [canvasCutSlabs, setCanvasCutSlabs] = useState<number | null>(null);
   const [canvasCutGroups, setCanvasCutGroups] = useState<{ lengthCm: number; count: number }[]>([]);
 
@@ -193,7 +193,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         slabThicknessCm,
         selectedSlabId,
         selectedSlabName,
-        cutSlabs: String(canvasCutSlabs ?? 0),
+        cutSlabs: String(isInProjectCreating ? (canvasCutSlabs ?? 0) : (cutSlabs || '0')),
         soilExcessCm,
         selectedGroutingId,
         addFrameBoard,
@@ -557,41 +557,42 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     }
   };
 
-  // Add equipment fetching
+  // Add equipment fetching (carriers filtered by event_tasks - same logic as canvas/project creation)
   useEffect(() => {
     const fetchEquipment = async () => {
       try {
         const companyId = useAuthStore.getState().getCompanyId();
         if (!companyId) return;
-        
-        // Fetch excavators
-        const { data: excavatorData, error: excavatorError } = await supabase
-          .from('setup_digging')
-          .select('*')
-          .eq('type', 'excavator')
-          .eq('company_id', companyId);
-        
-        if (excavatorError) throw excavatorError;
-        
-        // Fetch carriers
-        const { data: carrierData, error: carrierError } = await supabase
-          .from('setup_digging')
-          .select('*')
-          .eq('type', 'barrows_dumpers')
-          .eq('company_id', companyId);
-        
-        if (carrierError) throw carrierError;
-        
-        setExcavators(excavatorData || []);
-        setCarriersLocal(carrierData || []);
+
+        const [excRes, carRes, tasksRes] = await Promise.all([
+          supabase.from('setup_digging').select('*').eq('type', 'excavator').eq('company_id', companyId),
+          supabase.from('setup_digging').select('*').eq('type', 'barrows_dumpers').eq('company_id', companyId),
+          supabase.from('event_tasks').select('name').eq('company_id', companyId),
+        ]);
+
+        if (excRes.error) throw excRes.error;
+        if (carRes.error) throw carRes.error;
+        if (tasksRes.error) throw tasksRes.error;
+
+        const allCarriers = carRes.data || [];
+        const taskNames = (tasksRes.data || []).map((t) => t.name);
+        const validSizes = new Set<number>();
+        const re = /(\d+(?:\.\d+)?)t\b/g;
+        for (const name of taskNames) {
+          let m: RegExpExecArray | null;
+          re.lastIndex = 0;
+          while ((m = re.exec(name)) !== null) validSizes.add(parseFloat(m[1]));
+        }
+        const filtered =
+          validSizes.size === 0 ? allCarriers : allCarriers.filter((c) => c['size (in tones)'] != null && validSizes.has(c['size (in tones)']));
+
+        setExcavators(excRes.data || []);
+        setCarriersLocal(filtered);
       } catch (error) {
         console.error('Error fetching equipment:', error);
       }
     };
-    
-    if (calculateDigging || calculateTransport) {
-      fetchEquipment();
-    }
+    if (calculateDigging || calculateTransport) fetchEquipment();
   }, [calculateDigging, calculateTransport]);
 
   // Add time estimate functions
@@ -703,7 +704,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       const mortarThicknessM = parseFloat(mortarThicknessCm) / 100; // cm to meters
       const slabThicknessM = parseFloat(slabThicknessCm) / 100; // cm to meters
       const soilExcessM = soilExcessCm ? parseFloat(soilExcessCm) / 100 : 0; // cm to meters
-      const cutSlabsNum = canvasCutSlabs ?? 0;
+      const cutSlabsNum = isInProjectCreating ? (canvasCutSlabs ?? 0) : (cutSlabs ? parseInt(cutSlabs) : 0);
       
       // Calculate effective area for regular slabs (subtract frame area if applicable)
       const frameAreaM2 = addFrameBoard && frameResults ? frameResults.totalFrameAreaM2 : 0;
@@ -1275,8 +1276,11 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     }
   }, [materials]);
 
-  // Only show slab-related templates in the dropdown
-  const slabTypeOptions = taskTemplates.filter((tpl: SlabType) => tpl.name.toLowerCase().includes('laying slabs'));
+  // Only show slab-related templates in the dropdown (exclude concrete slabs - they have their own calculator)
+  const slabTypeOptions = taskTemplates.filter((tpl: SlabType) => {
+    const name = (tpl.name || '').toLowerCase();
+    return name.includes('laying slabs') && !name.includes('(concrete)') && !name.includes('betonowe');
+  });
   const selectedSlabName = slabTypeOptions.find((tpl: SlabType) => tpl.id?.toString() === selectedSlabId)?.name ?? '';
   const selectedGroutingName = groutingMethods.find((m: { id?: string | number; name?: string }) => (m.id?.toString() || String(m.id)) === selectedGroutingId)?.name ?? '';
 
@@ -1284,9 +1288,6 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
       {!compactForPath && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs }}>
-            <Badge color={colors.accentBlue}>DEFAULT</Badge>
-          </div>
           <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display, letterSpacing: '0.3px', margin: `${spacing.md}px 0 ${spacing.sm}px` }}>
             {t('calculator:slab_installation_calculator_title')}
           </h2>
@@ -1331,14 +1332,24 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         </div>
 
         {!compactForPath && !isInProjectCreating && (
-          <TextInput
-            label={t('calculator:input_additional_soil_depth')}
-            value={soilExcessCm}
-            onChange={setSoilExcessCm}
-            placeholder={t('calculator:placeholder_enter_depth_cm')}
-            unit="cm"
-            helperText={t('calculator:additional_depth_info')}
-          />
+          <>
+            <TextInput
+              label={t('calculator:input_additional_soil_depth')}
+              value={soilExcessCm}
+              onChange={setSoilExcessCm}
+              placeholder={t('calculator:placeholder_enter_depth_cm')}
+              unit="cm"
+              helperText={t('calculator:additional_depth_info')}
+            />
+            <TextInput
+              label={t('calculator:slabs_to_cut_label')}
+              value={cutSlabs}
+              onChange={setCutSlabs}
+              placeholder={t('calculator:placeholder_enter_number_cuts')}
+              unit=""
+              helperText={t('calculator:slabs_to_cut_helper')}
+            />
+          </>
         )}
         
         {!compactForPath && (
@@ -1686,12 +1697,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
               footer={
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: spacing.md }}>
                   <span style={{ fontSize: fontSizes.base, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
-                    Total Cost:
+                    {t('calculator:total_cost_colon')}
                   </span>
                   <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display }}>
                     {materials.some(m => m.total_price !== null)
                       ? `£${materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}`
-                      : 'N/A'}
+                      : t('calculator:not_available')}
                   </span>
                 </div>
               }

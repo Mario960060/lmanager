@@ -204,7 +204,10 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
         .order("name");
       if (error) throw error;
       return (data || []).filter(
-        (t: { name?: string }) => (t.name || "").toLowerCase().includes("laying slabs")
+        (t: { name?: string }) => {
+          const name = (t.name || "").toLowerCase();
+          return name.includes("laying slabs") && !name.includes("(concrete)") && !name.includes("betonowe");
+        }
       );
     },
     enabled: !!companyId && subType === "slabs",
@@ -435,6 +438,18 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
     savePathDefaultsToStorage(subType, companyId, getDefaultsToStore());
     onClose();
   }, [subType, companyId, getDefaultsToStore, onClose]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleClose();
+      if (e.key === "Enter" && isValid) {
+        e.preventDefault();
+        handleConfirm();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [handleClose, handleConfirm, isValid]);
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>

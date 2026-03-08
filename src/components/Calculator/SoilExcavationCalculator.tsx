@@ -373,12 +373,12 @@ const SoilExcavationCalculator: React.FC<SoilExcavationCalculatorProps> = ({ onR
             onChange={setTransportDistance}
             placeholder={t('calculator:distance_placeholder')}
             unit="m"
-            helperText="Set to 0 for no transporting"
+            helperText={t('calculator:set_to_zero_no_transport')}
           />
         )}
         
         <Button onClick={calculateTime} variant="primary" fullWidth>
-          Calculate Time
+          {t('calculator:calculate_time_button')}
         </Button>
         
         {result && (

@@ -3,7 +3,7 @@
 // Slab pattern rendering on polygon shapes (grid, brick)
 // ══════════════════════════════════════════════════════════════
 
-import { Point, Shape, toPixels, toMeters, labelAnchorInsidePolygon } from "../geometry";
+import { Point, Shape, toPixels, toMeters, labelAnchorInsidePolygon, areaM2, polygonCentroidByArea, pointInPolygon } from "../geometry";
 import { getEffectivePolygon } from "../arcMath";
 
 type WorldToScreen = (wx: number, wy: number) => { x: number; y: number };
@@ -486,17 +486,22 @@ export function drawPathSlabPattern(
   const reusedAreaCm2 = Number(inputs?.vizReusedAreaCm2 ?? 0);
   const actualWasteCm2 = Math.max(0, wasteAreaCm2 - reusedAreaCm2);
   const wastePct = totalSlabAreaCm2 > 0 ? Math.round((actualWasteCm2 / totalSlabAreaCm2) * 100) : (total > 0 ? Math.round((cutCount / total) * 100) : 0);
+
+  ctx.restore();
+
   if (total > 0) {
-    const anchor = labelAnchorInsidePolygon(shape.points);
+    const poly = outline.length >= 3 ? outline : shape.points;
+    const anchor = labelAnchorInsidePolygon(poly);
     const sc = worldToScreen(anchor.x, anchor.y);
+    const area = areaM2(poly);
     ctx.font = "bold 14px 'JetBrains Mono',monospace";
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(`${fullCount} full, ${cutCount} cut, ~${wastePct}% waste`, sc.x, sc.y + 26);
+    ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + 8);
+    ctx.fillText(`${fullCount} full, ${cutCount} cut`, sc.x, sc.y + 24);
+    ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + 40);
   }
-
-  ctx.restore();
   return true;
 }
 
@@ -561,7 +566,8 @@ export function drawSlabPattern(
   }
   const extendC = Math.ceil(maxAlongDir / stepLength) + 2;
   const extendR = Math.ceil(maxAlongPerp / stepWidth) + 2;
-  const extend = Math.max(extendC, extendR, 10);
+  const EXTEND_CAP = 100; // Prevent O(extend²) freeze on very large polygons
+  const extend = Math.min(Math.max(extendC, extendR, 10), EXTEND_CAP);
 
   const vizWaste = shape.calculatorInputs?.vizWasteSatisfied;
   const wasteSatisfiedSet = new Set<string>(
@@ -670,17 +676,22 @@ export function drawSlabPattern(
   const reusedAreaCm2 = Number(inputs?.vizReusedAreaCm2 ?? 0);
   const actualWasteCm2 = Math.max(0, wasteAreaCm2 - reusedAreaCm2);
   const wastePct = totalSlabAreaCm2 > 0 ? Math.round((actualWasteCm2 / totalSlabAreaCm2) * 100) : (total > 0 ? Math.round((cutCount / total) * 100) : 0);
+
+  ctx.restore();
+
   if (total > 0) {
-    const anchor = labelAnchorInsidePolygon(shape.points);
+    const areaCtr = polygonCentroidByArea(pts);
+    const anchor = pointInPolygon(areaCtr, pts) ? areaCtr : labelAnchorInsidePolygon(pts);
     const sc = worldToScreen(anchor.x, anchor.y);
+    const area = areaM2(getEffectivePolygon(shape));
     ctx.font = "bold 14px 'JetBrains Mono',monospace";
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(`${fullCount} full, ${cutCount} cut, ~${wastePct}% waste`, sc.x, sc.y + 26);
+    ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + 8);
+    ctx.fillText(`${fullCount} full, ${cutCount} cut`, sc.x, sc.y + 24);
+    ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + 40);
   }
-
-  ctx.restore();
 }
 
 /**
@@ -894,7 +905,8 @@ export function computeSlabCuts(shape: Shape, inputs: Record<string, any>): Slab
   }
   const extendC = Math.ceil(maxAlongDir / stepLength) + 2;
   const extendR = Math.ceil(maxAlongPerp / stepWidth) + 2;
-  const extend = Math.max(extendC, extendR, 10);
+  const EXTEND_CAP = 100; // Prevent O(extend²) freeze on very large polygons (e.g. after "Dosuń do krawędzi")
+  const extend = Math.min(Math.max(extendC, extendR, 10), EXTEND_CAP);
 
   const cuts: CutInfo[] = [];
   let cutSlabCount = 0;

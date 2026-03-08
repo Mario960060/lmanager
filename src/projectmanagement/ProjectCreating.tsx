@@ -1966,7 +1966,7 @@ const ProjectCreating = () => {
                         )
                         .map(template => (
                           <option key={template.id || 'unknown'} value={template.id || ''}>
-                            {template.name}
+                            {translateTaskName(template.name, t)}
                           </option>
                         ))}
                       </select>

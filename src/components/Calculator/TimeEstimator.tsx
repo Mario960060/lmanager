@@ -107,7 +107,7 @@ const TimeEstimator = () => {
             className="w-full rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             onClick={() => setDropdownOpen((open) => !open)}
           >
-            {selectedTask ? selectedTask.name : 'Select a task'}
+            {selectedTask ? translateTaskName(selectedTask.name, t) : t('calculator:select_task_placeholder')}
           </button>
           {dropdownOpen && (
             <div className="absolute z-10 mt-1 w-full rounded-md bg-white shadow-lg border border-gray-200">
@@ -211,10 +211,10 @@ const TimeEstimator = () => {
               <div className="pt-3 border-t border-gray-700">
                 <div className="text-sm text-gray-300">{t('calculator:estimated_working_days')}</div>
                 <div className="text-2xl font-bold text-white">
-                  {result.days} days
+                  {result.days} {t('calculator:days')}
                 </div>
                 <div className="text-xs text-gray-400 mt-1">
-                  Based on 8-hour workday
+                  {t('calculator:days_based_on_8hrs')}
                 </div>
               </div>
             </div>

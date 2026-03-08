@@ -167,7 +167,7 @@ const MortarCalculator: React.FC<CalculatorProps> = ({ type, onResultsChange }) 
                   {result.volume} m³
                 </span>
                 <span style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>
-                  (Approximately {(result.volume * 1.5).toFixed(2)} tonnes)
+                  ({t('calculator:approximately_tonnes_format', { value: (result.volume * 1.5).toFixed(2) })})
                 </span>
               </div>
             </Card>

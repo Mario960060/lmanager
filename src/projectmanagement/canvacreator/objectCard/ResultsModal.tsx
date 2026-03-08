@@ -101,7 +101,7 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
       onMouseDown={onClose}
     >
       <div
-        style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 10, width: "100%", maxWidth: 500, maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,0.6)", overflow: "hidden" }}
+        style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 10, width: "100%", maxWidth: "min(96vw, 900px)", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,0.6)", overflow: "hidden" }}
         onMouseDown={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -174,7 +174,7 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {tasks.map((task, i) => {
                   const rawName = task.task ?? task.name ?? t("project:results_task_fallback", { n: i + 1 });
-                  const name = translateTaskName(rawName, (k: string) => t(k));
+                  const name = translateTaskName(rawName, t);
                   const pct = totalHours > 0 ? (task.hours / totalHours) * 100 : 0;
                   return (
                     <div key={i}>

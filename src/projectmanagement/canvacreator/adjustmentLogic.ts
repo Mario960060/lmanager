@@ -5,7 +5,7 @@
 
 import polygonClipping from "polygon-clipping";
 import type { Polygon, MultiPolygon } from "polygon-clipping";
-import { Point, Shape, centroid, distance, toPixels } from "./geometry";
+import { Point, Shape, centroid, distance, toPixels, shoelaceArea } from "./geometry";
 import { getEffectivePolygon } from "./arcMath";
 import { getPathPolygon, getPolygonLinearOutline } from "./linearElements";
 
@@ -58,6 +58,9 @@ function fromGeoJSONMulti(multi: MultiPolygon): Point[][] {
 
 /** Areas in Layer 1 (garden) without coverage from Layer 2. */
 export function computeEmptyAreas(shapes: Shape[]): Point[][] {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeEmptyAreas:entry',message:'computeEmptyAreas start',data:{shapesLen:shapes.length},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+  // #endregion
   const layer1 = shapes.filter(s => s.layer === 1 && s.closed && s.points.length >= 3);
   const layer2 = shapes.filter(s => s.layer === 2);
   if (layer1.length === 0) return [];
@@ -95,13 +98,22 @@ export function computeEmptyAreas(shapes: Shape[]): Point[][] {
 
   let layer2Union: MultiPolygon;
   try {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeEmptyAreas:preLayer2Union',message:'before layer2 union',data:{layer2PolysLen:layer2Polys.length},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+    // #endregion
     layer2Union = layer2Polys.length === 1 ? [layer2Polys[0]] : polygonClipping.union(layer2Polys[0], ...layer2Polys.slice(1));
   } catch {
     return fromGeoJSONMulti(gardenUnion);
   }
 
   try {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeEmptyAreas:preDiff',message:'before difference',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+    // #endregion
     const empty = polygonClipping.difference(gardenUnion, layer2Union);
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeEmptyAreas:exit',message:'computeEmptyAreas done',data:{emptyLen:empty?.length},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+    // #endregion
     return fromGeoJSONMulti(empty);
   } catch {
     return [];
@@ -115,6 +127,9 @@ export interface OverflowResult {
 
 /** Parts of Layer 2 elements (except grass) that extend outside Layer 1. */
 export function computeOverflowAreas(shapes: Shape[]): OverflowResult[] {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeOverflowAreas:entry',message:'computeOverflowAreas start',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+  // #endregion
   const layer1 = shapes.filter(s => s.layer === 1 && s.closed && s.points.length >= 3);
   const layer2Indices = shapes
     .map((s, i) => ({ s, i }))
@@ -153,6 +168,9 @@ export function computeOverflowAreas(shapes: Shape[]): OverflowResult[] {
       // ignore
     }
   }
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeOverflowAreas:exit',message:'computeOverflowAreas done',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+  // #endregion
   return results;
 }
 
@@ -164,6 +182,9 @@ export interface OverlapResult {
 
 /** Overlaps: surface vs surface, and surface vs linear (wall/kerb/foundation). */
 export function computeOverlaps(shapes: Shape[]): OverlapResult[] {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeOverlaps:entry',message:'computeOverlaps start',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+  // #endregion
   const surfaceShapes: { shape: Shape; idx: number }[] = [];
   const linearShapes: { shape: Shape; idx: number }[] = [];
   for (let i = 0; i < shapes.length; i++) {
@@ -219,6 +240,9 @@ export function computeOverlaps(shapes: Shape[]): OverlapResult[] {
     }
   }
 
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeOverlaps:exit',message:'computeOverlaps done',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
+  // #endregion
   return results;
 }
 
@@ -396,6 +420,142 @@ export function extendShapeToCoverEmptyArea(shapes: Shape[], shapeIdx: number, e
     if (polys.length === 0) return null;
     return polys[0];
   } catch {
+    return null;
+  }
+}
+
+/** Get garden polygon (union of Layer 1 shapes). Returns first polygon or null. */
+function getGardenPolygon(shapes: Shape[]): Polygon | null {
+  const layer1 = shapes.filter(s => s.layer === 1 && s.closed && s.points.length >= 3);
+  if (layer1.length === 0) return null;
+  const polys: Polygon[] = [];
+  for (const s of layer1) {
+    const pts = getShapePolygonForAdjustment(s);
+    const p = toGeoJSONPolygon(pts);
+    if (p) polys.push(p);
+  }
+  if (polys.length === 0) return null;
+  try {
+    const unionResult = polys.length === 1 ? [polys[0]] : polygonClipping.union(polys[0], ...polys.slice(1));
+    const firstPoly = unionResult[0];
+    return firstPoly && firstPoly[0] ? firstPoly : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Axis-aligned rectangle as polygon (ring format for GeoJSON). */
+function rectToPolygon(x1: number, y1: number, x2: number, y2: number): Polygon {
+  const minX = Math.min(x1, x2);
+  const maxX = Math.max(x1, x2);
+  const minY = Math.min(y1, y2);
+  const maxY = Math.max(y1, y2);
+  return [[[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY], [minX, minY]]];
+}
+
+/** Extend shape to garden edge in one direction only (one-sided scale).
+ *  Restricts empty area to the element's extent along the boundary.
+ *  Falls back to extendShapeToCoverEmptyArea when no Layer 1 (garden) or strip misses the gap (element-to-element). */
+export function extendShapeToGardenEdge(shapes: Shape[], shapeIdx: number, emptyAreaPolygon: Point[]): Point[] | null {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:entry',message:'extendShapeToGardenEdge called',data:{shapeIdx,emptyAreaLen:emptyAreaPolygon.length,shapesCount:shapes.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
+  const shape = shapes[shapeIdx];
+  if (!shape) return null;
+  const shapePts = getShapePolygonForAdjustment(shape);
+  if (shapePts.length < 3) return null;
+  const emptyPoly = toGeoJSONPolygon(emptyAreaPolygon);
+  if (!emptyPoly) return null;
+  const gardenPoly = getGardenPolygon(shapes);
+  if (!gardenPoly) {
+    // No Layer 1 (garden) – fallback to fill for element-to-element gaps
+    return extendShapeToCoverEmptyArea(shapes, shapeIdx, emptyAreaPolygon);
+  }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:preIntersection',message:'before intersection',data:{shapePtsLen:shapePts.length},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+  // #endregion
+
+  const elemMinX = Math.min(...shapePts.map(p => p.x));
+  const elemMaxX = Math.max(...shapePts.map(p => p.x));
+  const elemMinY = Math.min(...shapePts.map(p => p.y));
+  const elemMaxY = Math.max(...shapePts.map(p => p.y));
+
+  const gardenPts = gardenPoly[0].map(([x, y]) => ({ x, y }));
+  const gardenMinX = Math.min(...gardenPts.map(p => p.x));
+  const gardenMaxX = Math.max(...gardenPts.map(p => p.x));
+  const gardenMinY = Math.min(...gardenPts.map(p => p.y));
+  const gardenMaxY = Math.max(...gardenPts.map(p => p.y));
+
+  const emptyCentroid = centroid(emptyAreaPolygon);
+  const shapeCentroid = centroid(shapePts);
+
+  const dx = emptyCentroid.x - shapeCentroid.x;
+  const dy = emptyCentroid.y - shapeCentroid.y;
+  const eps = 1e-6;
+
+  let stripPoly: Polygon;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    if (dx < 0) {
+      stripPoly = rectToPolygon(gardenMinX - eps, elemMinY - eps, elemMinX + eps, elemMaxY + eps);
+    } else {
+      stripPoly = rectToPolygon(elemMaxX - eps, elemMinY - eps, gardenMaxX + eps, elemMaxY + eps);
+    }
+  } else {
+    if (dy < 0) {
+      stripPoly = rectToPolygon(elemMinX - eps, gardenMinY - eps, elemMaxX + eps, elemMinY + eps);
+    } else {
+      stripPoly = rectToPolygon(elemMinX - eps, elemMaxY - eps, elemMaxX + eps, gardenMaxY + eps);
+    }
+  }
+
+  try {
+    const restricted = polygonClipping.intersection(emptyPoly, stripPoly);
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:postIntersection',message:'after intersection',data:{restrictedLen:restricted?.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    const restrictedPolys = fromGeoJSONMulti(restricted);
+    if (restrictedPolys.length === 0) {
+      // Strip missed the gap (e.g. element-to-element, no garden edge in that direction) – fallback to fill
+      return extendShapeToCoverEmptyArea(shapes, shapeIdx, emptyAreaPolygon);
+    }
+
+    const shapeGeo = toGeoJSONPolygon(shapePts);
+    if (!shapeGeo) return null;
+
+    let resultPoly: Point[] | null = null;
+    let bestArea = 0;
+    let iterCount = 0;
+    for (const rp of restrictedPolys) {
+      if (rp.length < 3) continue;
+      const rpGeo = toGeoJSONPolygon(rp);
+      if (!rpGeo) continue;
+      iterCount++;
+      const union = polygonClipping.union(shapeGeo, rpGeo);
+      // #region agent log
+      if (iterCount <= 2) fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:postUnion',message:'after union',data:{iterCount,polysLen:union?.length},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
+      const polys = fromGeoJSONMulti(union);
+      for (const p of polys) {
+        if (p.length < 3) continue;
+        const area = shoelaceArea(p);
+        if (area < 1) continue;
+        if (pointInPolygon(shapeCentroid, p) || area > bestArea) {
+          resultPoly = p;
+          bestArea = area;
+          if (pointInPolygon(shapeCentroid, p)) break;
+        }
+      }
+      if (resultPoly && pointInPolygon(shapeCentroid, resultPoly)) break;
+    }
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:exit',message:'extendShapeToGardenEdge returning',data:{hasResult:!!resultPoly,iterCount},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
+    return resultPoly;
+  } catch (err) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:catch',message:'extendShapeToGardenEdge threw',data:{err:String(err)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
     return null;
   }
 }

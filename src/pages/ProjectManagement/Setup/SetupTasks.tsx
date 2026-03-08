@@ -21,7 +21,7 @@ interface SetupTasksProps {
 }
 
 const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'calculator']);
+  const { t } = useTranslation(['common', 'form', 'utilities', 'calculator', 'units']);
   const queryClient = useQueryClient();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [taskSearch, setTaskSearch] = useState('');

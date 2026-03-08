@@ -641,7 +641,7 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                 <option value="">{t('event:select_task_type')}</option>
                 {taskTemplates.map(template => (
                   <option key={template.id} value={template.id}>
-                    {template.name}
+                    {translateTaskName(template.name, t)}
                   </option>
                 ))}
                 <option value="other">{t('event:other_custom_task')}</option>

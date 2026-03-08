@@ -570,7 +570,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
         >
           <option value="">{t('calculator:select_grouting_method_placeholder')}</option>
           {groutingMethods.map((method: any) => (
-            <option key={method.id} value={method.id}>{method.name}</option>
+            <option key={method.id} value={method.id}>{translateTaskName(method.name, t)}</option>
           ))}
         </select>
         {isLoadingGrouting && <p className="text-sm text-gray-500 mt-1">{t('calculator:loading_grouting_methods')}</p>}

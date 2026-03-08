@@ -1390,6 +1390,25 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
                         );
                       })}
                     </tbody>
+                    <tfoot>
+                      <tr style={{ borderTop: `2px solid ${colors.borderDefault}`, background: colors.bgOverlay, fontWeight: fontWeights.semibold }}>
+                        <td className="py-2 px-3" colSpan={5} style={{ color: colors.textPrimary }}>
+                          {t('calculator:lshape_total_blocks_label')}
+                        </td>
+                        <td className="py-2 px-3" style={{ color: colors.textPrimary }}>
+                          {result.materials
+                            .filter(m => m.courseDetails)
+                            .flatMap(m => m.courseDetails || [])
+                            .reduce((sum, c) => sum + (c.blocks || 0), 0)}
+                        </td>
+                        <td className="py-2 px-3" style={{ color: colors.textPrimary }}>
+                          {result.materials
+                            .filter(m => m.courseDetails)
+                            .flatMap(m => m.courseDetails || [])
+                            .reduce((sum, c) => sum + (c.rows || 0), 0)}
+                        </td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               </div>

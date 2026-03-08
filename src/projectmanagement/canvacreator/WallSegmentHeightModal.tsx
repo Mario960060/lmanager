@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Shape, Point, distance, PIXELS_PER_METER, C } from "./geometry";
 
@@ -30,6 +30,18 @@ export default function WallSegmentHeightModal({ shape, onSave, onClose }: WallS
   const segmentLengths = pts.length >= 2
     ? pts.slice(0, -1).map((p, i) => distance(p, pts[i + 1]) / PIXELS_PER_METER)
     : [];
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "Enter") {
+        e.preventDefault();
+        onSave(segmentHeights);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose, onSave, segmentHeights]);
 
   const updateSegment = (idx: number, field: "startH" | "endH", value: number) => {
     setSegmentHeights(prev => {

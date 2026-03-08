@@ -7,6 +7,7 @@ import DatePicker from './DatePicker';
 import { ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 import { useAuthStore } from '../lib/store';
 import { format, parseISO, addDays, subDays, isFriday, startOfDay, endOfDay, isToday, isSameDay, eachWeekOfInterval, startOfWeek, endOfWeek } from 'date-fns';
+import { pl } from 'date-fns/locale';
 
 const getThisWeekRange = () => {
   const today = new Date();
@@ -32,7 +33,8 @@ const getLastWeekRange = () => {
 };
 
 const CheckWeeklyHoursModal = ({ open, onClose }) => {
-  const { t } = useTranslation(['common', 'form', 'utilities', 'event', 'calculator']);
+  const { t, i18n } = useTranslation(['common', 'form', 'utilities', 'event', 'calculator']);
+  const dateLocale = i18n.language === 'pl' ? pl : undefined;
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [tab, setTab] = useState('thisweek');
@@ -314,7 +316,7 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
                       : 'text-gray-500'
                   }`} />
                   <span>
-                    {format(week.start, 'MMM d')} - {format(week.end, 'MMM d, yyyy')}
+                    {format(week.start, 'MMM d', { locale: dateLocale })} - {format(week.end, 'MMM d, yyyy', { locale: dateLocale })}
                   </span>
                 </div>
               </div>
@@ -375,7 +377,7 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
                     return (
                       <div key={date} className="mb-2">
                         <div className="flex justify-between items-center text-sm font-medium text-gray-400 mb-1">
-                          <span>{format(parseISO(date), 'EEEE, MMMM d, yyyy')}</span>
+                          <span>{format(parseISO(date), 'EEEE, MMMM d, yyyy', { locale: dateLocale })}</span>
                           <span className="text-gray-300 font-semibold">{dailyTotal.toFixed(2)} {t('event:hrs_short')}</span>
                         </div>
                         {entries.map((entry, idx) => (

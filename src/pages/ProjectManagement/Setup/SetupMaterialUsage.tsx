@@ -67,6 +67,18 @@ const CALCULATORS = [
     supabaseId: "artificial_grass",
   },
   {
+    key: "natural_turf_calculator",
+    label: "Natural Turf",
+    icon: "🌿",
+    color: "#16a34a",
+    thicknesses: [
+      { key: "type1_thickness", label: "Type 1 Thickness", unit: "cm", default: 10 },
+      { key: "soil_thickness", label: "Soil Thickness", unit: "cm", default: 5 },
+    ],
+    hasSand: false,
+    supabaseId: "natural_turf",
+  },
+  {
     key: "wall_calculator",
     label: "Walls",
     icon: "▦",

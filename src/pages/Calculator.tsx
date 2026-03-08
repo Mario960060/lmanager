@@ -53,6 +53,7 @@ const CalculatorPage: React.FC = () => {
   const companyId = useAuthStore((s) => s.getCompanyId());
   const [activeCalculator, setActiveCalculator] = useState<CalculatorType | null>(null);
   const [activeSubType, setActiveSubType] = useState<string | null>(null);
+  const [activeCalculatorLabel, setActiveCalculatorLabel] = useState<string | null>(null);
   const { setShowCalculatorMenu, setKeepSidebarOpenFor, setSelectedCalculatorType, setSelectedSubType, setExpandedCategory } = useCalculatorMenu();
 
   const pageInfoDescription = React.useMemo(() => {
@@ -65,6 +66,7 @@ const CalculatorPage: React.FC = () => {
     }
     if (activeCalculator === 'slab' && activeSubType === 'default') return t('calculator:slab_info_description');
     if (activeCalculator === 'kerbs') return t('calculator:kerbs_info_description');
+    if (activeCalculator === 'foundation') return t('calculator:foundation_calculator_description');
     return t('calculator:info_description');
   }, [activeCalculator, activeSubType, t]);
 
@@ -72,6 +74,7 @@ const CalculatorPage: React.FC = () => {
   const slabDefaults = useMemo(() => getCalculatorInputDefaults('slab', companyId), [companyId]);
   const concreteSlabsDefaults = useMemo(() => getCalculatorInputDefaults('concreteSlabs', companyId), [companyId]);
   const grassDefaults = useMemo(() => getCalculatorInputDefaults('grass', companyId), [companyId]);
+  const turfDefaults = useMemo(() => getCalculatorInputDefaults('turf', companyId), [companyId]);
 
   // Calculator buttons are now handled by the sidebar in Layout.tsx
   
@@ -89,10 +92,11 @@ const CalculatorPage: React.FC = () => {
   useEffect(() => {
     const handleSelectSubCalculator = (e: any) => {
       console.log('selectSubCalculator event received:', e.detail);
-      const { calculatorType, subType } = e.detail;
+      const { calculatorType, subType, subTypeLabel } = e.detail;
       console.log('Setting activeCalculator to:', calculatorType, 'and activeSubType to:', subType);
       setActiveCalculator(calculatorType);
       setActiveSubType(subType);
+      setActiveCalculatorLabel(subTypeLabel ?? null);
     };
     
     window.addEventListener('selectSubCalculator', handleSelectSubCalculator);
@@ -170,7 +174,7 @@ const CalculatorPage: React.FC = () => {
       case 'grass':
         return <ArtificialGrassCalculator key={calculatorKey} savedInputs={grassDefaults} />;
       case 'turf':
-        return <NaturalTurfCalculator key={calculatorKey} />;
+        return <NaturalTurfCalculator key={calculatorKey} savedInputs={turfDefaults} />;
       case 'kerbs':
         return <KerbsEdgesAndSetsCalculator key={calculatorKey} type={activeSubType as SubCalculatorType['kerbs']} />;
       case 'foundation':
@@ -184,30 +188,26 @@ const CalculatorPage: React.FC = () => {
 
   return (
     <div style={{ height: '100vh', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontFamily: fonts.body, background: colors.bgMain }}>
-      <div style={{ display: 'flex', alignItems: 'center', padding: `${spacing["5xl"]}px ${spacing["6xl"]}px` }}>
-        <CalculatorIcon style={{ width: spacing["8xl"], height: spacing["8xl"], color: colors.textDim, marginRight: spacing.lg }} />
-        <h1 style={{ fontSize: fontSizes["3xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>
-          {t('calculator:construction_calculator_title')}
-        </h1>
-        <PageInfoModal
-          description={pageInfoDescription}
-          title={t('calculator:info_title')}
-          quickTips={[]}
-        />
-      </div>
-
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', padding: `0 ${spacing["6xl"]}px` }}>
         <div style={{ flex: 1, overflowY: 'auto' }} id="calculator-container">
           {activeCalculator && activeSubType ? (
             <div style={{ background: colors.bgCard, borderRadius: radii["3xl"], boxShadow: '0 4px 20px rgba(0,0,0,0.3)', padding: spacing["6xl"], minHeight: '100%', width: '100%' }}>
-              <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, marginBottom: spacing["6xl"] }}>
-                {activeSubType.charAt(0).toUpperCase() + activeSubType.slice(1).replace(/_/g, ' ')}
-              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg, marginBottom: spacing["6xl"] }}>
+                <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>
+                  {activeCalculatorLabel || activeSubType.replace(/_/g, ' ')}
+                </h2>
+                <PageInfoModal
+                  description={pageInfoDescription}
+                  title={t('calculator:info_title')}
+                  quickTips={[]}
+                />
+              </div>
               {renderCalculator()}
             </div>
           ) : (
             <div style={{ background: colors.bgCard, borderRadius: radii["3xl"], boxShadow: shadows.lg, padding: spacing["6xl"], textAlign: 'center', color: colors.textDim, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: spacing["9xl"] * 10, width: '100%' }}>
               <div>
+                <CalculatorIcon style={{ width: spacing["8xl"], height: spacing["8xl"], color: colors.textDim, marginBottom: spacing.lg }} />
                 <p style={{ fontSize: fontSizes["2xl"], marginBottom: spacing.md, color: colors.textMuted }}>{t('calculator:select_calculator_message')}</p>
                 <p style={{ color: colors.textFaint }}>{t('calculator:calculator_sidebar_hint')}</p>
               </div>

@@ -208,9 +208,14 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
     addNoteMutation.mutate({ eventId: selectedEvent, content: noteContent });
   };
 
-  const handleAddMaterial = (eventId: string) => {
+  const handleAddMaterial = (eventId: string | null) => {
     setSelectedEventForMaterial(eventId);
     setShowMaterialModal(true);
+  };
+
+  const handleAddEquipment = (eventId: string | null) => {
+    setSelectedEventForEquipment(eventId);
+    setShowEquipmentModal(true);
   };
 
   return (
@@ -220,6 +225,24 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
           {events.length} {t('event:events_label')}
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["8xl"], overflowY: 'auto' }}>
+          {/* Add Material/Equipment for day - when no events */}
+          {events.length === 0 && (
+            <div style={{ background: colors.bgSubtle, padding: spacing["5xl"], borderRadius: radii.lg }}>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, marginBottom: spacing.base, fontFamily: fonts.display }}>{t('event:add_for_this_day')}</h3>
+              <p style={{ fontSize: fontSizes.base, color: colors.textDim, marginBottom: spacing["5xl"], fontFamily: fonts.body }}>{t('event:no_events_add_materials_equipment')}</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.sm }}>
+                <Button variant="accent" color={colors.green} onClick={() => handleAddMaterial(null)}>
+                  <Package style={{ width: 16, height: 16, marginRight: spacing.xs }} />
+                  {t('event:add_material')}
+                </Button>
+                <Button variant="accent" color={colors.orange} onClick={() => handleAddEquipment(null)}>
+                  <Wrench style={{ width: 16, height: 16, marginRight: spacing.xs }} />
+                  {t('event:require_equipment')}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Events Section */}
           {events.length > 0 && (
             <div>
@@ -237,7 +260,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
                           <Package style={{ width: 16, height: 16, marginRight: spacing.xs }} />
                           {t('event:add_material')}
                         </Button>
-                        <Button variant="accent" color={colors.orange} onClick={() => { setSelectedEventForEquipment(event.id); setShowEquipmentModal(true); }}>
+                        <Button variant="accent" color={colors.orange} onClick={() => handleAddEquipment(event.id)}>
                           <Wrench style={{ width: 16, height: 16, marginRight: spacing.xs }} />
                           {t('event:require_equipment')}
                         </Button>
@@ -278,6 +301,21 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
                   </div>
                 );
               })}
+              {(materialsByProject['unassigned'] || []).length > 0 && (
+                <div style={{ background: colors.bgSubtle, padding: spacing["5xl"], borderRadius: radii.lg }}>
+                  <h4 style={{ fontWeight: fontWeights.medium, color: colors.textDim, marginBottom: spacing.base, fontFamily: fonts.body }}>{t('event:add_for_this_day')}</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.base }}>
+                    {(materialsByProject['unassigned'] || []).map(material => (
+                      <div key={material.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${spacing.sm} 0` }}>
+                        <div>
+                          <p style={{ fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.textPrimary, fontFamily: fonts.body }}>{material.material} - {material.quantity}</p>
+                          {material.notes && <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body }}>{material.notes}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {Object.keys(materialsByProject).length === 0 && (
                 <p style={{ color: colors.textDim, textAlign: 'center', padding: spacing["5xl"], fontFamily: fonts.body }}>{t('event:no_materials_needed_today')}</p>
               )}
@@ -316,6 +354,22 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
                   </div>
                 );
               })}
+              {(equipmentByProject['unassigned'] || []).length > 0 && (
+                <div style={{ background: colors.bgSubtle, padding: spacing["5xl"], borderRadius: radii.lg }}>
+                  <h4 style={{ fontWeight: fontWeights.medium, color: colors.textDim, marginBottom: spacing.base, fontFamily: fonts.body }}>{t('event:add_for_this_day')}</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.base }}>
+                    {(equipmentByProject['unassigned'] || []).map(equipment => (
+                      <div key={equipment.id} style={{ display: 'flex', alignItems: 'center' }}>
+                        <Wrench style={{ width: 20, height: 20, color: colors.textDim, marginRight: spacing.base }} />
+                        <div>
+                          <p style={{ fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.textPrimary, fontFamily: fonts.body }}>{equipment.equipment?.name} - {equipment.quantity} {equipment.quantity > 1 ? t('event:units_label') : t('event:unit_singular')}</p>
+                          {equipment.notes && <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body }}>{equipment.notes}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {Object.keys(equipmentByProject).length === 0 && (
                 <p style={{ color: colors.textDim, textAlign: 'center', padding: spacing["5xl"], fontFamily: fonts.body }}>{t('event:no_equipment_required_today')}</p>
               )}
@@ -383,7 +437,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
         />
       )}
 
-      {showEquipmentModal && selectedEventForEquipment && (
+      {showEquipmentModal && (
         <CalendarEquipmentModal
           eventId={selectedEventForEquipment}
           date={date}

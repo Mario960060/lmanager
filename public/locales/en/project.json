@@ -481,6 +481,7 @@
   "object_card_rolls_orientation_across": "Across (vertical)",
   "grass_rotate_piece_90": "Rotate piece 90°",
   "grass_rotate_group_90": "Rotate group 90°",
+  "grass_rotate_element_90": "Rotate element 90°",
   "object_card_effective_width": "Effective width after trimming when joining",
   "object_card_detected_slab": "Detected slab size:",
   "object_card_piece": "Piece",

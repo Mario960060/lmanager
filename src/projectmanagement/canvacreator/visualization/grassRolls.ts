@@ -3,7 +3,7 @@
 // Artificial grass piece placement and rendering
 // ══════════════════════════════════════════════════════════════
 
-import { Point, Shape, toPixels, toMeters, areaM2, distance, formatLength, midpoint, edgeNormalAngle, labelAnchorInsidePolygon, centroid } from "../geometry";
+import { Point, Shape, toPixels, toMeters, areaM2, distance, formatLength, midpoint, edgeNormalAngle, labelAnchorInsidePolygon, centroid, readableTextAngle } from "../geometry";
 import { getEffectivePolygon as getEffectivePolygonWithArcs } from "../arcMath";
 import { shrinkPolygon } from "./slabPattern";
 
@@ -596,6 +596,52 @@ export function getJoinedGroup(pieces: GrassPiece[], pieceIdx: number): number[]
   return Array.from(joined);
 }
 
+/** Rotate point 90° CW around center (screen coords: y down). */
+function rotate90CW(p: Point, center: Point): Point {
+  const dx = p.x - center.x;
+  const dy = p.y - center.y;
+  return { x: center.x + dy, y: center.y - dx };
+}
+
+/**
+ * Rotate a group of grass pieces 90° as a unit. Each piece's center rotates around
+ * the group centroid; rotation flag is toggled (0↔90). Preserves joins and dimensions.
+ */
+export function rotateGrassGroup90(pieces: GrassPiece[], groupIndices: number[]): GrassPiece[] {
+  if (groupIndices.length === 0) return pieces;
+  const result = [...pieces];
+
+  const groupPieces = groupIndices.map(i => pieces[i]).filter(Boolean);
+  const corners = groupPieces.flatMap(p => getRawPieceCorners(p));
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const c of corners) {
+    if (c.x < minX) minX = c.x;
+    if (c.x > maxX) maxX = c.x;
+    if (c.y < minY) minY = c.y;
+    if (c.y > maxY) maxY = c.y;
+  }
+  const groupCenter = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+
+  for (const i of groupIndices) {
+    const p = result[i];
+    if (!p) continue;
+    const wPx = toPixels(p.widthM);
+    const lPx = toPixels(p.lengthM);
+    const [w, l] = p.rotation === 90 ? [lPx, wPx] : [wPx, lPx];
+    const pieceCenter = { x: p.x + l / 2, y: p.y + w / 2 };
+    const newCenter = rotate90CW(pieceCenter, groupCenter);
+    const newRot = (p.rotation === 90 ? 0 : 90) as 0 | 90;
+    const [newW, newL] = newRot === 90 ? [lPx, wPx] : [wPx, lPx];
+    result[i] = {
+      ...p,
+      x: newCenter.x - newL / 2,
+      y: newCenter.y - newW / 2,
+      rotation: newRot,
+    };
+  }
+  return result;
+}
+
 /**
  * Validate coverage of polygon by grass pieces.
  * Coverage = % of ELEMENT covered by pattern. Sample the element, count points inside any piece.
@@ -929,6 +975,8 @@ export function drawGrassPieces(
         const segOffset = nSeg > 1 ? (k - (nSeg - 1) / 2) * 10 : 0;
         const lx = mid.x + Math.cos(norm) * offset - Math.sin(norm) * segOffset;
         const ly = mid.y + Math.sin(norm) * offset + Math.cos(norm) * segOffset;
+        const edgeAngle = Math.atan2(sb.y - sa.y, sb.x - sa.x);
+        const textAngle = readableTextAngle(edgeAngle);
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         if (lenM >= MIN_LABEL_M) {
@@ -937,10 +985,18 @@ export function drawGrassPieces(
           const w = ctx.measureText(label).width;
           if (inside) {
             ctx.fillStyle = "rgba(0,0,0,0.55)";
-            ctx.fillRect(lx - w / 2 - 2, ly - 7, w + 4, 14);
+            ctx.save();
+            ctx.translate(lx, ly);
+            ctx.rotate(textAngle);
+            ctx.fillRect(-w / 2 - 2, -7, w + 4, 14);
+            ctx.restore();
           }
+          ctx.save();
+          ctx.translate(lx, ly);
+          ctx.rotate(textAngle);
           ctx.fillStyle = "rgba(255,255,255,0.95)";
-          ctx.fillText(label, lx, ly);
+          ctx.fillText(label, 0, 0);
+          ctx.restore();
         }
       }
     }
@@ -961,14 +1017,20 @@ export function drawGrassPieces(
         const offset = 22;
         const lx = smid.x + Math.cos(norm) * offset;
         const ly = smid.y + Math.sin(norm) * offset;
+        const edgeAngle = Math.atan2(sb.y - sa.y, sb.x - sa.x);
+        const textAngle = readableTextAngle(edgeAngle);
         ctx.font = "bold 13px 'JetBrains Mono',monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillStyle = "#ffffff";
         ctx.strokeStyle = "rgba(0,0,0,0.8)";
         ctx.lineWidth = 2;
-        ctx.strokeText(lengthLabel, lx, ly);
-        ctx.fillText(lengthLabel, lx, ly);
+        ctx.save();
+        ctx.translate(lx, ly);
+        ctx.rotate(textAngle);
+        ctx.strokeText(lengthLabel, 0, 0);
+        ctx.fillText(lengthLabel, 0, 0);
+        ctx.restore();
       }
     }
   }
@@ -978,9 +1040,12 @@ export function drawGrassPieces(
   const cov = validateCoverage(shape, pieces);
   const anchor = labelAnchorInsidePolygon(pts);
   const sc = worldToScreen(anchor.x, anchor.y);
+  const area = pts.length >= 3 ? areaM2(pts) : 0;
   ctx.font = "bold 14px 'JetBrains Mono',monospace";
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + 8);
   ctx.fillStyle = cov.coveragePercent < 99.99 ? "#e74c3c" : "#ffffff";
   ctx.fillText(`Coverage: ${cov.coveragePercent.toFixed(1)}%`, sc.x, sc.y + 24);
   ctx.fillStyle = "#ffffff";

@@ -6,11 +6,11 @@ import {
   SelectionRect, DimEdit, ContextMenuInfo, LinkedEntry, isArcEntry,
   PIXELS_PER_METER, GRID_SPACING, POINT_RADIUS, EDGE_HIT_THRESHOLD, GRASS_EDGE_HIT_PX,
   SNAP_TO_START_RADIUS, SNAP_TO_LAST_RADIUS, MIN_ZOOM, MAX_ZOOM, SNAP_MAGNET_PX, ARC_SNAP_PX, PATTERN_SNAP_PX,
-  distance, toMeters, toPixels, formatLength, midpoint, angleDeg, areaM2, polylineLengthMeters,
-  projectOntoSegment, edgeNormalAngle, snapTo45, snapTo45Soft, snapAngleTo45, snapShiftSmart, interiorAngleDir, centroid, labelAnchorInsidePolygon,
+  distance, toMeters, toPixels, formatLength, midpoint, angleDeg, areaM2, polylineLengthMeters, rotatePointAround,
+  projectOntoSegment, edgeNormalAngle, readableTextAngle, snapTo45, snapTo45Soft, snapAngleTo45, snapShiftSmart, interiorAngleDir, centroid, labelAnchorInsidePolygon,
   constrainLockedEdges,
-  snapMagnet, snapMagnetShape, pointInPolygon,
-  makeSquare, makeRectangle, makeTriangle, makeTrapezoid, C,
+  snapMagnet, snapMagnetShape, pointInPolygon, pointInOrNearPolygon,
+  makeSquare, makeRectangle, makeTriangle, makeTrapezoid, C, C_LIGHT,
 } from "./geometry";
 import { calcEdgeSlopes, calcShapeGradient, formatSlope, slopeColor, interpolateHeightAtPoint, fillShapeHeightHeatmap, computeGlobalHeightRange } from "./geodesy.ts";
 import { isLinearElement, isGroundworkLinear, isPathElement, isPolygonLinearElement, groundworkLabel, drawLinearElement, drawLinearElementInactive, hitTestLinearElement, hitTestPathElement, computeThickPolyline, getPathPolygon, getLinearElementPath, getPolygonThicknessM, polygonToSegmentLengths, polygonEdgeToSegmentIndex, removeSegmentFromPolygonOutline } from "./linearElements";
@@ -19,7 +19,8 @@ import { drawDeckPattern } from "./visualization/deckBoards";
 import { drawSlabPattern, drawPathSlabPattern, drawSlabFrame, computePatternSnap, computeSlabCuts, computePathSlabCuts } from "./visualization/slabPattern";
 import { drawCobblestonePattern, drawMonoblockFrame, computeCobblestoneCuts } from "./visualization/cobblestonePattern";
 import { drawFencePostMarkers, drawWallSlopeIndicators } from "./visualization/linearMarkers";
-import { drawGrassPieces, hitTestGrassPiece, hitTestGrassPieceEdge, hitTestGrassJoinEdge, snapGrassPieceEdge, snapGrassPieceToPolygon, getJoinedGroup, validateCoverage, getEffectiveTotalArea, getEffectivePieceDimensionsForInput, type GrassPiece } from "./visualization/grassRolls";
+import { drawGeodesyLabels, getGeodesyCardsInfo, hitTestGeodesyCard, findCardForPoint, type GeodesyCardInfo, GEODESY_CARD_PAD, GEODESY_CARD_ROW_H } from "./visualization/geodesyLabels";
+import { drawGrassPieces, hitTestGrassPiece, hitTestGrassPieceEdge, hitTestGrassJoinEdge, snapGrassPieceEdge, snapGrassPieceToPolygon, getJoinedGroup, rotateGrassGroup90, validateCoverage, getEffectiveTotalArea, getEffectivePieceDimensionsForInput, type GrassPiece } from "./visualization/grassRolls";
 import { ProjectSettings, DEFAULT_PROJECT_SETTINGS } from "./types";
 import ObjectCardModal from "./objectCard/ObjectCardModal";
 import StairsCreationModal from "./objectCard/StairsCreationModal";
@@ -29,7 +30,7 @@ import WallSegmentHeightModal from "./WallSegmentHeightModal";
 import ProjectSummaryPanel from "./ProjectSummaryPanel";
 import ProjectCardModal from "./ProjectCardModal";
 import { computePreparation } from "./preparationLogic";
-import { computeEmptyAreas, computeOverflowAreas, computeOverlaps, clipShapeToGarden, removeOverlapFromShape, findTouchingElementsForEmptyArea, extendShapeToCoverEmptyArea, clipSurfaceToOutsideLinear, findSurfacesOverlappingLinear } from "./adjustmentLogic";
+import { computeEmptyAreas, computeOverflowAreas, computeOverlaps, clipShapeToGarden, removeOverlapFromShape, findTouchingElementsForEmptyArea, extendShapeToCoverEmptyArea, extendShapeToGardenEdge, clipSurfaceToOutsideLinear, findSurfacesOverlappingLinear } from "./adjustmentLogic";
 import { computeGroundworkLinearResults, isManualExcavation, getFoundationDiggingMethodFromExcavator } from "./GroundworkLinearCalculator";
 import { drawAlternatingLinkedHalf } from "./linkedEdgeDrawing";
 import { drawCurvedEdge, calcEdgeLengthWithArcs, getEffectivePolygon, getEffectivePolygonWithEdgeIndices, drawSmoothPolygonPath, drawSmoothPolygonStroke, projectOntoArcEdge, drawArcHandles, hitTestArcPoint, dragArcPoint, snapArcPoint, arcPointToWorld, worldToArcPoint } from "./arcMath";
@@ -41,6 +42,7 @@ import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../lib/store";
 import { loadPlan, savePlan, linkPlanToEvent, type CanvasPayload } from "../../lib/plansService";
 import { useTranslation } from "react-i18next";
+import { useTheme } from "../../themes";
 import "./toolbar.css";
 
 // ══════════════════════════════════════════════════════════════
@@ -70,6 +72,49 @@ function passesViewFilter(shape: Shape, viewFilter: ViewFilter, activeLayer: Act
   return false;
 }
 
+const EDGE_MATCH_TOL = 5;
+
+/** Check if two edges are the same (within tolerance). */
+function edgesMatch(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
+  return (
+    (distance(a1, b1) < EDGE_MATCH_TOL && distance(a2, b2) < EDGE_MATCH_TOL) ||
+    (distance(a1, b2) < EDGE_MATCH_TOL && distance(a2, b1) < EDGE_MATCH_TOL)
+  );
+}
+
+/** Apply polygon points from adjustment operations (extend/fill). Preserves edgeArcs only on edges that weren't modified. */
+function applyPolygonPointsToShape(shape: Shape, newPts: Point[]): Shape {
+  const s = { ...shape, points: newPts };
+  if (isPathElement(s)) {
+    s.calculatorInputs = { ...s.calculatorInputs, pathIsOutline: true };
+  }
+  if (!shape.edgeArcs || shape.edgeArcs.every(a => !a || a.length === 0)) {
+    s.edgeArcs = undefined;
+    return s;
+  }
+  const oldPts = shape.points;
+  const n = newPts.length;
+  const m = oldPts.length;
+  const newEdgeArcs: (typeof shape.edgeArcs)[number][] = [];
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const newA = newPts[i];
+    const newB = newPts[j];
+    let matched = false;
+    for (let k = 0; k < m; k++) {
+      const l = (k + 1) % m;
+      if (edgesMatch(newA, newB, oldPts[k], oldPts[l]) && shape.edgeArcs[k]) {
+        newEdgeArcs[i] = [...shape.edgeArcs[k]!];
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) newEdgeArcs[i] = null;
+  }
+  s.edgeArcs = newEdgeArcs.length > 0 ? newEdgeArcs : undefined;
+  return s;
+}
+
 /** Compute context menu position so it always fits on screen. Opens in the direction with most space. */
 function clampContextMenuPosition(clickX: number, clickY: number, menuWidth: number, menuHeight: number, padding = 8): { x: number; y: number } {
   const vw = window.innerWidth;
@@ -93,6 +138,8 @@ export default function MasterProject() {
   const { user } = useAuthStore();
   const currentPlanIdRef = useRef<string | null>(urlPlanId ?? null);
   const { t } = useTranslation(["project"]);
+  const { currentTheme } = useTheme();
+  const CC = currentTheme?.id === "light" ? C_LIGHT : C;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mouseRafRef = useRef<number>(0);
@@ -129,14 +176,15 @@ export default function MasterProject() {
   const [canvasSize, setCanvasSize] = useState({ w: 900, h: 600 });
   const [editingDim, setEditingDim] = useState<DimEdit | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [editingDimMode, setEditingDimMode] = useState<"a" | "b" | "split">("b");
   const [mouseWorld, setMouseWorld] = useState<Point>({ x: 0, y: 0 });
   const [contextMenu, setContextMenu] = useState<ContextMenuInfo | null>(null);
   const [contextMenuDisplayPos, setContextMenuDisplayPos] = useState<{ x: number; y: number } | null>(null);
   const [activeLayer, setActiveLayer] = useState<ActiveLayer>(1);
   const [selectedPattern, setSelectedPattern] = useState<{ shapeIdx: number; type: "slab" | "grass" | "cobblestone" } | null>(null);
-  const [editingHeight, setEditingHeight] = useState<{ shapeIdx: number; pointIdx: number; heightPointIdx?: number; x: number; y: number } | null>(null);
+  const [editingGeodesyCard, setEditingGeodesyCard] = useState<{ cardInfo: GeodesyCardInfo } | null>(null);
+  const [heightValues, setHeightValues] = useState<string[]>([]);
   const [hoveredHeightPoint, setHoveredHeightPoint] = useState<{ shapeIdx: number; heightPointIdx: number } | null>(null);
-  const [heightValue, setHeightValue] = useState("");
   const [clickedHeightTooltip, setClickedHeightTooltip] = useState<{ world: Point; shapeIdx: number; height: number } | null>(null);
   // Linked points: groups of points that move together across shapes
   // Each group is an array of LinkedEntry that should stay at the same position
@@ -153,6 +201,7 @@ export default function MasterProject() {
   const [grassNearEdge, setGrassNearEdge] = useState<{ pieceIdx: number; otherPieceIdx: number; edgeIdx: number } | null>(null);
   const [grassTrimModal, setGrassTrimModal] = useState<{ shapeIdx: number; pieceAIdx: number; pieceBIdx: number; edgeIdx: number } | null>(null);
   const [adjustmentFillModal, setAdjustmentFillModal] = useState<{ emptyAreaIdx: number } | null>(null);
+  const [adjustmentExtendModal, setAdjustmentExtendModal] = useState<{ emptyAreaIdx: number } | null>(null);
   const [adjustmentSpreadModal, setAdjustmentSpreadModal] = useState<{ shapeIdxA: number; shapeIdxB: number; overlapIdx: number } | null>(null);
   const [grassScaleInfo, setGrassScaleInfo] = useState<{ shapeIdx: number; pieceIdx: number; edge: "length_start" | "length_end"; startMouse: Point; startLength: number; startX: number; startY: number } | null>(null);
   const [grassAlignedPolyEdges, setGrassAlignedPolyEdges] = useState<number[]>([]);
@@ -181,6 +230,9 @@ export default function MasterProject() {
   const [pathConfig, setPathConfig] = useState<PathConfig | null>(null);
   const [shapeCreationModal, setShapeCreationModal] = useState<{ type: "square" | "rectangle" | "triangle" | "trapezoid" } | null>(null);
   const [segmentHeightModal, setSegmentHeightModal] = useState<{ shapeIdx: number } | null>(null);
+  const [setAngleModal, setSetAngleModal] = useState<{ shapeIdx: number; pointIdx: number } | null>(null);
+  const [setAngleTargetValue, setSetAngleTargetValue] = useState("");
+  const [setAngleMode, setSetAngleMode] = useState<"a" | "b" | "split">("split");
   const [resultsModalShapeIdx, setResultsModalShapeIdx] = useState<number | null>(null);
   const [showCreatePreview, setShowCreatePreview] = useState(false);
   const [recalculateTrigger, setRecalculateTrigger] = useState(0);
@@ -192,7 +244,6 @@ export default function MasterProject() {
   const edgeHitThresholdEffective = isMobile ? EDGE_HIT_THRESHOLD * 1.8 : EDGE_HIT_THRESHOLD;
   const grassEdgeHitPxEffective = isMobile ? GRASS_EDGE_HIT_PX * 1.5 : GRASS_EDGE_HIT_PX;
   const [viewFilter, setViewFilter] = useState<ViewFilter>("all");
-  const [dismissedLayerHints, setDismissedLayerHints] = useState<Set<number>>(new Set());
   const [namePromptShapeIdx, setNamePromptShapeIdx] = useState<number | null>(null);
   const [projectSummaryContextMenu, setProjectSummaryContextMenu] = useState<{ shapeIdx: number; x: number; y: number } | null>(null);
   const [projectSummaryDisplayPos, setProjectSummaryDisplayPos] = useState<{ x: number; y: number } | null>(null);
@@ -430,17 +481,30 @@ export default function MasterProject() {
 
   useEffect(() => {
     if (!modeDropdownOpen && !layersDropdownOpen && !shapesDropdownOpen && !pathDropdownOpen && !linearDropdownOpen && !groundworkDropdownOpen && !stairsDropdownOpen) return;
-    const onOutside = (e: MouseEvent) => {
-      if (modeDropdownRef.current && !modeDropdownRef.current.contains(e.target as Node)) setModeDropdownOpen(false);
-      if (layersDropdownRef.current && !layersDropdownRef.current.contains(e.target as Node)) setLayersDropdownOpen(false);
-      if (shapesDropdownRef.current && !shapesDropdownRef.current.contains(e.target as Node)) setShapesDropdownOpen(false);
-      if (pathDropdownRef.current && !pathDropdownRef.current.contains(e.target as Node)) setPathDropdownOpen(false);
-      if (linearDropdownRef.current && !linearDropdownRef.current.contains(e.target as Node)) setLinearDropdownOpen(false);
-      if (groundworkDropdownRef.current && !groundworkDropdownRef.current.contains(e.target as Node)) setGroundworkDropdownOpen(false);
-      if (stairsDropdownRef.current && !stairsDropdownRef.current.contains(e.target as Node)) setStairsDropdownOpen(false);
+    const getTarget = (e: MouseEvent | TouchEvent): Node | null => {
+      if (e instanceof TouchEvent && e.changedTouches?.[0]) {
+        const t = e.changedTouches[0];
+        return document.elementFromPoint(t.clientX, t.clientY);
+      }
+      return e.target as Node;
+    };
+    const onOutside = (e: MouseEvent | TouchEvent) => {
+      const target = getTarget(e);
+      if (!target) return;
+      if (modeDropdownRef.current && !modeDropdownRef.current.contains(target)) setModeDropdownOpen(false);
+      if (layersDropdownRef.current && !layersDropdownRef.current.contains(target)) setLayersDropdownOpen(false);
+      if (shapesDropdownRef.current && !shapesDropdownRef.current.contains(target)) setShapesDropdownOpen(false);
+      if (pathDropdownRef.current && !pathDropdownRef.current.contains(target)) setPathDropdownOpen(false);
+      if (linearDropdownRef.current && !linearDropdownRef.current.contains(target)) setLinearDropdownOpen(false);
+      if (groundworkDropdownRef.current && !groundworkDropdownRef.current.contains(target)) setGroundworkDropdownOpen(false);
+      if (stairsDropdownRef.current && !stairsDropdownRef.current.contains(target)) setStairsDropdownOpen(false);
     };
     document.addEventListener("mousedown", onOutside);
-    return () => document.removeEventListener("mousedown", onOutside);
+    document.addEventListener("touchend", onOutside, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", onOutside);
+      document.removeEventListener("touchend", onOutside);
+    };
   }, [modeDropdownOpen, layersDropdownOpen, shapesDropdownOpen, pathDropdownOpen, linearDropdownOpen, groundworkDropdownOpen, stairsDropdownOpen]);
 
   useEffect(() => {
@@ -552,7 +616,7 @@ export default function MasterProject() {
       return poly;
     };
 
-    ctx.fillStyle = C.bg;
+    ctx.fillStyle = CC.bg;
     ctx.fillRect(0, 0, W, H);
 
     // Grid
@@ -561,12 +625,12 @@ export default function MasterProject() {
       ctx.lineWidth = 1;
       for (let x = pan.x % gridPx; x < W; x += gridPx) {
         const wx = (x - pan.x) / zoom;
-        ctx.strokeStyle = Math.abs(Math.round(wx / PIXELS_PER_METER) * PIXELS_PER_METER - wx) < 1 ? C.gridMajor : C.grid;
+        ctx.strokeStyle = Math.abs(Math.round(wx / PIXELS_PER_METER) * PIXELS_PER_METER - wx) < 1 ? CC.gridMajor : CC.grid;
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
       }
       for (let y = pan.y % gridPx; y < H; y += gridPx) {
         const wy = (y - pan.y) / zoom;
-        ctx.strokeStyle = Math.abs(Math.round(wy / PIXELS_PER_METER) * PIXELS_PER_METER - wy) < 1 ? C.gridMajor : C.grid;
+        ctx.strokeStyle = Math.abs(Math.round(wy / PIXELS_PER_METER) * PIXELS_PER_METER - wy) < 1 ? CC.gridMajor : CC.grid;
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
       }
     }
@@ -574,7 +638,7 @@ export default function MasterProject() {
     // Origin (hidden during PDF export)
     if (!isExportingRef.current) {
       const o = worldToScreen(0, 0);
-      ctx.strokeStyle = C.textDim; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = CC.textDim; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.moveTo(o.x, 0); ctx.lineTo(o.x, H); ctx.moveTo(0, o.y); ctx.lineTo(W, o.y); ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -638,7 +702,7 @@ export default function MasterProject() {
             ctx.lineTo(s.x, s.y);
           }
           ctx.closePath();
-          ctx.fillStyle = C.layer2Dim;
+          ctx.fillStyle = CC.layer2Dim;
           ctx.fill();
         }
         return;
@@ -660,14 +724,14 @@ export default function MasterProject() {
           }
         }
         ctx.closePath();
-        ctx.fillStyle = shape.layer === 2 ? C.layer2Dim : C.inactiveShape;
+        ctx.fillStyle = shape.layer === 2 ? CC.layer2Dim : CC.inactiveShape;
         ctx.fill();
       }
 
       const edgeCount = shape.closed ? pts.length : pts.length - 1;
       const hasArcsInactiveStroke = !!(shape.edgeArcs?.some(a => a && a.length > 0));
       if (hasArcsInactiveStroke) {
-        ctx.strokeStyle = C.inactiveEdge;
+        ctx.strokeStyle = CC.inactiveEdge;
         ctx.lineWidth = 1.2;
         ctx.beginPath();
         drawSmoothPolygonPath(ctx, getCachedPoly(si), (wx, wy) => worldToScreen(wx, wy));
@@ -677,20 +741,27 @@ export default function MasterProject() {
           const j = (i + 1) % pts.length;
           const sa = worldToScreen(pts[i].x, pts[i].y);
           const sb = worldToScreen(pts[j].x, pts[j].y);
-          ctx.strokeStyle = C.inactiveEdge;
+          ctx.strokeStyle = CC.inactiveEdge;
           ctx.lineWidth = 1.2;
           ctx.beginPath(); ctx.moveTo(sa.x, sa.y); ctx.lineTo(sb.x, sb.y); ctx.stroke();
         }
       }
 
       if (shape.closed && pts.length >= 3) {
-        const effPts = getCachedPoly(si);
-        const area = areaM2(effPts);
-        const anchor = labelAnchorInsidePolygon(shape.points);
-        const sc = worldToScreen(anchor.x, anchor.y);
-        ctx.font = "bold 14px 'JetBrains Mono',monospace";
-        ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y);
+        const hasPatternLabel = shape.layer === 2 && (
+          ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth) ||
+          (shape.calculatorType === "paving" && shape.calculatorInputs) ||
+          (shape.calculatorType === "grass" && (shape.calculatorInputs?.vizPieces?.length ?? 0) > 0)
+        );
+        if (!hasPatternLabel) {
+          const effPts = getCachedPoly(si);
+          const area = areaM2(effPts);
+          const anchor = labelAnchorInsidePolygon(shape.points);
+          const sc = worldToScreen(anchor.x, anchor.y);
+          ctx.font = "bold 14px 'JetBrains Mono',monospace";
+          ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y);
+        }
       }
     });
 
@@ -713,7 +784,7 @@ export default function MasterProject() {
             ctx.lineTo(s.x, s.y);
           }
           ctx.closePath();
-          ctx.fillStyle = isSel ? "rgba(108,92,231,0.15)" : C.layer2Dim;
+          ctx.fillStyle = isSel ? "rgba(108,92,231,0.15)" : CC.layer2Dim;
           ctx.fill();
           if ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth) {
             if (!drawPathSlabPattern(ctx, pathShape, worldToScreen, zoom, true, !isSel)) {
@@ -728,7 +799,7 @@ export default function MasterProject() {
             }
             drawCobblestonePattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel);
           }
-          ctx.strokeStyle = isSel ? "rgba(108,92,231,0.8)" : C.layer2Edge;
+          ctx.strokeStyle = isSel ? "rgba(108,92,231,0.8)" : CC.layer2Edge;
           ctx.lineWidth = isSel ? 2.5 : 1.8;
           ctx.beginPath();
           const s0stroke = worldToScreen(outline[0].x, outline[0].y);
@@ -842,7 +913,7 @@ export default function MasterProject() {
         const ctr = centroid(pts);
         const sc = worldToScreen(ctr.x, ctr.y);
         const handleY = minY - 35;
-        ctx.strokeStyle = C.accent;
+        ctx.strokeStyle = CC.accent;
         ctx.lineWidth = 1.5;
         ctx.setLineDash([3, 3]);
         ctx.beginPath();
@@ -852,9 +923,9 @@ export default function MasterProject() {
         ctx.setLineDash([]);
         ctx.beginPath();
         ctx.arc(sc.x, handleY, 8, 0, Math.PI * 2);
-        ctx.fillStyle = C.button;
+        ctx.fillStyle = CC.button;
         ctx.fill();
-        ctx.strokeStyle = C.accent;
+        ctx.strokeStyle = CC.accent;
         ctx.lineWidth = 2;
         ctx.stroke();
       });
@@ -882,15 +953,15 @@ export default function MasterProject() {
           const isFirstOnly = si === drawingShapeIdx && pts.length === 1 && pi === 0;
           const r = isFirstOnly ? POINT_RADIUS + 2 : POINT_RADIUS * 0.8;
           ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
-          ctx.fillStyle = C.layer2Edge; ctx.fill();
-          ctx.strokeStyle = C.point; ctx.lineWidth = 2; ctx.stroke();
+          ctx.fillStyle = CC.layer2Edge; ctx.fill();
+          ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
           if (isFirstOnly) {
             const animT = (Date.now() % 1500) / 1500;
             const pulse = r + 4 + Math.sin(animT * Math.PI * 2) * 3;
             ctx.beginPath(); ctx.arc(sp.x, sp.y, pulse, 0, Math.PI * 2);
-            ctx.strokeStyle = C.open; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+            ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
             ctx.font = "10px 'JetBrains Mono',monospace";
-            ctx.fillStyle = C.open; ctx.textAlign = "center";
+            ctx.fillStyle = CC.open; ctx.textAlign = "center";
             ctx.fillText(t("project:canvas_click_second_point"), sp.x, sp.y - 20);
           }
         });
@@ -898,7 +969,7 @@ export default function MasterProject() {
           const last = pts[pts.length - 1];
           const sl = worldToScreen(last.x, last.y);
           const sm = worldToScreen(eMouse.x, eMouse.y);
-          ctx.strokeStyle = C.open; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+          ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
           ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sm.x, sm.y); ctx.stroke();
           ctx.setLineDash([]);
         }
@@ -908,8 +979,13 @@ export default function MasterProject() {
 
     // ── Draw active layer shapes ──────────────────────────
     const showGeodesy = geodesyEnabled;
+    // Geodesy only for layer 1 when viewing layer 1; for layer 2 when viewing 2/3/5
+    const geodesyLayerFilter = (s: Shape) => {
+      if (s.layer === 1) return activeLayer === 1;
+      return activeLayer === 2 || activeLayer === 3 || activeLayer === 5;
+    };
     const geodesyGlobalRange = showGeodesy ? computeGlobalHeightRange(shapes, s =>
-      (activeLayer === 3 || activeLayer === 5) ? (s.layer === 1 || s.layer === 2) : s.layer === activeLayer
+      geodesyLayerFilter(s) && (!(activeLayer === 3 || activeLayer === 5) ? s.layer === activeLayer : (s.layer === 1 || s.layer === 2))
     ) : undefined;
 
     shapes.forEach((shape, si) => {
@@ -924,8 +1000,8 @@ export default function MasterProject() {
       const isDraw = si === drawingShapeIdx;
       const isOpen = !shape.closed;
       const isL2 = shape.layer === 2;
-      const edgeColor = isOpen ? C.open : isL2 ? C.layer2Edge : C.edge;
-      const edgeHovColor = isOpen ? C.openHover : isL2 ? C.layer2 : C.edgeHover;
+      const edgeColor = isOpen ? CC.open : isL2 ? CC.layer2Edge : CC.edge;
+      const edgeHovColor = isOpen ? CC.openHover : isL2 ? CC.layer2 : CC.edgeHover;
 
       if (isPathElement(shape)) {
         const outline = getPathPolygon(shape);
@@ -940,7 +1016,7 @@ export default function MasterProject() {
               ctx.lineTo(s.x, s.y);
             }
             ctx.closePath();
-            ctx.fillStyle = isSel ? "rgba(108,92,231,0.15)" : C.layer2Dim;
+            ctx.fillStyle = isSel ? "rgba(108,92,231,0.15)" : CC.layer2Dim;
             ctx.fill();
             if ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth) {
               if (!drawPathSlabPattern(ctx, pathShape, worldToScreen, zoom, true, !isSel)) {
@@ -973,8 +1049,8 @@ export default function MasterProject() {
           const isD = dragInfo && dragInfo.shapeIdx === si && dragInfo.pointIdx === pi;
           const r = (isH || isD ? POINT_RADIUS + 2 : POINT_RADIUS) * (isSel || isDraw ? 1 : 0.8);
           ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
-          ctx.fillStyle = isH || isD ? C.layer2 : C.layer2Edge; ctx.fill();
-          ctx.strokeStyle = C.point; ctx.lineWidth = 2; ctx.stroke();
+          ctx.fillStyle = isH || isD ? CC.layer2 : CC.layer2Edge; ctx.fill();
+          ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
         });
         if ((isSel || showAllArcPoints) && shape.edgeArcs && pts.length >= 2) {
           const linkedArcIdsForShape = new Set<string>();
@@ -990,7 +1066,7 @@ export default function MasterProject() {
           const last = pts[pts.length - 1];
           const sl = worldToScreen(last.x, last.y);
           const sm = worldToScreen(eMouse.x, eMouse.y);
-          ctx.strokeStyle = C.open; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+          ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
           ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sm.x, sm.y); ctx.stroke();
           ctx.setLineDash([]);
         }
@@ -1003,7 +1079,7 @@ export default function MasterProject() {
         if (shape.elementType === "fence" && shape.calculatorResults) {
           drawFencePostMarkers(ctx, shape, worldToScreen, zoom);
         }
-        if (shape.elementType === "wall" && (shape.heights?.some((h: number) => Math.abs(h) > 0.0001))) {
+        if (showGeodesy && geodesyLayerFilter(shape) && shape.elementType === "wall" && (shape.heights?.some((h: number) => Math.abs(h) > 0.0001))) {
           drawWallSlopeIndicators(ctx, shape, worldToScreen);
         }
         pts.forEach((p, pi) => {
@@ -1011,15 +1087,15 @@ export default function MasterProject() {
           const isH = hoveredPoint && hoveredPoint.shapeIdx === si && hoveredPoint.pointIdx === pi;
           const isD = dragInfo && dragInfo.shapeIdx === si && dragInfo.pointIdx === pi;
           const r = (isH || isD ? POINT_RADIUS + 2 : POINT_RADIUS) * (isSel || isDraw ? 1 : 0.8);
-          const fc = C.layer2Edge;
-          const hc = C.layer2;
+          const fc = CC.layer2Edge;
+          const hc = CC.layer2;
           if (isH || isD) {
             ctx.beginPath(); ctx.arc(sp.x, sp.y, r + 5, 0, Math.PI * 2);
             ctx.fillStyle = "rgba(108,92,231,0.4)"; ctx.fill();
           }
           ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
           ctx.fillStyle = isH || isD ? hc : fc; ctx.fill();
-          ctx.strokeStyle = C.point; ctx.lineWidth = 2; ctx.stroke();
+          ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
         });
         if ((isSel || showAllArcPoints) && shape.edgeArcs) {
           const linkedArcIdsForShape = new Set<string>();
@@ -1037,7 +1113,7 @@ export default function MasterProject() {
           const last = pts[pts.length - 1];
           const sl = worldToScreen(last.x, last.y);
           const sm = worldToScreen(eMouse.x, eMouse.y);
-          ctx.strokeStyle = C.open; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+          ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
           ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sm.x, sm.y); ctx.stroke();
           ctx.setLineDash([]);
           for (const guide of smartGuides) {
@@ -1061,7 +1137,7 @@ export default function MasterProject() {
           const liveLen = distance(last, eMouse);
           const lm = midpoint(sl, sm);
           ctx.font = "12px 'JetBrains Mono',monospace";
-          ctx.fillStyle = C.text; ctx.textAlign = "center";
+          ctx.fillStyle = CC.text; ctx.textAlign = "center";
           ctx.fillText(formatLength(liveLen), lm.x, lm.y - 12);
         }
         return;
@@ -1083,14 +1159,14 @@ export default function MasterProject() {
           }
         }
         ctx.closePath();
-        if (showGeodesy) {
+        if (showGeodesy && geodesyLayerFilter(shape)) {
           fillShapeHeightHeatmap(ctx, shape, worldToScreen, geodesyGlobalRange);
         } else {
-          ctx.fillStyle = isSel ? (isL2 ? "rgba(108,92,231,0.15)" : C.selectedFill) : (isL2 ? C.layer2Dim : C.shapeFill);
+          ctx.fillStyle = isSel ? (isL2 ? "rgba(108,92,231,0.15)" : CC.selectedFill) : (isL2 ? CC.layer2Dim : CC.shapeFill);
           ctx.fill();
         }
 
-        {/* Patterns drawn only in Pattern layer (block at L697); Elements shows shapes without patterns */}
+        // Patterns drawn only in Pattern layer (block at L697); Elements shows shapes without patterns
       }
 
       const vizAlignedEdges = (shape.calculatorInputs?.vizAlignedEdges as number[] | undefined) ?? [];
@@ -1103,7 +1179,7 @@ export default function MasterProject() {
           const isLockedEdge = shape.lockedEdges.some(e => e.idx === edgeIdx);
           const isAlignedEdge = isSel && vizAlignedEdges.includes(edgeIdx);
           return {
-            strokeStyle: isAlignedEdge ? "#27ae60" : (isLockedEdge ? C.locked : isHov ? edgeHovColor : edgeColor),
+            strokeStyle: isAlignedEdge ? "#27ae60" : (isLockedEdge ? CC.locked : isHov ? edgeHovColor : edgeColor),
             lineWidth: isAlignedEdge ? 3 : (isSel ? 2.5 : 1.8),
           };
         });
@@ -1117,7 +1193,7 @@ export default function MasterProject() {
         const isLockedEdge = shape.lockedEdges.some(e => e.idx === i);
         const isAlignedEdge = isSel && vizAlignedEdges.includes(i);
 
-        ctx.strokeStyle = isAlignedEdge ? "#27ae60" : (isLockedEdge ? C.locked : isHov ? edgeHovColor : edgeColor);
+        ctx.strokeStyle = isAlignedEdge ? "#27ae60" : (isLockedEdge ? CC.locked : isHov ? edgeHovColor : edgeColor);
         ctx.lineWidth = isAlignedEdge ? 3 : (isSel ? 2.5 : 1.8);
 
         const arcs = shape.edgeArcs?.[i];
@@ -1139,25 +1215,34 @@ export default function MasterProject() {
         if (isLockedEdge && isSel) {
           const emid = midpoint(sa, sb);
           ctx.font = "10px 'JetBrains Mono',monospace";
-          ctx.fillStyle = C.locked; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillStyle = CC.locked; ctx.textAlign = "center"; ctx.textBaseline = "middle";
           ctx.fillText("🔒", emid.x, emid.y - 14);
         }
 
         const len = calcEdgeLengthWithArcs(pts[i], pts[j], arcs);
         const mid = midpoint(sa, sb);
         const norm = edgeNormalAngle(sa, sb);
+        const edgeAngle = Math.atan2(sb.y - sa.y, sb.x - sa.x);
+        const textAngle = readableTextAngle(edgeAngle);
         const edgeLabelOffset = 28;
-        const lx = mid.x + Math.cos(norm) * edgeLabelOffset, ly = mid.y + Math.sin(norm) * edgeLabelOffset;
-        if (!(editingDim && editingDim.shapeIdx === si && editingDim.edgeIdx === i)) {
+        const slopeLabelOffset = 42;
+        const lx = mid.x - Math.cos(norm) * edgeLabelOffset;
+        const ly = mid.y - Math.sin(norm) * edgeLabelOffset;
+        const hideDimInAdjustment = activeLayer === 5 && shape.layer === 1;
+        if (!hideDimInAdjustment && !(editingDim && editingDim.shapeIdx === si && editingDim.edgeIdx === i)) {
+          ctx.save();
+          ctx.translate(lx, ly);
+          ctx.rotate(textAngle);
           ctx.font = "12px 'JetBrains Mono','Fira Code',monospace";
-          ctx.fillStyle = isLockedEdge ? C.locked : isHov ? edgeHovColor : C.text;
+          ctx.fillStyle = isLockedEdge ? CC.locked : isHov ? edgeHovColor : CC.text;
           ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillText(formatLength(len), lx, ly);
+          ctx.fillText(formatLength(len), 0, 0);
+          ctx.restore();
         }
 
         // Slope label in geodesy mode — arrow along edge, pointing downhill (high → low)
-        // Text placed opposite to arrow direction so it never overlaps the arrow
-        if (showGeodesy && shape.closed) {
+        // Slopes outside element, lengths inside (opposite sides to avoid overlap)
+        if (!hideDimInAdjustment && showGeodesy && geodesyLayerFilter(shape) && shape.closed) {
           const slopes = calcEdgeSlopes(shape);
           const sl = slopes.find(s => s.edgeIdx === i);
           if (sl && sl.direction !== "flat") {
@@ -1181,18 +1266,27 @@ export default function MasterProject() {
             ctx.lineTo(ax, ay);
             ctx.lineTo(ax + Math.cos(Math.atan2(uy, ux) - Math.PI * 0.8) * headLen, ay + Math.sin(Math.atan2(uy, ux) - Math.PI * 0.8) * headLen);
             ctx.stroke();
-            const slopeTextOffset = 18;
-            const stx = lx - ux * slopeTextOffset;
-            const sty = ly - uy * slopeTextOffset;
-            ctx.font = "bold 10px 'JetBrains Mono',monospace";
+            const stx = mid.x + Math.cos(norm) * slopeLabelOffset;
+            const sty = mid.y + Math.sin(norm) * slopeLabelOffset;
+            ctx.save();
+            ctx.translate(stx, sty);
+            ctx.rotate(textAngle);
+            ctx.font = "bold 20px 'JetBrains Mono',monospace";
             ctx.fillStyle = slopeColor(sl.severity);
             ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.fillText(formatSlope(sl), stx, sty);
+            ctx.fillText(formatSlope(sl), 0, 0);
+            ctx.restore();
           } else if (sl) {
-            ctx.font = "bold 10px 'JetBrains Mono',monospace";
+            const stx = mid.x + Math.cos(norm) * slopeLabelOffset;
+            const sty = mid.y + Math.sin(norm) * slopeLabelOffset;
+            ctx.save();
+            ctx.translate(stx, sty);
+            ctx.rotate(textAngle);
+            ctx.font = "bold 20px 'JetBrains Mono',monospace";
             ctx.fillStyle = slopeColor(sl.severity);
             ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.fillText(formatSlope(sl), lx, ly + 24);
+            ctx.fillText(formatSlope(sl), 0, 0);
+            ctx.restore();
           }
         }
       }
@@ -1224,12 +1318,12 @@ export default function MasterProject() {
           const ccw = cross > 0;
 
           ctx.beginPath(); ctx.moveTo(sc.x, sc.y); ctx.arc(sc.x, sc.y, 25, d1, d2, !ccw); ctx.closePath();
-          ctx.fillStyle = isLockedAngle ? "rgba(255,68,68,0.15)" : C.angleFill; ctx.fill();
-          ctx.strokeStyle = isLockedAngle ? C.lockedAngle : C.angleStroke; ctx.lineWidth = isLockedAngle ? 2 : 1; ctx.stroke();
+          ctx.fillStyle = isLockedAngle ? "rgba(255,68,68,0.15)" : CC.angleFill; ctx.fill();
+          ctx.strokeStyle = isLockedAngle ? CC.lockedAngle : CC.angleStroke; ctx.lineWidth = isLockedAngle ? 2 : 1; ctx.stroke();
 
           const intDir = interiorAngleDir(pts, i);
           ctx.font = "11px 'JetBrains Mono',monospace";
-          ctx.fillStyle = isLockedAngle ? C.lockedAngle : C.angleText; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillStyle = isLockedAngle ? CC.lockedAngle : CC.angleText; ctx.textAlign = "center"; ctx.textBaseline = "middle";
           ctx.fillText((isLockedAngle ? "🔒 " : "") + angle.toFixed(1) + "°", sc.x + Math.cos(intDir) * 39, sc.y + Math.sin(intDir) * 39);
         }
       }
@@ -1240,21 +1334,21 @@ export default function MasterProject() {
         const isH = hoveredPoint && hoveredPoint.shapeIdx === si && hoveredPoint.pointIdx === pi;
         const isD = dragInfo && dragInfo.shapeIdx === si && dragInfo.pointIdx === pi;
         const r = (isH || isD ? POINT_RADIUS + 2 : POINT_RADIUS) * (isSel || isDraw ? 1 : 0.8);
-        const fc = isOpen ? C.open : isL2 ? C.layer2Edge : C.pointFill;
-        const hc = isOpen ? C.openHover : isL2 ? C.layer2 : C.pointHover;
+        const fc = isOpen ? CC.open : isL2 ? CC.layer2Edge : CC.pointFill;
+        const hc = isOpen ? CC.openHover : isL2 ? CC.layer2 : CC.pointHover;
 
         if (isH || isD) {
           ctx.beginPath(); ctx.arc(sp.x, sp.y, r + 5, 0, Math.PI * 2);
-          ctx.fillStyle = isOpen ? C.openGlow : isL2 ? "rgba(108,92,231,0.4)" : C.accentGlow; ctx.fill();
+          ctx.fillStyle = isOpen ? CC.openGlow : isL2 ? "rgba(108,92,231,0.4)" : CC.accentGlow; ctx.fill();
         }
         ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
         ctx.fillStyle = isH || isD ? hc : fc; ctx.fill();
-        ctx.strokeStyle = C.point; ctx.lineWidth = 2; ctx.stroke();
+        ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
 
         // Linked point indicator
         if (isPointLinked(si, pi)) {
           ctx.beginPath(); ctx.arc(sp.x, sp.y, r + 4, 0, Math.PI * 2);
-          ctx.strokeStyle = C.accent; ctx.lineWidth = 1.5; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
+          ctx.strokeStyle = CC.accent; ctx.lineWidth = 1.5; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
         }
       });
 
@@ -1265,12 +1359,12 @@ export default function MasterProject() {
         const ctr = centroid(pts);
         const sc = worldToScreen(ctr.x, ctr.y);
         const handleY = minY - 35;
-        const hColor = isL2 ? C.layer2 : C.accent;
+        const hColor = isL2 ? CC.layer2 : CC.accent;
         ctx.strokeStyle = hColor; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
         ctx.beginPath(); ctx.moveTo(sc.x, minY - 5); ctx.lineTo(sc.x, handleY + 8); ctx.stroke();
         ctx.setLineDash([]);
         ctx.beginPath(); ctx.arc(sc.x, handleY, 8, 0, Math.PI * 2);
-        ctx.fillStyle = rotateInfo ? hColor : C.button; ctx.fill();
+        ctx.fillStyle = rotateInfo ? hColor : CC.button; ctx.fill();
         ctx.strokeStyle = hColor; ctx.lineWidth = 2; ctx.stroke();
         ctx.beginPath(); ctx.arc(sc.x, handleY, 5, -Math.PI * 0.8, Math.PI * 0.3, false);
         ctx.strokeStyle = hColor; ctx.lineWidth = 1.5; ctx.stroke();
@@ -1282,13 +1376,20 @@ export default function MasterProject() {
 
       // Area
       if (shape.closed && pts.length >= 3) {
-        const effPts = getCachedPoly(si);
-        const area = areaM2(effPts);
         const anchor = labelAnchorInsidePolygon(shape.points);
         const sc = worldToScreen(anchor.x, anchor.y);
-        ctx.font = "bold 16px 'JetBrains Mono',monospace";
-        ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y);
+        const hasPatternLabel = isL2 && (
+          ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth) ||
+          (shape.calculatorType === "paving" && shape.calculatorInputs) ||
+          (shape.calculatorType === "grass" && (shape.calculatorInputs?.vizPieces?.length ?? 0) > 0)
+        );
+        if (!hasPatternLabel) {
+          const effPts = getCachedPoly(si);
+          const area = areaM2(effPts);
+          ctx.font = "bold 16px 'JetBrains Mono',monospace";
+          ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y);
+        }
 
         if (isL2 && shape.calculatorType === "deck" && shape.calculatorResults?.materials) {
           const boards = shape.calculatorResults.materials.find((m: any) => (m.name || "").toLowerCase().includes("decking board"));
@@ -1306,7 +1407,7 @@ export default function MasterProject() {
         }
 
         // Gradient arrow in geodesy mode — text placed opposite to arrow so it never overlaps
-        if (showGeodesy) {
+        if (showGeodesy && geodesyLayerFilter(shape)) {
           const grad = calcShapeGradient(shape);
           if (grad && grad.magnitude > 0.05) {
             const gradBaseY = sc.y + 58;
@@ -1327,7 +1428,7 @@ export default function MasterProject() {
             const textOffset = 22;
             const tx = sc.x - Math.cos(grad.angle) * textOffset;
             const ty = gradBaseY - Math.sin(grad.angle) * textOffset;
-            ctx.font = "bold 10px 'JetBrains Mono',monospace";
+            ctx.font = "bold 20px 'JetBrains Mono',monospace";
             ctx.fillStyle = slopeColor(grad.severity);
             ctx.textAlign = "center"; ctx.textBaseline = "middle";
             ctx.fillText(grad.magnitude.toFixed(1) + " cm/m", tx, ty);
@@ -1342,47 +1443,30 @@ export default function MasterProject() {
         const ctr = centroid(pts);
         const sc = worldToScreen(ctr.x, ctr.y);
         ctx.font = "12px 'JetBrains Mono',monospace";
-        ctx.fillStyle = C.open; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = CC.open; ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText(t("project:canvas_unclosed_no_area"), sc.x, sc.y);
       }
 
-      // Height labels (geodesy mode) — display in cm
-      if (showGeodesy) {
-        const heights = shape.heights || pts.map(() => 0);
-        pts.forEach((p, pi) => {
-          const sp = worldToScreen(p.x, p.y);
-          const h = heights[pi] ?? 0;
-          const hCm = h * 100;
-          ctx.font = "bold 14px 'JetBrains Mono',monospace";
-          ctx.fillStyle = "#ffffff";
-          ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-          ctx.fillText((hCm >= 0 ? "+" : "") + hCm.toFixed(1) + " cm", sp.x, sp.y - 16);
-        });
-      }
+      // Height labels (geodesy mode) — drawn via drawGeodesyLabels below (avoids overlap at junctions)
+      // Vertex height labels skipped here when showGeodesy
 
-      // Punkty wysokościowe (Layer 1) — widoczne zawsze, nie wpływają na geometrię
-      if (shape.layer === 1 && (shape.heightPoints?.length ?? 0) > 0) {
+      // Punkty wysokościowe (Layer 1) — widoczne tylko w layer 1
+      if (shape.layer === 1 && activeLayer === 1 && (shape.heightPoints?.length ?? 0) > 0) {
         const hpList = shape.heightPoints!;
         const isGeodesy = showGeodesy;
         const r = (POINT_RADIUS * 0.9) * (isGeodesy ? 1 : 0.7);
         hpList.forEach((hp, hpi) => {
           const sp = worldToScreen(hp.x, hp.y);
           const isH = hoveredHeightPoint?.shapeIdx === si && hoveredHeightPoint?.heightPointIdx === hpi;
-          const isEdit = editingHeight?.shapeIdx === si && editingHeight?.pointIdx === -1 && editingHeight?.heightPointIdx === hpi;
+          const isEdit = editingGeodesyCard?.cardInfo?.group?.some(p => !p.isVertex && p.shapeIdx === si && p.heightPointIdx === hpi);
           ctx.beginPath();
           ctx.rect(sp.x - r, sp.y - r, r * 2, r * 2);
-          ctx.fillStyle = isH || isEdit ? C.geo : (isGeodesy ? C.geo : C.textDim);
+          ctx.fillStyle = isH || isEdit ? CC.geo : (isGeodesy ? CC.geo : CC.textDim);
           ctx.fill();
-          ctx.strokeStyle = isH || isEdit ? "#fff" : C.point;
+          ctx.strokeStyle = isH || isEdit ? "#fff" : CC.point;
           ctx.lineWidth = isH || isEdit ? 2 : 1;
           ctx.stroke();
-          if (isGeodesy) {
-            const hCm = hp.height * 100;
-            ctx.font = "bold 14px 'JetBrains Mono',monospace";
-            ctx.fillStyle = "#ffffff";
-            ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-            ctx.fillText((hCm >= 0 ? "+" : "") + hCm.toFixed(1) + " cm", sp.x, sp.y - r - 4);
-          }
+          // Height label drawn via drawGeodesyLabels (avoids overlap at junctions)
         });
       }
 
@@ -1392,7 +1476,7 @@ export default function MasterProject() {
         const sl = worldToScreen(last.x, last.y);
         const sm = worldToScreen(eMouse.x, eMouse.y);
 
-        ctx.strokeStyle = C.open; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
         ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sm.x, sm.y); ctx.stroke();
         ctx.setLineDash([]);
 
@@ -1434,7 +1518,7 @@ export default function MasterProject() {
             const nx = dir.x / dLen, ny = dir.y / dLen, ext = 5000;
             const sA = worldToScreen(last.x - nx * ext, last.y - ny * ext);
             const sB = worldToScreen(last.x + nx * ext, last.y + ny * ext);
-            ctx.strokeStyle = C.snapLine; ctx.lineWidth = 1; ctx.setLineDash([2, 6]);
+            ctx.strokeStyle = CC.snapLine; ctx.lineWidth = 1; ctx.setLineDash([2, 6]);
             ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
             ctx.setLineDash([]);
           }
@@ -1443,7 +1527,7 @@ export default function MasterProject() {
         const liveLen = distance(last, eMouse);
         const lm = midpoint(sl, sm);
         ctx.font = "12px 'JetBrains Mono',monospace";
-        ctx.fillStyle = C.text; ctx.textAlign = "center";
+        ctx.fillStyle = CC.text; ctx.textAlign = "center";
         ctx.fillText(formatLength(liveLen), lm.x, lm.y - 12);
 
         if (pts.length >= 2) {
@@ -1451,7 +1535,7 @@ export default function MasterProject() {
           const angle = angleDeg(prev, last, eMouse);
           const sc = worldToScreen(last.x, last.y);
           ctx.font = "11px 'JetBrains Mono',monospace";
-          ctx.fillStyle = C.angleText; ctx.textAlign = "center";
+          ctx.fillStyle = CC.angleText; ctx.textAlign = "center";
           ctx.fillText(angle.toFixed(1) + "°", sc.x, sc.y - 20);
         }
 
@@ -1459,13 +1543,24 @@ export default function MasterProject() {
           const ss = worldToScreen(pts[0].x, pts[0].y);
           if (distance(sm, ss) < SNAP_TO_START_RADIUS) {
             ctx.beginPath(); ctx.arc(ss.x, ss.y, 14, 0, Math.PI * 2);
-            ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.stroke();
+            ctx.strokeStyle = CC.accent; ctx.lineWidth = 2; ctx.stroke();
             ctx.font = "10px 'JetBrains Mono',monospace";
-            ctx.fillStyle = C.accent; ctx.fillText("Close", ss.x, ss.y - 20);
+            ctx.fillStyle = CC.accent; ctx.fillText("Close", ss.x, ss.y - 20);
           }
         }
       }
     });
+
+    // Geodesy labels with leader lines — avoids overlap when multiple points share position
+    if (showGeodesy) {
+      const geodesyFilter = (s: Shape) => {
+        if (!geodesyLayerFilter(s)) return false;
+        if (!passesViewFilter(s, viewFilter, activeLayer)) return false;
+        if (activeLayer === 5) return s.layer === 1 || s.layer === 2;
+        return s.layer === activeLayer;
+      };
+      drawGeodesyLabels(ctx, shapes, worldToScreen, geodesyFilter, hoveredPoint, hoveredHeightPoint, editingGeodesyCard?.cardInfo.group ?? null);
+    }
 
     // ── Layer 5: Adjustment — empty areas (red), overflow (red), overlaps (orange) ──
     if (activeLayer === 5) {
@@ -1483,9 +1578,9 @@ export default function MasterProject() {
       adjustmentData.emptyAreas.forEach(poly => {
         ctx.beginPath();
         drawPolygon(poly);
-        ctx.fillStyle = C.adjustmentEmpty;
+        ctx.fillStyle = CC.adjustmentEmpty;
         ctx.fill();
-        ctx.strokeStyle = C.adjustmentEmptyStroke;
+        ctx.strokeStyle = CC.adjustmentEmptyStroke;
         ctx.lineWidth = 1.5;
         ctx.stroke();
       });
@@ -1494,9 +1589,9 @@ export default function MasterProject() {
         overflowPolygons.forEach(poly => {
           ctx.beginPath();
           drawPolygon(poly);
-          ctx.fillStyle = C.adjustmentOverflow;
+          ctx.fillStyle = CC.adjustmentOverflow;
           ctx.fill();
-          ctx.strokeStyle = C.adjustmentOverflowStroke;
+          ctx.strokeStyle = CC.adjustmentOverflowStroke;
           ctx.lineWidth = 1.5;
           ctx.stroke();
         });
@@ -1505,9 +1600,9 @@ export default function MasterProject() {
       adjustmentData.overlaps.forEach(({ overlapPolygon }) => {
         ctx.beginPath();
         drawPolygon(overlapPolygon);
-        ctx.fillStyle = C.adjustmentOverlap;
+        ctx.fillStyle = CC.adjustmentOverlap;
         ctx.fill();
-        ctx.strokeStyle = C.adjustmentOverlapStroke;
+        ctx.strokeStyle = CC.adjustmentOverlapStroke;
         ctx.lineWidth = 1.5;
         ctx.stroke();
       });
@@ -1526,9 +1621,9 @@ export default function MasterProject() {
             const pulseT = (Date.now() % 2000) / 2000;
             const pulse = 10 + Math.sin(pulseT * Math.PI * 2) * 3;
             ctx.beginPath(); ctx.arc(sp.x, sp.y, pulse, 0, Math.PI * 2);
-            ctx.strokeStyle = C.open; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+            ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
             ctx.font = "10px 'JetBrains Mono',monospace";
-            ctx.fillStyle = C.open; ctx.textAlign = "center";
+            ctx.fillStyle = CC.open; ctx.textAlign = "center";
             ctx.fillText(t("project:canvas_continue"), sp.x, sp.y - 18);
           });
         }
@@ -1541,7 +1636,7 @@ export default function MasterProject() {
         const p = shapes[si].points[pi];
         const sp = worldToScreen(p.x, p.y);
         ctx.beginPath(); ctx.arc(sp.x, sp.y, POINT_RADIUS + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = C.danger; ctx.lineWidth = 2.5; ctx.stroke();
+        ctx.strokeStyle = CC.danger; ctx.lineWidth = 2.5; ctx.stroke();
         ctx.beginPath(); ctx.arc(sp.x, sp.y, POINT_RADIUS + 8, 0, Math.PI * 2);
         ctx.fillStyle = "rgba(255,71,87,0.15)"; ctx.fill();
       }
@@ -1554,13 +1649,13 @@ export default function MasterProject() {
       const w = Math.abs(selectionRect.endX - selectionRect.startX);
       const h = Math.abs(selectionRect.endY - selectionRect.startY);
       ctx.fillStyle = "rgba(255,71,87,0.08)"; ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = C.danger; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = CC.danger; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
       ctx.strokeRect(x, y, w, h); ctx.setLineDash([]);
     }
 
     // HUD
     ctx.font = "11px 'JetBrains Mono',monospace";
-    ctx.fillStyle = C.textDim; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+    ctx.fillStyle = CC.textDim; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
     let hud = `${toMeters(mouseWorld.x).toFixed(2)}, ${toMeters(mouseWorld.y).toFixed(2)} m  |  zoom: ${(zoom * 100).toFixed(0)}%  |  Layer ${activeLayer}`;
     if (shiftHeld) hud += "  |  SNAP 45°";
     if (drawingShapeIdx !== null && mode === "freeDraw") hud += "  |  Drawing (Esc = cancel)";
@@ -1576,8 +1671,8 @@ export default function MasterProject() {
     if (geodesyEnabled) hud += "  |  GEODESY: click point → set height, click area → show height";
     ctx.fillText(hud, 10, H - 10);
 
-    // Height tooltip (geodesy mode): click on L1 shape interior
-    if (geodesyEnabled && clickedHeightTooltip) {
+    // Height tooltip (geodesy mode): click on L1 shape interior — only show in layer 1
+    if (geodesyEnabled && activeLayer === 1 && clickedHeightTooltip) {
       const sp = worldToScreen(clickedHeightTooltip.world.x, clickedHeightTooltip.world.y);
       const hCm = clickedHeightTooltip.height * 100;
       const text = (hCm >= 0 ? "+" : "") + hCm.toFixed(1) + " cm";
@@ -1588,17 +1683,111 @@ export default function MasterProject() {
       const boxH = 22;
       ctx.fillStyle = "rgba(0,0,0,0.8)";
       ctx.fillRect(sp.x - boxW / 2, sp.y - boxH - 12, boxW, boxH);
-      ctx.fillStyle = C.geo;
+      ctx.fillStyle = CC.geo;
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
       ctx.fillText(text, sp.x, sp.y - 14);
     }
-  }, [shapes, selectedShapeIdx, selectedPattern, patternDragInfo, patternDragPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t]);
 
-  // Clear height tooltip when disabling geodesy
+    // Set angle overlay: dim canvas, show only edited shape with A/B labels and angle arc
+    if (setAngleModal) {
+      const si = setAngleModal.shapeIdx, pi = setAngleModal.pointIdx;
+      const shape = shapes[si];
+      if (shape?.closed && shape.points.length >= 3 && pi >= 0 && pi < shape.points.length) {
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillRect(0, 0, W, H);
+        const pts = shape.points;
+        const n = pts.length;
+        const prev = (pi - 1 + n) % n, next = (pi + 1) % n;
+        const V = pts[pi], prevPt = pts[prev], nextPt = pts[next];
+        const sV = worldToScreen(V.x, V.y);
+        ctx.strokeStyle = CC.accent;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        const s0 = worldToScreen(pts[0].x, pts[0].y);
+        ctx.moveTo(s0.x, s0.y);
+        for (let i = 1; i < pts.length; i++) {
+          const s = worldToScreen(pts[i].x, pts[i].y);
+          ctx.lineTo(s.x, s.y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        const currentAngle = angleDeg(prevPt, V, nextPt);
+        const intDir = interiorAngleDir(pts, pi);
+        const arcR = 28;
+        const startAngle = Math.atan2(prevPt.y - V.y, prevPt.x - V.x);
+        const endAngle = Math.atan2(nextPt.y - V.y, nextPt.x - V.x);
+        ctx.strokeStyle = CC.angleStroke;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sV.x, sV.y, arcR, startAngle, endAngle);
+        ctx.stroke();
+        ctx.font = "bold 12px 'JetBrains Mono',monospace";
+        ctx.fillStyle = CC.angleText;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const labelX = sV.x + Math.cos(intDir) * (arcR + 14);
+        const labelY = sV.y + Math.sin(intDir) * (arcR + 14);
+        ctx.fillText(currentAngle.toFixed(1) + "°", labelX, labelY);
+        const midA = midpoint(prevPt, V);
+        const midB = midpoint(V, nextPt);
+        const sA = worldToScreen(midA.x, midA.y);
+        const sB = worldToScreen(midB.x, midB.y);
+        const sPrev = worldToScreen(prevPt.x, prevPt.y);
+        const sNext = worldToScreen(nextPt.x, nextPt.y);
+        const LABEL_OFFSET_PX = 26;
+        const perpA = { x: sV.y - sPrev.y, y: sPrev.x - sV.x };
+        const lenA = Math.sqrt(perpA.x * perpA.x + perpA.y * perpA.y) || 1;
+        const perpB = { x: sNext.y - sV.y, y: sV.x - sNext.x };
+        const lenB = Math.sqrt(perpB.x * perpB.x + perpB.y * perpB.y) || 1;
+        const offA = { x: sA.x + (perpA.x / lenA) * LABEL_OFFSET_PX, y: sA.y + (perpA.y / lenA) * LABEL_OFFSET_PX };
+        const offB = { x: sB.x + (perpB.x / lenB) * LABEL_OFFSET_PX, y: sB.y + (perpB.y / lenB) * LABEL_OFFSET_PX };
+        ctx.font = "bold 15px 'JetBrains Mono',monospace";
+        ctx.fillStyle = "#fff";
+        ctx.fillText(t("project:set_angle_side_a_label"), offA.x, offA.y);
+        ctx.fillText(t("project:set_angle_side_b_label"), offB.x, offB.y);
+      }
+    }
+
+    // Dimension edit overlay: dim canvas, show only the edited edge with Punkt A / Punkt B labels
+    if (editingDim) {
+      const si = editingDim.shapeIdx, ei = editingDim.edgeIdx;
+      const shape = shapes[si];
+      if (shape?.points.length >= 2) {
+        const pts = shape.points;
+        const j = (ei + 1) % pts.length;
+        const A = pts[ei], B = pts[j];
+        const sA = worldToScreen(A.x, A.y);
+        const sB = worldToScreen(B.x, B.y);
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.fillRect(0, 0, W, H);
+        ctx.strokeStyle = CC.accent;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(sA.x, sA.y);
+        ctx.lineTo(sB.x, sB.y);
+        ctx.stroke();
+        const LABEL_OFFSET_PX = 24;
+        const perpAx = sB.y - sA.y, perpAy = sA.x - sB.x;
+        const lenA = Math.sqrt(perpAx * perpAx + perpAy * perpAy) || 1;
+        const perpBx = sA.y - sB.y, perpBy = sB.x - sA.x;
+        const lenB = Math.sqrt(perpBx * perpBx + perpBy * perpBy) || 1;
+        const offAx = sA.x + (perpAx / lenA) * LABEL_OFFSET_PX, offAy = sA.y + (perpAy / lenA) * LABEL_OFFSET_PX;
+        const offBx = sB.x + (perpBx / lenB) * LABEL_OFFSET_PX, offBy = sB.y + (perpBy / lenB) * LABEL_OFFSET_PX;
+        ctx.font = "bold 15px 'JetBrains Mono',monospace";
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(t("project:dim_edit_point_a"), offAx, offAy);
+        ctx.fillText(t("project:dim_edit_point_b"), offBx, offBy);
+      }
+    }
+  }, [shapes, selectedShapeIdx, selectedPattern, patternDragInfo, patternDragPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id]);
+
+  // Clear height tooltip when disabling geodesy or switching away from layer 1
   useEffect(() => {
-    if (!geodesyEnabled) setClickedHeightTooltip(null);
-  }, [geodesyEnabled]);
+    if (!geodesyEnabled || activeLayer !== 1) setClickedHeightTooltip(null);
+  }, [geodesyEnabled, activeLayer]);
 
   // Pulse animation
   useEffect(() => {
@@ -1626,6 +1815,7 @@ export default function MasterProject() {
   }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, viewFilter, pointRadiusEffective]);
 
   const hitTestHeightPoint = useCallback((wp: Point): { shapeIdx: number; heightPointIdx: number } | null => {
+    if (activeLayer !== 1) return null; // Layer 1 height points only hittable in layer 1
     const th = (pointRadiusEffective * 1.2) / zoom + 4;
     const r = th * (PIXELS_PER_METER / 80);
     if (selectedShapeIdx !== null && isOnActiveLayer(selectedShapeIdx)) {
@@ -1647,7 +1837,7 @@ export default function MasterProject() {
       }
     }
     return null;
-  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, pointRadiusEffective]);
+  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, pointRadiusEffective, activeLayer]);
 
   const hitTestEdge = useCallback((wp: Point): EdgeHitResult | null => {
     const th = edgeHitThresholdEffective / zoom + 2;
@@ -1857,6 +2047,7 @@ export default function MasterProject() {
   const skipBlurRef = useRef(false);
   const applyHeightEditRef = useRef<((fromBlur?: boolean) => void) | null>(null);
   const heightInputSelectOnceRef = useRef(false);
+  const geodesyCardRef = useRef<HTMLDivElement | null>(null);
   const rightClickScaleTriggeredRef = useRef(false);
   /** Pending right-click scale: activate only on drag (not on single click). Single click = context menu. */
   const RIGHT_CLICK_SCALE_DRAG_THRESHOLD_PX = 5;
@@ -1879,9 +2070,6 @@ export default function MasterProject() {
   } | null>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button === 0) {
-      setDismissedLayerHints(prev => { const next = new Set(prev); next.add(activeLayer); return next; });
-    }
     if (e.button === 2) {
       rightClickScaleTriggeredRef.current = false;
       pendingRightClickScaleRef.current = null;
@@ -2097,52 +2285,83 @@ export default function MasterProject() {
       return;
     }
 
-    // Geodesy (toggle): click point to edit height, or click L1 shape interior to show interpolated height.
+    // Geodesy (toggle): click card or point → edit heights in card; click L1 interior → show interpolated height.
     if (geodesyEnabled) {
+      const geodesyFilter = (s: Shape) => {
+        if (s.layer === 1 && activeLayer !== 1) return false; // Layer 1 geodesy only in layer 1
+        if (!passesViewFilter(s, viewFilter, activeLayer)) return false;
+        if (activeLayer === 5) return s.layer === 1 || s.layer === 2;
+        return s.layer === activeLayer;
+      };
+      const rect = canvasRef.current?.getBoundingClientRect();
+      const ctx = canvasRef.current?.getContext("2d");
+      if (rect && ctx) {
+        const canvasX = e.clientX - rect.left;
+        const canvasY = e.clientY - rect.top;
+        const cardsInfo = getGeodesyCardsInfo(ctx, shapes, worldToScreen, geodesyFilter);
+        const cardHit = hitTestGeodesyCard(canvasX, canvasY, cardsInfo);
+        if (cardHit) {
+          setClickedHeightTooltip(null);
+          if (editingGeodesyCard) applyHeightEditRef.current?.();
+          skipBlurRef.current = true;
+          const card = cardsInfo[cardHit.cardIdx];
+          setEditingGeodesyCard({ cardInfo: card });
+          setHeightValues(card.entries.map(ent => (ent.height * 100).toFixed(1)));
+          setSelectedShapeIdx(card.group[0]?.shapeIdx ?? null);
+          requestAnimationFrame(() => { skipBlurRef.current = false; });
+          return;
+        }
+      }
       const hpHit = hitTestHeightPoint(world);
       if (hpHit) {
         setClickedHeightTooltip(null);
-        if (editingHeight) applyHeightEditRef.current?.();
+        if (editingGeodesyCard) applyHeightEditRef.current?.();
         skipBlurRef.current = true;
-        heightInputSelectOnceRef.current = false;
-        setSelectedShapeIdx(hpHit.shapeIdx);
-        const hp = shapes[hpHit.shapeIdx].heightPoints![hpHit.heightPointIdx];
-        const sp = worldToScreen(hp.x, hp.y);
-        const r = canvasRef.current!.getBoundingClientRect();
-        setEditingHeight({ shapeIdx: hpHit.shapeIdx, pointIdx: -1, heightPointIdx: hpHit.heightPointIdx, x: r.left + sp.x, y: r.top + sp.y - 30 });
-        setHeightValue((hp.height * 100).toFixed(1)); // cm
+        if (rect && ctx) {
+          const cardsInfo = getGeodesyCardsInfo(ctx, shapes, worldToScreen, geodesyFilter);
+          const card = findCardForPoint(cardsInfo, { shapeIdx: hpHit.shapeIdx, heightPointIdx: hpHit.heightPointIdx });
+          if (card) {
+            setEditingGeodesyCard({ cardInfo: card });
+            setHeightValues(card.entries.map(ent => (ent.height * 100).toFixed(1)));
+            setSelectedShapeIdx(hpHit.shapeIdx);
+          }
+        }
         requestAnimationFrame(() => { skipBlurRef.current = false; });
         return;
       }
       const ptHit = hitTestPoint(world);
       if (ptHit) {
         setClickedHeightTooltip(null);
-        if (editingHeight) applyHeightEditRef.current?.();
+        if (editingGeodesyCard) applyHeightEditRef.current?.();
         skipBlurRef.current = true;
-        heightInputSelectOnceRef.current = false;
-        setSelectedShapeIdx(ptHit.shapeIdx);
-        const sp = worldToScreen(shapes[ptHit.shapeIdx].points[ptHit.pointIdx].x, shapes[ptHit.shapeIdx].points[ptHit.pointIdx].y);
-        const r = canvasRef.current!.getBoundingClientRect();
-        const hM = shapes[ptHit.shapeIdx].heights?.[ptHit.pointIdx] ?? 0;
-        setEditingHeight({ shapeIdx: ptHit.shapeIdx, pointIdx: ptHit.pointIdx, x: r.left + sp.x, y: r.top + sp.y - 30 });
-        setHeightValue((hM * 100).toFixed(1)); // cm
+        if (rect && ctx) {
+          const cardsInfo = getGeodesyCardsInfo(ctx, shapes, worldToScreen, geodesyFilter);
+          const card = findCardForPoint(cardsInfo, { shapeIdx: ptHit.shapeIdx, pointIdx: ptHit.pointIdx });
+          if (card) {
+            setEditingGeodesyCard({ cardInfo: card });
+            setHeightValues(card.entries.map(ent => (ent.height * 100).toFixed(1)));
+            setSelectedShapeIdx(ptHit.shapeIdx);
+          }
+        }
         requestAnimationFrame(() => { skipBlurRef.current = false; });
         return;
       }
       applyHeightEditRef.current?.();
-      setEditingHeight(null);
+      setEditingGeodesyCard(null);
       setSelectedShapeIdx(null);
-      // Click on L1 shape interior (not on vertex) → show interpolated height
-      for (let si = shapes.length - 1; si >= 0; si--) {
-        const shape = shapes[si];
-        if (!passesViewFilter(shape, viewFilter, activeLayer)) continue;
-        if (shape.layer !== 1 || !shape.closed || shape.points.length < 3) continue;
-        if (!pointInPolygon(world, shape.points)) continue;
-        const h = interpolateHeightAtPoint(shape, world);
-        if (h !== null) {
-          setClickedHeightTooltip({ world, shapeIdx: si, height: h });
+      // Click on L1 shape interior (not on vertex) → show interpolated height (only in layer 1)
+      if (activeLayer === 1) {
+        for (let si = shapes.length - 1; si >= 0; si--) {
+          const shape = shapes[si];
+          if (!passesViewFilter(shape, viewFilter, activeLayer)) continue;
+          if (shape.layer !== 1 || !shape.closed || shape.points.length < 3) continue;
+          if (!pointInPolygon(world, shape.points)) continue;
+          const h = interpolateHeightAtPoint(shape, world);
+          if (h !== null) {
+            setClickedHeightTooltip({ world, shapeIdx: si, height: h });
+          }
+          return;
         }
-        return;
       }
       setClickedHeightTooltip(null);
       setIsPanning(true);
@@ -2151,7 +2370,7 @@ export default function MasterProject() {
     }
 
     // Clear height UI when not in geodesy mode (we didn't enter the geodesy block above)
-    setEditingHeight(null);
+    setEditingGeodesyCard(null);
     setClickedHeightTooltip(null);
 
     // Select mode
@@ -2545,7 +2764,7 @@ export default function MasterProject() {
       setSelectedShapeIdx(null);
       setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
-  }, [mode, shapes, drawingShapeIdx, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, worldToScreen, saveHistory, selectedShapeIdx, isOnActiveLayer, activeLayer, editingHeight]);
+  }, [mode, shapes, drawingShapeIdx, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, worldToScreen, saveHistory, selectedShapeIdx, isOnActiveLayer, activeLayer, editingGeodesyCard]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const world = getWorldPos(e);
@@ -2718,8 +2937,12 @@ export default function MasterProject() {
         const piece = pieces[pieceIdx];
         const rawDx = world.x - startMouse.x;
         const rawDy = world.y - startMouse.y;
-        const dx = rawDy;
-        const dy = rawDx;
+        const dirDeg = Number(shape?.calculatorInputs?.grassVizDirection ?? 0);
+        const rad = (-dirDeg * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const dx = rawDx * cos - rawDy * sin;
+        const dy = rawDx * sin + rawDy * cos;
         const movedPiece = { ...piece, x: piece.x + dx, y: piece.y + dy };
         const snapThreshold = toPixels(0.015);
         const { snappedPiece: snappedToPieces, nearEdge } = snapGrassPieceEdge(movedPiece, pieces, pieceIdx, snapThreshold);
@@ -2867,7 +3090,10 @@ export default function MasterProject() {
       }));
       const magThreshold = SNAP_MAGNET_PX / zoom;
       const draggedPt = newPts[scaleCorner.pointIdx];
-      const snap = snapMagnet(draggedPt, shapes, scaleCorner.shapeIdx, magThreshold);
+      const toMouse = { x: world.x - ax, y: world.y - ay };
+      const len = Math.sqrt(toMouse.x * toMouse.x + toMouse.y * toMouse.y);
+      const snapDir = len > 1 ? { x: toMouse.x / len, y: toMouse.y / len } : undefined;
+      const snap = snapMagnet(draggedPt, shapes, scaleCorner.shapeIdx, magThreshold, snapDir);
       const snapOff = snap.didSnap ? { x: snap.snapped.x - draggedPt.x, y: snap.snapped.y - draggedPt.y } : { x: 0, y: 0 };
       if (snap.didSnap) newPts = newPts.map(pt => ({ x: pt.x + snapOff.x, y: pt.y + snapOff.y }));
       setShapes(p => {
@@ -2905,7 +3131,8 @@ export default function MasterProject() {
       });
       const magThreshold = SNAP_MAGNET_PX / zoom;
       const edgeMid = midpoint(newPts[ei], newPts[j]);
-      const snap = snapMagnet(edgeMid, shapes, scaleEdge.shapeIdx, magThreshold);
+      const snapDir = moveDist >= 0 ? { x: nx, y: ny } : { x: -nx, y: -ny };
+      const snap = snapMagnet(edgeMid, shapes, scaleEdge.shapeIdx, magThreshold, snapDir);
       if (snap.didSnap) {
         const off = { x: snap.snapped.x - edgeMid.x, y: snap.snapped.y - edgeMid.y };
         newPts = newPts.map(pt => ({ x: pt.x + off.x, y: pt.y + off.y }));
@@ -3467,16 +3694,17 @@ export default function MasterProject() {
     }
     const w = getWorldPos(e);
     if (activeLayer === 5) {
-      // Hit test adjustment areas (empty, overflow, overlap) — check polygons first
+      // Hit test adjustment areas (empty, overflow, overlap) — widened tolerance for easier clicking
+      const adjHitTol = toPixels(0.15);
       for (let i = 0; i < adjustmentData.emptyAreas.length; i++) {
-        if (pointInPolygon(w, adjustmentData.emptyAreas[i])) {
+        if (pointInOrNearPolygon(w, adjustmentData.emptyAreas[i], adjHitTol)) {
           setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: -1, pointIdx: -1, edgeIdx: -1, adjustmentEmpty: { emptyAreaIdx: i } });
           return;
         }
       }
       for (const { shapeIdx: si, overflowPolygons } of adjustmentData.overflowAreas) {
         for (let i = 0; i < overflowPolygons.length; i++) {
-          if (pointInPolygon(w, overflowPolygons[i])) {
+          if (pointInOrNearPolygon(w, overflowPolygons[i], adjHitTol)) {
             setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: si, pointIdx: -1, edgeIdx: -1, adjustmentOverflow: { shapeIdx: si } });
             return;
           }
@@ -3484,7 +3712,7 @@ export default function MasterProject() {
       }
       for (let i = 0; i < adjustmentData.overlaps.length; i++) {
         const { shapeIdxA, shapeIdxB, overlapPolygon } = adjustmentData.overlaps[i];
-        if (pointInPolygon(w, overlapPolygon)) {
+        if (pointInOrNearPolygon(w, overlapPolygon, adjHitTol)) {
           setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: shapeIdxA, pointIdx: -1, edgeIdx: -1, adjustmentOverlap: { shapeIdxA, shapeIdxB, overlapIdx: i } });
           return;
         }
@@ -3641,6 +3869,7 @@ export default function MasterProject() {
         if (Math.abs(e.clientX - r.left - lx) < 40 && Math.abs(e.clientY - r.top - ly) < 15) {
           setEditingDim({ shapeIdx: si, edgeIdx: i, x: e.clientX, y: e.clientY });
           setEditValue(toMeters(distance(pts[i], pts[j])).toFixed(3));
+          setEditingDimMode("b");
           return;
         }
       }
@@ -3653,7 +3882,7 @@ export default function MasterProject() {
       // Don't intercept when typing in an input
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") {
-        if (e.key === "Escape") { setEditingDim(null); setEditingHeight(null); }
+        if (e.key === "Escape") { setEditingDim(null); setEditingGeodesyCard(null); }
         return;
       }
       if (e.key === "Escape") {
@@ -3665,11 +3894,11 @@ export default function MasterProject() {
           if (s && isPathElement(s)) setPathConfig(null);
           setDrawingShapeIdx(null); setMode("select"); return;
         }
-        setEditingDim(null); setEditingHeight(null); setContextMenu(null); setProjectSummaryContextMenu(null);
+        setEditingDim(null); setEditingGeodesyCard(null); setContextMenu(null); setProjectSummaryContextMenu(null);
       }
       if (e.key === "z" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); return; }
       if (e.key === "Delete" || e.key === "Backspace") {
-        if (editingDim || editingHeight) return; // don't delete while editing
+        if (editingDim || editingGeodesyCard) return; // don't delete while editing
         e.preventDefault();
         if (selectedPoints.length > 0) {
           saveHistory();
@@ -3698,6 +3927,21 @@ export default function MasterProject() {
     return () => window.removeEventListener("keydown", h);
   }, [mode, selectedShapeIdx, drawingShapeIdx, selectedPoints, saveHistory, undo, shapes]);
 
+  // Canvas modals: Escape = close (grassTrim, adjustmentFill, adjustmentExtend, adjustmentSpread)
+  useEffect(() => {
+    if (!grassTrimModal && !adjustmentFillModal && !adjustmentExtendModal && !adjustmentSpreadModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (grassTrimModal) setGrassTrimModal(null);
+        if (adjustmentFillModal) setAdjustmentFillModal(null);
+        if (adjustmentExtendModal) setAdjustmentExtendModal(null);
+        if (adjustmentSpreadModal) setAdjustmentSpreadModal(null);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [grassTrimModal, adjustmentFillModal, adjustmentExtendModal, adjustmentSpreadModal]);
+
   // ── Actions ────────────────────────────────────────────
   const addShape = (factory: (cx: number, cy: number, layer: LayerID) => Shape) => {
     saveHistory();
@@ -3705,6 +3949,26 @@ export default function MasterProject() {
     setShapes(p => [...p, factory(cx, cy, (activeLayer === 3 || activeLayer === 4 ? 2 : activeLayer) as LayerID)]);
     setSelectedShapeIdx(shapes.length); setMode("select"); setDrawingShapeIdx(null);
   };
+
+  // Shape creation modal: Enter = confirm, Escape = close
+  useEffect(() => {
+    if (!shapeCreationModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShapeCreationModal(null);
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const { type } = shapeCreationModal;
+        const label = (shapeInputs.name || "").trim() || (type === "square" ? t("project:toolbar_shape_square") : type === "rectangle" ? t("project:toolbar_shape_rectangle") : type === "triangle" ? t("project:toolbar_shape_triangle") : t("project:toolbar_shape_trapezoid"));
+        if (type === "square") addShape((cx2, cy2, l) => ({ ...makeSquare(cx2, cy2, l, parseFloat(shapeInputs.side) || 4), label }));
+        else if (type === "rectangle") addShape((cx2, cy2, l) => ({ ...makeRectangle(cx2, cy2, l, parseFloat(shapeInputs.width) || 6, parseFloat(shapeInputs.height) || 4), label }));
+        else if (type === "triangle") addShape((cx2, cy2, l) => ({ ...makeTriangle(cx2, cy2, l, parseFloat(shapeInputs.base) || 5, parseFloat(shapeInputs.height) || 4), label }));
+        else addShape((cx2, cy2, l) => ({ ...makeTrapezoid(cx2, cy2, l, parseFloat(shapeInputs.top) || 3, parseFloat(shapeInputs.bottom) || 6, parseFloat(shapeInputs.height) || 4), label }));
+        setShapeCreationModal(null);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [shapeCreationModal, shapeInputs, addShape, t]);
 
   const removePoint = (si: number, pi: number) => {
     removeEntryAndLinked({ si, pi });
@@ -4418,62 +4682,119 @@ export default function MasterProject() {
     const { shapeIdx: si, edgeIdx: ei } = editingDim;
     const pts = shapes[si].points;
     const j = (ei + 1) % pts.length;
-    const cur = distance(pts[ei], pts[j]);
+    const A = pts[ei], B = pts[j];
+    const cur = distance(A, B);
     if (cur < 0.001) { setEditingDim(null); return; }
-    const ratio = toPixels(val) / cur;
-    const dx = pts[j].x - pts[ei].x, dy = pts[j].y - pts[ei].y;
+    const targetPx = toPixels(val);
+    const ux = (B.x - A.x) / cur, uy = (B.y - A.y) / cur;
     setShapes(p => {
-      const n = [...p]; const s = { ...n[si] }; const np = [...s.points];
-      np[j] = { x: pts[ei].x + dx * ratio, y: pts[ei].y + dy * ratio };
-      s.points = np; n[si] = s; if (s.linkedShapeIdx != null && n[s.linkedShapeIdx]) n[s.linkedShapeIdx] = { ...n[s.linkedShapeIdx], points: [...np] }; return n;
+      const ns = [...p]; const s = { ...ns[si] }; const np = [...s.points];
+      let newA: Point, newB: Point;
+      if (editingDimMode === "a") {
+        newA = { x: B.x - ux * targetPx, y: B.y - uy * targetPx };
+        newB = { ...B };
+      } else if (editingDimMode === "b") {
+        newA = { ...A };
+        newB = { x: A.x + ux * targetPx, y: A.y + uy * targetPx };
+      } else {
+        const half = targetPx / 2;
+        const M = midpoint(A, B);
+        newA = { x: M.x - ux * half, y: M.y - uy * half };
+        newB = { x: M.x + ux * half, y: M.y + uy * half };
+      }
+      np[ei] = newA;
+      np[j] = newB;
+      const moveLinked = (pi: number, newPos: Point) => {
+        const dragEntry: LinkedEntry = { si, pi };
+        const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
+        if (group) {
+          for (const lp of group) {
+            if (linkedEntriesMatch(lp, dragEntry)) continue;
+            if (ns[lp.si]) {
+              if (lp.si === si && !isArcEntry(lp)) { np[lp.pi] = { ...newPos }; continue; }
+              const ls = { ...ns[lp.si] };
+              if (isArcEntry(lp)) {
+                const lea = ls.edgeArcs ? [...ls.edgeArcs] : [];
+                const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
+                const li = lArcs.findIndex(a => a.id === lp.arcId);
+                if (li >= 0) {
+                  const lA = ls.points[lp.edgeIdx];
+                  const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
+                  const { t: lt, offset: lo } = worldToArcPoint(lA, lB, newPos);
+                  lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
+                  lea[lp.edgeIdx] = lArcs;
+                  ls.edgeArcs = lea;
+                  ns[lp.si] = ls;
+                }
+              } else {
+                const lpts = [...ls.points];
+                lpts[lp.pi] = { ...newPos };
+                ls.points = lpts;
+                ns[lp.si] = ls;
+              }
+            }
+          }
+        }
+      };
+      if (editingDimMode === "a") moveLinked(ei, newA);
+      else if (editingDimMode === "b") moveLinked(j, newB);
+      else { moveLinked(ei, newA); moveLinked(j, newB); }
+      s.points = np;
+      ns[si] = s;
+      if (s.linkedShapeIdx != null && ns[s.linkedShapeIdx]) ns[s.linkedShapeIdx] = { ...ns[s.linkedShapeIdx], points: [...np] };
+      return ns;
     });
     setEditingDim(null);
   };
 
   const applyHeightEdit = (fromBlur = false) => {
     if (fromBlur && skipBlurRef.current) return;
-    if (!editingHeight) return;
-    const valCm = parseFloat(heightValue);
-    if (isNaN(valCm)) { setEditingHeight(null); return; }
-    const val = valCm / 100; // input in cm, store in meters
-    const { shapeIdx: si, pointIdx: pi, heightPointIdx: hpi } = editingHeight;
+    if (!editingGeodesyCard) return;
+    const { cardInfo } = editingGeodesyCard;
     saveHistory();
-    if (pi === -1 && hpi !== undefined) {
-      setShapes(p => {
-        const n = [...p]; const s = { ...n[si] };
-        const hpList = [...(s.heightPoints ?? [])];
-        if (hpi < hpList.length) {
-          hpList[hpi] = { ...hpList[hpi], height: val };
-          s.heightPoints = hpList;
-          n[si] = s;
-        }
-        return n;
-      });
-      setEditingHeight(null);
-      return;
-    }
     setShapes(p => {
-      const n = [...p];
-      const s = { ...n[si] };
-      const nh = [...(s.heights || s.points.map(() => 0))];
-      while (nh.length < s.points.length) nh.push(0);
-      nh[pi] = val; s.heights = nh;
-      n[si] = s;
-      const group = linkedGroups.find(g => g.some(lp => lp.si === si && lp.pi === pi));
-      if (group) {
-        for (const lp of group) {
-          if (lp.si === si && lp.pi === pi) continue;
-          if (n[lp.si]?.layer === 1) {
-            const ls = { ...n[lp.si] };
-            const lh = [...(ls.heights || ls.points.map(() => 0))];
-            while (lh.length < ls.points.length) lh.push(0);
-            lh[lp.pi] = val; ls.heights = lh; n[lp.si] = ls;
+      let n = [...p];
+      for (let rowIdx = 0; rowIdx < cardInfo.entries.length; rowIdx++) {
+        const valCm = parseFloat(heightValues[rowIdx] ?? "");
+        if (isNaN(valCm)) continue;
+        const val = valCm / 100;
+        const entry = cardInfo.entries[rowIdx];
+        for (const pt of entry.points) {
+          if (pt.isVertex && pt.pointIdx != null) {
+            const s = { ...n[pt.shapeIdx] };
+            const nh = [...(s.heights || s.points.map(() => 0))];
+            while (nh.length < s.points.length) nh.push(0);
+            nh[pt.pointIdx] = val;
+            s.heights = nh;
+            n[pt.shapeIdx] = s;
+            const group = linkedGroups.find(g => g.some(lp => lp.si === pt.shapeIdx && lp.pi === pt.pointIdx));
+            if (group) {
+              for (const lp of group) {
+                if (lp.si === pt.shapeIdx && lp.pi === pt.pointIdx) continue;
+                if (n[lp.si]?.layer === 1) {
+                  const ls = { ...n[lp.si] };
+                  const lh = [...(ls.heights || ls.points.map(() => 0))];
+                  while (lh.length < ls.points.length) lh.push(0);
+                  lh[lp.pi] = val;
+                  ls.heights = lh;
+                  n[lp.si] = ls;
+                }
+              }
+            }
+          } else if (!pt.isVertex && pt.heightPointIdx != null) {
+            const s = { ...n[pt.shapeIdx] };
+            const hpList = [...(s.heightPoints ?? [])];
+            if (pt.heightPointIdx < hpList.length) {
+              hpList[pt.heightPointIdx] = { ...hpList[pt.heightPointIdx], height: val };
+              s.heightPoints = hpList;
+              n[pt.shapeIdx] = s;
+            }
           }
         }
       }
       return n;
     });
-    setEditingHeight(null);
+    setEditingGeodesyCard(null);
   };
   applyHeightEditRef.current = applyHeightEdit;
 
@@ -4482,6 +4803,7 @@ export default function MasterProject() {
     setSelectedShapeIdx(null);
     setDrawingShapeIdx(null);
     setClickedHeightTooltip(null);
+    setEditingGeodesyCard(null);
     setDragInfo(null);
     setShapeDragInfo(null);
     setRotateInfo(null);
@@ -4624,9 +4946,9 @@ export default function MasterProject() {
   const l2Count = shapes.filter(s => s.layer === 2).length;
 
   return (
-    <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", background: C.bg, fontFamily: "'JetBrains Mono','Fira Code','Courier New',monospace", color: C.text, overflow: "hidden", userSelect: "none" }}>
+    <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", background: CC.bg, fontFamily: "'JetBrains Mono','Fira Code','Courier New',monospace", color: CC.text, overflow: "hidden", userSelect: "none" }}>
       {showRestoredToast && (
-        <div style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: C.accent, color: C.bg, padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
+        <div style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: CC.accent, color: CC.bg, padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
           ✓ {t("project:restored_unsaved_sketch")}
         </div>
       )}
@@ -4671,7 +4993,7 @@ export default function MasterProject() {
             <button
               type="button"
               className={`geodesy-toggle ${geodesyEnabled ? "on" : "off"}`}
-              onClick={() => { setGeodesyEnabled(v => !v); if (geodesyEnabled) setEditingHeight(null); }}
+              onClick={() => { setGeodesyEnabled(v => !v); if (geodesyEnabled) setEditingGeodesyCard(null); }}
               title={geodesyEnabled ? t("project:toolbar_geodesy_on_tooltip") : t("project:toolbar_geodesy_off_tooltip")}
             >
               <span className="geodesy-indicator" />
@@ -4782,9 +5104,9 @@ export default function MasterProject() {
                 {pathDropdownOpen && (
                   <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 140 }}>
                     {[
-                      { subType: "slabs" as const, icon: "▦", key: "toolbar_path_slabs", color: C.layer2Edge },
-                      { subType: "concreteSlabs" as const, icon: "▣", key: "toolbar_path_concrete_slabs", color: C.layer2Edge },
-                      { subType: "monoblock" as const, icon: "▤", key: "toolbar_path_monoblock", color: C.layer2Edge },
+                      { subType: "slabs" as const, icon: "▦", key: "toolbar_path_slabs", color: CC.layer2Edge },
+                      { subType: "concreteSlabs" as const, icon: "▣", key: "toolbar_path_concrete_slabs", color: CC.layer2Edge },
+                      { subType: "monoblock" as const, icon: "▤", key: "toolbar_path_monoblock", color: CC.layer2Edge },
                     ].map(({ subType, icon, key, color }) => (
                       <button key={key} type="button"
                         onClick={() => { setPathCreationModal({ subType, name: t(`project:${key}`) }); setPathDropdownOpen(false); }}
@@ -4816,10 +5138,10 @@ export default function MasterProject() {
                 {linearDropdownOpen && (
                   <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 140 }}>
                     {[
-                      { mode: "drawFence" as const, icon: "⌇", key: "toolbar_linear_fence", color: C.fence },
-                      { mode: "drawWall" as const, icon: "▥", key: "toolbar_linear_wall", color: C.wall },
-                      { mode: "drawKerb" as const, icon: "╌", key: "toolbar_linear_kerb", color: C.kerb },
-                      { mode: "drawFoundation" as const, icon: "▦", key: "toolbar_linear_foundation", color: C.foundation },
+                      { mode: "drawFence" as const, icon: "⌇", key: "toolbar_linear_fence", color: CC.fence },
+                      { mode: "drawWall" as const, icon: "▥", key: "toolbar_linear_wall", color: CC.wall },
+                      { mode: "drawKerb" as const, icon: "╌", key: "toolbar_linear_kerb", color: CC.kerb },
+                      { mode: "drawFoundation" as const, icon: "▦", key: "toolbar_linear_foundation", color: CC.foundation },
                     ].map(({ mode: m, icon, key, color }) => (
                       <button key={key} type="button"
                         onClick={() => { setDrawingShapeIdx(null); setMode(m); setSelectedShapeIdx(null); setLinearDropdownOpen(false); }}
@@ -4906,10 +5228,10 @@ export default function MasterProject() {
                 {groundworkDropdownOpen && (
                   <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 160 }}>
                     {[
-                      { mode: "drawDrainage" as const, icon: "⌇", key: "toolbar_groundwork_drainage", color: C.drainage },
-                      { mode: "drawCanalPipe" as const, icon: "⌇", key: "toolbar_groundwork_canal_pipe", color: C.canalPipe },
-                      { mode: "drawWaterPipe" as const, icon: "⌇", key: "toolbar_groundwork_water_pipe", color: C.waterPipe },
-                      { mode: "drawCable" as const, icon: "⌇", key: "toolbar_groundwork_cable", color: C.cable },
+                      { mode: "drawDrainage" as const, icon: "⌇", key: "toolbar_groundwork_drainage", color: CC.drainage },
+                      { mode: "drawCanalPipe" as const, icon: "⌇", key: "toolbar_groundwork_canal_pipe", color: CC.canalPipe },
+                      { mode: "drawWaterPipe" as const, icon: "⌇", key: "toolbar_groundwork_water_pipe", color: CC.waterPipe },
+                      { mode: "drawCable" as const, icon: "⌇", key: "toolbar_groundwork_cable", color: CC.cable },
                     ].map(({ mode: m, icon, key, color }) => (
                       <button key={key} type="button"
                         onClick={() => { setDrawingShapeIdx(null); setMode(m); setSelectedShapeIdx(null); setGroundworkDropdownOpen(false); }}
@@ -4995,8 +5317,8 @@ export default function MasterProject() {
           <button
             onClick={() => { setTipOpen(v => !v); setShortcutsOpen(false); }}
             style={{
-              width: 28, height: 28, borderRadius: "50%", border: `1px solid ${C.panelBorder}`,
-              background: C.button, color: C.textDim, cursor: "pointer", fontSize: 14,
+              width: 28, height: 28, borderRadius: "50%", border: `1px solid ${CC.panelBorder}`,
+              background: CC.button, color: CC.textDim, cursor: "pointer", fontSize: 14,
               display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
             }}
             title={t("project:canvas_tip_title")}
@@ -5006,8 +5328,8 @@ export default function MasterProject() {
           <button
             onClick={() => { setShortcutsOpen(v => !v); setTipOpen(false); }}
             style={{
-              width: 28, height: 28, borderRadius: "50%", border: `1px solid ${C.panelBorder}`,
-              background: C.button, color: C.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600,
+              width: 28, height: 28, borderRadius: "50%", border: `1px solid ${CC.panelBorder}`,
+              background: CC.button, color: CC.textDim, cursor: "pointer", fontSize: 14, fontWeight: 600,
               display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
             }}
             title={t("project:canvas_shortcuts_title_tooltip")}
@@ -5018,12 +5340,12 @@ export default function MasterProject() {
             <div
               style={{
                 position: "absolute", bottom: "100%", right: 0, marginBottom: 8,
-                background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, padding: 14,
-                boxShadow: "0 4px 20px rgba(0,0,0,0.4)", width: 380, fontSize: 12, lineHeight: 1.6, color: C.text,
+                background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 14,
+                boxShadow: "0 4px 20px rgba(0,0,0,0.4)", width: 380, fontSize: 12, lineHeight: 1.6, color: CC.text,
               }}
               onClick={e => e.stopPropagation()}
             >
-              <div style={{ fontWeight: 600, marginBottom: 8, color: C.accent }}>{t("project:canvas_tip_title")}</div>
+              <div style={{ fontWeight: 600, marginBottom: 8, color: CC.accent }}>{t("project:canvas_tip_title")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div>{t("project:canvas_tip_overlap")}</div>
                 <div>{t("project:canvas_tip_foundation_time")}</div>
@@ -5035,12 +5357,12 @@ export default function MasterProject() {
             <div
               style={{
                 position: "absolute", bottom: "100%", right: 0, marginBottom: 8,
-                background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, padding: 14,
-                boxShadow: "0 4px 20px rgba(0,0,0,0.4)", width: 380, fontSize: 12, lineHeight: 1.7, color: C.text,
+                background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 14,
+                boxShadow: "0 4px 20px rgba(0,0,0,0.4)", width: 380, fontSize: 12, lineHeight: 1.7, color: CC.text,
               }}
               onClick={e => e.stopPropagation()}
             >
-              <div style={{ fontWeight: 600, marginBottom: 10, color: C.accent }}>{t("project:canvas_shortcuts_title")}</div>
+              <div style={{ fontWeight: 600, marginBottom: 10, color: CC.accent }}>{t("project:canvas_shortcuts_title")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <div>{t("project:canvas_shortcut_left_object")}</div>
                 <div>{t("project:canvas_shortcut_left_empty_ctrl")}</div>
@@ -5060,8 +5382,8 @@ export default function MasterProject() {
         </div>
 
         {contextMenu && (
-          <div ref={contextMenuRef} style={{ position: "fixed", left: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).x, top: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).y, background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", minWidth: 160 }}>
-            <div style={{ fontSize: 11, color: C.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${C.panelBorder}`, marginBottom: 4 }}>
+          <div ref={contextMenuRef} style={{ position: "fixed", left: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).x, top: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", minWidth: 160 }}>
+            <div style={{ fontSize: 11, color: CC.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${CC.panelBorder}`, marginBottom: 4 }}>
               {contextMenu.adjustmentEmpty && t("project:adjustment_empty_area")}
               {contextMenu.adjustmentOverflow && (() => {
                 const s = shapes[contextMenu.adjustmentOverflow.shapeIdx];
@@ -5076,22 +5398,22 @@ export default function MasterProject() {
             </div>
             {/* Layer 5 Adjustment menus */}
             {contextMenu.adjustmentEmpty && (
-              <CtxItem label={t("project:adjustment_fill")} color={C.accent} onClick={() => {
-                const { emptyAreaIdx } = contextMenu.adjustmentEmpty!;
-                const emptyArea = adjustmentData.emptyAreas[emptyAreaIdx];
-                const touching = findTouchingElementsForEmptyArea(shapes, emptyArea);
-                if (touching.length === 0) {
-                  setContextMenu(null);
-                  return;
-                }
+              <>
+                <CtxItem label={t("project:adjustment_fill")} color={CC.accent} onClick={() => {
+                  const { emptyAreaIdx } = contextMenu.adjustmentEmpty!;
+                  const emptyArea = adjustmentData.emptyAreas[emptyAreaIdx];
+                  const touching = findTouchingElementsForEmptyArea(shapes, emptyArea);
+                  if (touching.length === 0) {
+                    setContextMenu(null);
+                    return;
+                  }
                 if (touching.length === 1) {
                   saveHistory();
                   const newPts = extendShapeToCoverEmptyArea(shapes, touching[0], emptyArea);
                   if (newPts) {
                     setShapes(p => {
                       const n = [...p];
-                      const s = { ...n[touching[0]], points: newPts };
-                      n[touching[0]] = s;
+                      n[touching[0]] = applyPolygonPointsToShape(n[touching[0]], newPts);
                       return n;
                     });
                   }
@@ -5099,11 +5421,43 @@ export default function MasterProject() {
                   return;
                 }
                 setAdjustmentFillModal({ emptyAreaIdx });
-                setContextMenu(null);
-              }} />
+                  setContextMenu(null);
+                }} />
+                <CtxItem label={t("project:adjustment_extend_to_edge", { defaultValue: "Dosuń do krawędzi" })} color={CC.accent} onClick={() => {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MasterProject.tsx:extendToEdge:click',message:'Dosun to krawedzi clicked',data:{},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+                  // #endregion
+                  const { emptyAreaIdx } = contextMenu.adjustmentEmpty!;
+                  const emptyArea = adjustmentData.emptyAreas[emptyAreaIdx];
+                  const touching = findTouchingElementsForEmptyArea(shapes, emptyArea);
+                  if (touching.length === 0) {
+                    setContextMenu(null);
+                    return;
+                  }
+                  if (touching.length === 1) {
+                    saveHistory();
+                    const newPts = extendShapeToGardenEdge(shapes, touching[0], emptyArea);
+                    if (newPts) {
+                      // #region agent log
+                      fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MasterProject.tsx:extendToEdge:preSetShapes',message:'about to setShapes',data:{},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+                      // #endregion
+                      setShapes(p => {
+                        const n = [...p];
+                        const s = applyPolygonPointsToShape(n[touching[0]], newPts);
+                        n[touching[0]] = s;
+                        return n;
+                      });
+                    }
+                    setContextMenu(null);
+                    return;
+                  }
+                  setAdjustmentExtendModal({ emptyAreaIdx });
+                  setContextMenu(null);
+                }} />
+              </>
             )}
             {contextMenu.adjustmentOverflow && (
-              <CtxItem label={t("project:adjustment_hide")} color={C.accent} onClick={() => {
+              <CtxItem label={t("project:adjustment_hide")} color={CC.accent} onClick={() => {
                 const si = contextMenu.adjustmentOverflow!.shapeIdx;
                 const newPts = clipShapeToGarden(shapes, si);
                 if (newPts) {
@@ -5120,7 +5474,7 @@ export default function MasterProject() {
             )}
             {contextMenu.adjustmentOverlap && (
               <>
-                <CtxItem label={t("project:adjustment_remove_part_a")} color={C.danger} onClick={() => {
+                <CtxItem label={t("project:adjustment_remove_part_a", { name: shapes[contextMenu.adjustmentOverlap.shapeIdxA]?.label || shapes[contextMenu.adjustmentOverlap.shapeIdxA]?.calculatorType || shapes[contextMenu.adjustmentOverlap.shapeIdxA]?.elementType || '' })} color={CC.danger} onClick={() => {
                   const { shapeIdxA, overlapIdx } = contextMenu.adjustmentOverlap!;
                   const overlap = adjustmentData.overlaps[overlapIdx]?.overlapPolygon;
                   if (!overlap) return;
@@ -5137,7 +5491,7 @@ export default function MasterProject() {
                   }
                   setContextMenu(null);
                 }} />
-                <CtxItem label={t("project:adjustment_remove_part_b")} color={C.danger} onClick={() => {
+                <CtxItem label={t("project:adjustment_remove_part_b", { name: shapes[contextMenu.adjustmentOverlap.shapeIdxB]?.label || shapes[contextMenu.adjustmentOverlap.shapeIdxB]?.calculatorType || shapes[contextMenu.adjustmentOverlap.shapeIdxB]?.elementType || '' })} color={CC.danger} onClick={() => {
                   const { shapeIdxB, overlapIdx } = contextMenu.adjustmentOverlap!;
                   const overlap = adjustmentData.overlaps[overlapIdx]?.overlapPolygon;
                   if (!overlap) return;
@@ -5154,7 +5508,7 @@ export default function MasterProject() {
                   }
                   setContextMenu(null);
                 }} />
-                <CtxItem label={t("project:adjustment_spread")} color={C.accent} onClick={() => {
+                <CtxItem label={t("project:adjustment_spread")} color={CC.accent} onClick={() => {
                   setAdjustmentSpreadModal({ ...contextMenu.adjustmentOverlap! });
                   setContextMenu(null);
                 }} />
@@ -5162,7 +5516,7 @@ export default function MasterProject() {
             )}
             {/* Grass join/unjoin menu */}
             {contextMenu.grassJoin && (
-              <CtxItem label="🔗 Złącz roleki" color={C.accent} onClick={() => {
+              <CtxItem label="🔗 Złącz roleki" color={CC.accent} onClick={() => {
                 const { shapeIdx, grassJoin } = contextMenu;
                 if (!grassJoin) return;
                 saveHistory();
@@ -5186,7 +5540,7 @@ export default function MasterProject() {
               }} />
             )}
             {contextMenu.heightPointIdx !== undefined && (
-              <CtxItem label="✕ Usuń punkt wysokościowy" color={C.danger} onClick={() => {
+              <CtxItem label="✕ Usuń punkt wysokościowy" color={CC.danger} onClick={() => {
                 const si = contextMenu.shapeIdx, hpi = contextMenu.heightPointIdx!;
                 saveHistory();
                 setShapes(p => {
@@ -5202,7 +5556,7 @@ export default function MasterProject() {
             {/* Arc point menu — "Dodaj arc point" nie wyświetla się, bo arc point już tam jest */}
             {contextMenu.arcPoint && (
               <>
-                <CtxItem label="〰 Zmiana na square point" color={C.accent} onClick={() => {
+                <CtxItem label="〰 Zmiana na square point" color={CC.accent} onClick={() => {
                   saveHistory();
                   const si = contextMenu.shapeIdx, ei = contextMenu.edgeIdx, ap = contextMenu.arcPoint!;
                   const A = shapes[si].points[ei];
@@ -5242,7 +5596,7 @@ export default function MasterProject() {
                   })).filter(g => g.length >= 2));
                   setContextMenu(null);
                 }} />
-                <CtxItem label="✕ Remove arc point" color={C.danger} onClick={() => {
+                <CtxItem label="✕ Remove arc point" color={CC.danger} onClick={() => {
                   const si = contextMenu.shapeIdx, ei = contextMenu.edgeIdx, ap = contextMenu.arcPoint!;
                   removeEntryAndLinked({ si, pi: -1 as const, edgeIdx: ei, arcId: ap.id });
                 }} />
@@ -5252,7 +5606,7 @@ export default function MasterProject() {
                   const ap = contextMenu.arcPoint!;
                   const isLinked = isArcPointLinked(si, ei, ap.id);
                   if (isLinked) {
-                    return <CtxItem label="🔗 Unlink arc point" color={C.text} onClick={() => {
+                    return <CtxItem label="🔗 Unlink arc point" color={CC.text} onClick={() => {
                       unlinkEntry({ si, pi: -1 as const, edgeIdx: ei, arcId: ap.id });
                     }} />;
                   }
@@ -5262,63 +5616,44 @@ export default function MasterProject() {
                   const nearby = findNearbyLinkableEntries(worldPos, si, ap.id);
                   const edges = findAllEdgesPositionTouches(worldPos, si);
                   if (nearby.length === 0 && edges.length === 0) return null;
-                  return <CtxItem label="🔗 Link arc point" color={C.accent} onClick={() => {
+                  return <CtxItem label="🔗 Link arc point" color={CC.accent} onClick={() => {
                     linkArcPoint(si, ei, ap);
                   }} />;
                 })()}
               </>
             )}
             {contextMenu.grassPieceIdx != null && (
-              <>
-                <CtxItem label={t("project:grass_rotate_piece_90")} color={C.accent} onClick={() => {
-                  const { shapeIdx, grassPieceIdx: pieceIdx } = contextMenu;
-                  if (pieceIdx == null) return;
-                  saveHistory();
-                  setShapes(p => {
-                    const n = [...p];
-                    const s = { ...n[shapeIdx] };
-                    const inputs = { ...s.calculatorInputs };
-                    const pieces = [...(inputs.vizPieces as GrassPiece[])];
-                    const piece = pieces[pieceIdx];
-                    if (piece) {
-                      pieces[pieceIdx] = { ...piece, rotation: (piece.rotation === 90 ? 0 : 90) as 0 | 90 };
-                      inputs.vizPieces = pieces;
-                      const cov = validateCoverage(s, pieces);
-                      inputs.jointsLength = String(cov.joinLengthM.toFixed(2));
-                      inputs.trimLength = String(cov.trimLengthM.toFixed(2));
-                      n[shapeIdx] = { ...s, calculatorInputs: inputs };
-                    }
-                    return n;
-                  });
-                  setContextMenu(null);
-                }} />
-                <CtxItem label={t("project:grass_rotate_group_90")} color={C.accent} onClick={() => {
-                  const { shapeIdx, grassPieceIdx: pieceIdx } = contextMenu;
-                  if (pieceIdx == null) return;
-                  saveHistory();
-                  setShapes(p => {
-                    const n = [...p];
-                    const s = { ...n[shapeIdx] };
-                    const inputs = { ...s.calculatorInputs };
-                    const pieces = [...(inputs.vizPieces as GrassPiece[])];
-                    const groupIndices = getJoinedGroup(pieces, pieceIdx);
-                    for (const i of groupIndices) {
-                      const piece = pieces[i];
-                      if (piece) pieces[i] = { ...piece, rotation: (piece.rotation === 90 ? 0 : 90) as 0 | 90 };
-                    }
-                    inputs.vizPieces = pieces;
-                    const cov = validateCoverage(s, pieces);
-                    inputs.jointsLength = String(cov.joinLengthM.toFixed(2));
-                    inputs.trimLength = String(cov.trimLengthM.toFixed(2));
-                    n[shapeIdx] = { ...s, calculatorInputs: inputs };
-                    return n;
-                  });
-                  setContextMenu(null);
-                }} />
-              </>
+              <CtxItem label={t("project:grass_rotate_element_90")} color={CC.accent} onClick={() => {
+                const { shapeIdx, grassPieceIdx: pieceIdx } = contextMenu;
+                if (pieceIdx == null) return;
+                saveHistory();
+                setShapes(p => {
+                  const n = [...p];
+                  const s = { ...n[shapeIdx] };
+                  const inputs = { ...s.calculatorInputs };
+                  const pieces = [...(inputs.vizPieces as GrassPiece[])];
+                  const groupIndices = getJoinedGroup(pieces, pieceIdx);
+                  const rotated = groupIndices.length > 1
+                    ? rotateGrassGroup90(pieces, groupIndices)
+                    : (() => {
+                        const piece = pieces[pieceIdx];
+                        if (!piece) return pieces;
+                        const np = [...pieces];
+                        np[pieceIdx] = { ...piece, rotation: (piece.rotation === 90 ? 0 : 90) as 0 | 90 };
+                        return np;
+                      })();
+                  inputs.vizPieces = rotated;
+                  const cov = validateCoverage(s, rotated);
+                  inputs.jointsLength = String(cov.joinLengthM.toFixed(2));
+                  inputs.trimLength = String(cov.trimLengthM.toFixed(2));
+                  n[shapeIdx] = { ...s, calculatorInputs: inputs };
+                  return n;
+                });
+                setContextMenu(null);
+              }} />
             )}
             {contextMenu.grassUnjoin && (
-              <CtxItem label="✂ Rozłącz roleki" color={C.text} onClick={() => {
+              <CtxItem label="✂ Rozłącz roleki" color={CC.text} onClick={() => {
                 const { shapeIdx, grassUnjoin } = contextMenu;
                 if (!grassUnjoin) return;
                 saveHistory();
@@ -5346,10 +5681,10 @@ export default function MasterProject() {
             {/* Point menu */}
             {contextMenu.pointIdx >= 0 && (<>
               {shapes[contextMenu.shapeIdx]?.points.length > 3 && (
-                <CtxItem label="✕ Remove point" color={C.danger} onClick={() => { removePoint(contextMenu.shapeIdx, contextMenu.pointIdx); }} />
+                <CtxItem label="✕ Remove point" color={CC.danger} onClick={() => { removePoint(contextMenu.shapeIdx, contextMenu.pointIdx); }} />
               )}
               {shapes[contextMenu.shapeIdx] && (shapes[contextMenu.shapeIdx].layer === 1 || shapes[contextMenu.shapeIdx].layer === 2) && shapes[contextMenu.shapeIdx].points.length > 3 && (
-                <CtxItem label="〰 Zmiana na arc point" color={C.accent} onClick={() => {
+                <CtxItem label="〰 Zmiana na arc point" color={CC.accent} onClick={() => {
                   saveHistory();
                   const si = contextMenu.shapeIdx, pi = contextMenu.pointIdx;
                   const s = shapes[si]; const pts = s.points;
@@ -5405,56 +5740,75 @@ export default function MasterProject() {
                 }} />
               )}
               {shapes[contextMenu.shapeIdx]?.closed && (
-                <CtxItem
-                  label={shapes[contextMenu.shapeIdx]?.lockedAngles.includes(contextMenu.pointIdx) ? "🔓 Unlock angle" : "🔒 Lock angle"}
-                  color={shapes[contextMenu.shapeIdx]?.lockedAngles.includes(contextMenu.pointIdx) ? C.locked : C.text}
-                  onClick={() => { toggleLockAngle(contextMenu.shapeIdx, contextMenu.pointIdx); setContextMenu(null); }}
-                />
+                <>
+                  <CtxItem
+                    label={shapes[contextMenu.shapeIdx]?.lockedAngles.includes(contextMenu.pointIdx) ? "🔓 Unlock angle" : "🔒 Lock angle"}
+                    color={shapes[contextMenu.shapeIdx]?.lockedAngles.includes(contextMenu.pointIdx) ? CC.locked : CC.text}
+                    onClick={() => { toggleLockAngle(contextMenu.shapeIdx, contextMenu.pointIdx); setContextMenu(null); }}
+                  />
+                  <CtxItem
+                    label={t("project:set_angle_manually")}
+                    color={CC.accent}
+                    onClick={() => {
+                      const si = contextMenu.shapeIdx, pi = contextMenu.pointIdx;
+                      const s = shapes[si];
+                      const pts = s.points;
+                      if (pts.length < 3) return;
+                      const n = pts.length;
+                      const prev = (pi - 1 + n) % n, next = (pi + 1) % n;
+                      const currentAngle = angleDeg(pts[prev], pts[pi], pts[next]);
+                      setSetAngleTargetValue(currentAngle.toFixed(1));
+                      setSetAngleMode("split");
+                      setSetAngleModal({ shapeIdx: si, pointIdx: pi });
+                      setContextMenu(null);
+                    }}
+                  />
+                </>
               )}
               {isPointLinked(contextMenu.shapeIdx, contextMenu.pointIdx) ? (
-                <CtxItem label="🔗 Unlink point" color={C.text} onClick={() => unlinkPoint(contextMenu.shapeIdx, contextMenu.pointIdx)} />
+                <CtxItem label="🔗 Unlink point" color={CC.text} onClick={() => unlinkPoint(contextMenu.shapeIdx, contextMenu.pointIdx)} />
               ) : (() => {
                 const nearby = findAllNearbyPoints(contextMenu.shapeIdx, contextMenu.pointIdx);
                 const edges = findAllEdgesPointTouches(contextMenu.shapeIdx, contextMenu.pointIdx);
                 if (nearby.length > 0 || edges.length > 0) {
-                  return <CtxItem label="🔗 Link all at point" color={C.accent} onClick={() => linkAllAtPoint(contextMenu.shapeIdx, contextMenu.pointIdx)} />;
+                  return <CtxItem label="🔗 Link all at point" color={CC.accent} onClick={() => linkAllAtPoint(contextMenu.shapeIdx, contextMenu.pointIdx)} />;
                 }
                 return null;
               })()}
               {shapes[contextMenu.shapeIdx]?.layer === 2 && (
                 <>
-                  <div style={{ height: 1, background: C.panelBorder, margin: "4px 0" }} />
+                  <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
                   {shapes[contextMenu.shapeIdx]?.elementType === "wall" && (
-                    <CtxItem label="↕ Ustaw wysokości segmentu" color={C.accent} onClick={() => { setSegmentHeightModal({ shapeIdx: contextMenu.shapeIdx }); setContextMenu(null); }} />
+                    <CtxItem label="↕ Ustaw wysokości segmentu" color={CC.accent} onClick={() => { setSegmentHeightModal({ shapeIdx: contextMenu.shapeIdx }); setContextMenu(null); }} />
                   )}
                   {shapes[contextMenu.shapeIdx]?.calculatorResults && (
                     <CtxItem label={`📊 ${t("project:path_view_results")}`} color="#a29bfe" onClick={() => { setResultsModalShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
                   )}
-                  <CtxItem label={shapes[contextMenu.shapeIdx]?.calculatorType ? `✏️ Edit Object Card (${shapes[contextMenu.shapeIdx].calculatorType})` : "✏️ Edit Object Card"} color={C.accent} onClick={() => { setObjectCardShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
+                  <CtxItem label={shapes[contextMenu.shapeIdx]?.calculatorType ? `✏️ Edit Object Card (${shapes[contextMenu.shapeIdx].calculatorType})` : "✏️ Edit Object Card"} color={CC.accent} onClick={() => { setObjectCardShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
                 </>
               )}
             </>)}
             {/* Edge menu */}
             {contextMenu.edgeIdx >= 0 && (<>
               {isLinearElement(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx].points.length >= 3 && (
-                <CtxItem label="✕ Usuń segment" color={C.danger} onClick={() => { saveHistory(); removeLinearSegment(contextMenu.shapeIdx, contextMenu.edgeIdx); setContextMenu(null); setSelectedShapeIdx(null); }} />
+                <CtxItem label="✕ Usuń segment" color={CC.danger} onClick={() => { saveHistory(); removeLinearSegment(contextMenu.shapeIdx, contextMenu.edgeIdx); setContextMenu(null); setSelectedShapeIdx(null); }} />
               )}
               {isGroundworkLinear(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx].points.length === 2 && (
-                <CtxItem label="✕ Usuń element" color={C.danger} onClick={() => { saveHistory(); setShapes(p => p.filter((_, i) => i !== contextMenu.shapeIdx)); setContextMenu(null); setSelectedShapeIdx(null); }} />
+                <CtxItem label="✕ Usuń element" color={CC.danger} onClick={() => { saveHistory(); setShapes(p => p.filter((_, i) => i !== contextMenu.shapeIdx)); setContextMenu(null); setSelectedShapeIdx(null); }} />
               )}
               {isLinearElement(shapes[contextMenu.shapeIdx]) && (() => {
                 const et = shapes[contextMenu.shapeIdx].elementType;
                 const target = et === "fence" || et === "foundation" ? "wall" : et === "wall" ? "kerb" : "polygon";
                 const label = target === "wall" ? t("project:align_to_wall") : target === "kerb" ? t("project:align_to_kerb") : t("project:align_to_plot");
-                return <CtxItem label={label} color={C.accent} onClick={() => alignLinearSegmentTo(contextMenu.shapeIdx, contextMenu.edgeIdx, target)} />;
+                return <CtxItem label={label} color={CC.accent} onClick={() => alignLinearSegmentTo(contextMenu.shapeIdx, contextMenu.edgeIdx, target)} />;
               })()}
               <CtxItem
                 label={shapes[contextMenu.shapeIdx]?.lockedEdges.some(e => e.idx === contextMenu.edgeIdx) ? "🔓 Unlock length" : "🔒 Lock length"}
-                color={shapes[contextMenu.shapeIdx]?.lockedEdges.some(e => e.idx === contextMenu.edgeIdx) ? C.locked : C.text}
+                color={shapes[contextMenu.shapeIdx]?.lockedEdges.some(e => e.idx === contextMenu.edgeIdx) ? CC.locked : CC.text}
                 onClick={() => { toggleLockEdge(contextMenu.shapeIdx, contextMenu.edgeIdx); setContextMenu(null); }}
               />
               {contextMenu.pathCenterlineEdgeIdx !== undefined && contextMenu.edgePos !== undefined && (
-                <CtxItem label="〰 Arc Point" color={C.accent} onClick={() => {
+                <CtxItem label="〰 Arc Point" color={CC.accent} onClick={() => {
                   saveHistory();
                   const si = contextMenu.shapeIdx;
                   const ei = contextMenu.pathCenterlineEdgeIdx!;
@@ -5476,12 +5830,12 @@ export default function MasterProject() {
                 }} />
               )}
               {shapes[contextMenu.shapeIdx]?.layer === 1 && contextMenu.edgePos !== undefined && contextMenu.edgeT !== undefined && (
-                <CtxItem label="➕ Dodaj punkt" color={C.geo} onClick={() => {
+                <CtxItem label="➕ Dodaj punkt" color={CC.geo} onClick={() => {
                   insertPointOnEdge(contextMenu.shapeIdx, contextMenu.edgeIdx, contextMenu.edgePos!, contextMenu.edgeT!);
                 }} />
               )}
               {!isLinearElement(shapes[contextMenu.shapeIdx]) && !isPathElement(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx]?.closed && contextMenu.edgePos !== undefined && contextMenu.edgeT !== undefined && (shapes[contextMenu.shapeIdx].layer === 1 || shapes[contextMenu.shapeIdx].layer === 2) && (
-                <CtxItem label="〰 Dodaj arc point" color={C.accent} onClick={() => {
+                <CtxItem label="〰 Dodaj arc point" color={CC.accent} onClick={() => {
                   saveHistory();
                   const si = contextMenu.shapeIdx, ei = contextMenu.edgeIdx;
                   const pts = shapes[si].points;
@@ -5501,25 +5855,25 @@ export default function MasterProject() {
               )}
               {shapes[contextMenu.shapeIdx]?.layer === 2 && (
                 <>
-                  <div style={{ height: 1, background: C.panelBorder, margin: "4px 0" }} />
+                  <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
                   {shapes[contextMenu.shapeIdx]?.elementType === "wall" && (
-                    <CtxItem label="↕ Ustaw wysokości segmentu" color={C.accent} onClick={() => { setSegmentHeightModal({ shapeIdx: contextMenu.shapeIdx }); setContextMenu(null); }} />
+                    <CtxItem label="↕ Ustaw wysokości segmentu" color={CC.accent} onClick={() => { setSegmentHeightModal({ shapeIdx: contextMenu.shapeIdx }); setContextMenu(null); }} />
                   )}
                   {shapes[contextMenu.shapeIdx]?.calculatorResults && (
                     <CtxItem label={`📊 ${t("project:path_view_results")}`} color="#a29bfe" onClick={() => { setResultsModalShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
                   )}
-                  <CtxItem label={shapes[contextMenu.shapeIdx]?.calculatorType ? `✏️ Edit Object Card (${shapes[contextMenu.shapeIdx].calculatorType})` : "✏️ Edit Object Card"} color={C.accent} onClick={() => { setObjectCardShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
+                  <CtxItem label={shapes[contextMenu.shapeIdx]?.calculatorType ? `✏️ Edit Object Card (${shapes[contextMenu.shapeIdx].calculatorType})` : "✏️ Edit Object Card"} color={CC.accent} onClick={() => { setObjectCardShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
                 </>
               )}
             </>)}
             {/* Shape-level menu (Layer 1 Garden) */}
             {contextMenu.pointIdx === -1 && contextMenu.edgeIdx === -1 && shapes[contextMenu.shapeIdx]?.layer === 1 && shapes[contextMenu.shapeIdx]?.closed && (
               <>
-                <div style={{ height: 1, background: C.panelBorder, margin: "4px 0" }} />
+                <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
                 {contextMenu.interiorWorldPos && (
                   <CtxItem
                     label="➕ Dodaj punkt wysokościowy"
-                    color={C.geo}
+                    color={CC.geo}
                     onClick={() => {
                       const si = contextMenu.shapeIdx;
                       const shape = shapes[si];
@@ -5541,15 +5895,15 @@ export default function MasterProject() {
             {/* Shape-level menu (Layer 2) */}
             {contextMenu.pointIdx === -1 && contextMenu.edgeIdx === -1 && shapes[contextMenu.shapeIdx]?.layer === 2 && (
               <>
-                <div style={{ height: 1, background: C.panelBorder, margin: "4px 0" }} />
+                <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
                 {isGroundworkLinear(shapes[contextMenu.shapeIdx]) && (
-                  <CtxItem label="✕ Usuń element" color={C.danger} onClick={() => { saveHistory(); setShapes(p => p.filter((_, i) => i !== contextMenu.shapeIdx)); setContextMenu(null); setSelectedShapeIdx(null); }} />
+                  <CtxItem label="✕ Usuń element" color={CC.danger} onClick={() => { saveHistory(); setShapes(p => p.filter((_, i) => i !== contextMenu.shapeIdx)); setContextMenu(null); setSelectedShapeIdx(null); }} />
                 )}
                 {shapes[contextMenu.shapeIdx]?.elementType === "wall" && !isGroundworkLinear(shapes[contextMenu.shapeIdx]) && (
-                  <CtxItem label="↕ Ustaw wysokości segmentu" color={C.accent} onClick={() => { setSegmentHeightModal({ shapeIdx: contextMenu.shapeIdx }); setContextMenu(null); }} />
+                  <CtxItem label="↕ Ustaw wysokości segmentu" color={CC.accent} onClick={() => { setSegmentHeightModal({ shapeIdx: contextMenu.shapeIdx }); setContextMenu(null); }} />
                 )}
                 {isPolygonLinearElement(shapes[contextMenu.shapeIdx]) && findSurfacesOverlappingLinear(shapes, contextMenu.shapeIdx).length > 0 && (
-                  <CtxItem label={t("project:align_surfaces_to_linear")} color={C.accent} onClick={() => {
+                  <CtxItem label={t("project:align_surfaces_to_linear")} color={CC.accent} onClick={() => {
                     const linearIdx = contextMenu.shapeIdx;
                     const overlappers = findSurfacesOverlappingLinear(shapes, linearIdx);
                     saveHistory();
@@ -5569,11 +5923,11 @@ export default function MasterProject() {
                 )}
                 <CtxItem
                   label={shapes[contextMenu.shapeIdx]?.calculatorType ? `✏️ Edit Object Card (${shapes[contextMenu.shapeIdx].calculatorType})` : "✏️ Edit Object Card"}
-                  color={C.accent}
+                  color={CC.accent}
                   onClick={() => { setObjectCardShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }}
                 />
                 {shapes[contextMenu.shapeIdx]?.calculatorType && !isGroundworkLinear(shapes[contextMenu.shapeIdx]) && (
-                  <CtxItem label="Remove Calculator" color={C.danger} onClick={() => {
+                  <CtxItem label="Remove Calculator" color={CC.danger} onClick={() => {
                     setShapes(p => {
                       const n = [...p]; const s = { ...n[contextMenu.shapeIdx] };
                       s.calculatorType = undefined; s.calculatorSubType = undefined;
@@ -5589,74 +5943,134 @@ export default function MasterProject() {
         )}
 
         {projectSummaryContextMenu !== null && shapes[projectSummaryContextMenu.shapeIdx] && (
-          <div ref={projectSummaryMenuRef} style={{ position: "fixed", left: (projectSummaryDisplayPos ?? { x: projectSummaryContextMenu.x, y: projectSummaryContextMenu.y }).x, top: (projectSummaryDisplayPos ?? { x: projectSummaryContextMenu.x, y: projectSummaryContextMenu.y }).y, background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", minWidth: 160 }}>
-            <div style={{ fontSize: 11, color: C.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${C.panelBorder}`, marginBottom: 4 }}>
+          <div ref={projectSummaryMenuRef} style={{ position: "fixed", left: (projectSummaryDisplayPos ?? { x: projectSummaryContextMenu.x, y: projectSummaryContextMenu.y }).x, top: (projectSummaryDisplayPos ?? { x: projectSummaryContextMenu.x, y: projectSummaryContextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", minWidth: 160 }}>
+            <div style={{ fontSize: 11, color: CC.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${CC.panelBorder}`, marginBottom: 4 }}>
               {shapes[projectSummaryContextMenu.shapeIdx].label || shapes[projectSummaryContextMenu.shapeIdx].calculatorType || "Element"}
             </div>
             {shapes[projectSummaryContextMenu.shapeIdx]?.calculatorResults && (
               <CtxItem label={`📊 ${t("project:path_view_results")}`} color="#a29bfe" onClick={() => { setResultsModalShapeIdx(projectSummaryContextMenu.shapeIdx); setProjectSummaryContextMenu(null); }} />
             )}
-            <CtxItem label="✕ Usuń element" color={C.danger} onClick={() => {
+            <CtxItem label="✕ Usuń element" color={CC.danger} onClick={() => {
               saveHistory();
               setShapes(p => p.filter((_, i) => i !== projectSummaryContextMenu.shapeIdx));
               setSelectedShapeIdx(null);
               setProjectSummaryContextMenu(null);
             }} />
-            <CtxItem label="✏️ Zmień nazwę" color={C.accent} onClick={() => {
+            <CtxItem label="✏️ Zmień nazwę" color={CC.accent} onClick={() => {
               setNamePromptShapeIdx(projectSummaryContextMenu.shapeIdx);
               setProjectSummaryContextMenu(null);
             }} />
           </div>
         )}
 
-        {editingDim && (
-          <div style={{ position: "fixed", left: editingDim.x - 60, top: editingDim.y - 16, zIndex: 100 }}>
-            <input autoFocus value={editValue} onChange={e => setEditValue(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") applyDimEdit(); if (e.key === "Escape") setEditingDim(null); }}
-              onBlur={applyDimEdit}
-              style={{ width: 100, padding: "4px 8px", background: C.panel, border: `2px solid ${C.accent}`, borderRadius: 4, color: C.text, fontFamily: "inherit", fontSize: 13, outline: "none", textAlign: "center" }}
-              placeholder={t("project:meters_placeholder")} />
-          </div>
-        )}
+        {editingDim && (() => {
+          const rect = canvasRef.current?.getBoundingClientRect();
+          const dialogLeft = rect ? Math.max(rect.left + 20, Math.min(rect.right - 280, rect.left + rect.width * 0.6)) : editingDim.x - 140;
+          const dialogTop = rect ? Math.max(rect.top + 20, Math.min(rect.bottom - 260, rect.top + rect.height * 0.4)) : editingDim.y - 120;
+          return (
+            <div style={{ position: "fixed", left: dialogLeft, top: dialogTop, zIndex: 200, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, boxShadow: "0 8px 32px rgba(0,0,0,0.5)", minWidth: 260 }} onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === "Enter") applyDimEdit(); if (e.key === "Escape") setEditingDim(null); }}>
+              <div style={{ fontWeight: 600, marginBottom: 16, color: CC.text }}>{t("project:dim_edit_title")}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                <span style={{ fontSize: 13, color: CC.text }}>{t("project:dim_edit_length")}:</span>
+                <input
+                  autoFocus
+                  type="number"
+                  min={0.001}
+                  step={0.01}
+                  value={editValue}
+                  onChange={e => setEditValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") applyDimEdit(); if (e.key === "Escape") setEditingDim(null); }}
+                  style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }}
+                />
+                <span style={{ color: CC.textDim }}>m</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: CC.text }}>
+                  <input type="radio" name="dimMode" checked={editingDimMode === "a"} onChange={() => setEditingDimMode("a")} />
+                  {t("project:dim_edit_mode_a")}
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: CC.text }}>
+                  <input type="radio" name="dimMode" checked={editingDimMode === "b"} onChange={() => setEditingDimMode("b")} />
+                  {t("project:dim_edit_mode_b")}
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: CC.text }}>
+                  <input type="radio" name="dimMode" checked={editingDimMode === "split"} onChange={() => setEditingDimMode("split")} />
+                  {t("project:dim_edit_mode_split")}
+                </label>
+              </div>
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button onClick={() => setEditingDim(null)} style={{ padding: "8px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13 }}>{t("project:set_angle_cancel")}</button>
+                <button onClick={applyDimEdit} style={{ padding: "8px 16px", background: CC.accent, border: "none", borderRadius: 6, color: CC.bg, cursor: "pointer", fontSize: 13 }}>{t("project:set_angle_apply")}</button>
+              </div>
+            </div>
+          );
+        })()}
 
-        {editingHeight && (
-          <div style={{ position: "fixed", left: editingHeight.x - 60, top: editingHeight.y - 36, zIndex: 100 }}>
-            <input
-              autoFocus
-              value={heightValue}
-              onChange={e => setHeightValue(e.target.value)}
-              onFocus={e => {
-                if (!heightInputSelectOnceRef.current) {
-                  heightInputSelectOnceRef.current = true;
-                  e.target.select();
-                }
+        {editingGeodesyCard ? (() => {
+          const rect = canvasRef.current?.getBoundingClientRect();
+          if (!rect) return null;
+          const { cardInfo } = editingGeodesyCard;
+          const { left, top } = cardInfo.cardBounds;
+          const fixedLeft = rect.left + left;
+          const fixedTop = rect.top + top;
+          const cardW = cardInfo.cardBounds.right - cardInfo.cardBounds.left;
+          const cardH = cardInfo.cardBounds.bottom - cardInfo.cardBounds.top;
+          return (
+            <div
+              style={{
+                position: "fixed",
+                left: fixedLeft,
+                top: fixedTop,
+                width: cardW,
+                minHeight: cardH,
+                zIndex: 100,
+                background: "rgba(26,26,46,0.95)",
+                border: `1px solid ${CC.geo}`,
+                borderRadius: 4,
+                padding: GEODESY_CARD_PAD,
+                font: "10px 'JetBrains Mono',monospace",
               }}
-              onKeyDown={e => { if (e.key === "Enter") applyHeightEdit(); if (e.key === "Escape") setEditingHeight(null); }}
-              onBlur={() => applyHeightEdit(true)}
-              style={{ width: 120, padding: "4px 8px", background: C.panel, border: `2px solid ${C.geo}`, borderRadius: 4, color: C.geo, fontFamily: "inherit", fontSize: 13, outline: "none", textAlign: "center" }}
-              placeholder="cm" />
-          </div>
-        )}
-
-        {shapes.filter(s => s.layer === activeLayer).length === 0 && activeLayer !== 3 && activeLayer !== 4 && mode === "select" && !drawingShapeIdx && !dismissedLayerHints.has(activeLayer) && (
-          <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", textAlign: "center", color: C.textDim, pointerEvents: "none" }}>
-            <div style={{ fontSize: 40, marginBottom: 16, opacity: 0.3 }}>{activeLayer === 1 ? "⬡" : "◈"}</div>
-            <div style={{ fontSize: 15, marginBottom: 8 }}>
-              {activeLayer === 1 ? "Draw garden outline" : "Add internal elements (patio, grass, walls...)"}
+              ref={geodesyCardRef}
+              onBlur={e => {
+                if (e.relatedTarget && geodesyCardRef.current?.contains(e.relatedTarget as Node)) return;
+                applyHeightEdit(true);
+              }}
+              onKeyDown={e => { if (e.key === "Escape") { skipBlurRef.current = true; applyHeightEdit(); requestAnimationFrame(() => { skipBlurRef.current = false; }); } }}
+            >
+              {cardInfo.entries.map((entry, rowIdx) => (
+                <div key={rowIdx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: rowIdx < cardInfo.entries.length - 1 ? 4 : 0, height: GEODESY_CARD_ROW_H }}>
+                  <span style={{ color: "#fff", minWidth: 80 }}>{entry.label}</span>
+                  <input
+                    autoFocus={rowIdx === 0}
+                    value={heightValues[rowIdx] ?? ""}
+                    onChange={e => {
+                      const v = [...heightValues];
+                      v[rowIdx] = e.target.value;
+                      setHeightValues(v);
+                    }}
+                    onFocus={e => {
+                      if (!heightInputSelectOnceRef.current && rowIdx === 0) {
+                        heightInputSelectOnceRef.current = true;
+                        e.target.select();
+                      }
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === "Enter") { skipBlurRef.current = true; applyHeightEdit(); requestAnimationFrame(() => { skipBlurRef.current = false; }); }
+                    }}
+                    style={{ flex: 1, padding: "2px 6px", background: CC.panel, border: `2px solid ${CC.geo}`, borderRadius: 4, color: CC.geo, fontFamily: "inherit", fontSize: 12, outline: "none", textAlign: "right" }}
+                    placeholder="cm"
+                  />
+                  <span style={{ color: CC.geo, fontSize: 11 }}>cm</span>
+                </div>
+              ))}
             </div>
-            <div style={{ fontSize: 12, lineHeight: 1.8 }}>
-              Click edge → add point &nbsp;|&nbsp; Right-click point → remove<br />
-              Drag point → edit &nbsp;|&nbsp; Double-click dimension → enter manually<br />
-              Shift → snap 45° &nbsp;|&nbsp; Ctrl+drag → select points &nbsp;|&nbsp; Scroll → zoom<br />
-              Ctrl+Z → undo &nbsp;|&nbsp; Free Draw: Right-click = cancel
-            </div>
-          </div>
-        )}
+          );
+        })() : null}
 
         {shapeCreationModal && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setShapeCreationModal(null)}>
-            <div style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 320, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontWeight: 600, marginBottom: 16, color: C.text }}>
+            <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 320, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 600, marginBottom: 16, color: CC.text }}>
                 {shapeCreationModal.type === "square" && t("project:toolbar_shape_square")}
                 {shapeCreationModal.type === "rectangle" && t("project:toolbar_shape_rectangle")}
                 {shapeCreationModal.type === "triangle" && t("project:toolbar_shape_triangle")}
@@ -5664,62 +6078,62 @@ export default function MasterProject() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ width: 120, fontSize: 13, color: C.text }}>{t("project:shape_modal_name_label")}</span>
+                  <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_name_label")}</span>
                   <input type="text" value={shapeInputs.name} onChange={e => setShapeInputs(p => ({ ...p, name: e.target.value }))}
                     placeholder={shapeCreationModal.type === "square" ? t("project:name_placeholder_patio") : shapeCreationModal.type === "rectangle" ? t("project:name_placeholder_terrace") : shapeCreationModal.type === "triangle" ? t("project:name_placeholder_flowerbed") : t("project:name_placeholder_border")}
-                    style={{ flex: 1, padding: "6px 10px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 13 }} />
+                    style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
                 </label>
                 {shapeCreationModal.type === "square" && (
                   <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 120, fontSize: 13, color: C.text }}>{t("project:shape_modal_side_m")}</span>
+                    <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_side_m")}</span>
                     <input type="number" min="0.1" step="0.1" value={shapeInputs.side} onChange={e => setShapeInputs(p => ({ ...p, side: e.target.value }))}
-                      style={{ flex: 1, padding: "6px 10px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 13 }} />
+                      style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
                   </label>
                 )}
                 {shapeCreationModal.type === "rectangle" && (
                   <>
                     <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ width: 120, fontSize: 13, color: C.text }}>{t("project:shape_modal_width_m")}</span>
+                      <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_width_m")}</span>
                       <input type="number" min="0.1" step="0.1" value={shapeInputs.width} onChange={e => setShapeInputs(p => ({ ...p, width: e.target.value }))}
-                        style={{ flex: 1, padding: "6px 10px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 13 }} />
+                        style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
                     </label>
                     <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ width: 120, fontSize: 13, color: C.text }}>{t("project:shape_modal_height_m")}</span>
+                      <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_height_m")}</span>
                       <input type="number" min="0.1" step="0.1" value={shapeInputs.height} onChange={e => setShapeInputs(p => ({ ...p, height: e.target.value }))}
-                        style={{ flex: 1, padding: "6px 10px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 13 }} />
+                        style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
                     </label>
                   </>
                 )}
                 {shapeCreationModal.type === "triangle" && (
                   <>
                     <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ width: 120, fontSize: 13, color: C.text }}>{t("project:shape_modal_base_m")}</span>
+                      <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_base_m")}</span>
                       <input type="number" min="0.1" step="0.1" value={shapeInputs.base} onChange={e => setShapeInputs(p => ({ ...p, base: e.target.value }))}
-                        style={{ flex: 1, padding: "6px 10px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 13 }} />
+                        style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
                     </label>
                     <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ width: 120, fontSize: 13, color: C.text }}>{t("project:shape_modal_height_m")}</span>
+                      <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_height_m")}</span>
                       <input type="number" min="0.1" step="0.1" value={shapeInputs.height} onChange={e => setShapeInputs(p => ({ ...p, height: e.target.value }))}
-                        style={{ flex: 1, padding: "6px 10px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 13 }} />
+                        style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
                     </label>
                   </>
                 )}
                 {shapeCreationModal.type === "trapezoid" && (
                   <>
                     <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ width: 120, fontSize: 13, color: C.text }}>{t("project:shape_modal_top_m")}</span>
+                      <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_top_m")}</span>
                       <input type="number" min="0.1" step="0.1" value={shapeInputs.top} onChange={e => setShapeInputs(p => ({ ...p, top: e.target.value }))}
-                        style={{ flex: 1, padding: "6px 10px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 13 }} />
+                        style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
                     </label>
                     <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ width: 120, fontSize: 13, color: C.text }}>{t("project:shape_modal_bottom_m")}</span>
+                      <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_bottom_m")}</span>
                       <input type="number" min="0.1" step="0.1" value={shapeInputs.bottom} onChange={e => setShapeInputs(p => ({ ...p, bottom: e.target.value }))}
-                        style={{ flex: 1, padding: "6px 10px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 13 }} />
+                        style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
                     </label>
                     <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ width: 120, fontSize: 13, color: C.text }}>{t("project:shape_modal_height_m")}</span>
+                      <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_height_m")}</span>
                       <input type="number" min="0.1" step="0.1" value={shapeInputs.height} onChange={e => setShapeInputs(p => ({ ...p, height: e.target.value }))}
-                        style={{ flex: 1, padding: "6px 10px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 13 }} />
+                        style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
                     </label>
                   </>
                 )}
@@ -5735,7 +6149,7 @@ export default function MasterProject() {
                     else addShape((cx2, cy2, l) => ({ ...makeTrapezoid(cx2, cy2, l, parseFloat(shapeInputs.top) || 3, parseFloat(shapeInputs.bottom) || 6, parseFloat(shapeInputs.height) || 4), label }));
                     setShapeCreationModal(null);
                   }}
-                  style={{ padding: "8px 16px", background: C.accent, border: "none", borderRadius: 6, color: C.bg, cursor: "pointer", fontSize: 13 }}
+                  style={{ padding: "8px 16px", background: CC.accent, border: "none", borderRadius: 6, color: CC.bg, cursor: "pointer", fontSize: 13 }}
                 >
                   {t("project:shape_modal_create_btn")}
                 </button>
@@ -5833,11 +6247,185 @@ export default function MasterProject() {
           />
         )}
 
+        {setAngleModal && (() => {
+          const si = setAngleModal.shapeIdx, pi = setAngleModal.pointIdx;
+          const shape = shapes[si];
+          if (!shape?.closed || shape.points.length < 3 || pi < 0 || pi >= shape.points.length) return null;
+          const pts = shape.points;
+          const n = pts.length;
+          const prev = (pi - 1 + n) % n, next = (pi + 1) % n;
+          const V = pts[pi], prevPt = pts[prev], nextPt = pts[next];
+          const currentAngle = angleDeg(prevPt, V, nextPt);
+          const applyAngle = () => {
+            const targetVal = parseFloat(setAngleTargetValue);
+            if (isNaN(targetVal)) return;
+            const targetAngle = Math.max(1, Math.min(359, targetVal));
+            const delta = targetAngle - currentAngle;
+            if (Math.abs(delta) < 0.01) { setSetAngleModal(null); return; }
+            saveHistory();
+            setShapes(p => {
+              const ns = [...p];
+              const s = { ...ns[si] };
+              const np = [...s.points];
+              const nV = np[pi];
+              if (setAngleMode === "a") {
+                const newPrev = rotatePointAround(nV, np[prev], delta);
+                np[prev] = newPrev;
+                const dragEntry: LinkedEntry = { si, pi: prev };
+                const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
+                if (group) {
+                  for (const lp of group) {
+                    if (linkedEntriesMatch(lp, dragEntry)) continue;
+                    if (ns[lp.si]) {
+                      if (lp.si === si && !isArcEntry(lp)) { np[lp.pi] = { x: newPrev.x, y: newPrev.y }; continue; }
+                      const ls = { ...ns[lp.si] };
+                      if (isArcEntry(lp)) {
+                        const lea = ls.edgeArcs ? [...ls.edgeArcs] : [];
+                        const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
+                        const li = lArcs.findIndex(a => a.id === lp.arcId);
+                        if (li >= 0) {
+                          const lA = ls.points[lp.edgeIdx];
+                          const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
+                          const { t: lt, offset: lo } = worldToArcPoint(lA, lB, newPrev);
+                          lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
+                          lea[lp.edgeIdx] = lArcs;
+                          ls.edgeArcs = lea;
+                          ns[lp.si] = ls;
+                        }
+                      } else {
+                        const lpts = [...ls.points];
+                        lpts[lp.pi] = { x: newPrev.x, y: newPrev.y };
+                        ls.points = lpts;
+                        ns[lp.si] = ls;
+                      }
+                    }
+                  }
+                }
+              } else if (setAngleMode === "b") {
+                const newNext = rotatePointAround(nV, np[next], -delta);
+                np[next] = newNext;
+                const dragEntry: LinkedEntry = { si, pi: next };
+                const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
+                if (group) {
+                  for (const lp of group) {
+                    if (linkedEntriesMatch(lp, dragEntry)) continue;
+                    if (ns[lp.si]) {
+                      if (lp.si === si && !isArcEntry(lp)) { np[lp.pi] = { x: newNext.x, y: newNext.y }; continue; }
+                      const ls = { ...ns[lp.si] };
+                      if (isArcEntry(lp)) {
+                        const lea = ls.edgeArcs ? [...ls.edgeArcs] : [];
+                        const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
+                        const li = lArcs.findIndex(a => a.id === lp.arcId);
+                        if (li >= 0) {
+                          const lA = ls.points[lp.edgeIdx];
+                          const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
+                          const { t: lt, offset: lo } = worldToArcPoint(lA, lB, newNext);
+                          lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
+                          lea[lp.edgeIdx] = lArcs;
+                          ls.edgeArcs = lea;
+                          ns[lp.si] = ls;
+                        }
+                      } else {
+                        const lpts = [...ls.points];
+                        lpts[lp.pi] = { x: newNext.x, y: newNext.y };
+                        ls.points = lpts;
+                        ns[lp.si] = ls;
+                      }
+                    }
+                  }
+                }
+              } else {
+                const newPrev = rotatePointAround(nV, np[prev], delta / 2);
+                const newNext = rotatePointAround(nV, np[next], -delta / 2);
+                np[prev] = newPrev;
+                np[next] = newNext;
+                for (const pt of [prev, next]) {
+                  const newPos = pt === prev ? newPrev : newNext;
+                  const dragEntry: LinkedEntry = { si, pi: pt };
+                  const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
+                  if (group) {
+                    for (const lp of group) {
+                      if (linkedEntriesMatch(lp, dragEntry)) continue;
+                      if (ns[lp.si]) {
+                        if (lp.si === si && !isArcEntry(lp)) { np[lp.pi] = { x: newPos.x, y: newPos.y }; continue; }
+                        const ls = { ...ns[lp.si] };
+                        if (isArcEntry(lp)) {
+                          const lea = ls.edgeArcs ? [...ls.edgeArcs] : [];
+                          const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
+                          const li = lArcs.findIndex(a => a.id === lp.arcId);
+                          if (li >= 0) {
+                            const lA = ls.points[lp.edgeIdx];
+                            const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
+                            const { t: lt, offset: lo } = worldToArcPoint(lA, lB, newPos);
+                            lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
+                            lea[lp.edgeIdx] = lArcs;
+                            ls.edgeArcs = lea;
+                            ns[lp.si] = ls;
+                          }
+                        } else {
+                          const lpts = [...ls.points];
+                          lpts[lp.pi] = { x: newPos.x, y: newPos.y };
+                          ls.points = lpts;
+                          ns[lp.si] = ls;
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              s.points = np;
+              ns[si] = s;
+              return ns;
+            });
+            setSetAngleModal(null);
+          };
+          const rect = canvasRef.current?.getBoundingClientRect();
+          const dialogLeft = rect ? Math.max(rect.left + 20, Math.min(rect.right - 280, rect.left + rect.width * 0.6)) : 20;
+          const dialogTop = rect ? Math.max(rect.top + 20, Math.min(rect.bottom - 320, rect.top + rect.height * 0.4)) : 20;
+          return (
+            <div style={{ position: "fixed", left: dialogLeft, top: dialogTop, zIndex: 200, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, boxShadow: "0 8px 32px rgba(0,0,0,0.5)", minWidth: 260 }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 600, marginBottom: 16, color: CC.text }}>{t("project:set_angle_modal_title")}</div>
+              <div style={{ fontSize: 13, color: CC.textDim, marginBottom: 8 }}>{t("project:set_angle_current")}: {currentAngle.toFixed(1)}°</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                <span style={{ fontSize: 13, color: CC.text }}>{t("project:set_angle_new")}:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={359}
+                  step={0.1}
+                  value={setAngleTargetValue}
+                  onChange={e => setSetAngleTargetValue(e.target.value)}
+                  style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }}
+                />
+                <span style={{ color: CC.textDim }}>°</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: CC.text }}>
+                  <input type="radio" name="angleMode" checked={setAngleMode === "a"} onChange={() => setSetAngleMode("a")} />
+                  {t("project:set_angle_mode_a")}
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: CC.text }}>
+                  <input type="radio" name="angleMode" checked={setAngleMode === "b"} onChange={() => setSetAngleMode("b")} />
+                  {t("project:set_angle_mode_b")}
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: CC.text }}>
+                  <input type="radio" name="angleMode" checked={setAngleMode === "split"} onChange={() => setSetAngleMode("split")} />
+                  {t("project:set_angle_mode_split")}
+                </label>
+              </div>
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button onClick={() => setSetAngleModal(null)} style={{ padding: "8px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13 }}>{t("project:set_angle_cancel")}</button>
+                <button onClick={applyAngle} style={{ padding: "8px 16px", background: CC.accent, border: "none", borderRadius: 6, color: CC.bg, cursor: "pointer", fontSize: 13 }}>{t("project:set_angle_apply")}</button>
+              </div>
+            </div>
+          );
+        })()}
+
         {grassTrimModal && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setGrassTrimModal(null)}>
-            <div style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontWeight: 600, marginBottom: 12, color: C.text }}>Łączenie rolek trawy</div>
-              <p style={{ fontSize: 13, color: C.textDim, marginBottom: 16, lineHeight: 1.5 }}>
+            <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>Łączenie rolek trawy</div>
+              <p style={{ fontSize: 13, color: CC.textDim, marginBottom: 16, lineHeight: 1.5 }}>
                 Przy łączeniu rolek, aby uzyskać najlepszy efekt, ucinamy boki które się łączą o 3 cm (3 rzędy trawy).
               </p>
               <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
@@ -5876,7 +6464,7 @@ export default function MasterProject() {
                     });
                     setGrassTrimModal(null);
                   }}
-                  style={{ padding: "8px 16px", background: C.accent, border: "none", borderRadius: 6, color: C.bg, cursor: "pointer", fontSize: 13 }}
+                  style={{ padding: "8px 16px", background: CC.accent, border: "none", borderRadius: 6, color: CC.bg, cursor: "pointer", fontSize: 13 }}
                 >
                   Akceptuj
                 </button>
@@ -5896,7 +6484,7 @@ export default function MasterProject() {
                     });
                     setGrassTrimModal(null);
                   }}
-                  style={{ padding: "8px 16px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, cursor: "pointer", fontSize: 13 }}
+                  style={{ padding: "8px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13 }}
                 >
                   Zostaw całą szerokość
                 </button>
@@ -5907,8 +6495,8 @@ export default function MasterProject() {
 
         {adjustmentFillModal && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentFillModal(null)}>
-            <div style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontWeight: 600, marginBottom: 12, color: C.text }}>{t("project:adjustment_fill_pick")}</div>
+            <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:adjustment_fill_pick")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
                 {findTouchingElementsForEmptyArea(shapes, adjustmentData.emptyAreas[adjustmentFillModal.emptyAreaIdx] ?? []).map(si => {
                   const s = shapes[si];
@@ -5923,28 +6511,70 @@ export default function MasterProject() {
                           saveHistory();
                           setShapes(p => {
                             const n = [...p];
-                            n[si] = { ...n[si], points: newPts };
+                            n[si] = applyPolygonPointsToShape(n[si], newPts);
                             return n;
                           });
                         }
                         setAdjustmentFillModal(null);
                       }}
-                      style={{ padding: "10px 16px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, cursor: "pointer", fontSize: 13, textAlign: "left" }}
+                      style={{ padding: "10px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13, textAlign: "left" }}
                     >
                       {name}
                     </button>
                   );
                 })}
               </div>
-              <button onClick={() => setAdjustmentFillModal(null)} style={{ padding: "8px 16px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, cursor: "pointer", fontSize: 13 }}>{t("project:cancel_button")}</button>
+              <button onClick={() => setAdjustmentFillModal(null)} style={{ padding: "8px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13 }}>{t("project:cancel_button")}</button>
+            </div>
+          </div>
+        )}
+
+        {adjustmentExtendModal && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentExtendModal(null)}>
+            <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:adjustment_extend_pick", { defaultValue: "Wybierz element do dosunięcia" })}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+                {findTouchingElementsForEmptyArea(shapes, adjustmentData.emptyAreas[adjustmentExtendModal.emptyAreaIdx] ?? []).map(si => {
+                  const s = shapes[si];
+                  const name = s?.label || s?.calculatorType || s?.elementType || `Element ${si + 1}`;
+                  return (
+                    <button
+                      key={si}
+                      onClick={() => {
+                        // #region agent log
+                        fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MasterProject.tsx:extendModal:click',message:'extend modal element clicked',data:{si},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+                        // #endregion
+                        const emptyArea = adjustmentData.emptyAreas[adjustmentExtendModal!.emptyAreaIdx];
+                        const newPts = extendShapeToGardenEdge(shapes, si, emptyArea);
+                        if (newPts) {
+                          saveHistory();
+                          // #region agent log
+                          fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MasterProject.tsx:extendModal:preSetShapes',message:'about to setShapes',data:{},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+                          // #endregion
+                          setShapes(p => {
+                            const n = [...p];
+                            n[si] = applyPolygonPointsToShape(n[si], newPts);
+                            return n;
+                          });
+                        }
+                        setAdjustmentExtendModal(null);
+                      }}
+                      style={{ padding: "10px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13, textAlign: "left" }}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={() => setAdjustmentExtendModal(null)} style={{ padding: "8px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13 }}>{t("project:cancel_button")}</button>
             </div>
           </div>
         )}
 
         {adjustmentSpreadModal && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentSpreadModal(null)}>
-            <div style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontWeight: 600, marginBottom: 12, color: C.text }}>{t("project:adjustment_spread_pick")}</div>
+            <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:adjustment_spread_pick")}</div>
               <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
                 {[adjustmentSpreadModal.shapeIdxA, adjustmentSpreadModal.shapeIdxB].map(si => {
                   const s = shapes[si];
@@ -5972,14 +6602,14 @@ export default function MasterProject() {
                         });
                         setAdjustmentSpreadModal(null);
                       }}
-                      style={{ padding: "10px 16px", background: C.accent, border: "none", borderRadius: 6, color: C.bg, cursor: "pointer", fontSize: 13 }}
+                      style={{ padding: "10px 16px", background: CC.accent, border: "none", borderRadius: 6, color: CC.bg, cursor: "pointer", fontSize: 13 }}
                     >
                       {name}
                     </button>
                   );
                 })}
               </div>
-              <button onClick={() => setAdjustmentSpreadModal(null)} style={{ padding: "8px 16px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, cursor: "pointer", fontSize: 13 }}>{t("project:cancel_button")}</button>
+              <button onClick={() => setAdjustmentSpreadModal(null)} style={{ padding: "8px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13 }}>{t("project:cancel_button")}</button>
             </div>
           </div>
         )}
@@ -6060,8 +6690,8 @@ export default function MasterProject() {
       {activeLayer === 4 ? (
         <PreparationPanel
           shapes={shapes}
-          soilType={projectSettings.soilType ?? "clay"}
-          levelingMaterial={projectSettings.levelingMaterial ?? "tape1"}
+          soilType={(projectSettings.soilType || "clay") as "clay" | "sand" | "rock"}
+          levelingMaterial={(projectSettings.levelingMaterial || "tape1") as "tape1" | "soil"}
           onGroundworkClick={(si) => shapes[si]?.calculatorResults && setResultsModalShapeIdx(si)}
         />
       ) : (
@@ -6133,6 +6763,8 @@ function PreparationPanel({
   onGroundworkClick?: (shapeIdx: number) => void;
 }) {
   const { t } = useTranslation(["project"]);
+  const { currentTheme } = useTheme();
+  const CC = currentTheme?.id === "light" ? C_LIGHT : C;
   const result = computePreparation(shapes, soilType, levelingMaterial);
   const groundworkShapes = shapes
     .map((s, i) => ({ s, i }))
@@ -6141,8 +6773,8 @@ function PreparationPanel({
   return (
     <div style={{
       width: 280,
-      background: C.panel,
-      borderLeft: `1px solid ${C.panelBorder}`,
+      background: CC.panel,
+      borderLeft: `1px solid ${CC.panelBorder}`,
       display: "flex",
       flexDirection: "column",
       flexShrink: 0,
@@ -6150,17 +6782,17 @@ function PreparationPanel({
     }}>
       <div style={{
         padding: "12px 16px",
-        borderBottom: `1px solid ${C.panelBorder}`,
+        borderBottom: `1px solid ${CC.panelBorder}`,
         fontSize: 14,
         fontWeight: 600,
-        color: C.foundation,
+        color: CC.foundation,
       }}>
         {t("project:preparation_label")}
       </div>
       <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
         {groundworkShapes.length > 0 && (
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, marginBottom: 8, textTransform: "uppercase" }}>{t("project:groundwork_linear_label")}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: CC.textDim, marginBottom: 8, textTransform: "uppercase" }}>{t("project:groundwork_linear_label")}</div>
             {groundworkShapes.map(({ s, i }) => {
               const lenM = polylineLengthMeters(s.points);
               return (
@@ -6170,29 +6802,29 @@ function PreparationPanel({
                   style={{
                     padding: "10px 12px",
                     marginBottom: 8,
-                    background: C.bg,
+                    background: CC.bg,
                     borderRadius: 8,
-                    border: `1px solid ${C.panelBorder}`,
+                    border: `1px solid ${CC.panelBorder}`,
                     fontSize: 12,
                     cursor: s.calculatorResults ? "pointer" : "default",
                   }}
                 >
-                  <div style={{ fontWeight: 600, color: C.text, marginBottom: 4 }}>{s.label || groundworkLabel(s)}</div>
-                  <div style={{ color: C.textDim, fontSize: 11 }}>{t("project:total_length")}: {lenM.toFixed(2)} m</div>
-                  {s.calculatorResults && <div style={{ fontSize: 10, color: C.accent, marginTop: 4 }}>{t("project:click_view_results")}</div>}
+                  <div style={{ fontWeight: 600, color: CC.text, marginBottom: 4 }}>{s.label || groundworkLabel(s)}</div>
+                  <div style={{ color: CC.textDim, fontSize: 11 }}>{t("project:total_length")}: {lenM.toFixed(2)} m</div>
+                  {s.calculatorResults && <div style={{ fontSize: 10, color: CC.accent, marginTop: 4 }}>{t("project:click_view_results")}</div>}
                 </div>
               );
             })}
           </div>
         )}
         {!result.validation.ok ? (
-          <div style={{ fontSize: 12, color: C.danger }}>
+          <div style={{ fontSize: 12, color: CC.danger }}>
             {result.validation.elementsWithoutHeights && result.validation.elementsWithoutHeights.length > 0 && (
               <div>{t("project:elements_without_heights")}: {result.validation.elementsWithoutHeights.join(", ")}. {t("project:add_heights_geodesy")}</div>
             )}
           </div>
         ) : result.elements.length === 0 && groundworkShapes.length === 0 ? (
-          <div style={{ fontSize: 13, color: C.textDim, textAlign: "center", padding: 24 }}>
+          <div style={{ fontSize: 13, color: CC.textDim, textAlign: "center", padding: 24 }}>
             {t("project:no_preparation_elements")}
           </div>
         ) : result.elements.length > 0 ? (
@@ -6203,17 +6835,17 @@ function PreparationPanel({
                 style={{
                   padding: "10px 12px",
                   marginBottom: 8,
-                  background: C.bg,
+                  background: CC.bg,
                   borderRadius: 8,
-                  border: `1px solid ${C.panelBorder}`,
+                  border: `1px solid ${CC.panelBorder}`,
                   fontSize: 12,
                 }}
               >
-                <div style={{ fontWeight: 600, color: C.text, marginBottom: 6 }}>{el.label}</div>
-                <div style={{ color: C.textDim, fontSize: 11 }}>
+                <div style={{ fontWeight: 600, color: CC.text, marginBottom: 6 }}>{el.label}</div>
+                <div style={{ color: CC.textDim, fontSize: 11 }}>
                   {el.areaM2} m² · {t("project:excavation_label")}: {el.excavationM3} m³ ({el.excavationTonnes} t)
                 </div>
-                <div style={{ color: C.textDim, fontSize: 11 }}>
+                <div style={{ color: CC.textDim, fontSize: 11 }}>
                   {t("project:fill_label")}: {el.fillM3} m³ ({el.fillTonnes} t) · {el.pctAreaNeedingFill}% {t("project:area_low")}
                 </div>
               </div>
@@ -6221,26 +6853,26 @@ function PreparationPanel({
             <div style={{
               marginTop: 12,
               padding: "12px",
-              background: C.bg,
+              background: CC.bg,
               borderRadius: 8,
-              border: `1px solid ${C.panelBorder}`,
+              border: `1px solid ${CC.panelBorder}`,
               fontSize: 13,
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: C.textDim }}>{t("project:total_excavation")}</span>
-                <span style={{ color: C.text, fontWeight: 600 }}>{result.totalExcavationM3} m³</span>
+                <span style={{ color: CC.textDim }}>{t("project:total_excavation")}</span>
+                <span style={{ color: CC.text, fontWeight: 600 }}>{result.totalExcavationM3} m³</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: C.textDim }}>{t("project:total_fill")}</span>
-                <span style={{ color: C.text, fontWeight: 600 }}>{result.totalFillM3} m³</span>
+                <span style={{ color: CC.textDim }}>{t("project:total_fill")}</span>
+                <span style={{ color: CC.text, fontWeight: 600 }}>{result.totalFillM3} m³</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: C.textDim }}>{t("project:excavation_tonnes")}</span>
-                <span style={{ color: C.text, fontWeight: 600 }}>{result.totalExcavationTonnes} t</span>
+                <span style={{ color: CC.textDim }}>{t("project:excavation_tonnes")}</span>
+                <span style={{ color: CC.text, fontWeight: 600 }}>{result.totalExcavationTonnes} t</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: C.textDim }}>{t("project:fill_tonnes")}</span>
-                <span style={{ color: C.text, fontWeight: 600 }}>{result.totalFillTonnes} t</span>
+                <span style={{ color: CC.textDim }}>{t("project:fill_tonnes")}</span>
+                <span style={{ color: CC.text, fontWeight: 600 }}>{result.totalFillTonnes} t</span>
               </div>
             </div>
           </>
@@ -6254,13 +6886,15 @@ function PreparationPanel({
 
 function NamePromptModal({ initialLabel, onConfirm, onCancel }: { initialLabel: string; onConfirm: (val: string) => void; onCancel: () => void }) {
   const { t } = useTranslation(["project", "common"]);
+  const { currentTheme } = useTheme();
+  const CC = currentTheme?.id === "light" ? C_LIGHT : C;
   const [val, setVal] = useState(initialLabel);
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={onCancel}>
-      <div style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 360, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontWeight: 600, marginBottom: 12, color: C.text }}>{t("project:name_prompt_title")}</div>
+      <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 360, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:name_prompt_title")}</div>
         <input
           ref={inputRef}
           type="text"
@@ -6271,11 +6905,11 @@ function NamePromptModal({ initialLabel, onConfirm, onCancel }: { initialLabel: 
             if (e.key === "Enter") { onConfirm(val.trim()); }
             if (e.key === "Escape") onCancel();
           }}
-          style={{ width: "100%", padding: "10px 12px", background: C.bg, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 14 }}
+          style={{ width: "100%", padding: "10px 12px", background: CC.bg, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 14 }}
         />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
-          <button onClick={onCancel} style={{ padding: "8px 16px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, cursor: "pointer" }}>{t("common:cancel")}</button>
-          <button onClick={() => onConfirm(val.trim())} style={{ padding: "8px 16px", background: C.accent, border: "none", borderRadius: 6, color: C.bg, cursor: "pointer", fontWeight: 600 }}>OK</button>
+          <button onClick={onCancel} style={{ padding: "8px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer" }}>{t("common:cancel")}</button>
+          <button onClick={() => onConfirm(val.trim())} style={{ padding: "8px 16px", background: CC.accent, border: "none", borderRadius: 6, color: CC.bg, cursor: "pointer", fontWeight: 600 }}>OK</button>
         </div>
       </div>
     </div>

@@ -137,6 +137,11 @@ const NaturalTurfCalculator: React.FC<NaturalTurfCalculatorProps> = ({
   }, [savedInputs?.effectiveAreaM2, savedInputs?.area, initialArea, isInProjectCreating]);
 
   useEffect(() => {
+    if (savedInputs?.tape1ThicknessCm != null && savedInputs.tape1ThicknessCm !== '') setTape1ThicknessCm(String(savedInputs.tape1ThicknessCm));
+    if (savedInputs?.soilThicknessCm != null && savedInputs.soilThicknessCm !== '') setSoilThicknessCm(String(savedInputs.soilThicknessCm));
+  }, [savedInputs?.tape1ThicknessCm, savedInputs?.soilThicknessCm]);
+
+  useEffect(() => {
     if (onInputsChange && isInProjectCreating) {
       onInputsChange({
         area,

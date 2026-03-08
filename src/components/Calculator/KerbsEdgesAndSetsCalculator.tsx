@@ -173,7 +173,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
   recalculateTrigger = 0
 }) => {
   // State
-  const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
+  const { t } = useTranslation(['calculator', 'utilities', 'common', 'units', 'project']);
   const companyId = useAuthStore(state => state.getCompanyId());
   const segmentLengths: number[] = savedInputs?.segmentLengths ?? [];
   const totalLengthCanvas = canvasLength ?? (segmentLengths.length > 0 ? segmentLengths.reduce((a, b) => a + b, 0) : 0);
@@ -734,10 +734,10 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
   return (
     <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
       <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display }}>
-        {KERB_NAMES[kerbType]} Calculator
+        {t('calculator:kerb_calculator_title_format', { name: t(kerbType === 'flat' ? 'project:calc_subtype_flat_edges' : kerbType === 'sets' ? 'project:calc_subtype_sets' : `project:calc_subtype_${kerbType}_kerbs`) })}
       </h2>
       <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>
-        Calculate materials, time, and costs for {KERB_NAMES[kerbType].toLowerCase()} installation projects.
+        {t('calculator:kerb_calculator_description', { name: t(kerbType === 'flat' ? 'project:calc_subtype_flat_edges' : kerbType === 'sets' ? 'project:calc_subtype_sets' : `project:calc_subtype_${kerbType}_kerbs`).toLowerCase() })}
       </p>
 
       <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`}>
@@ -1040,7 +1040,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
               }))}
               footer={
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: spacing.md }}>
-                  <span style={{ fontSize: fontSizes.base, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>Total Cost:</span>
+                  <span style={{ fontSize: fontSizes.base, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>{t('calculator:total_cost_colon')}</span>
                   <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display }}>
                     {result.materials.some(m => m.total_price !== null) ? `£${result.materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}` : 'N/A'}
                   </span>

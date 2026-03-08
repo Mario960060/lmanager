@@ -774,12 +774,12 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
               footer={
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: spacing.md }}>
                   <span style={{ fontSize: fontSizes.base, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
-                    Total Cost:
+                    {t('calculator:total_cost_colon')}
                   </span>
                   <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display }}>
                     {materials.some(m => m.total_price !== null)
                       ? `£${materials.reduce((sum: number, m: Material) => sum + (m.total_price || 0), 0).toFixed(2)}`
-                      : 'N/A'}
+                      : t('calculator:not_available')}
                   </span>
                 </div>
               }

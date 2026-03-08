@@ -1820,14 +1820,14 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
       {type === 'sleeper' ? (
         <div style={{ display: 'flex', gap: spacing.md, marginBottom: spacing["5xl"] }}>
-          {chipBtn(postMethod === 'concrete', () => setPostMethod('concrete'), 'Concrete in Posts')}
-          {chipBtn(postMethod === 'direct', () => setPostMethod('direct'), 'Drive Posts Directly')}
+          {chipBtn(postMethod === 'concrete', () => setPostMethod('concrete'), t('calculator:input_concrete_in_posts'))}
+          {chipBtn(postMethod === 'direct', () => setPostMethod('direct'), t('calculator:input_drive_posts_directly'))}
         </div>
       ) : (
         (type === 'block4' || type === 'block7') && (
           <div style={{ display: 'flex', gap: spacing.md }}>
-            {chipBtn(layingMethod === 'standing', () => setLayingMethod('standing'), 'Standing')}
-            {chipBtn(layingMethod === 'flat', () => setLayingMethod('flat'), 'Flat')}
+            {chipBtn(layingMethod === 'standing', () => setLayingMethod('standing'), t('calculator:standing_label'))}
+            {chipBtn(layingMethod === 'flat', () => setLayingMethod('flat'), t('calculator:flat_label'))}
           </div>
         )
       )}
@@ -2114,7 +2114,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                   ))}
                   <tr className="bg-gray-700">
                     <td colSpan={4} className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white text-right">
-                      Total Cost:
+                      {t('calculator:total_cost_colon')}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-white">
                       {result.materials.reduce((sum, material) => sum + (material.total_price || 0), 0).toFixed(2) !== '0.00' 

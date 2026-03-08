@@ -153,7 +153,7 @@ const Layout = () => {
       icon: Grass, 
       label: t('nav:artificial_grass_calculator'),
       subTypes: [
-        { type: 'Artificial Grass', label: t('nav:artificial_grass') }
+        { type: 'default', label: t('nav:artificial_grass') }
       ]
     },
     { 
@@ -173,17 +173,6 @@ const Layout = () => {
         { type: 'rumbled', label: t('nav:rumbled_kerbs') },
         { type: 'flat', label: t('nav:flat_edges') },
         { type: 'sets', label: t('nav:sets') }
-      ]
-    },
-    { 
-      type: 'groundwork', 
-      icon: Activity, 
-      label: t('nav:groundwork_linear'),
-      subTypes: [
-        { type: 'drainage', label: t('nav:groundwork_drainage') },
-        { type: 'canalPipe', label: t('nav:groundwork_canal_pipe') },
-        { type: 'waterPipe', label: t('nav:groundwork_water_pipe') },
-        { type: 'cable', label: t('nav:groundwork_cable') }
       ]
     },
     { 
@@ -364,7 +353,7 @@ const Layout = () => {
                                       // Dispatch event after a short delay to ensure component is mounted
                                       setTimeout(() => {
                                         const event = new CustomEvent('selectSubCalculator', { 
-                                          detail: { calculatorType: calc.type, subType: subType.type }
+                                          detail: { calculatorType: calc.type, subType: subType.type, subTypeLabel: subType.label }
                                         });
                                         console.log('Dispatching event:', event.detail);
                                         window.dispatchEvent(event);
@@ -372,7 +361,7 @@ const Layout = () => {
                                     } else {
                                       // Already on calculator page, dispatch immediately
                                       const event = new CustomEvent('selectSubCalculator', { 
-                                        detail: { calculatorType: calc.type, subType: subType.type }
+                                        detail: { calculatorType: calc.type, subType: subType.type, subTypeLabel: subType.label }
                                       });
                                       console.log('Dispatching event:', event.detail);
                                       window.dispatchEvent(event);

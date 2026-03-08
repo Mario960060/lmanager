@@ -854,7 +854,7 @@ const ConcreteSlabsCalculator: React.FC<ConcreteSlabsCalculatorProps> = ({
               </table>
               <div className="mt-4 text-right pr-6">
                 <p className="text-sm font-medium">
-                  Total Cost: {materials.some(m => m.total_price !== null) ? `£${materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}` : 'N/A'}
+                  {t('calculator:total_cost_colon')} {materials.some(m => m.total_price !== null) ? `£${materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}` : t('calculator:not_available')}
                 </p>
               </div>
             </div>

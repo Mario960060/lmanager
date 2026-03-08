@@ -34,6 +34,7 @@
   position: relative;
   z-index: 100;
   font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  touch-action: manipulation; /* Remove 300ms tap delay on mobile */
 }
 
 .toolbar-cad .toolbar-row {
@@ -77,6 +78,7 @@
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
+  touch-action: manipulation;
 }
 
 .toolbar-cad .layer-tab:hover {
@@ -147,6 +149,7 @@
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
+  touch-action: manipulation;
 }
 
 .toolbar-cad .geodesy-toggle:hover {
@@ -205,6 +208,7 @@
   cursor: pointer;
   transition: all 0.12s;
   white-space: nowrap;
+  touch-action: manipulation;
 }
 
 .toolbar-cad .tool-btn:hover {
@@ -252,6 +256,7 @@
   cursor: pointer;
   transition: all 0.12s;
   white-space: nowrap;
+  touch-action: manipulation; /* Reliable tap on mobile */
 }
 
 .toolbar-cad .dropdown-trigger:hover {

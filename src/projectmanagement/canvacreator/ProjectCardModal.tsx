@@ -459,7 +459,7 @@ export default function ProjectCardModal({
 
                     {projectSettings.calculateTransport && (
                       <div>
-                        <label style={labelStyle}>Distance (meters)</label>
+                        <label style={labelStyle}>{t("project:distance_meters")}</label>
                         <input
                           type="text"
                           value={projectSettings.transportDistance}

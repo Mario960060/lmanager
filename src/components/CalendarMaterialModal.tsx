@@ -17,7 +17,7 @@ interface Material {
 }
 
 interface CalendarMaterialModalProps {
-  eventId: string;
+  eventId: string | null;
   date: Date;
   onClose: () => void;
 }
@@ -66,19 +66,23 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
     enabled: !!companyId && !!eventId
   });
 
+  const hasEvent = !!eventId;
+
   const addMaterialMutation = useMutation({
-    mutationFn: async ({ material, quantity, unit, notes }: { 
+    mutationFn: async ({ material, quantity, unit, notes, event_id: overrideEventId }: { 
       material: string; 
       quantity: number; 
       unit: string;
       notes?: string;
+      event_id?: string | null;
     }) => {
       const formattedDate = format(date, 'yyyy-MM-dd');
+      const finalEventId = overrideEventId !== undefined ? overrideEventId : eventId;
 
       const { error } = await supabase
         .from('calendar_materials')
         .insert({
-          event_id: eventId,
+          event_id: finalEventId || null,
           user_id: user?.id,
           material,
           quantity,
@@ -126,12 +130,13 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
       material: materialData.name,
       quantity: materialData.total_amount,
       unit: materialData.unit,
-      notes: materialData.notes
+      notes: materialData.notes,
+      event_id: materialData.event_id || null
     });
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-[1100] flex items-center justify-center p-4">
       <div className="bg-white rounded-lg max-w-2xl w-full">
         <div className="flex justify-between items-center p-6 border-b">
           <div>
@@ -164,14 +169,16 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
           </div>
 
           <div className="max-h-60 overflow-y-auto border rounded-lg">
-            {/* Add Unspecified Material Option */}
-            <div
-              onClick={() => setShowUnspecifiedModal(true)}
-              className="p-4 hover:bg-gray-50 cursor-pointer border-b"
-            >
-              <h3 className="font-medium text-blue-600">+ {t('event:other_custom_item')}</h3>
-              <p className="text-sm text-gray-600 mt-1">{t('event:add_custom_item_details')}</p>
-            </div>
+            {/* Add Unspecified Material Option - only when event is selected */}
+            {hasEvent && (
+              <div
+                onClick={() => setShowUnspecifiedModal(true)}
+                className="p-4 hover:bg-gray-50 cursor-pointer border-b"
+              >
+                <h3 className="font-medium text-blue-600">+ {t('event:other_custom_item')}</h3>
+                <p className="text-sm text-gray-600 mt-1">{t('event:add_custom_item_details')}</p>
+              </div>
+            )}
 
             <div
               onClick={() => {

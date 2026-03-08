@@ -481,6 +481,7 @@
   "object_card_rolls_orientation_across": "W poprzek (pionowo)",
   "grass_rotate_piece_90": "Obróć element 90°",
   "grass_rotate_group_90": "Obróć grupę 90°",
+  "grass_rotate_element_90": "Obróć element 90°",
   "object_card_effective_width": "Efektywna szerokość po obcięciu przy łączeniu",
   "object_card_detected_slab": "Wykryty rozmiar płyty:",
   "object_card_piece": "Element",

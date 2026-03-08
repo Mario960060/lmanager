@@ -126,6 +126,14 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
     fetchCarriers();
   }, [companyId]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   // Fetch slab types when slab calculator type — for immediate pattern viz (no need to select type first)
   const { data: slabTypesData = [] } = useQuery({
     queryKey: ["slab_laying_types", companyId || "no-company"],
@@ -138,7 +146,10 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
         .order("name");
       if (error) throw error;
       return (data || []).filter(
-        (t: { name?: string }) => (t.name || "").toLowerCase().includes("laying slabs")
+        (t: { name?: string }) => {
+          const name = (t.name || "").toLowerCase();
+          return name.includes("laying slabs") && !name.includes("(concrete)") && !name.includes("betonowe");
+        }
       );
     },
     enabled: !!companyId && calculatorType === "slab",
@@ -333,7 +344,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
     [effectiveCalcTypeForDefaults, companyId]
   );
   const isConcreteSlabs = calculatorType === "concreteSlabs" || (calculatorType === "slab" && calculatorSubType === "concreteSlabs");
-  const THICKNESS_KEYS = ["tape1ThicknessCm", "sandThicknessCm", "mortarThicknessCm", "monoBlocksHeightCm", "slabThicknessCm", "concreteSlabThicknessCm"];
+  const THICKNESS_KEYS = ["tape1ThicknessCm", "sandThicknessCm", "soilThicknessCm", "mortarThicknessCm", "monoBlocksHeightCm", "slabThicknessCm", "concreteSlabThicknessCm"];
   const savedInputsMerged = useMemo(() => {
     const filterEmpty = (obj: Record<string, any>) => {
       const out = { ...obj };

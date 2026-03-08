@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit } from '../../lib/translationMap';
-import { colors, radii } from '../../themes/designTokens';
+import { colors, radii, fontSizes } from '../../themes/designTokens';
 import { Button } from '../../themes/uiComponents';
 
 interface TaskTemplate {
@@ -119,6 +119,10 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
   const [wallHeight, setWallHeight] = useState<string>(() =>
     fromWallSegments && initialWallHeightM != null ? initialWallHeightM.toFixed(3) : ''
   );
+  const defH = parseFloat(wallHeight) || 1;
+  const [wallConfigMode, setWallConfigMode] = useState<'single' | 'segments'>('single');
+  const [segmentLengthsLocal, setSegmentLengthsLocal] = useState<number[]>([]);
+  const [segmentHeightsLocal, setSegmentHeightsLocal] = useState<Array<{ startH: number; endH: number }>>([]);
   const [selectedSlab, setSelectedSlab] = useState<SlabDimension>(SLAB_DIMENSIONS[0]);
   const [slabOrientation, setSlabOrientation] = useState<'long' | 'side'>('long');
   const [selectedGap, setSelectedGap] = useState<number>(GAP_OPTIONS[0]);
@@ -171,6 +175,37 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       setWallHeight(initialWallHeightM.toFixed(3));
     }
   }, [fromWallSegments, initialWallLengthM, initialWallHeightM]);
+
+  const addSegment = () => {
+    const len = segmentLengthsLocal.length > 0 ? segmentLengthsLocal[segmentLengthsLocal.length - 1] : 1;
+    const h = segmentHeightsLocal.length > 0 ? (segmentHeightsLocal[segmentHeightsLocal.length - 1]?.startH ?? defH) : defH;
+    setSegmentLengthsLocal((prev) => [...prev, len]);
+    setSegmentHeightsLocal((prev) => [...prev, { startH: h, endH: h }]);
+    setWallConfigMode('segments');
+  };
+  const removeSegment = (idx: number) => {
+    setSegmentLengthsLocal((prev) => prev.filter((_, i) => i !== idx));
+    setSegmentHeightsLocal((prev) => prev.filter((_, i) => i !== idx));
+    if (segmentLengthsLocal.length <= 1) setWallConfigMode('single');
+  };
+  const updateSegmentLength = (idx: number, value: number) => {
+    setSegmentLengthsLocal((prev) => {
+      const next = [...prev];
+      next[idx] = Math.max(0.01, value);
+      return next;
+    });
+  };
+  const updateSegmentHeight = (idx: number, field: 'startH' | 'endH', value: number) => {
+    setSegmentHeightsLocal((prev) => {
+      const next = [...prev];
+      if (!next[idx]) next[idx] = { startH: defH, endH: defH };
+      next[idx] = { ...next[idx], [field]: Math.max(0.01, value) };
+      return next;
+    });
+  };
+  const setAllSegmentHeights = (h: number) => {
+    setSegmentHeightsLocal(segmentLengthsLocal.map(() => ({ startH: h, endH: h })));
+  };
 
   // Add equipment fetching
   useEffect(() => {
@@ -279,14 +314,28 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     let wallHeightCm: number;
     let wallArea: number;
 
+    let segmentDimensionsForCalc: { length: number; height: number }[] | undefined;
     if (fromWallSegments && initialAreaM2 != null && initialAreaM2 > 0) {
       wallArea = initialAreaM2;
       const len = initialWallLengthM ?? Math.sqrt(initialAreaM2);
       const h = len > 0 ? initialAreaM2 / len : Math.sqrt(initialAreaM2);
       wallLengthCm = len * 100;
       wallHeightCm = h * 100;
+      segmentDimensionsForCalc = initialSegmentDimensions;
     } else if (fromWallSegments && (initialAreaM2 == null || initialAreaM2 <= 0)) {
       return; // No sides selected yet
+    } else if (!fromWallSegments && wallConfigMode === 'segments' && segmentLengthsLocal.length > 0) {
+      const hasInvalid = segmentLengthsLocal.some((l) => !l || l <= 0);
+      if (hasInvalid) return;
+      segmentDimensionsForCalc = segmentLengthsLocal.map((len, i) => {
+        const sh = segmentHeightsLocal[i];
+        const avgH = sh ? (sh.startH + sh.endH) / 2 : defH;
+        return { length: len, height: avgH };
+      });
+      wallArea = segmentDimensionsForCalc.reduce((sum, s) => sum + s.length * s.height, 0);
+      const totalLen = segmentDimensionsForCalc.reduce((sum, s) => sum + s.length, 0);
+      wallLengthCm = totalLen * 100;
+      wallHeightCm = totalLen > 0 ? (wallArea / totalLen) * 100 : defH * 100;
     } else {
       if (!wallLength || !wallHeight) return;
       wallLengthCm = parseFloat(wallLength) * 100;
@@ -298,6 +347,18 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     // Determine slab dimensions based on orientation
     const slabWidth = slabOrientation === 'long' ? selectedSlab.width : selectedSlab.height;
     const slabHeight = slabOrientation === 'long' ? selectedSlab.height : selectedSlab.width;
+
+    // Compute slabs per segment when we have segment dimensions (for materials/total)
+    const segDims = segmentDimensionsForCalc ?? initialSegmentDimensions;
+    const slabsPerSegment: number[] | undefined = segDims && segDims.length > 0
+      ? segDims.map(({ length, height }) => {
+          const lenCm = length * 100;
+          const hCm = height * 100;
+          const sL = Math.ceil((lenCm + gapCm) / (slabWidth + gapCm));
+          const sH = Math.ceil((hCm + gapCm) / (slabHeight + gapCm));
+          return sL * sH;
+        })
+      : undefined;
 
     // Calculate slabs needed for length and height
     const slabsInLength = Math.floor((wallLengthCm + gapCm) / (slabWidth + gapCm));
@@ -495,7 +556,10 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       cutSlabsWithFull[cut.idx].fullSlabsNeeded = slabsUsed;
     }
 
-    const totalFullSlabsNeeded = fullSlabs + cutSlabsWithFull.reduce((s, c) => s + (c.fullSlabsNeeded ?? 0), 0);
+    let totalFullSlabsNeeded = fullSlabs + cutSlabsWithFull.reduce((s, c) => s + (c.fullSlabsNeeded ?? 0), 0);
+    if (slabsPerSegment && slabsPerSegment.length > 0) {
+      totalFullSlabsNeeded = slabsPerSegment.reduce((a, b) => a + b, 0);
+    }
 
     if (totalFullSlabsNeeded > 0) {
       const slabMaterialLabel = slabType === 'porcelain' ? 'porcelain' : slabType === 'granite' ? 'granite' : 'sandstone';
@@ -658,20 +722,12 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     }
 
     const totalTransportTime = tileTransportTime + adhesiveTransportTime;
-    
-    let slabsPerSegment: number[] | undefined;
-    if (initialSegmentDimensions && initialSegmentDimensions.length > 0) {
-      slabsPerSegment = initialSegmentDimensions.map(({ length, height }) => {
-        const lenCm = length * 100;
-        const hCm = height * 100;
-        const sL = Math.ceil((lenCm + gapCm) / (slabWidth + gapCm));
-        const sH = Math.ceil((hCm + gapCm) / (slabHeight + gapCm));
-        return sL * sH;
-      });
-    }
 
+    const totalSlabsCount = slabsPerSegment && slabsPerSegment.length > 0
+      ? slabsPerSegment.reduce((a, b) => a + b, 0)
+      : fullSlabs + cutSlabs.reduce((sum, cut) => sum + cut.quantity, 0);
     const newResults = {
-      totalSlabs: fullSlabs + cutSlabs.reduce((sum, cut) => sum + cut.quantity, 0),
+      totalSlabs: totalSlabsCount,
       totalCuts,
       adhesiveNeeded,
       cuttingBreakdown,
@@ -734,9 +790,11 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
           <label className={labelCls} style={labelStyle}>{t('calculator:input_tile_wall_length_m')}</label>
           <input
             type="number"
-            value={wallLength}
-            onChange={(e) => !fromWallSegments && setWallLength(e.target.value)}
-            readOnly={fromWallSegments}
+            value={!fromWallSegments && wallConfigMode === 'segments' && segmentLengthsLocal.length > 0
+              ? segmentLengthsLocal.reduce((a, b) => a + b, 0).toFixed(3)
+              : wallLength}
+            onChange={(e) => !fromWallSegments && wallConfigMode !== 'segments' && setWallLength(e.target.value)}
+            readOnly={fromWallSegments || (wallConfigMode === 'segments' && segmentLengthsLocal.length > 0)}
             className={inputCls}
             style={inputStyle}
             placeholder={t('calculator:placeholder_enter_wall_length_tile')}
@@ -747,9 +805,11 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
           <label className={labelCls} style={labelStyle}>{t('calculator:input_tile_wall_height_m')}</label>
           <input
             type="number"
-            value={wallHeight}
-            onChange={(e) => !fromWallSegments && setWallHeight(e.target.value)}
-            readOnly={fromWallSegments}
+            value={!fromWallSegments && wallConfigMode === 'segments' && segmentHeightsLocal.length > 0
+              ? (segmentHeightsLocal.reduce((sum, h) => sum + (h.startH + h.endH) / 2, 0) / segmentHeightsLocal.length).toFixed(2)
+              : wallHeight}
+            onChange={(e) => !fromWallSegments && wallConfigMode !== 'segments' && setWallHeight(e.target.value)}
+            readOnly={fromWallSegments || (wallConfigMode === 'segments' && segmentLengthsLocal.length > 0)}
             className={inputCls}
             style={inputStyle}
             placeholder={t('calculator:placeholder_enter_wall_height_tile')}
@@ -757,6 +817,112 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
           />
         </div>
       </div>
+
+      {/* Wall configuration: Single / Segments — only when not from wall (standalone) */}
+      {!fromWallSegments && (
+        <div>
+          <label style={{ fontSize: '0.75rem', fontWeight: 600, color: colors.textWarm ?? colors.textLabel, marginBottom: 6, display: 'block' }}>{t('calculator:wall_configuration_label')}</label>
+          <div style={{ display: 'flex', background: colors.bgDeep ?? '#1a2332', borderRadius: 8, border: `1px solid ${colors.bgDeepBorder ?? 'rgba(255,255,255,0.06)'}`, padding: 3, gap: 3 }}>
+            <button
+              type="button"
+              disabled={segmentLengthsLocal.length > 1}
+              onClick={() => {
+                if (segmentLengthsLocal.length <= 1) {
+                  setWallConfigMode('single');
+                  if (segmentLengthsLocal.length === 1) {
+                    setWallLength(String(segmentLengthsLocal[0]));
+                    setWallHeight(String(segmentHeightsLocal[0]?.startH ?? defH));
+                  }
+                }
+              }}
+              title={segmentLengthsLocal.length > 1 ? t('calculator:remove_segments_single') : undefined}
+              style={{
+                flex: 1, padding: '9px 12px', borderRadius: 6, border: 'none', background: wallConfigMode === 'single' ? (colors.greenBg ?? 'rgba(34,197,94,0.1)') : 'transparent',
+                color: segmentLengthsLocal.length > 1 ? (colors.textDisabled ?? '#64748b') : (wallConfigMode === 'single' ? (colors.green ?? '#22c55e') : (colors.textLabel ?? '#94a3b8')), fontWeight: 600, fontSize: '0.82rem', cursor: segmentLengthsLocal.length > 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, opacity: segmentLengthsLocal.length > 1 ? 0.5 : 1
+              }}
+            >
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x={3} y={8} width={18} height={8} rx={1} /></svg>
+              {t('calculator:single_wall_label')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setWallConfigMode('segments')}
+              style={{
+                flex: 1, padding: '9px 12px', borderRadius: 6, border: 'none', background: wallConfigMode === 'segments' ? (colors.greenBg ?? 'rgba(34,197,94,0.1)') : 'transparent',
+                color: wallConfigMode === 'segments' ? (colors.green ?? '#22c55e') : (colors.textLabel ?? '#94a3b8'), fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
+              }}
+            >
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x={2} y={8} width={5} height={8} rx={1} /><rect x={9} y={8} width={6} height={8} rx={1} /><rect x={17} y={8} width={5} height={8} rx={1} /></svg>
+              {t('calculator:segments_label')} {segmentLengthsLocal.length > 0 && `(${segmentLengthsLocal.length})`}
+            </button>
+          </div>
+          <div style={{ fontSize: fontSizes?.sm ?? 13, color: colors.textLabel ?? '#94a3b8', marginTop: 6 }}>
+            {wallConfigMode === 'single' ? t('calculator:wall_config_single_desc') : t('calculator:wall_config_segments_desc')}
+          </div>
+        </div>
+      )}
+
+      {/* Segments table — when standalone and segments mode */}
+      {!fromWallSegments && wallConfigMode === 'segments' && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textCool ?? '#64748b', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x={2} y={8} width={5} height={8} rx={1} /><rect x={9} y={6} width={6} height={10} rx={1} /><rect x={17} y={9} width={5} height={7} rx={1} /></svg>
+              {t('calculator:wall_segments_label')}
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.green ?? '#22c55e', background: colors.greenBg ?? 'rgba(34,197,94,0.1)', padding: '1px 8px', borderRadius: 10 }}>{segmentLengthsLocal.length}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => setAllSegmentHeights(defH)} title={t('calculator:reset_heights_title')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 6, border: 'none', background: 'transparent', color: colors.textLabel ?? '#94a3b8', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg>
+                {t('calculator:reset_button')}
+              </button>
+              <button type="button" onClick={addSegment} style={{ padding: '5px 12px', borderRadius: 6, border: `1px solid ${colors.green ?? '#22c55e'}`, background: colors.greenBg ?? 'rgba(34,197,94,0.1)', color: colors.green ?? '#22c55e', fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer' }}>
+                + {t('calculator:segments_label')}
+              </button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.68rem', color: colors.textLabel ?? '#94a3b8', fontWeight: 600 }}>{t('calculator:set_all_label')}</span>
+            {[0.6, 1.0, 1.2, 1.5, 1.8, 2.0].map((h) => (
+              <button key={h} type="button" onClick={() => setAllSegmentHeights(h)} style={{ padding: '3px 10px', borderRadius: 12, border: `1px solid ${colors.borderInputDark ?? 'rgba(255,255,255,0.1)'}`, background: 'transparent', color: colors.textLabel ?? '#94a3b8', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer' }}>
+                {h === 1 || h === 2 ? `${h}.0m` : `${h}m`}
+              </button>
+            ))}
+          </div>
+          <div style={{ background: colors.bgDeep ?? '#1a2332', border: `1px solid ${colors.bgDeepBorder ?? 'rgba(255,255,255,0.06)'}`, borderRadius: 12, overflow: 'hidden', marginTop: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '46px 1fr 100px 100px 44px', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel ?? '#94a3b8', padding: '0 12px', textTransform: 'uppercase' }}>#</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel ?? '#94a3b8', padding: '0 12px', textTransform: 'uppercase' }}>{t('calculator:length_label')}</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel ?? '#94a3b8', padding: '0 12px', textTransform: 'uppercase', textAlign: 'center' }}>{t('calculator:segment_start_h')}</span>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel ?? '#94a3b8', padding: '0 12px', textTransform: 'uppercase', textAlign: 'center' }}>{t('calculator:segment_end_h')}</span>
+              <span></span>
+            </div>
+            {segmentLengthsLocal.length === 0 ? (
+              <div style={{ padding: 16, textAlign: 'center', color: colors.textLabel ?? '#94a3b8', fontSize: '0.85rem' }}>
+                {t('calculator:no_segments_add')}
+              </div>
+            ) : (
+              segmentLengthsLocal.map((segLen, idx) => (
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '46px 1fr 100px 100px 44px', alignItems: 'center', padding: 0, borderBottom: idx < segmentLengthsLocal.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', background: idx % 2 === 1 ? 'rgba(255,255,255,0.022)' : undefined }}>
+                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem', fontWeight: 600, color: colors.textLabel ?? '#94a3b8', textAlign: 'center', padding: '10px 0' }}>{idx + 1}</div>
+                  <div style={{ padding: '5px 6px' }}>
+                    <input type="number" value={segLen} step={0.01} min={0.01} onChange={(e) => updateSegmentLength(idx, parseFloat(e.target.value) || 0)} style={{ width: '100%', maxWidth: 120, padding: '6px 8px', background: colors.bgInputDark ?? '#0f172a', border: `1px solid ${colors.borderInputDark ?? 'rgba(255,255,255,0.1)'}`, borderRadius: 6, color: colors.textPrimaryLight ?? '#e2e8f0', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', textAlign: 'center', outline: 'none' }} />
+                  </div>
+                  <div style={{ padding: '5px 6px', display: 'flex', justifyContent: 'center' }}>
+                    <input type="number" value={segmentHeightsLocal[idx]?.startH ?? defH} step={0.1} min={0.1} onChange={(e) => updateSegmentHeight(idx, 'startH', parseFloat(e.target.value) || 0)} style={{ width: '100%', maxWidth: 80, padding: '6px 8px', background: colors.bgInputDark ?? '#0f172a', border: `1px solid ${colors.borderInputDark ?? 'rgba(255,255,255,0.1)'}`, borderRadius: 6, color: colors.textPrimaryLight ?? '#e2e8f0', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', textAlign: 'center', outline: 'none' }} />
+                  </div>
+                  <div style={{ padding: '5px 6px', display: 'flex', justifyContent: 'center' }}>
+                    <input type="number" value={segmentHeightsLocal[idx]?.endH ?? defH} step={0.1} min={0.1} onChange={(e) => updateSegmentHeight(idx, 'endH', parseFloat(e.target.value) || 0)} style={{ width: '100%', maxWidth: 80, padding: '6px 8px', background: colors.bgInputDark ?? '#0f172a', border: `1px solid ${colors.borderInputDark ?? 'rgba(255,255,255,0.1)'}`, borderRadius: 6, color: colors.textPrimaryLight ?? '#e2e8f0', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', textAlign: 'center', outline: 'none' }} />
+                  </div>
+                  <div style={{ padding: '5px', display: 'flex', justifyContent: 'center' }}>
+                    <button type="button" onClick={() => removeSegment(idx)} title={t('calculator:remove_segment')} style={{ padding: 4, borderRadius: 4, border: 'none', background: 'transparent', color: colors.textLabel ?? '#94a3b8', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       <div>
         <label className="block text-sm font-medium text-gray-700">{t('calculator:input_tile_slab_dimensions')}</label>
@@ -1018,7 +1184,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       {!(fromWallSegments && (canvasMode || isInProjectCreating)) && (
         <div className="flex justify-center">
           <Button variant="accent" color={colors.accentBlue} onClick={calculateResults}>
-            Calculate
+            {t('calculator:calculate_button')}
           </Button>
         </div>
       )}
@@ -1033,16 +1199,16 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
                 <thead className="bg-gray-50">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type
+                      {t('calculator:table_type_header')}
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Length (cm)
+                      {t('calculator:table_length_cm')}
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Height (cm)
+                      {t('calculator:table_height_cm')}
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Quantity
+                      {t('calculator:table_quantity_header')}
                     </th>
                   </tr>
                 </thead>
@@ -1051,7 +1217,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
                   {results.cuttingBreakdown.fullSlabs > 0 && (
                     <tr>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        Full Slabs
+                        {t('calculator:full_slabs_row')}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {slabOrientation === 'long' ? selectedSlab.width : selectedSlab.height}
@@ -1089,8 +1255,8 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
             </div>
           </div>
 
-          {/* Slabs per segment (wycinka) when from wall */}
-          {fromWallSegments && results.slabsPerSegment && results.slabsPerSegment.length > 0 && (
+          {/* Slabs per segment (wycinka) when from wall or user-defined segments */}
+          {results.slabsPerSegment && results.slabsPerSegment.length > 0 && (
             <div className="bg-gray-50 p-4 rounded-lg">
               <h3 className="text-lg font-medium text-gray-900 mb-4">{t('calculator:slabs_per_segment_label')}</h3>
               <div className="space-y-1 text-sm text-gray-700">
@@ -1108,7 +1274,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
             <ul className="list-disc ml-6 text-gray-100">
               {results.taskBreakdown.map((task, index) => (
                 <li key={index}>
-                  <span className="font-bold">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours
+                  <span className="font-bold">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_suffix')}
                 </li>
               ))}
             </ul>

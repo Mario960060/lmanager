@@ -3,7 +3,7 @@
 // Post markers on fences, slope indicators on walls
 // ══════════════════════════════════════════════════════════════
 
-import { Point, Shape, distance, toPixels, midpoint } from "../geometry";
+import { Point, Shape, distance, toPixels, midpoint, readableTextAngle } from "../geometry";
 import { C } from "../geometry";
 import { calcEdgeSlopes, formatSlope, slopeColor } from "../geodesy";
 
@@ -114,10 +114,18 @@ export function drawWallSlopeIndicators(
     ctx.moveTo(sm.x, sm.y);
     ctx.lineTo(ax, ay);
     ctx.stroke();
-    ctx.font = "9px 'JetBrains Mono',monospace";
+    const textAngle = readableTextAngle(Math.atan2(sb.y - sa.y, sb.x - sa.x));
+    const slopeLabelOffset = 18;
+    const stx = sm.x + (sb.y - sa.y) / len * slopeLabelOffset;
+    const sty = sm.y - (sb.x - sa.x) / len * slopeLabelOffset;
+    ctx.save();
+    ctx.translate(stx, sty);
+    ctx.rotate(textAngle);
+    ctx.font = "bold 20px 'JetBrains Mono',monospace";
     ctx.fillStyle = slopeColor(sl.severity);
     ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillText(formatSlope(sl), sm.x, sm.y + 6);
+    ctx.textBaseline = "middle";
+    ctx.fillText(formatSlope(sl), 0, 0);
+    ctx.restore();
   }
 }

@@ -17,7 +17,7 @@ interface Equipment {
 }
 
 interface CalendarEquipmentModalProps {
-  eventId: string;
+  eventId: string | null;
   date: Date;
   onClose: () => void;
 }
@@ -51,7 +51,7 @@ const CalendarEquipmentModal: React.FC<CalendarEquipmentModalProps> = ({ eventId
     enabled: !!companyId
   });
 
-  // Fetch event details
+  // Fetch event details (only when eventId is provided)
   const { data: event } = useQuery({
     queryKey: ['event', eventId],
     queryFn: async () => {
@@ -62,7 +62,8 @@ const CalendarEquipmentModal: React.FC<CalendarEquipmentModalProps> = ({ eventId
         .single();
       if (error) throw error;
       return data;
-    }
+    },
+    enabled: !!eventId
   });
 
   const requireEquipmentMutation = useMutation({
@@ -88,7 +89,7 @@ const CalendarEquipmentModal: React.FC<CalendarEquipmentModalProps> = ({ eventId
       const { error } = await supabase
         .from('calendar_equipment')
         .insert({
-          event_id: eventId,
+          event_id: eventId || null,
           equipment_id,
           user_id: user?.id,
           date: formattedDate,
@@ -100,7 +101,7 @@ const CalendarEquipmentModal: React.FC<CalendarEquipmentModalProps> = ({ eventId
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['calendar_equipment', format(date, 'yyyy-MM-dd')] });
+      queryClient.invalidateQueries({ queryKey: ['calendar_equipment'] });
       queryClient.invalidateQueries({ queryKey: ['equipment'] });
       queryClient.invalidateQueries({ queryKey: ['available_equipment'] });
       onClose();
@@ -128,7 +129,7 @@ const CalendarEquipmentModal: React.FC<CalendarEquipmentModalProps> = ({ eventId
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-[1100] flex items-center justify-center p-4">
       <div className="bg-white rounded-lg max-w-2xl w-full">
         <div className="flex justify-between items-center p-6 border-b">
           <div>

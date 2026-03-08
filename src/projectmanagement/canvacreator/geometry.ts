@@ -234,6 +234,19 @@ export function angleDeg(p1: Point, vertex: Point, p2: Point): number {
   return (Math.acos(cos) * 180) / Math.PI;
 }
 
+/** Rotate point around center by angleDeg (positive = counterclockwise). */
+export function rotatePointAround(center: Point, point: Point, angleDeg: number): Point {
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  const rad = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return {
+    x: center.x + dx * cos - dy * sin,
+    y: center.y + dx * sin + dy * cos,
+  };
+}
+
 export function shoelaceArea(points: Point[]): number {
   let area = 0;
   const n = points.length;
@@ -243,6 +256,23 @@ export function shoelaceArea(points: Point[]): number {
     area -= points[j].x * points[i].y;
   }
   return Math.abs(area) / 2;
+}
+
+/** Polygon centroid by signed area — true geometric center, more reliable than vertex average. */
+export function polygonCentroidByArea(pts: Point[]): Point {
+  if (pts.length < 3) return pts.length ? pts[0] : { x: 0, y: 0 };
+  let area = 0, cx = 0, cy = 0;
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const cross = pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+    area += cross;
+    cx += (pts[i].x + pts[j].x) * cross;
+    cy += (pts[i].y + pts[j].y) * cross;
+  }
+  area /= 2;
+  if (Math.abs(area) < 1e-20) return centroid(pts);
+  return { x: cx / (6 * area), y: cy / (6 * area) };
 }
 
 export function areaM2(points: Point[]): number {
@@ -261,6 +291,12 @@ export function projectOntoSegment(p: Point, a: Point, b: Point): Projection {
 
 export function edgeNormalAngle(a: Point, b: Point): number {
   return Math.atan2(b.y - a.y, b.x - a.x) + Math.PI / 2;
+}
+
+/** Angle for text parallel to edge, flipped so text is never upside down */
+export function readableTextAngle(edgeAngle: number): number {
+  if (edgeAngle > Math.PI / 2 || edgeAngle < -Math.PI / 2) return edgeAngle + Math.PI;
+  return edgeAngle;
 }
 
 export function snapTo45(origin: Point, target: Point): Point {
@@ -393,6 +429,24 @@ export function pointInPolygon(p: Point, pts: Point[]): boolean {
     if ((yi > p.y) !== (yj > p.y) && p.x < ((xj - xi) * (p.y - yi)) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
+}
+
+/** Distance from point to polygon boundary (min distance to any edge). */
+export function distanceToPolygon(p: Point, pts: Point[]): number {
+  if (pts.length < 2) return Infinity;
+  let minDist = Infinity;
+  const n = pts.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const proj = projectOntoSegment(p, pts[j], pts[i]);
+    if (proj.dist < minDist) minDist = proj.dist;
+  }
+  return minDist;
+}
+
+/** True if point is inside polygon or within tolerance of its boundary. */
+export function pointInOrNearPolygon(p: Point, pts: Point[], tolerance: number): boolean {
+  if (pointInPolygon(p, pts)) return true;
+  return distanceToPolygon(p, pts) <= tolerance;
 }
 
 /** Find edge index to split when inserting interior point p. Ray from p in +x direction, first edge hit. */
@@ -548,15 +602,29 @@ function circleCircleIntersect(c1: Point, r1: number, c2: Point, r2: number): Po
 
 // ── Snap Magnet ──────────────────────────────────────────────
 
-export function snapMagnet(point: Point, shapes: Shape[], excludeShapeIdx: number, threshold: number): SnapResult {
+/** Optional: only snap to targets in this direction (dot product >= 0). Prevents snapping to wrong side. */
+export function snapMagnet(
+  point: Point,
+  shapes: Shape[],
+  excludeShapeIdx: number,
+  threshold: number,
+  preferredDirection?: Point
+): SnapResult {
   let bestDist = threshold;
   let result: SnapResult = { snapped: { ...point }, didSnap: false, snapType: null, snapTarget: null };
+
+  const inPreferredDir = (target: Point): boolean => {
+    if (!preferredDirection) return true;
+    const dx = target.x - point.x;
+    const dy = target.y - point.y;
+    return dx * preferredDirection.x + dy * preferredDirection.y >= 0;
+  };
 
   for (let si = 0; si < shapes.length; si++) {
     if (si === excludeShapeIdx) continue;
     for (const pt of shapes[si].points) {
       const d = distance(point, pt);
-      if (d < bestDist) {
+      if (d < bestDist && inPreferredDir(pt)) {
         bestDist = d;
         result = { snapped: { ...pt }, didSnap: true, snapType: "point", snapTarget: { ...pt } };
       }
@@ -574,7 +642,7 @@ export function snapMagnet(point: Point, shapes: Shape[], excludeShapeIdx: numbe
       for (let i = 0; i < ec; i++) {
         const j = (i + 1) % pts.length;
         const proj = projectOntoSegment(point, pts[i], pts[j]);
-        if (proj.t > 0.01 && proj.t < 0.99 && proj.dist < bestDist) {
+        if (proj.t > 0.01 && proj.t < 0.99 && proj.dist < bestDist && inPreferredDir(proj.proj)) {
           bestDist = proj.dist;
           result = { snapped: { ...proj.proj }, didSnap: true, snapType: "edge", snapTarget: { ...proj.proj } };
         }
@@ -700,6 +768,7 @@ export function makeTrapezoid(cx: number, cy: number, layer: LayerID = 1, topM?:
 }
 
 // ── Theme Colors ─────────────────────────────────────────────
+// Default (dark) canvas theme
 
 export const C = {
   bg: "#1a1a2e", grid: "#252542", gridMajor: "#2d2d50",
@@ -733,3 +802,37 @@ export const C = {
   adjustmentOverlap: "rgba(200,100,0,0.5)",
   adjustmentOverlapStroke: "#c2410c",
 } as const;
+
+/** Light Clean theme: white canvas, dark elements (canvas only) */
+export const C_LIGHT: typeof C = {
+  ...C,
+  bg: "#f8fafc", grid: "#cbd5e1", gridMajor: "#94a3b8",
+  accent: "#0d9488", accentGlow: "rgba(13,148,136,0.3)",
+  edge: "#0f766e", edgeHover: "#0d9488",
+  point: "#1e293b", pointFill: "#0d9488", pointHover: "#14b8a6",
+  open: "#ea580c", openHover: "#c2410c", openGlow: "rgba(234,88,12,0.3)",
+  text: "#1e293b", textDim: "#64748b",
+  angleFill: "rgba(234,179,8,0.15)", angleStroke: "#ca8a04", angleText: "#a16207",
+  panel: "#ffffff", panelBorder: "#e2e8f0", button: "#f1f5f9", buttonHover: "#e2e8f0",
+  shapeFill: "rgba(13,148,136,0.08)", selectedFill: "rgba(13,148,136,0.15)",
+  danger: "#dc2626", snapLine: "rgba(13,148,136,0.5)",
+  layer2: "#7c3aed", layer2Dim: "rgba(124,58,237,0.15)", layer2Edge: "#8b5cf6",
+  inactiveShape: "rgba(0,0,0,0.06)", inactiveEdge: "rgba(0,0,0,0.2)",
+  locked: "#dc2626", lockedGlow: "rgba(220,38,38,0.2)", lockedAngle: "#b91c1c",
+  geo: "#0d9488", geoText: "#0f766e",
+  fence: "#92400e", fenceDim: "rgba(146,64,14,0.2)",
+  wall: "#475569", wallDim: "rgba(71,85,105,0.2)",
+  kerb: "#475569", kerbDim: "rgba(71,85,105,0.2)",
+  foundation: "#b45309", foundationDim: "rgba(180,83,9,0.2)",
+  drainage: "#15803d", drainageDim: "rgba(21,128,61,0.2)",
+  canalPipe: "#1d4ed8", canalPipeDim: "rgba(29,78,216,0.2)",
+  waterPipe: "#2563eb", waterPipeDim: "rgba(37,99,235,0.2)",
+  cable: "#7c3aed", cableDim: "rgba(124,58,237,0.2)",
+  badge: "#f1f5f9",
+  adjustmentEmpty: "rgba(239,68,68,0.35)",
+  adjustmentEmptyStroke: "#dc2626",
+  adjustmentOverflow: "rgba(239,68,68,0.3)",
+  adjustmentOverflowStroke: "#dc2626",
+  adjustmentOverlap: "rgba(180,83,9,0.5)",
+  adjustmentOverlapStroke: "#c2410c",
+};

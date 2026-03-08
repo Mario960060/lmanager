@@ -12,7 +12,8 @@ import BackButton from '../../components/BackButton';
 import DatePicker from '../../components/DatePicker';
 
 const ProjectPerformance = () => {
-  const { t } = useTranslation(['common', 'dashboard', 'utilities', 'project', 'calculator']);
+  const { t, i18n } = useTranslation(['common', 'dashboard', 'utilities', 'project', 'calculator']);
+  const dateLocale = i18n.language === 'pl' ? pl : undefined;
   const [projectSearch, setProjectSearch] = useState('');
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState<'single' | 'weekly' | 'range'>('range');

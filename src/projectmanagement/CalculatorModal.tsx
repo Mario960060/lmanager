@@ -62,7 +62,7 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
   mode = 'ProjectCreating',
   eventId
 }) => {
-  const { t } = useTranslation(['common', 'calculator', 'form']);
+  const { t } = useTranslation(['common', 'calculator', 'form', 'project']);
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
@@ -74,6 +74,7 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
   const slabDefaults = useMemo(() => getCalculatorInputDefaults('slab', companyId), [companyId]);
   const concreteSlabsDefaults = useMemo(() => getCalculatorInputDefaults('concreteSlabs', companyId), [companyId]);
   const grassDefaults = useMemo(() => getCalculatorInputDefaults('grass', companyId), [companyId]);
+  const turfDefaults = useMemo(() => getCalculatorInputDefaults('turf', companyId), [companyId]);
 
   // Fetch carriers for both digging and materials in AddTask mode
   React.useEffect(() => {
@@ -201,7 +202,7 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
       case 'grass':
         return <ArtificialGrassCalculator {...commonProps} savedInputs={grassDefaults} />;
       case 'turf':
-        return <NaturalTurfCalculator {...commonProps} />;
+        return <NaturalTurfCalculator {...commonProps} savedInputs={turfDefaults} />;
       case 'tile':
         if (calculatorSubType === 'coping') {
           return <CopingInstallationCalculator {...commonProps} />;
@@ -280,17 +281,17 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
           {renderCalculator()}
         </div>
 
-        <div className="flex justify-end gap-3 p-6 border-t bg-gray-50">
+        <div className="flex flex-row justify-end gap-3 p-4 sm:p-6 border-t bg-gray-50" style={{ flexWrap: 'nowrap' }}>
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium bg-gray-800 text-gray-300 rounded-md hover:bg-gray-700 transition-colors"
+            className="flex-1 sm:flex-none min-h-[48px] px-5 py-3 text-base font-medium bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
           >
             {t('project:cancel_button_label')}
           </button>
           <button
             onClick={handleSaveResults}
             disabled={!calculatorResults}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md disabled:opacity-50"
+            className="flex-1 sm:flex-none min-h-[48px] px-5 py-3 text-base font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
           >
             {t('project:add_to_project_button')}
           </button>

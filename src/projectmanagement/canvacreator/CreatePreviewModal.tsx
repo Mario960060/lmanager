@@ -57,7 +57,7 @@ function isProjectCardComplete(ps: ProjectSettings): boolean {
 type TaskItem = { task: string; name?: string; hours: number; amount?: number | string; unit?: string };
 type MaterialItem = { name: string; quantity: number; unit: string };
 
-function aggregatePreview(shapes: Shape[]) {
+function aggregatePreview(shapes: Shape[], elementFallback: string) {
   const layer2Shapes = shapes.filter((s) => s.layer === 2 && s.calculatorResults);
   const tasksByElement: { elementName: string; tasks: TaskItem[]; isGroundwork: boolean }[] = [];
   const materialMap = new Map<string, MaterialItem>();
@@ -65,7 +65,7 @@ function aggregatePreview(shapes: Shape[]) {
 
   for (const shape of layer2Shapes) {
     const r = shape.calculatorResults!;
-    const elementName = shape.label || r.name || shape.calculatorType || t("project:create_preview_element_fallback");
+    const elementName = shape.label || r.name || shape.calculatorType || elementFallback;
     const isGroundwork = isGroundworkLinear(shape);
 
     if (r.taskBreakdown && r.taskBreakdown.length > 0) {
@@ -144,10 +144,14 @@ export default function CreatePreviewModal({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCancel();
+      if (e.key === "Enter" && isCardComplete) {
+        e.preventDefault();
+        onConfirm();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
+  }, [onCancel, onConfirm, isCardComplete]);
 
   const fmtH = (h: number) => {
     if (!h) return "0 h";
@@ -440,7 +444,7 @@ export default function CreatePreviewModal({
                         }}
                       >
                         <span style={{ fontSize: "0.94rem", color: D.textPrimary, fontWeight: 450 }}>
-                          {translateTaskName(task.task || task.name || t("project:results_task_fallback", { n: i + 1 }), (k) => t(k))}
+                          {translateTaskName(task.task || task.name || t("project:results_task_fallback", { n: i + 1 }), t)}
                         </span>
                         <span
                           style={{

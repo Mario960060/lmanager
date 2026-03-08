@@ -3,7 +3,7 @@
 // Cobblestone (monoblock) pattern rendering — 20×10 cm blocks, 1mm joint
 // ══════════════════════════════════════════════════════════════
 
-import { Point, Shape, toPixels, toMeters } from "../geometry";
+import { Point, Shape, toPixels, toMeters, labelAnchorInsidePolygon, areaM2 } from "../geometry";
 import { getEffectivePolygon } from "../arcMath";
 import {
   shrinkPolygon,
@@ -183,7 +183,8 @@ export function drawCobblestonePattern(
   }
   const extendC = Math.ceil(maxAlongDir / stepLength) + 2;
   const extendR = Math.ceil(maxAlongPerp / stepWidth) + 2;
-  const extend = Math.max(extendC, extendR, 10);
+  const EXTEND_CAP = 100; // Prevent O(extend²) freeze on very large polygons
+  const extend = Math.min(Math.max(extendC, extendR, 10), EXTEND_CAP);
 
   const pattern = inputs?.vizPattern ?? "grid";
   const blockAreaPx2 = blockLengthPx * blockWidthPx;
@@ -203,9 +204,12 @@ export function drawCobblestonePattern(
     return n;
   };
 
+  let fullCount = 0;
+  let cutCount = 0;
   const drawBlock = (corners: Point[], isCut: boolean, r: number, c: number) => {
     if (!rectIntersectsPolygon(corners, pts)) return;
     if (isCut && !showCuts) return;
+    isCut ? cutCount++ : fullCount++;
 
     const isWasteReused = isCut && wasteSatisfiedSet.has(`${r},${c}`);
     const vertsInSlab = hasArcs ? countOrigVertsInSlab(corners) : 4;
@@ -262,6 +266,26 @@ export function drawCobblestonePattern(
   }
 
   ctx.restore();
+
+  const total = fullCount + cutCount;
+  const blockAreaCm2 = blockWidthCm * blockLengthCm;
+  const totalBlockAreaCm2 = total > 0 && blockAreaCm2 > 0 ? total * blockAreaCm2 : 0;
+  const wasteSatisfiedCount = wasteSatisfiedSet.size;
+  const wastePct = totalBlockAreaCm2 > 0
+    ? Math.round(Math.max(0, (cutCount - wasteSatisfiedCount) / total) * 100)
+    : (total > 0 ? Math.round((cutCount / total) * 100) : 0);
+  if (total > 0) {
+    const anchor = labelAnchorInsidePolygon(pts);
+    const sc = worldToScreen(anchor.x, anchor.y);
+    const area = areaM2(getEffectivePolygon(shape));
+    ctx.font = "bold 14px 'JetBrains Mono',monospace";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + 8);
+    ctx.fillText(`${fullCount} full, ${cutCount} cut`, sc.x, sc.y + 24);
+    ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + 40);
+  }
 }
 
 /**
@@ -315,7 +339,8 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
   }
   const extendC = Math.ceil(maxAlongDir / stepLength) + 2;
   const extendR = Math.ceil(maxAlongPerp / stepWidth) + 2;
-  const extend = Math.max(extendC, extendR, 10);
+  const EXTEND_CAP = 100; // Prevent O(extend²) freeze on very large polygons
+  const extend = Math.min(Math.max(extendC, extendR, 10), EXTEND_CAP);
 
   let cutBlockCount = 0;
   const cutBlockData: {

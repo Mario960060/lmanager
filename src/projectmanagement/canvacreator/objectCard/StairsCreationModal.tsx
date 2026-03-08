@@ -99,7 +99,7 @@ const StairsCreationModal: React.FC<StairsCreationModalProps> = ({
     fetchCarriers();
   }, [companyId]);
 
-  const handleCreate = () => {
+  const handleCreate = useCallback(() => {
     // Extract dimensions from calculator (cm → m)
     const widthCm = calculatorResults?.canvasWidthCm ?? 300;
     const lengthCm = calculatorResults?.canvasLengthCm ?? 200;
@@ -116,7 +116,19 @@ const StairsCreationModal: React.FC<StairsCreationModalProps> = ({
     };
     onCreate(fullShape);
     onClose();
-  };
+  }, [calculatorResults, calculatorInputs, centerX, centerY, layer, subType, label, onCreate, onClose]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "Enter" && calculatorResults) {
+        e.preventDefault();
+        handleCreate();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose, calculatorResults, handleCreate]);
 
   const renderCalculator = () => {
     if (subType === "l_shape") return <LShapeStairCalculator {...commonProps} />;

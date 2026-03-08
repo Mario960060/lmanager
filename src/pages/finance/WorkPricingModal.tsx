@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { translateTaskName, translateTaskDescription } from '../../lib/translationMap';
+import { translateTaskName, translateTaskDescription, translateUnit } from '../../lib/translationMap';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { supabase } from '../../lib/supabase';

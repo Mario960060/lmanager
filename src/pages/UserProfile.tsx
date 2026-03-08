@@ -17,7 +17,7 @@ import { Spinner, Button } from '../themes/uiComponents';
 import { colors } from '../themes/designTokens';
 
 const UserProfile = () => {
-  const { t } = useTranslation(['common', 'dashboard', 'form']);
+  const { t } = useTranslation(['common', 'dashboard', 'form', 'event', 'calculator', 'material', 'utilities']);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user, profile, setProfile } = useAuthStore();

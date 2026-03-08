@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { translateMaterialName } from '../../lib/translationMap';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
 import {
   colors,
@@ -105,9 +106,9 @@ const SandCalculator: React.FC<SandCalculatorProps> = ({ onResultsChange }) => {
       <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
         <SelectDropdown
           label={t('calculator:input_select_material')}
-          value={selectedMaterial.name}
-          options={materials.map((m) => m.name)}
-          onChange={(val) => setSelectedMaterial(materials.find((m) => m.name === val) || materials[0])}
+          value={translateMaterialName(selectedMaterial.name, t)}
+          options={materials.map((m) => translateMaterialName(m.name, t))}
+          onChange={(val) => setSelectedMaterial(materials.find((m) => translateMaterialName(m.name, t) === val) || materials[0])}
           placeholder={t('calculator:input_select_material')}
         />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
@@ -156,7 +157,7 @@ const SandCalculator: React.FC<SandCalculatorProps> = ({ onResultsChange }) => {
         {result !== null && (
           <div style={{ marginTop: spacing.xl, padding: spacing.base, background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>
             <p style={{ fontSize: fontSizes.base, color: colors.textPrimary, fontFamily: fonts.body }}>
-              Required Mass: <span style={{ fontWeight: fontWeights.bold }}>{result} tonnes</span>
+              {t('calculator:required_mass_label')} <span style={{ fontWeight: fontWeights.bold }}>{result} {t('calculator:tons_suffix')}</span>
             </p>
           </div>
         )}

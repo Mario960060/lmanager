@@ -10,6 +10,7 @@ export const taskNameTranslationMap: Record<string, string> = {
   'transport adhesive': 'calculator:task_transport_adhesive',
 
   // Slab Calculator tasks
+  'slabs': 'calculator:laying_slabs',
   'transport slabs': 'calculator:task_transport_slabs',
   'transport sand': 'calculator:task_transport_sand',
   'transport cement': 'calculator:task_transport_cement',
@@ -197,18 +198,174 @@ export const taskNameTranslationMap: Record<string, string> = {
   'underground cable installation (manual)': 'calculator:task_underground_cable_manual',
   'water pipe installation (machinery)': 'calculator:task_water_pipe_machinery',
   'water pipe installation (manual)': 'calculator:task_water_pipe_manual',
+
+  // Polish task names (DB may store PL) - map to same keys for bidirectional translation
+  'Klejenie przodów schodów': 'calculator:task_adhesiving_fronts_stairs',
+  'Klejenie płytek na stopnie/czapki': 'calculator:task_adhesiving_steps_coppings',
+  'Przerwa': 'calculator:task_break',
+  'Murowanie cegłą': 'calculator:task_bricklaying',
+  'Budowa ściany z podkładów (1. warstwa)': 'calculator:task_building_sleeper_wall_1st_layer',
+  'Budowa ściany z podkładów (na 1. warstwie)': 'calculator:task_building_sleeper_wall_on_top',
+  'Budowa schodów penta 3 stopnie': 'calculator:task_building_penta_stairs_3_steps',
+  'Murowanie schodów z bloczków 4"': 'calculator:task_building_steps_4inch_blocks',
+  'Murowanie schodów z bloczków 7"': 'calculator:task_building_steps_7inch_blocks',
+  'Budowa schodów z cegły': 'calculator:task_building_steps_bricks',
+  'Zagęszczanie kostki m²/h': 'calculator:task_compacting_monoblocks_m2h',
+  'Ubijanie dużą ubijarką': 'calculator:task_compacting_large_compactor',
+  'Ubijanie średnią ubijarką': 'calculator:task_compacting_medium_compactor',
+  'Ubijanie małą ubijarką': 'calculator:task_compacting_small_compactor',
+  'Ubijanie małym walcem': 'calculator:task_compacting_small_roller',
+  'Cięcie płyty betonowej 120 cm': 'calculator:task_cutting_120cm_concrete_slab',
+  'Cięcie płyty granitowej 120 cm': 'calculator:task_cutting_120cm_granite_slab',
+  'Cięcie płyty porcelanowej 120 cm': 'calculator:task_cutting_120cm_porcelain_slab',
+  'Cięcie płyty piaskowcowej 120 cm': 'calculator:task_cutting_120cm_sandstone_slab',
+  'Cięcie płyty granitowej 30 cm': 'calculator:task_cutting_30cm_granite_slab',
+  'Cięcie płyty porcelanowej 30 cm': 'calculator:task_cutting_30cm_porcelain_slab',
+  'Cięcie płyty piaskowcowej 30 cm': 'calculator:task_cutting_30cm_sandstone_slab',
+  'Cięcie płyty betonowej 40 cm': 'calculator:task_cutting_40cm_concrete_slab',
+  'Cięcie płyty betonowej 60 cm': 'calculator:task_cutting_60cm_concrete_slab',
+  'Cięcie płyty granitowej 60 cm': 'calculator:task_cutting_60cm_granite_slab',
+  'Cięcie płyty porcelanowej 60 cm': 'calculator:task_cutting_60cm_porcelain_slab',
+  'Cięcie płyty piaskowcowej 60 cm': 'calculator:task_cutting_60cm_sandstone_slab',
+  'Cięcie płyty betonowej 90 cm': 'calculator:task_cutting_90cm_concrete_slab',
+  'Cięcie płyty granitowej 90 cm': 'calculator:task_cutting_90cm_granite_slab',
+  'Cięcie płyty porcelanowej 90 cm': 'calculator:task_cutting_90cm_porcelain_slab',
+  'Cięcie płyty piaskowcowej 90 cm': 'calculator:task_cutting_90cm_sandstone_slab',
+  'Cięcie łat tarasowych': 'calculator:task_cutting_decking_joists',
+  'Cięcie kostki brukowej': 'calculator:task_cutting_mono_blocks',
+  'Cięcie porcelany': 'calculator:task_cutting_porcelain',
+  'Cięcie porcelany (ramka)': 'calculator:task_cutting_porcelain_frame',
+  'Cięcie płyty z piaskowca': 'calculator:task_cutting_sandstones',
+  'Cięcie płyty z piaskowca (ramka)': 'calculator:task_cutting_sandstones_frame',
+  'Cięcie desek tarasowych': 'calculator:task_decking_boards_cuts',
+  'Cięcie desek ramy tarasu': 'calculator:task_decking_frame_boards_cuts',
+  'Kopanie i układanie drenażu': 'calculator:task_digging_putting_drainage',
+  'Kopanie dołków pod słupki': 'calculator:task_digging_holes_posts',
+  'Montaż rury drenażowej (maszyna)': 'calculator:task_drainage_pipe_machinery',
+  'Montaż rury drenażowej (ręcznie)': 'calculator:task_drainage_pipe_manual',
+  'Kopanie fundamentu łopatą': 'calculator:task_excavating_foundation_shovel',
+  'Kopanie fundamentu koparką dużą': 'calculator:task_excavating_foundation_big_excavator',
+  'Kopanie fundamentu koparką średnią': 'calculator:task_excavating_foundation_medium_excavator',
+  'Kopanie fundamentu koparką małą': 'calculator:task_excavating_foundation_small_excavator',
+  'Montaż desek tarasowych': 'calculator:task_fixing_decking_boards',
+  'Montaż ramy tarasu': 'calculator:task_fixing_decking_frame',
+  'Fugowanie porcelany 90×60 (zawiesina)': 'calculator:task_grouting_porcelain_90x60_slurry',
+  'Fugowanie porcelany mix rozmiary (zawiesina)': 'calculator:task_grouting_porcelain_slurry',
+  'Fugowanie granitu mix rozmiary (zawiesina)': 'calculator:task_grouting_granite_slurry',
+  'Fugowanie piaskowca mix rozmiary (zawiesina)': 'calculator:task_grouting_sandstone_slurry',
+  'Fugowanie piaskowca 90×60 (zaprawa)': 'calculator:task_grouting_sandstones_90x60_mortar',
+  'Fugowanie piaskowca (wmiatanie)': 'calculator:task_grouting_sandstones_brushin',
+  'Fugowanie piaskowca mix (zaprawa)': 'calculator:task_grouting_sandstones_mix_mortar',
+  'Układanie setów 10×10': 'calculator:task_laying_10x10_sets',
+  'Układanie bloczków 4" (na płasko)': 'calculator:task_laying_4inch_blocks_flat',
+  'Układanie bloczków 4" (na stojąco)': 'calculator:task_laying_4inch_blocks_standing',
+  'Układanie bloczków 7" (na płasko)': 'calculator:task_laying_7inch_blocks_flat',
+  'Układanie bloczków 7" (na stojąco)': 'calculator:task_laying_7inch_blocks_standing',
+  'Układanie krawędzi płaskich': 'calculator:task_laying_flat_edges',
+  'Układanie obrzeży typu KL': 'calculator:task_laying_kl_kerbs',
+  'Układanie krawężników brukowanych': 'calculator:task_laying_rumbled_kerbs',
+  'Układanie płytek na ramce pow. 0,3 m²': 'calculator:task_laying_slab_frame_above_03',
+  'Układanie płytek na ramce poniżej 0,3 m²': 'calculator:task_laying_slab_frame_below_03',
+  'Układanie płyt 90×60 (porcelana)': 'calculator:task_laying_slabs_90x60_porcelain',
+  'Układanie płyt 90×60 (piaskowiec)': 'calculator:task_laying_slabs_90x60_sandstones',
+  'Układanie płyt mix (porcelana)': 'calculator:task_laying_slabs_mix_porcelain',
+  'Układanie płyt mix (piaskowiec)': 'calculator:task_laying_slabs_mix_sandstones',
+  'Układanie Sztucznej Trawy': 'calculator:task_laying_artificial_grass',
+  'Układanie Naturalnej Trawy': 'calculator:task_laying_natural_turf',
+  'Układanie kostki': 'calculator:task_laying_monoblocks',
+  'Układanie płyt 40×40 (beton)': 'calculator:task_laying_slabs_concrete_40x40',
+  'Układanie płyt 60×60 (beton)': 'calculator:task_laying_slabs_concrete_60x60',
+  'Układanie płyt 90×60 (beton)': 'calculator:task_laying_slabs_concrete_90x60',
+  'Mieszanie Zaprawy': 'calculator:task_mixing_mortar',
+  'Inne': 'calculator:task_other',
+  'Wyrównanie podłoża pod murek (wypoziomowanie)': 'calculator:task_preparing_for_wall',
+  'Montaż rury kanalizacyjnej PVC (maszyna)': 'calculator:task_pvc_sewer_pipe_machinery',
+  'Montaż rury kanalizacyjnej PVC (ręcznie)': 'calculator:task_pvc_sewer_pipe_manual',
+  'Zagęszczanie piasku': 'calculator:task_sand_screeding',
+  'Ustawianie słupów': 'calculator:task_setting_up_posts',
+  'Montaż ogrodzenia kompozytowego': 'calculator:task_standard_composite_fence',
+  'Przybijanie sztachet poziomych': 'calculator:task_standard_fence_horizontal',
+  'Przybijanie batonów (płot wenecki)': 'calculator:task_standard_fence_venetian',
+  'Przybijanie sztachet pionowych': 'calculator:task_standard_fence_vertical',
+  'Montaż płytek 120×30': 'calculator:task_tile_installation_120x30',
+  'Montaż płytek 30×30': 'calculator:task_tile_installation_30x30',
+  'Montaż płytek 60×30': 'calculator:task_tile_installation_60x30',
+  'Montaż płytek 60×60': 'calculator:task_tile_installation_60x60',
+  'Montaż płytek 80×40': 'calculator:task_tile_installation_80x40',
+  'Montaż płytek 80×80': 'calculator:task_tile_installation_80x80',
+  'Montaż płytek 90×30': 'calculator:task_tile_installation_90x30',
+  'Montaż płytek 90×60': 'calculator:task_tile_installation_90x60',
+  'Przycinanie Krawędzi (Sztuczna Trawa)': 'calculator:task_trimming_edges_artificial_grass',
+  'Montaż kabla podziemnego +wykopanie i zasypanie (maszyna)': 'calculator:task_underground_cable_machinery',
+  'Montaż kabla podziemnego +wykopanie i zasypanie (ręcznie)': 'calculator:task_underground_cable_manual',
+  'Montaż rury wodnej +wykopanie i zasypanie (maszyna)': 'calculator:task_water_pipe_machinery',
+  'Montaż rury wodnej +wykopanie i zasypanie (ręcznie)': 'calculator:task_water_pipe_manual',
 };
+
+/** Dynamic task patterns for excavator/carrier tasks - translation only in UI, data stays unchanged */
+const DYNAMIC_TASK_PATTERNS: Array<{
+  regex: RegExp;
+  key: string;
+  extractParams: (m: RegExpMatchArray) => Record<string, string>;
+}> = [
+  {
+    regex: /^Excavation soil with (.+?) \((\d+(?:\.\d+)?)t\)$/,
+    key: 'calculator:task_excavation_soil_with_excavator',
+    extractParams: (m) => ({ excavatorName: m[1], size: m[2] }),
+  },
+  {
+    regex: /^Loading tape1 with (.+?) \((\d+(?:\.\d+)?)t\)$/,
+    key: 'calculator:task_loading_tape1_with_excavator',
+    extractParams: (m) => ({ excavatorName: m[1], size: m[2] }),
+  },
+  {
+    regex: /^Transporting soil with (.+?) \((\d+(?:\.\d+)?)t\) - (\d+(?:\.\d+)?)m$/,
+    key: 'calculator:task_transporting_soil_with_carrier',
+    extractParams: (m) => ({ carrierName: m[1], size: m[2], distance: m[3] }),
+  },
+  {
+    regex: /^Transporting Type 1 with (.+?) \((\d+(?:\.\d+)?)t\) - (\d+(?:\.\d+)?)m$/,
+    key: 'calculator:task_transporting_tape1_with_carrier',
+    extractParams: (m) => ({ carrierName: m[1], size: m[2], distance: m[3] }),
+  },
+  {
+    regex: /^Transporting tape1 with (.+?) \((\d+(?:\.\d+)?)t\) - (\d+(?:\.\d+)?)m$/,
+    key: 'calculator:task_transporting_tape1_with_carrier',
+    extractParams: (m) => ({ carrierName: m[1], size: m[2], distance: m[3] }),
+  },
+  {
+    regex: /^Excavation soil with (.+?) and (.+?) (\d+(?:\.\d+)?)t$/,
+    key: 'calculator:task_excavation_soil_with_excavator_and_carrier',
+    extractParams: (m) => ({ excavatorName: m[1], carrierName: m[2], carrierSize: m[3] }),
+  },
+  {
+    regex: /^Preparation with (.+?) and (.+?) (\d+(?:\.\d+)?)t$/,
+    key: 'calculator:task_preparation_with_excavator_and_carrier',
+    extractParams: (m) => ({ excavatorName: m[1], carrierName: m[2], carrierSize: m[3] }),
+  },
+  {
+    regex: /^Load-in and compacting sand with (.+?) and (.+?) (\d+(?:\.\d+)?)t$/,
+    key: 'calculator:task_load_in_compacting_sand_with_excavator_and_carrier',
+    extractParams: (m) => ({ excavatorName: m[1], carrierName: m[2], carrierSize: m[3] }),
+  },
+  {
+    regex: /^Loading Sand with (.+)$/,
+    key: 'calculator:task_loading_sand_with_excavator',
+    extractParams: (m) => ({ excavatorName: m[1] }),
+  },
+];
 
 /**
  * Translates a task name using the translation map
  * Falls back to the original task name if no translation key is found
+ * Translation is UI-only; stored task names in DB/functions remain unchanged
  * @param taskName - The hardcoded task name
- * @param t - The i18n translation function
+ * @param t - The i18n translation function (supports t(key, options) for interpolation)
  * @returns The translated task name or the original if not found
  */
 export const translateTaskName = (
   taskName: string | undefined,
-  t: (key: string) => string
+  t: (key: string, options?: Record<string, string>) => string
 ): string => {
   if (!taskName) return '';
 
@@ -223,6 +380,17 @@ export const translateTaskName = (
       if (translatedBase !== baseKey) return `(${count}) ${translatedBase}`;
     }
     return taskName;
+  }
+
+  // Dynamic excavator/carrier patterns (UI translation only)
+  for (const { regex, key, extractParams } of DYNAMIC_TASK_PATTERNS) {
+    const match = taskName.match(regex);
+    if (match) {
+      const params = extractParams(match);
+      const translated = t(key, params);
+      if (translated !== key) return translated;
+      break;
+    }
   }
 
   // Look up the translation key in the map (exact match first, then case-insensitive)
@@ -294,7 +462,90 @@ export const translateTaskBreakdown = (
  * Maps common task description text to translation keys
  */
 export const taskDescriptionTranslationMap: Record<string, string> = {
+  // Person / crew
   'for 1 person': 'calculator:task_desc_for_1_person',
+  'dla 1 osoby': 'calculator:task_desc_for_1_person',
+  'for 1 persone': 'calculator:task_desc_for_1_person',
+  'for single person': 'calculator:task_desc_for_single_person',
+  'dla jednej osoby': 'calculator:task_desc_for_single_person',
+  'Time estimated for 1 person': 'calculator:task_desc_time_estimated_one_person',
+  'Czas szacunkowy dla 1 osoby': 'calculator:task_desc_time_estimated_one_person',
+  'Czas szacunkowy na 1 osobę': 'calculator:task_desc_time_estimated_one_person',
+  '1 person 1 week of job total': 'calculator:task_desc_1_person_1_week',
+  // Seed / generic
+  'Build standard wall section': 'calculator:task_desc_build_standard_wall',
+  'Install ceramic floor tiles': 'calculator:task_desc_install_ceramic_tiles',
+  'Paint walls with two coats': 'calculator:task_desc_paint_walls',
+  'Install basic plumbing fixtures': 'calculator:task_desc_install_plumbing',
+  'Install electrical wiring and outlets': 'calculator:task_desc_install_electrical',
+  // Stairs / adhesiving
+  'adhesiving single front tile': 'calculator:task_desc_adhesiving_front_tile',
+  'adhesiving single step or copping': 'calculator:task_desc_adhesiving_step_copping',
+  'normal break': 'calculator:task_desc_break',
+  // Sleeper wall
+  '1st row only': 'calculator:task_desc_1st_row_only',
+  '1st row not included here': 'calculator:task_desc_1st_row_not_included',
+  // Compacting
+  'Compacting monoblocks': 'calculator:task_desc_compacting_monoblocks',
+  'Compacting sand or type1': 'calculator:task_desc_compacting_sand_type1',
+  'Compacting sand or type1 with small roller': 'calculator:task_desc_compacting_sand_roller',
+  // Cutting
+  'cut with large grinder': 'calculator:task_desc_cut_large_grinder',
+  'cut with small grinder': 'calculator:task_desc_cut_small_grinder',
+  'cutting with measuring': 'calculator:task_desc_cutting_measuring',
+  'cuttn 1 monoblock': 'calculator:task_desc_cut_monoblock',
+  'for single person each slabs need to be cuted': 'calculator:task_desc_cut_porcelain',
+  'width cut or mitre on slab frame piece': 'calculator:task_desc_cut_porcelain_frame',
+  'for single person each sandstone that slab need to be cutted': 'calculator:task_desc_cut_sandstone',
+  'width cut on frame cut': 'calculator:task_desc_cut_sandstone_frame',
+  'cutting 1 board with measure': 'calculator:task_desc_cut_board',
+  'cutting boards for frame': 'calculator:task_desc_cut_frame_boards',
+  // Drainage / digging
+  'fully setting drainage with digging and back filling': 'calculator:task_desc_drainage_setting',
+  'diging a whole for average terrain': 'calculator:task_desc_digging_holes',
+  // Foundation excavator
+  '+7t': 'calculator:task_desc_excavator_7t',
+  '3-7 tones': 'calculator:task_desc_excavator_3_7t',
+  'up to 3 tones': 'calculator:task_desc_excavator_3t',
+  // Leveling
+  'Final leveling of sand layer. Approximately 3 minutes per square meter': 'calculator:task_desc_final_leveling_sand',
+  'Final leveling of Type 1': 'calculator:task_desc_final_leveling_type1',
+  // Deck
+  'no cutting': 'calculator:task_desc_no_cutting',
+  'fixing frame based on each joist/bearer': 'calculator:task_desc_fixing_frame',
+  // Grouting
+  'grouting and cleaning': 'calculator:task_desc_grouting_cleaning',
+  // Grass / jointing
+  'jointing 2 pieces per linear meter': 'calculator:task_desc_jointing_grass',
+  'for single person just fixing grass': 'calculator:task_desc_laying_artificial_grass',
+  'Trimming edges of artificial grass': 'calculator:task_desc_trimming_grass',
+  // Laying
+  'laying any 10x10 sets': 'calculator:task_desc_laying_10x10',
+  'laying Flat edges 15 x 5 x 100': 'calculator:task_desc_laying_flat_edges',
+  '200 x 100 x 125': 'calculator:task_desc_kerbs_kl',
+  'for single person, lying monoblocks': 'calculator:task_desc_laying_monoblocks',
+  'laying rolls 2m x 0.5m': 'calculator:task_desc_laying_natural_turf',
+  '200 x 100 x 80': 'calculator:task_desc_kerbs_rumbled',
+  'laying piece above 0.3m2': 'calculator:task_desc_laying_frame_above',
+  'laying 1 piece belowe 0.3m2': 'calculator:task_desc_laying_frame_below',
+  // Mortar / other
+  'Mixing mortar using concrete mixers (125kg)': 'calculator:task_desc_mixing_mortar',
+  'Describe task and amount of hours needed': 'calculator:task_desc_other',
+  'Preparing and leveling for wall': 'calculator:task_desc_preparing_wall',
+  'screeding on prepared area': 'calculator:task_desc_screeding',
+  'setting on concrete or driving in posts': 'calculator:task_desc_setting_posts',
+  // Fence
+  'puting slats in composite fence': 'calculator:task_desc_composite_fence',
+  'just slatting': 'calculator:task_desc_just_slatting',
+  // Tile installation
+  'fixing slabs 120 x 30 to wall on adhesive': 'calculator:task_desc_tile_120x30',
+  'fixing slabs 30 x 30 to wall on adhesive': 'calculator:task_desc_tile_30x30',
+  'fixing slabs 60 x 30 to wall on adhesive': 'calculator:task_desc_tile_60x30',
+  'fixing slabs 60 x 60 to wall on adhesive': 'calculator:task_desc_tile_60x60',
+  'fixing slabs 80 x 40 to wall on adhesive': 'calculator:task_desc_tile_80x40',
+  'fixing slabs 80 x 80 to wall on adhesive': 'calculator:task_desc_tile_80x80',
+  'fixing slabs 90 x 30 to wall on adhesive': 'calculator:task_desc_tile_90x30',
+  'fixing slabs 90 x 60 to wall on adhesive': 'calculator:task_desc_tile_90x60',
 };
 
 /**
@@ -372,6 +623,9 @@ export const materialNameTranslationMap: Record<string, string> = {
   'Sharp sand': 'material:sharp_sand',
   'Soil excavation': 'material:soil_excavation',
   'tape1': 'material:tape1',
+  'Type 1 Aggregate': 'calculator:aggregate_material_type1',
+  'Grid Sand': 'calculator:aggregate_material_grid_sand',
+  'Crushed Stone': 'calculator:aggregate_material_crushed_stone',
   'underground cable': 'material:underground_cable',
   'water pipe': 'material:water_pipe',
 };
@@ -499,6 +753,21 @@ export const unitTranslationMap: Record<string, string> = {
   rolls: 'units:rolls',
   batons: 'units:batons',
   boards: 'units:boards',
+  'square meters': 'units:square_meters',
+  'square metres': 'units:square_meters',
+  meters: 'units:meters',
+  'points': 'units:points',
+  units: 'units:units',
+  joist: 'units:joist',
+  joists: 'units:joists',
+  board: 'units:board',
+  'running meter': 'units:running_meter',
+  'running meters': 'units:running_meters',
+  percent: 'units:percent',
+  batch: 'units:batch',
+  brick: 'units:brick',
+  bricks: 'units:bricks',
+  godzin: 'units:hours',
 };
 
 /**

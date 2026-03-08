@@ -90,40 +90,42 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
   const [selectedCompactor, setSelectedCompactor] = useState<CompactorOption | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
-  // Fetch equipment from the database
+  // Fetch equipment from the database (carriers filtered by event_tasks - same logic as canvas/project creation)
   useEffect(() => {
     const fetchEquipment = async () => {
       try {
-        const companyId = useAuthStore.getState().getCompanyId();
         if (!companyId) return;
-        
-        // Fetch excavators
-        const { data: excavatorData, error: excavatorError } = await supabase
-          .from('setup_digging')
-          .select('*')
-          .eq('type', 'excavator')
-          .eq('company_id', companyId);
-        
-        if (excavatorError) throw excavatorError;
-        
-        // Fetch carriers (barrows/dumpers)
-        const { data: carrierData, error: carrierError } = await supabase
-          .from('setup_digging')
-          .select('*')
-          .eq('type', 'barrows_dumpers')
-          .eq('company_id', companyId);
-        
-        if (carrierError) throw carrierError;
-        
-        setExcavators(excavatorData || []);
-        setCarriers(carrierData || []);
+
+        const [excRes, carRes, tasksRes] = await Promise.all([
+          supabase.from('setup_digging').select('*').eq('type', 'excavator').eq('company_id', companyId),
+          supabase.from('setup_digging').select('*').eq('type', 'barrows_dumpers').eq('company_id', companyId),
+          supabase.from('event_tasks').select('name').eq('company_id', companyId),
+        ]);
+
+        if (excRes.error) throw excRes.error;
+        if (carRes.error) throw carRes.error;
+        if (tasksRes.error) throw tasksRes.error;
+
+        const allCarriers = carRes.data || [];
+        const taskNames = (tasksRes.data || []).map((t) => t.name);
+        const validSizes = new Set<number>();
+        const re = /(\d+(?:\.\d+)?)t\b/g;
+        for (const name of taskNames) {
+          let m: RegExpExecArray | null;
+          re.lastIndex = 0;
+          while ((m = re.exec(name)) !== null) validSizes.add(parseFloat(m[1]));
+        }
+        const filtered =
+          validSizes.size === 0 ? allCarriers : allCarriers.filter((c) => c['size (in tones)'] != null && validSizes.has(c['size (in tones)']));
+
+        setExcavators((excRes.data || []) as DiggingEquipment[]);
+        setCarriers(filtered as DiggingEquipment[]);
       } catch (error) {
         console.error('Error fetching equipment:', error);
       }
     };
-    
     fetchEquipment();
-  }, []);
+  }, [companyId]);
 
   // Calculate Type 1 aggregate weight from dimensions
   const calculateType1Weight = () => {
@@ -195,8 +197,9 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
       return;
     }
 
-    const depthCm = parseFloat(depth) || 0;
-    if (depthCm <= 0) {
+    // Depth required only in area mode; in direct (tons) mode use default 10cm for compacting
+    const depthCm = calculationMethod === 'direct' ? 10 : (parseFloat(depth) || 0);
+    if (calculationMethod === 'area' && depthCm <= 0) {
       alert(t('calculator:valid_depth_required'));
       return;
     }
@@ -221,8 +224,10 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
     // Total transport time
     const transportTime = trips * transportTimePerTrip;
 
-    // Calculate compacting time
-    const areaM2 = (parseFloat(length) || 0) * (parseFloat(width) || 0);
+    // Calculate compacting time: in direct mode estimate area from tons (volume/2.3 = m³, area = volume/(depth/100))
+    const areaM2 = calculationMethod === 'direct'
+      ? (totalTons / 2.3) / (depthCm / 100)
+      : (parseFloat(length) || 0) * (parseFloat(width) || 0);
     const compactingCalc = calculateCompactingTime(selectedCompactor, depthCm, 'type1');
     const compactingTimeTotal = areaM2 * compactingCalc.timePerM2 * compactingCalc.totalPasses;
     
@@ -331,13 +336,18 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
         </p>
         
         {calculationMethod === 'direct' ? (
-          <TextInput
-            label={t('calculator:input_aggregate_weight_tons')}
-            value={tons}
-            onChange={setTons}
-            placeholder={t('calculator:placeholder_enter_weight_tons')}
-            unit="tons"
-          />
+          <>
+            <TextInput
+              label={t('calculator:input_aggregate_weight_tons')}
+              value={tons}
+              onChange={setTons}
+              placeholder={t('calculator:placeholder_enter_weight_tons')}
+              unit="tons"
+            />
+            <p style={{ fontSize: fontSizes.sm, color: colors.textDim, marginTop: spacing.sm, fontFamily: fonts.body }}>
+              {t('calculator:message_depth_default_compacting')}
+            </p>
+          </>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: `0 ${spacing.base}` }}>
             <TextInput label={t('calculator:input_length_m')} value={length} onChange={setLength} placeholder={t('calculator:placeholder_enter_length')} unit="m" />
@@ -402,7 +412,7 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
         />
         
         <Button onClick={calculateTime} variant="primary" fullWidth>
-          Calculate Time
+          {t('calculator:calculate_time_button')}
         </Button>
         
         {result && (

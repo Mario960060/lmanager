@@ -149,7 +149,7 @@ export default function EquipmentPanel({
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, color: C.textDim, marginBottom: 6 }}>Carrier (slabs, pavers, cobblestone)</label>
+              <label style={{ display: "block", fontSize: 12, color: C.textDim, marginBottom: 6 }}>{t("project:carrier_slabs_pavers")}</label>
               <select
                 value={(projectSettings.selectedMaterialCarrier as any)?.id ?? ""}
                 onChange={e => {

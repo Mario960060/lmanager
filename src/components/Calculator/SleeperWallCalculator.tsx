@@ -115,7 +115,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
   recalculateTrigger = 0
 }) => {
   // Input states
-  const { t } = useTranslation(['calculator', 'utilities', 'common']);
+  const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
   const initLength = savedInputs?.length != null ? String(savedInputs.length) : (initialLength != null ? initialLength.toFixed(3) : '');
   const [length, setLength] = useState(initLength);
@@ -609,7 +609,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
     <div className="space-y-6">
       <h2 className="text-lg font-semibold">{t('calculator:sleeper_wall_calculator_title_alt')}</h2>
       <p className="text-sm text-gray-600">
-        Calculate materials, time, and costs for sleeper wall installation projects.
+        {t('calculator:sleeper_wall_calculator_description')}
       </p>
 
       <div className="space-y-4">
@@ -751,8 +751,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
             {result.roundedUpHeight !== result.originalHeight && (
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-md text-blue-700">
                 <p>
-                  Note: The wall height has been rounded up to {result.roundedUpHeight / 1000}m to avoid cutting sleepers along their length.
-                  This is {((result.roundedUpHeight - result.originalHeight) / 1000).toFixed(2)}m higher than the input height.
+                  {t('calculator:sleeper_rounded_up_note', { height: (result.roundedUpHeight / 1000).toFixed(2), diff: ((result.roundedUpHeight - result.originalHeight) / 1000).toFixed(2) })}
                 </p>
               </div>
             )}
@@ -761,10 +760,10 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
               <div className="p-4 bg-gray-50 border border-gray-200 rounded-md">
                 <p className="font-medium mb-2 text-white">{t('calculator:post_calculation_details')}:</p>
                 <ul className="text-sm space-y-1 text-white">
-                  <li>• Required post height: {result.postHeightMeters.toFixed(2)}m (wall height + 0.4m foundation)</li>
-                  <li>• Posts per 2.4m length: {result.piecesPerPost}</li>
-                  <li>• Total posts needed: {result.totalPosts} pieces</li>
-                  <li>• 2.4m posts to buy: {result.materialPostsNeeded}</li>
+                  <li>• {t('calculator:sleeper_required_post_height', { height: result.postHeightMeters.toFixed(2) })}</li>
+                  <li>• {t('calculator:sleeper_posts_per_length', { count: result.piecesPerPost })}</li>
+                  <li>• {t('calculator:sleeper_total_posts_needed', { count: result.totalPosts })}</li>
+                  <li>• {t('calculator:sleeper_posts_to_buy', { count: result.materialPostsNeeded })}</li>
                 </ul>
               </div>
             )}
@@ -779,7 +778,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
                     {result.taskBreakdown.map((task, index) => (
                       <li key={index} className="flex justify-between text-sm">
                         <span className="font-medium">{translateTaskName(task.task, t)}</span>
-                        <span className="text-blue-600">{task.hours.toFixed(2)} hours</span>
+                        <span className="text-blue-600">{task.hours.toFixed(2)} {t('calculator:hours_label')}</span>
                       </li>
                     ))}
                   </ul>
@@ -794,19 +793,19 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
                   <thead className="bg-gray-50">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Material
+                        {t('calculator:material_label')}
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Quantity
+                        {t('calculator:quantity_label')}
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Unit
+                        {t('calculator:unit_label')}
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Price per Unit
+                        {t('calculator:price_per_unit_label')}
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total Price
+                        {t('calculator:total_price_label')}
                       </th>
                     </tr>
                   </thead>
@@ -837,11 +836,10 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
               {/* Add total price row */}
               <div className="mt-4 text-right pr-6">
                 <p className="text-sm font-medium">
-                  Total Cost: {
-                    result.materials.some(m => m.total_price !== null) 
-                      ? `£${result.materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}`
-                      : 'N/A'
-                  }
+                  {t('calculator:total_cost_colon')}{' '}
+                  {result.materials.some(m => m.total_price !== null) 
+                    ? `£${result.materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}`
+                    : t('calculator:not_available')}
                 </p>
               </div>
             </div>

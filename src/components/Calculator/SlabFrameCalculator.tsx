@@ -320,7 +320,7 @@
                   disabled={!sideLength || !pieceLengthCm}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300"
                 >
-                  Confirm
+                  {t('calculator:confirm_button')}
                 </button>
               </div>
             </div>
@@ -333,13 +333,13 @@
                   {sides.map((side, index) => (
                     <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                       <span className="text-sm">
-                        Side {index + 1}: {side.length}m → {side.slabs} frame slabs
+                        {t('calculator:side_n_format', { n: index + 1 })}: {side.length}m → {side.slabs} {t('calculator:frame_slabs_label')}
                       </span>
                       <button
                         onClick={() => removeSide(index)}
                         className="text-red-600 hover:text-red-800 text-sm"
                       >
-                        Remove
+                        {t('calculator:remove_button')}
                       </button>
                     </div>
                   ))}
@@ -396,7 +396,7 @@
                   }}
                   className="w-full p-2 border rounded-md"
                 >
-                  <option value="">-- Select Carrier --</option>
+                  <option value="">-- {t('calculator:select_carrier_label')} --</option>
                   <option value="default">{t('calculator:default_wheelbarrow')}</option>
                   {carrierSpeeds.map(carrier => (
                     <option key={carrier.size} value={carrier.size.toString()}>
@@ -433,7 +433,7 @@
                   <p><strong>{t('calculator:total_labor_hours_label')}:</strong> {results.totalHours.toFixed(2)} {t('calculator:hours_label')}</p>
                   <p><strong>{t('calculator:total_frame_area_label')}:</strong> {results.totalFrameAreaM2.toFixed(2)} m²</p>
                   {calculateTransport && results && results.transportTime !== undefined && results.transportTime > 0 && (
-                    <p><strong>{t('calculator:transport_time_label')}:</strong> {results.transportTime?.toFixed(2) || 0} {t('calculator:hours_label')} (normalized to 30m: {results.normalizedTransportTime?.toFixed(2) || 0} {t('calculator:hours_label')})</p>
+                    <p><strong>{t('calculator:transport_time_label')}:</strong> {results.transportTime?.toFixed(2) || 0} {t('calculator:hours_label')} ({t('calculator:normalised_to_30m')}: {results.normalizedTransportTime?.toFixed(2) || 0} {t('calculator:hours_label')})</p>
                   )}
                   
                   <div className="mt-3">
@@ -441,7 +441,7 @@
                     <ul className="list-disc list-inside ml-2">
                       {sides.map((side, index) => (
                         <li key={index}>
-                          Side {index + 1}: {side.length}m = {side.slabs} slabs
+                          {t('calculator:side_length_slabs_format', { side: t('calculator:side_n_format', { n: index + 1 }), length: side.length, count: side.slabs })}
                         </li>
                       ))}
                     </ul>
@@ -453,7 +453,7 @@
                     onClick={onClose}
                     className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
                   >
-                    Accept
+                    {t('calculator:accept_button')}
                   </button>
                 </div>
               </div>
