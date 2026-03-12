@@ -44,8 +44,6 @@ const AdminTaskPerformanceModal: React.FC<AdminTaskPerformanceModalProps> = ({ o
   const { data: userGroups = [], isLoading, isError } = useQuery({
     queryKey: ['admin_task_performance_records', companyId],
     queryFn: async () => {
-      console.log('Fetching all task performance records');
-      
       // Fetch all task performance records with task details from event_tasks
       const { data: records, error } = await supabase
         .from('task_progress_entries')
@@ -63,8 +61,6 @@ const AdminTaskPerformanceModal: React.FC<AdminTaskPerformanceModalProps> = ({ o
         console.error('Error fetching task performance records:', error);
         throw error;
       }
-      
-      console.log(`Found ${records?.length || 0} task performance records`);
       
       // Fetch all profiles to get user names
       const { data: profiles, error: profilesError } = await supabase
@@ -121,8 +117,6 @@ const AdminTaskPerformanceModal: React.FC<AdminTaskPerformanceModalProps> = ({ o
   // Delete record mutation
   const deleteRecord = useMutation({
     mutationFn: async (recordId: string) => {
-      console.log(`Deleting task performance record: ${recordId}`);
-      
       const { error } = await supabase
         .from('task_progress_entries')
         .delete()

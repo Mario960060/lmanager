@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { handle403Error } from './lib/errorHandler';
@@ -23,7 +23,7 @@ import CompanyPanel from './pages/CompanyPanel';
 import UserProfile from './pages/UserProfile';
 import { useAuthStore } from './lib/store';
 import ProjectCreating from './projectmanagement/ProjectCreating';
-import MasterProject from './projectmanagement/canvacreator/MasterProject';
+const MasterProject = lazy(() => import('./projectmanagement/canvacreator/MasterProject'));
 import UserHoursPage from './components/UserHoursModal';
 import CompanySetupWizard from './pages/CompanySetupWizard';
 
@@ -66,8 +66,8 @@ function App() {
               <Route path="/events/:id" element={<EventDetails />} />
               <Route path="/project-management" element={<ProjectManagement />} />
               <Route path="/project-management/create" element={<ProjectCreating />} />
-              <Route path="/project-management/create-canvas" element={<MasterProject />} />
-              <Route path="/project-management/create-canvas/:planId" element={<MasterProject />} />
+              <Route path="/project-management/create-canvas" element={<Suspense fallback={<div style={{ padding: 24, textAlign: 'center' }}>Ładowanie...</div>}><MasterProject /></Suspense>} />
+              <Route path="/project-management/create-canvas/:planId" element={<Suspense fallback={<div style={{ padding: 24, textAlign: 'center' }}>Ładowanie...</div>}><MasterProject /></Suspense>} />
               <Route path="/project-performance" element={<ProjectPerformance />} />
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/company-panel" element={<CompanyPanel />} />

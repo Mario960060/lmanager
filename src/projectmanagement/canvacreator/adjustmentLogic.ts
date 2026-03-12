@@ -6,7 +6,8 @@
 import polygonClipping from "polygon-clipping";
 import type { Polygon, MultiPolygon } from "polygon-clipping";
 import { Point, Shape, centroid, distance, toPixels, shoelaceArea } from "./geometry";
-import { getEffectivePolygon } from "./arcMath";
+import type { ArcPoint } from "./geometry";
+import { getEffectivePolygon, fitQuadraticBezierControlToPoints } from "./arcMath";
 import { getPathPolygon, getPolygonLinearOutline } from "./linearElements";
 
 /** Surface elements: polygon or path shapes that cover area. */
@@ -32,9 +33,9 @@ export function getShapePolygonForAdjustment(shape: Shape): Point[] {
   if (shape.elementType === "pathSlabs" || shape.elementType === "pathConcreteSlabs" || shape.elementType === "pathMonoblock") {
     return getPathPolygon(shape);
   }
-  return shape.closed && shape.edgeArcs?.some(a => a && a.length > 0)
-    ? getEffectivePolygon(shape)
-    : shape.points;
+  const hasArcs = shape.closed && shape.edgeArcs?.some(a => a && a.length > 0);
+  const pts = hasArcs ? getEffectivePolygon(shape) : shape.points;
+  return pts;
 }
 
 /** Convert Point[] to GeoJSON Polygon format for polygon-clipping. */
@@ -58,9 +59,6 @@ function fromGeoJSONMulti(multi: MultiPolygon): Point[][] {
 
 /** Areas in Layer 1 (garden) without coverage from Layer 2. */
 export function computeEmptyAreas(shapes: Shape[]): Point[][] {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeEmptyAreas:entry',message:'computeEmptyAreas start',data:{shapesLen:shapes.length},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-  // #endregion
   const layer1 = shapes.filter(s => s.layer === 1 && s.closed && s.points.length >= 3);
   const layer2 = shapes.filter(s => s.layer === 2);
   if (layer1.length === 0) return [];
@@ -98,22 +96,13 @@ export function computeEmptyAreas(shapes: Shape[]): Point[][] {
 
   let layer2Union: MultiPolygon;
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeEmptyAreas:preLayer2Union',message:'before layer2 union',data:{layer2PolysLen:layer2Polys.length},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-    // #endregion
     layer2Union = layer2Polys.length === 1 ? [layer2Polys[0]] : polygonClipping.union(layer2Polys[0], ...layer2Polys.slice(1));
   } catch {
     return fromGeoJSONMulti(gardenUnion);
   }
 
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeEmptyAreas:preDiff',message:'before difference',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-    // #endregion
     const empty = polygonClipping.difference(gardenUnion, layer2Union);
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeEmptyAreas:exit',message:'computeEmptyAreas done',data:{emptyLen:empty?.length},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-    // #endregion
     return fromGeoJSONMulti(empty);
   } catch {
     return [];
@@ -127,9 +116,6 @@ export interface OverflowResult {
 
 /** Parts of Layer 2 elements (except grass) that extend outside Layer 1. */
 export function computeOverflowAreas(shapes: Shape[]): OverflowResult[] {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeOverflowAreas:entry',message:'computeOverflowAreas start',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-  // #endregion
   const layer1 = shapes.filter(s => s.layer === 1 && s.closed && s.points.length >= 3);
   const layer2Indices = shapes
     .map((s, i) => ({ s, i }))
@@ -168,9 +154,6 @@ export function computeOverflowAreas(shapes: Shape[]): OverflowResult[] {
       // ignore
     }
   }
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeOverflowAreas:exit',message:'computeOverflowAreas done',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-  // #endregion
   return results;
 }
 
@@ -182,9 +165,6 @@ export interface OverlapResult {
 
 /** Overlaps: surface vs surface, and surface vs linear (wall/kerb/foundation). */
 export function computeOverlaps(shapes: Shape[]): OverlapResult[] {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeOverlaps:entry',message:'computeOverlaps start',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-  // #endregion
   const surfaceShapes: { shape: Shape; idx: number }[] = [];
   const linearShapes: { shape: Shape; idx: number }[] = [];
   for (let i = 0; i < shapes.length; i++) {
@@ -240,9 +220,6 @@ export function computeOverlaps(shapes: Shape[]): OverlapResult[] {
     }
   }
 
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:computeOverlaps:exit',message:'computeOverlaps done',data:{},timestamp:Date.now(),hypothesisId:'H6'})}).catch(()=>{});
-  // #endregion
   return results;
 }
 
@@ -282,8 +259,9 @@ export function clipShapeToGarden(shapes: Shape[], shapeIdx: number): Point[] | 
   }
 }
 
-/** Remove overlap area from shape. Returns new points (may be multiple polygons) or null. */
-export function removeOverlapFromShape(shapes: Shape[], shapeIdx: number, overlapPolygon: Point[]): Point[][] | null {
+/** Remove overlap area from shape. Returns new points (single polygon) or null.
+ *  When difference yields multiple polygons, picks the one containing shape centroid or largest area. */
+export function removeOverlapFromShape(shapes: Shape[], shapeIdx: number, overlapPolygon: Point[]): Point[] | null {
   const shape = shapes[shapeIdx];
   if (!shape) return null;
   const shapePts = getShapePolygonForAdjustment(shape);
@@ -296,7 +274,22 @@ export function removeOverlapFromShape(shapes: Shape[], shapeIdx: number, overla
   try {
     const result = polygonClipping.difference([poly], overlapPoly);
     const polys = fromGeoJSONMulti(result);
-    return polys.length > 0 ? polys : null;
+    if (polys.length === 0) return null;
+    if (polys.length === 1) return polys[0];
+    const c = centroid(shapePts);
+    for (const p of polys) {
+      if (pointInPolygon(c, p)) return p;
+    }
+    let best = polys[0];
+    let bestArea = 0;
+    for (const p of polys) {
+      const a = Math.abs(shoelaceArea(p));
+      if (a > bestArea) {
+        bestArea = a;
+        best = p;
+      }
+    }
+    return best;
   } catch {
     return null;
   }
@@ -403,6 +396,123 @@ function pointInPolygon(p: Point, pts: Point[]): boolean {
   return inside;
 }
 
+/** Signed area of polygon: positive = CCW, negative = CW. */
+function signedAreaPolygon(pts: Point[]): number {
+  if (pts.length < 3) return 0;
+  let area = 0;
+  const n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+  }
+  return area / 2;
+}
+
+/** Fit union result back to original shape structure — preserves arcs, avoids adding many points.
+ * When shape has edgeArcs, returns a new Shape with same number of points but adjusted arc offsets.
+ * Returns null if fitting fails (fall back to raw apply). */
+export function fitUnionResultToShape(shape: Shape, unionPoints: Point[]): Shape | null {
+  const pts = shape.points;
+  const edgeArcs = shape.edgeArcs;
+  if (!shape.closed || pts.length < 3) return null;
+  if (!edgeArcs || edgeArcs.every(a => !a || a.length === 0)) return null;
+
+  const m = unionPoints.length;
+  if (m < pts.length) return null;
+
+  const origPoly = getEffectivePolygon(shape);
+  const origSignedArea = signedAreaPolygon(origPoly);
+  const resultSignedArea = signedAreaPolygon(unionPoints);
+  const sameOrientation = (origSignedArea > 0 && resultSignedArea > 0) || (origSignedArea < 0 && resultSignedArea < 0);
+
+  const n = pts.length;
+  const cornerIndices: number[] = [];
+  for (let i = 0; i < n; i++) {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let j = 0; j < m; j++) {
+      const d = distance(pts[i], unionPoints[j]);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = j;
+      }
+    }
+    cornerIndices.push(bestIdx);
+  }
+  const unique = new Set(cornerIndices);
+  if (unique.size !== n) return null;
+
+  const newPts = cornerIndices.map(idx => ({ ...unionPoints[idx] }));
+  const newEdgeArcs: (ArcPoint[] | null)[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const idxI = cornerIndices[i];
+    const idxJ = cornerIndices[j];
+    const A = newPts[i];
+    const B = newPts[j];
+
+    if (!edgeArcs[i] || edgeArcs[i]!.length === 0) {
+      newEdgeArcs[i] = null;
+      continue;
+    }
+
+    const segmentPts: Point[] = [];
+    if (idxI !== idxJ) {
+      const fwdLen = idxI < idxJ ? idxJ - idxI - 1 : (m - idxI - 1) + idxJ;
+      const bwdLen = idxJ < idxI ? idxI - idxJ - 1 : (m - idxJ - 1) + idxI;
+      const baseStep = fwdLen >= bwdLen ? 1 : -1;
+      const step = sameOrientation ? baseStep : -baseStep;
+      let k = idxI;
+      do {
+        k = step > 0 ? (k + 1) % m : (k - 1 + m) % m;
+        if (k !== idxJ) segmentPts.push(unionPoints[k]);
+      } while (k !== idxJ);
+    }
+    if (segmentPts.length < 1) {
+      newEdgeArcs[i] = [...edgeArcs[i]!];
+      continue;
+    }
+
+    const control = fitQuadraticBezierControlToPoints(A, B, [A, ...segmentPts, B]);
+    if (!control) {
+      newEdgeArcs[i] = [...edgeArcs[i]!];
+      continue;
+    }
+
+    const dx = B.x - A.x;
+    const dy = B.y - A.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 1e-9) {
+      newEdgeArcs[i] = [...edgeArcs[i]!];
+      continue;
+    }
+    const nx = -dy / len;
+    const ny = dx / len;
+    const mid = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
+    const offset = (control.x - mid.x) * nx + (control.y - mid.y) * ny;
+    const origArc = edgeArcs[i]![0];
+    const origOffset = origArc?.offset ?? 0;
+    const offsetDiff = Math.abs(offset - origOffset);
+    const maxReasonableOffset = len * 0.7;
+    if (Math.abs(offset) > maxReasonableOffset) {
+      newEdgeArcs[i] = [...edgeArcs[i]!];
+    } else if ((offsetDiff < len * 0.05 || offsetDiff < 2) && segmentPts.length > 15) {
+      newEdgeArcs[i] = [...edgeArcs[i]!];
+    } else {
+      const roundedOffset = Math.round(offset * 10000) / 10000;
+      const newArc: ArcPoint = { id: crypto.randomUUID(), t: 0.5, offset: roundedOffset };
+      newEdgeArcs[i] = [newArc];
+    }
+  }
+
+  const s: Shape = { ...shape, points: newPts, edgeArcs: newEdgeArcs };
+  if (shape.elementType === "pathSlabs" || shape.elementType === "pathConcreteSlabs" || shape.elementType === "pathMonoblock") {
+    s.calculatorInputs = { ...s.calculatorInputs, pathIsOutline: true };
+  }
+  return s;
+}
+
 /** Extend shape to cover empty area (union). Returns new points or null. */
 export function extendShapeToCoverEmptyArea(shapes: Shape[], shapeIdx: number, emptyAreaPolygon: Point[]): Point[] | null {
   const shape = shapes[shapeIdx];
@@ -418,146 +528,18 @@ export function extendShapeToCoverEmptyArea(shapes: Shape[], shapeIdx: number, e
     const union = polygonClipping.union(poly, emptyPoly);
     const polys = fromGeoJSONMulti(union);
     if (polys.length === 0) return null;
-    return polys[0];
+    const result = polys[0];
+    return result;
   } catch {
     return null;
   }
 }
 
-/** Get garden polygon (union of Layer 1 shapes). Returns first polygon or null. */
-function getGardenPolygon(shapes: Shape[]): Polygon | null {
-  const layer1 = shapes.filter(s => s.layer === 1 && s.closed && s.points.length >= 3);
-  if (layer1.length === 0) return null;
-  const polys: Polygon[] = [];
-  for (const s of layer1) {
-    const pts = getShapePolygonForAdjustment(s);
-    const p = toGeoJSONPolygon(pts);
-    if (p) polys.push(p);
-  }
-  if (polys.length === 0) return null;
-  try {
-    const unionResult = polys.length === 1 ? [polys[0]] : polygonClipping.union(polys[0], ...polys.slice(1));
-    const firstPoly = unionResult[0];
-    return firstPoly && firstPoly[0] ? firstPoly : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Axis-aligned rectangle as polygon (ring format for GeoJSON). */
-function rectToPolygon(x1: number, y1: number, x2: number, y2: number): Polygon {
-  const minX = Math.min(x1, x2);
-  const maxX = Math.max(x1, x2);
-  const minY = Math.min(y1, y2);
-  const maxY = Math.max(y1, y2);
-  return [[[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY], [minX, minY]]];
-}
-
-/** Extend shape to garden edge in one direction only (one-sided scale).
- *  Restricts empty area to the element's extent along the boundary.
- *  Falls back to extendShapeToCoverEmptyArea when no Layer 1 (garden) or strip misses the gap (element-to-element). */
+/** Extend shape to cover empty area (same as fill).
+ *  Always uses union — strip-based logic produced asymmetric results (kostka vs slaby)
+ *  and wrong geometry for element-to-element gaps. */
 export function extendShapeToGardenEdge(shapes: Shape[], shapeIdx: number, emptyAreaPolygon: Point[]): Point[] | null {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:entry',message:'extendShapeToGardenEdge called',data:{shapeIdx,emptyAreaLen:emptyAreaPolygon.length,shapesCount:shapes.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion
-  const shape = shapes[shapeIdx];
-  if (!shape) return null;
-  const shapePts = getShapePolygonForAdjustment(shape);
-  if (shapePts.length < 3) return null;
-  const emptyPoly = toGeoJSONPolygon(emptyAreaPolygon);
-  if (!emptyPoly) return null;
-  const gardenPoly = getGardenPolygon(shapes);
-  if (!gardenPoly) {
-    // No Layer 1 (garden) – fallback to fill for element-to-element gaps
-    return extendShapeToCoverEmptyArea(shapes, shapeIdx, emptyAreaPolygon);
-  }
-
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:preIntersection',message:'before intersection',data:{shapePtsLen:shapePts.length},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-  // #endregion
-
-  const elemMinX = Math.min(...shapePts.map(p => p.x));
-  const elemMaxX = Math.max(...shapePts.map(p => p.x));
-  const elemMinY = Math.min(...shapePts.map(p => p.y));
-  const elemMaxY = Math.max(...shapePts.map(p => p.y));
-
-  const gardenPts = gardenPoly[0].map(([x, y]) => ({ x, y }));
-  const gardenMinX = Math.min(...gardenPts.map(p => p.x));
-  const gardenMaxX = Math.max(...gardenPts.map(p => p.x));
-  const gardenMinY = Math.min(...gardenPts.map(p => p.y));
-  const gardenMaxY = Math.max(...gardenPts.map(p => p.y));
-
-  const emptyCentroid = centroid(emptyAreaPolygon);
-  const shapeCentroid = centroid(shapePts);
-
-  const dx = emptyCentroid.x - shapeCentroid.x;
-  const dy = emptyCentroid.y - shapeCentroid.y;
-  const eps = 1e-6;
-
-  let stripPoly: Polygon;
-  if (Math.abs(dx) >= Math.abs(dy)) {
-    if (dx < 0) {
-      stripPoly = rectToPolygon(gardenMinX - eps, elemMinY - eps, elemMinX + eps, elemMaxY + eps);
-    } else {
-      stripPoly = rectToPolygon(elemMaxX - eps, elemMinY - eps, gardenMaxX + eps, elemMaxY + eps);
-    }
-  } else {
-    if (dy < 0) {
-      stripPoly = rectToPolygon(elemMinX - eps, gardenMinY - eps, elemMaxX + eps, elemMinY + eps);
-    } else {
-      stripPoly = rectToPolygon(elemMinX - eps, elemMaxY - eps, elemMaxX + eps, gardenMaxY + eps);
-    }
-  }
-
-  try {
-    const restricted = polygonClipping.intersection(emptyPoly, stripPoly);
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:postIntersection',message:'after intersection',data:{restrictedLen:restricted?.length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
-    const restrictedPolys = fromGeoJSONMulti(restricted);
-    if (restrictedPolys.length === 0) {
-      // Strip missed the gap (e.g. element-to-element, no garden edge in that direction) – fallback to fill
-      return extendShapeToCoverEmptyArea(shapes, shapeIdx, emptyAreaPolygon);
-    }
-
-    const shapeGeo = toGeoJSONPolygon(shapePts);
-    if (!shapeGeo) return null;
-
-    let resultPoly: Point[] | null = null;
-    let bestArea = 0;
-    let iterCount = 0;
-    for (const rp of restrictedPolys) {
-      if (rp.length < 3) continue;
-      const rpGeo = toGeoJSONPolygon(rp);
-      if (!rpGeo) continue;
-      iterCount++;
-      const union = polygonClipping.union(shapeGeo, rpGeo);
-      // #region agent log
-      if (iterCount <= 2) fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:postUnion',message:'after union',data:{iterCount,polysLen:union?.length},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-      // #endregion
-      const polys = fromGeoJSONMulti(union);
-      for (const p of polys) {
-        if (p.length < 3) continue;
-        const area = shoelaceArea(p);
-        if (area < 1) continue;
-        if (pointInPolygon(shapeCentroid, p) || area > bestArea) {
-          resultPoly = p;
-          bestArea = area;
-          if (pointInPolygon(shapeCentroid, p)) break;
-        }
-      }
-      if (resultPoly && pointInPolygon(shapeCentroid, resultPoly)) break;
-    }
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:exit',message:'extendShapeToGardenEdge returning',data:{hasResult:!!resultPoly,iterCount},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-    // #endregion
-    return resultPoly;
-  } catch (err) {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'adjustmentLogic.ts:extendShapeToGardenEdge:catch',message:'extendShapeToGardenEdge threw',data:{err:String(err)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
-    return null;
-  }
+  return extendShapeToCoverEmptyArea(shapes, shapeIdx, emptyAreaPolygon);
 }
 
 // ── Fence 10×10 cm cutouts at post positions ─────────────────

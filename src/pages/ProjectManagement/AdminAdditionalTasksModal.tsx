@@ -56,8 +56,6 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
   const { data: userGroups = [], isLoading, isError } = useQuery({
     queryKey: ['admin_additional_tasks_records', companyId],
     queryFn: async () => {
-      console.log('Fetching all additional tasks records');
-      
       // Fetch all additional tasks with progress entries and event details
       const { data: records, error } = await supabase
         .from('additional_tasks')
@@ -86,8 +84,6 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
         console.error('Error fetching additional tasks records:', error);
         throw error;
       }
-      
-      console.log(`Found ${records?.length || 0} additional tasks records`);
       
       // Fetch all profiles to get user names
       const { data: profiles, error: profilesError } = await supabase
@@ -135,8 +131,6 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
   // Delete record mutation
   const deleteRecord = useMutation({
     mutationFn: async (recordId: string) => {
-      console.log(`Deleting additional task record: ${recordId}`);
-      
       const { error } = await supabase
         .from('additional_tasks')
         .delete()

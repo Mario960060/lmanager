@@ -40,8 +40,6 @@ const AdminAdditionalMaterialsModal: React.FC<AdminAdditionalMaterialsModalProps
   const { data: userGroups = [], isLoading, isError } = useQuery({
     queryKey: ['admin_additional_materials_records', companyId],
     queryFn: async () => {
-      console.log('Fetching all additional materials records');
-      
       // Fetch all additional materials with event titles
       const { data: records, error } = await supabase
         .from('additional_materials')
@@ -61,11 +59,6 @@ const AdminAdditionalMaterialsModal: React.FC<AdminAdditionalMaterialsModalProps
       if (error) {
         console.error('Error fetching additional materials records:', error);
         throw error;
-      }
-      
-      console.log(`Found ${records?.length || 0} additional materials records`);
-      if (records && records.length > 0) {
-        console.log('Sample record:', records[0]);
       }
       
       // Fetch all profiles to get user names
@@ -133,8 +126,6 @@ const AdminAdditionalMaterialsModal: React.FC<AdminAdditionalMaterialsModalProps
   // Delete record mutation
   const deleteRecord = useMutation({
     mutationFn: async (recordId: string) => {
-      console.log(`Deleting additional material record: ${recordId}`);
-      
       const { error } = await supabase
         .from('additional_materials')
         .delete()

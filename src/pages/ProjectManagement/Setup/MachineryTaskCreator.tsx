@@ -168,15 +168,6 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
           const soilTaskName = `Excavation soil with ${soilDiggerName} and ${soilCarrierName} ${soilCarrierSize}t`;
           const prepTaskName = `Preparation with ${prepDiggerName} and ${prepCarrierName} ${prepCarrierSize}t`;
 
-          console.log('Checking tasks:', {
-            soilTaskName,
-            prepTaskName,
-            exists: {
-              soil: existingTasks.includes(soilTaskName),
-              prep: existingTasks.includes(prepTaskName)
-            }
-          });
-
           // If any task doesn't exist, this excavator needs tasks
           if (!existingTasks.includes(soilTaskName) || 
               !existingTasks.includes(prepTaskName)) {
@@ -233,17 +224,6 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
           const soilTaskName = `Excavation soil with ${soilDiggerName} and ${soilCarrierName} ${soilCarrierSize}t`;
           const prepTaskName = `Preparation with ${prepDiggerName} and ${prepCarrierName} ${prepCarrierSize}t`;
           const sandTaskName = `Load-in and compacting sand with ${prepDiggerName} and ${prepCarrierName} ${prepCarrierSize}t`;
-
-          console.log('Checking tasks:', {
-            soilTaskName,
-            prepTaskName,
-            sandTaskName,
-            exists: {
-              soil: existingTasks.includes(soilTaskName),
-              prep: existingTasks.includes(prepTaskName),
-              sand: existingTasks.includes(sandTaskName)
-            }
-          });
 
           // If any task doesn't exist, this carrier needs tasks
           if (!existingTasks.includes(soilTaskName) || 
@@ -383,12 +363,6 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
           if (existingTasks.includes(soilTaskName)) {
             skippedCount++;
           } else {
-            console.log('[MachineryTaskCreator] Creating SOIL task:', soilTaskName, {
-              name: soilTaskName,
-              description: t('form:time_estimated_one_person'),
-              unit: t('form:tons_unit'),
-              estimated_hours: (typeof soilDiggerEstimate === 'object' ? soilDiggerEstimate.timePerTon : 0) + (typeof soilCarrierEstimate === 'object' ? soilCarrierEstimate.timePerTon : 0)
-            });
             // Create soil excavation task
             const soilTask = {
               name: soilTaskName,
@@ -416,12 +390,6 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
           if (existingTasks.includes(prepTaskName)) {
             skippedCount++;
           } else {
-            console.log('[MachineryTaskCreator] Creating PREPARATION task:', prepTaskName, {
-              name: prepTaskName,
-              description: t('form:time_estimated_one_person'),
-              unit: t('form:tons_unit'),
-              estimated_hours: (typeof prepDiggerEstimate === 'object' ? prepDiggerEstimate.timePerTon : 0) + (typeof prepCarrierEstimate === 'object' ? prepCarrierEstimate.timePerTon : 0)
-            });
             // Create preparation task
             const prepTask = {
               name: prepTaskName,
@@ -462,12 +430,6 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
         if (existingTasks.includes(loadingSandTaskName)) {
           skippedCount++;
         } else {
-          console.log('[MachineryTaskCreator] Creating LOADING SAND task:', loadingSandTaskName, {
-            name: loadingSandTaskName,
-            description: t('form:time_estimated_one_person'),
-            unit: t('form:tons_unit'),
-            estimated_hours: typeof loadingSandDiggerEstimate === 'object' ? loadingSandDiggerEstimate.timePerTon : 0
-          });
           // Create Loading Sand task
           const loadingSandTask = {
             name: loadingSandTaskName,

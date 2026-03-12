@@ -31,6 +31,9 @@ import {
 } from '../../themes/uiComponents';
 import { computeSlabCuts, computePathSlabCuts, groupCutsByLength } from '../../projectmanagement/canvacreator/visualization/slabPattern';
 import { distance, PIXELS_PER_METER } from '../../projectmanagement/canvacreator/geometry';
+import { isPathElement, getPathPolygon } from '../../projectmanagement/canvacreator/linearElements';
+import { getEffectivePolygon, getEffectivePolygonWithEdgeIndices } from '../../projectmanagement/canvacreator/arcMath';
+import { FrameSidesSelector } from '../../projectmanagement/canvacreator/objectCard/FrameSidesSelector';
 
 interface SlabType {
   id: string | number;
@@ -168,6 +171,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
   const [framePieceLengthCm, setFramePieceLengthCm] = useState<string>(savedInputs?.framePieceLengthCm ?? '60');
   const [framePieceWidthCm, setFramePieceWidthCm] = useState<string>(savedInputs?.framePieceWidthCm ?? '10');
   const [frameJointType, setFrameJointType] = useState<'butt' | 'miter45'>(savedInputs?.frameJointType ?? 'butt');
+  const [frameSidesEnabled, setFrameSidesEnabled] = useState<boolean[]>(Array.isArray(savedInputs?.frameSidesEnabled) ? savedInputs.frameSidesEnabled : []);
   const [frameResults, setFrameResults] = useState<{
     totalFrameSlabs: number;
     totalHours: number;
@@ -200,9 +204,10 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         framePieceLengthCm: addFrameBoard ? framePieceLengthCm : undefined,
         framePieceWidthCm: addFrameBoard ? framePieceWidthCm : undefined,
         frameJointType: addFrameBoard ? frameJointType : undefined,
+        frameSidesEnabled: addFrameBoard ? frameSidesEnabled : undefined,
       });
     }
-  }, [area, tape1ThicknessCm, mortarThicknessCm, slabThicknessCm, selectedSlabId, canvasCutSlabs, soilExcessCm, selectedGroutingId, addFrameBoard, framePieceLengthCm, framePieceWidthCm, frameJointType, onInputsChange, isInProjectCreating, taskTemplates?.length]);
+  }, [area, tape1ThicknessCm, mortarThicknessCm, slabThicknessCm, selectedSlabId, canvasCutSlabs, soilExcessCm, selectedGroutingId, addFrameBoard, framePieceLengthCm, framePieceWidthCm, frameJointType, frameSidesEnabled, onInputsChange, isInProjectCreating, taskTemplates?.length]);
 
   useEffect(() => {
     if (!isInProjectCreating || !shape?.closed || shape.points.length < 3) {
@@ -227,10 +232,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         vizFullSlabCount: fullSlabCount,
         vizWasteAreaCm2: wasteAreaCm2,
         vizReusedAreaCm2: reusedAreaCm2,
+        cutSlabs: String(cutSlabCount),
       };
       const same = prev.vizFullSlabCount === next.vizFullSlabCount
         && prev.vizWasteAreaCm2 === next.vizWasteAreaCm2
         && prev.vizReusedAreaCm2 === next.vizReusedAreaCm2
+        && prev.cutSlabs === next.cutSlabs
         && JSON.stringify(prev.vizWasteSatisfied ?? []) === JSON.stringify(next.vizWasteSatisfied);
       if (!same) {
         onInputsChange(next);
@@ -284,7 +291,19 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     if (!isInProjectCreating || !addFrameBoard) {
       return;
     }
-    if (!shape?.closed || !shape.points || shape.points.length < 3) {
+    let pts: Point[];
+    let edgeIndices: number[];
+    if (shape && isPathElement(shape)) {
+      const pathPts = getPathPolygon(shape);
+      if (!pathPts || pathPts.length < 3 || !shape.closed) { setFrameResults(null); return; }
+      pts = pathPts;
+      edgeIndices = pathPts.map((_, i) => i);
+    } else if (shape) {
+      const eff = getEffectivePolygonWithEdgeIndices(shape);
+      if (!eff.points.length || eff.points.length < 3 || !shape.closed) { setFrameResults(null); return; }
+      pts = eff.points;
+      edgeIndices = eff.edgeIndices;
+    } else {
       setFrameResults(null);
       return;
     }
@@ -298,12 +317,20 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     const groutM = groutMm / 1000;
     const pieceLenM = pieceLen / 100;
     const stepM = pieceLenM + groutM;
-    const pts = shape.points;
+    const numLogicalEdges = Math.max(...edgeIndices, -1) + 1;
+    const enabled = frameSidesEnabled.length >= numLogicalEdges ? frameSidesEnabled : Array.from({ length: numLogicalEdges }, () => true);
+    const edgeLengths: number[] = Array(numLogicalEdges).fill(0);
     const n = pts.length;
-    const sides: Array<{ length: number; slabs: number }> = [];
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
-      const sideLengthM = distance(pts[i], pts[j]) / PIXELS_PER_METER;
+      const edgeIdx = edgeIndices[j];
+      const segLenM = distance(pts[i], pts[j]) / PIXELS_PER_METER;
+      edgeLengths[edgeIdx] += segLenM;
+    }
+    const sides: Array<{ length: number; slabs: number }> = [];
+    for (let e = 0; e < numLogicalEdges; e++) {
+      if (enabled[e] === false) continue;
+      const sideLengthM = edgeLengths[e];
       const slabsPerSide = Math.ceil((sideLengthM + groutM) / stepM);
       sides.push({ length: sideLengthM, slabs: slabsPerSide });
     }
@@ -348,7 +375,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       cuttingTaskName,
       cutting_task_id: cuttingTaskId,
     });
-  }, [isInProjectCreating, addFrameBoard, shape?.closed, JSON.stringify(shape?.points), shape?.calculatorInputs?.vizGroutWidthMm, shape?.calculatorInputs?.vizGroutWidth, framePieceLengthCm, framePieceWidthCm, frameTaskTemplates, cuttingTasks, taskTemplates, selectedSlabId]);
+  }, [isInProjectCreating, addFrameBoard, shape, frameSidesEnabled, shape?.calculatorInputs?.vizGroutWidthMm, shape?.calculatorInputs?.vizGroutWidth, framePieceLengthCm, framePieceWidthCm, frameTaskTemplates, cuttingTasks, taskTemplates, selectedSlabId]);
 
   const [calculateDigging, setCalculateDigging] = useState<boolean>(false);
   const [selectedExcavator, setSelectedExcavator] = useState<DiggingEquipment | null>(null);
@@ -375,7 +402,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     if (savedInputs?.framePieceLengthCm != null) setFramePieceLengthCm(String(savedInputs.framePieceLengthCm));
     if (savedInputs?.framePieceWidthCm != null) setFramePieceWidthCm(String(savedInputs.framePieceWidthCm));
     if (savedInputs?.frameJointType === 'butt' || savedInputs?.frameJointType === 'miter45') setFrameJointType(savedInputs.frameJointType);
-  }, [savedInputs?.addFrameBoard, savedInputs?.framePieceLengthCm, savedInputs?.framePieceWidthCm, savedInputs?.frameJointType]);
+    if (Array.isArray(savedInputs?.frameSidesEnabled)) setFrameSidesEnabled(savedInputs.frameSidesEnabled);
+  }, [savedInputs?.addFrameBoard, savedInputs?.framePieceLengthCm, savedInputs?.framePieceWidthCm, savedInputs?.frameJointType, savedInputs?.frameSidesEnabled]);
 
   useEffect(() => {
     if (savedInputs?.tape1ThicknessCm != null && savedInputs.tape1ThicknessCm !== '') setTape1ThicknessCm(String(savedInputs.tape1ThicknessCm));
@@ -652,14 +680,6 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
   };
 
   const calculate = async () => {
-    console.log('Calculating with values:', {
-      area,
-      tape1ThicknessCm,
-      mortarThicknessCm,
-      selectedSlabId,
-      taskTemplates
-    });
-
     if (!area) {
       setCalculationError(t('calculator:enter_area'));
       return;
@@ -693,8 +713,6 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       return;
     }
     
-    console.log('Selected slab type:', selectedSlabType);
-    
     setCalculationError(null);
     
     try {
@@ -715,8 +733,6 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       
       // Check if the selected task has a valid unit and estimated_hours
       if (selectedSlabType.unit && selectedSlabType.estimated_hours !== undefined) {
-        console.log(`Task: ${selectedSlabType.name}, Unit: ${selectedSlabType.unit}, Estimated hours: ${selectedSlabType.estimated_hours}`);
-        
         const unitLower = selectedSlabType.unit.toLowerCase();
         if (unitLower === 'm2' || unitLower === 'square meters') {
           // Use effective area (total area minus frame area) for regular slab calculations
@@ -728,8 +744,6 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       } else {
         console.warn('Selected task has no unit or estimated_hours:', selectedSlabType);
       }
-      
-      console.log('Main task hours:', mainTaskHours);
       
       const isPorcelain = (selectedSlabType.name || '').toLowerCase().includes('slab') && 
         !(selectedSlabType.name || '').toLowerCase().includes('sandstone');
@@ -996,7 +1010,6 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         if (soilExcavationTemplate && soilExcavationTemplate.estimated_hours) {
           // Use estimated_hours as rate per tonne and multiply by actual tonnage
           soilExcavationTime = soilExcavationTemplate.estimated_hours * totalTons;
-          console.log('Found soil excavation template:', soilExcavationTemplate.name, 'Time:', soilExcavationTime);
         } else {
           console.warn('Soil excavation template not found for:', `Excavation soil with ${excavatorName} (${excavatorSize}t)`);
           soilExcavationTime = 0; // No fallback, template must exist
@@ -1019,7 +1032,6 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
           if (tape1Template && tape1Template.estimated_hours) {
             // Use estimated_hours as rate per tonne and multiply by actual tonnage
             tape1LoadingTime = tape1Template.estimated_hours * tape1Tons;
-            console.log('Found tape1 loading template:', tape1Template.name, 'Time:', tape1LoadingTime);
           } else {
             console.warn('Tape1 loading template not found for:', `Loading tape1 with ${excavatorName} (${excavatorSize}t)`);
             tape1LoadingTime = 0; // No fallback, template must exist
@@ -1429,6 +1441,37 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
                   <option value="miter45">{t('calculator:frame_joint_miter45')}</option>
                 </select>
               </div>
+              {shape && (() => {
+                if (isPathElement(shape)) {
+                  const pts = getPathPolygon(shape);
+                  if (!pts || pts.length < 3) return null;
+                  return (
+                    <div style={{ marginTop: 12 }}>
+                      <FrameSidesSelector
+                        points={pts}
+                        frameSidesEnabled={frameSidesEnabled}
+                        onChange={setFrameSidesEnabled}
+                        width={280}
+                        height={180}
+                      />
+                    </div>
+                  );
+                }
+                const { points: pts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
+                if (!pts || pts.length < 3) return null;
+                return (
+                  <div style={{ marginTop: 12 }}>
+                    <FrameSidesSelector
+                      points={pts}
+                      edgeIndices={edgeIndices}
+                      frameSidesEnabled={frameSidesEnabled}
+                      onChange={setFrameSidesEnabled}
+                      width={280}
+                      height={180}
+                    />
+                  </div>
+                );
+              })()}
             </div>
           )}
           {addFrameBoard && !isInProjectCreating && (

@@ -3,22 +3,49 @@
 // Cobblestone (monoblock) pattern rendering — 20×10 cm blocks, 1mm joint
 // ══════════════════════════════════════════════════════════════
 
+import polygonClipping from "polygon-clipping";
+import type { Polygon } from "polygon-clipping";
 import { Point, Shape, toPixels, toMeters, labelAnchorInsidePolygon, areaM2 } from "../geometry";
-import { getEffectivePolygon } from "../arcMath";
+import { scaledFontSize } from "../canvasRenderers";
+import { getEffectivePolygon, getEffectivePolygonWithEdgeIndices } from "../arcMath";
+import { isPathElement, getPathPolygon } from "../linearElements";
 import {
   shrinkPolygon,
+  shrinkPolygonByEdges,
   rectPolygonIntersectionArea,
   rectPolygonIntersection,
   computeWastePolygon,
   polygonBboxCm,
   polygonFitsInPolygonWithRotation,
+  collectCutOperationsFromDemand,
+  type CutInfo,
 } from "./slabPattern";
+
+/** Kostka-only: rect∩polygon with polygon-clipping fallback when Sutherland-Hodgman returns [] (concave/curved shapes). */
+function rectPolygonIntersectionKostka(corners: Point[], polygon: Point[]): Point[] {
+  const result = rectPolygonIntersection(corners, polygon);
+  if (result.length >= 3) return result;
+  if (polygon.length < 3) return [];
+  try {
+    const rectPoly: Polygon = [corners.map(p => [p.x, p.y])];
+    const shapePoly: Polygon = [polygon.map(p => [p.x, p.y])];
+    const inter = polygonClipping.intersection(rectPoly, shapePoly);
+    for (const poly of inter) {
+      if (poly.length > 0 && poly[0].length >= 3) {
+        return poly[0].map(([x, y]) => ({ x, y }));
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return [];
+}
 
 type WorldToScreen = (wx: number, wy: number) => { x: number; y: number };
 
-const BLOCK_COLOR = "#5d6d7e";
+const BLOCK_COLOR = "#9B5C3A";   // rudawobrąz (cobblestone) — odróżnienie od szarych płyt
 const FRAME_COLOR = "#4a6fa5";
-const BLOCK_CUT_COLOR = "#95a5a6";
+const BLOCK_CUT_COLOR = "#B8866B";   // jaśniejsza ruda dla cięć
 const BLOCK_SMALL_CUT_COLOR = "#e74c3c";
 const BLOCK_WASTE_REUSED_COLOR = "#27ae60";
 const JOINT_COLOR = "#4a5568";
@@ -114,7 +141,7 @@ export function drawCobblestonePattern(
   ctx: CanvasRenderingContext2D,
   shape: Shape,
   worldToScreen: WorldToScreen,
-  _zoom: number,
+  zoom: number,
   showCuts: boolean = true,
   originOffset?: { x: number; y: number },
   directionDegOverride?: number,
@@ -125,15 +152,21 @@ export function drawCobblestonePattern(
   const blockLengthCm = Number(inputs?.blockLengthCm ?? 10);
   const jointGapMm = Number(inputs?.jointGapMm ?? 1);
 
-  let pts = getEffectivePolygon(shape);
+  const { points: ptsRaw, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
+  let pts = ptsRaw;
   if (pts.length < 3 || !shape.closed) return;
 
   const addFrameToMonoblock = !!(inputs?.addFrameToMonoblock);
   const framePieceWidthCm = Number(inputs?.framePieceWidthCm ?? 0);
   const frameWidthCm = framePieceWidthCm;
+  const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
   if (addFrameToMonoblock && frameWidthCm > 0) {
     const frameWidthPx = toPixels(frameWidthCm / 100);
-    pts = shrinkPolygon(pts, frameWidthPx);
+    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled.length > 0) {
+      pts = shrinkPolygonByEdges(pts, frameWidthPx, edgeIndices, frameSidesEnabled);
+    } else {
+      pts = shrinkPolygon(pts, frameWidthPx);
+    }
     if (pts.length < 3) return;
   }
 
@@ -145,7 +178,12 @@ export function drawCobblestonePattern(
   const origPts = shape.points;
   const startCorner = Math.max(0, Math.min(origPts.length - 1, Math.floor(Number(inputs?.vizStartCorner ?? 0))));
   const off = originOffset ?? { x: Number(inputs?.vizOriginOffsetX ?? 0), y: Number(inputs?.vizOriginOffsetY ?? 0) };
-  const origin = { x: origPts[startCorner].x + off.x, y: origPts[startCorner].y + off.y };
+  // When frame exists, align origin to inner edge (frame boundary)
+  const originBase = addFrameToMonoblock && frameWidthCm > 0 ? pts : origPts;
+  const cornerIdx = Math.max(0, Math.min(startCorner, originBase.length - 1));
+  const cornerPt = originBase[cornerIdx];
+  if (!cornerPt) return;
+  const origin = { x: cornerPt.x + off.x, y: cornerPt.y + off.y };
 
   const angle = (directionDeg * Math.PI) / 180;
   const cos = Math.cos(angle);
@@ -189,9 +227,7 @@ export function drawCobblestonePattern(
   const pattern = inputs?.vizPattern ?? "grid";
   const blockAreaPx2 = blockLengthPx * blockWidthPx;
   const hasArcs = !!(shape.edgeArcs?.some(a => a && a.length > 0));
-  const polygonForIntersection = hasArcs
-    ? (addFrameToMonoblock && frameWidthCm > 0 ? shrinkPolygon(origPts, toPixels(frameWidthCm / 100)) : origPts)
-    : pts;
+  const polygonForIntersection = hasArcs ? pts : pts;
 
   const cornersInsideCount = (corners: Point[], polygon: Point[]): number => {
     let n = 0;
@@ -246,6 +282,7 @@ export function drawCobblestonePattern(
     for (let c = -extend; c <= extend; c++) {
       let offsetR = r;
       if (pattern === "brick" && c % 2 !== 0) offsetR = r + 0.5;
+      else if (pattern === "onethird") offsetR = r + [0, 2 / 3, 1 / 3][((c % 3) + 3) % 3];
       const cx = origin.x + c * stepLength * dir.x + offsetR * stepWidth * perp.x;
       const cy = origin.y + c * stepLength * dir.y + offsetR * stepWidth * perp.y;
 
@@ -270,31 +307,36 @@ export function drawCobblestonePattern(
   const total = fullCount + cutCount;
   const blockAreaCm2 = blockWidthCm * blockLengthCm;
   const totalBlockAreaCm2 = total > 0 && blockAreaCm2 > 0 ? total * blockAreaCm2 : 0;
-  const wasteSatisfiedCount = wasteSatisfiedSet.size;
-  const wastePct = totalBlockAreaCm2 > 0
-    ? Math.round(Math.max(0, (cutCount - wasteSatisfiedCount) / total) * 100)
-    : (total > 0 ? Math.round((cutCount / total) * 100) : 0);
+  const wasteAreaCm2 = Number(inputs?.vizWasteAreaCm2 ?? 0);
+  const reusedAreaCm2 = Number(inputs?.vizReusedAreaCm2 ?? 0);
+  const actualWasteCm2 = Math.max(0, wasteAreaCm2 - reusedAreaCm2);
+  const wastePct = totalBlockAreaCm2 > 0 ? Math.round((actualWasteCm2 / totalBlockAreaCm2) * 100) : (total > 0 ? Math.round((cutCount / total) * 100) : 0);
   if (total > 0) {
     const anchor = labelAnchorInsidePolygon(pts);
     const sc = worldToScreen(anchor.x, anchor.y);
     const area = areaM2(getEffectivePolygon(shape));
-    ctx.font = "bold 14px 'JetBrains Mono',monospace";
+    const baseFontSize = 14;
+    const scaledFont = scaledFontSize(baseFontSize, zoom);
+    const lineHeight = scaledFont * 1.2;
+    ctx.font = `bold ${scaledFont}px 'JetBrains Mono',monospace`;
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + 8);
-    ctx.fillText(`${fullCount} full, ${cutCount} cut`, sc.x, sc.y + 24);
-    ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + 40);
+    ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + lineHeight * 0.5);
+    ctx.fillText(`${fullCount} full, ${cutCount} cut`, sc.x, sc.y + lineHeight * 1.5);
+    ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + lineHeight * 2.5);
   }
 }
 
 /**
  * Compute cut block count for monoblocks that intersect the polygon but are not fully inside.
- * Returns cutBlockCount (number of blocks to cut, for input display) and wasteSatisfiedPositions.
+ * Returns cutBlockCount (number of blocks to cut), cuts (cut operations: 1 per diagonal/curved, 2 per corner),
+ * wasteSatisfiedPositions, wasteAreaCm2, and reusedAreaCm2 (same as slabs for area-based waste %).
  */
-export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>): { cutBlockCount: number; wasteSatisfiedPositions: string[] } {
-  let pts = getEffectivePolygon(shape);
-  if (pts.length < 3 || !shape.closed) return { cutBlockCount: 0, wasteSatisfiedPositions: [] };
+export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>): { cutBlockCount: number; cuts: CutInfo[]; wasteSatisfiedPositions: string[]; wasteAreaCm2: number; reusedAreaCm2: number } {
+  const { points: ptsRaw, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
+  let pts = ptsRaw;
+  if (pts.length < 3 || !shape.closed) return { cutBlockCount: 0, cuts: [], wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
 
   const blockWidthCm = Number(inputs?.blockWidthCm ?? 20);
   const blockLengthCm = Number(inputs?.blockLengthCm ?? 10);
@@ -302,10 +344,15 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
 
   const addFrameToMonoblock = !!(inputs?.addFrameToMonoblock);
   const framePieceWidthCm = Number(inputs?.framePieceWidthCm ?? 0);
+  const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
   if (addFrameToMonoblock && framePieceWidthCm > 0) {
     const frameWidthPx = toPixels(framePieceWidthCm / 100);
-    pts = shrinkPolygon(pts, frameWidthPx);
-    if (pts.length < 3) return { cutBlockCount: 0, wasteSatisfiedPositions: [] };
+    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled.length > 0) {
+      pts = shrinkPolygonByEdges(pts, frameWidthPx, edgeIndices, frameSidesEnabled);
+    } else {
+      pts = shrinkPolygon(pts, frameWidthPx);
+    }
+    if (pts.length < 3) return { cutBlockCount: 0, cuts: [], wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
   }
 
   const blockWidthPx = toPixels(blockWidthCm / 100);
@@ -317,7 +364,12 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
   const startCorner = Math.max(0, Math.min(origPts.length - 1, Math.floor(Number(inputs?.vizStartCorner ?? 0))));
   const offX = Number(inputs?.vizOriginOffsetX ?? 0);
   const offY = Number(inputs?.vizOriginOffsetY ?? 0);
-  const origin = { x: origPts[startCorner].x + offX, y: origPts[startCorner].y + offY };
+  // When frame exists, align origin to inner edge (frame boundary)
+  const originBase = addFrameToMonoblock && framePieceWidthCm > 0 ? pts : origPts;
+  const cornerIdx = Math.max(0, Math.min(startCorner, originBase.length - 1));
+  const cornerPt = originBase[cornerIdx];
+  if (!cornerPt) return { cutBlockCount: 0, cuts: [], wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
+  const origin = { x: cornerPt.x + offX, y: cornerPt.y + offY };
 
   const angle = (directionDeg * Math.PI) / 180;
   const cos = Math.cos(angle);
@@ -343,6 +395,7 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
   const extend = Math.min(Math.max(extendC, extendR, 10), EXTEND_CAP);
 
   let cutBlockCount = 0;
+  const cuts: CutInfo[] = [];
   const cutBlockData: {
     r: number; c: number;
     demandW: number; demandL: number;
@@ -354,6 +407,7 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
     for (let c = -extend; c <= extend; c++) {
       let offsetR = r;
       if (pattern === "brick" && c % 2 !== 0) offsetR = r + 0.5;
+      else if (pattern === "onethird") offsetR = r + [0, 2 / 3, 1 / 3][((c % 3) + 3) % 3];
       const cx = origin.x + c * stepLength * dir.x + offsetR * stepWidth * perp.x;
       const cy = origin.y + c * stepLength * dir.y + offsetR * stepWidth * perp.y;
 
@@ -374,8 +428,12 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
       cutBlockCount++;
 
       const slabOrigin = { x: cx, y: cy };
-      const demandPolygon = rectPolygonIntersection(corners, pts);
+      const demandPolygon = rectPolygonIntersectionKostka(corners, pts);
       if (demandPolygon.length < 3) continue;
+
+      // Collect cut operations before demandBbox filter (same as slabs) — diagonal=1, corner=2
+      const slabCuts = collectCutOperationsFromDemand(demandPolygon, corners, pts);
+      for (const sc of slabCuts) cuts.push(sc);
 
       const demandBbox = polygonBboxCm(demandPolygon, slabOrigin, dir, perp);
       const demandWCm = demandBbox.w;
@@ -414,8 +472,10 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
     }
   }
 
-  // Sequential matching: one demand + one waste per block
+  // Sequential matching: one demand + one waste per block (same as slabs)
   const wasteSatisfiedPositions: string[] = [];
+  let reusedAreaCm2 = 0;
+  let wasteAreaCm2 = 0;
   const wastePool: { w: number; l: number; r: number; c: number; polygon?: Point[] }[] = [];
 
   for (const item of cutBlockData) {
@@ -433,15 +493,17 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
     const idx = wastePool.findIndex(w => matches(w));
     if (idx >= 0) {
       wasteSatisfiedPositions.push(key);
+      reusedAreaCm2 += demandW * demandL;
       wastePool.splice(idx, 1);
     } else {
       if (wasteW > 0.5 && wasteL > 0.5) {
         wastePool.push({ w: wasteW, l: wasteL, r, c, polygon: wastePolygon });
+        wasteAreaCm2 += wasteW * wasteL;
       }
     }
   }
 
-  return { cutBlockCount, wasteSatisfiedPositions };
+  return { cutBlockCount, cuts, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 };
 }
 
 /**
@@ -453,7 +515,16 @@ export function computeMonoblockFrameBlocks(
   shape: Shape,
   inputs: Record<string, any>
 ): { totalFrameBlocks: number; totalFrameAreaM2: number; frameAngleCuts: number; sides: Array<{ length: number; blocks: number }> } {
-  const pts = getEffectivePolygon(shape);
+  let pts: Point[];
+  let edgeIndices: number[];
+  if (isPathElement(shape)) {
+    pts = getPathPolygon(shape);
+    edgeIndices = pts.map((_, i) => i);
+  } else {
+    const eff = getEffectivePolygonWithEdgeIndices(shape);
+    pts = eff.points;
+    edgeIndices = eff.edgeIndices;
+  }
   if (pts.length < 3 || !shape.closed) return { totalFrameBlocks: 0, totalFrameAreaM2: 0, frameAngleCuts: 0, sides: [] };
 
   const addFrameToMonoblock = !!(inputs?.addFrameToMonoblock);
@@ -468,19 +539,30 @@ export function computeMonoblockFrameBlocks(
   const jointPx = toPixels(jointGapMm / 1000);
   const stepLengthPx = pieceLengthPx + jointPx;
 
-  let totalFrameBlocks = 0;
-  const sides: Array<{ length: number; blocks: number }> = [];
+  const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
+  const numLogicalEdges = Math.max(...edgeIndices, -1) + 1;
   const n = pts.length;
-  const frameAngleCuts = frameJointType === 'miter45' ? n : 0;
-
+  const edgeLengthsPx: number[] = Array(numLogicalEdges).fill(0);
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
-    const a = pts[i];
-    const b = pts[j];
-    const edgeLenPx = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2) || 1;
+    const edgeIdx = edgeIndices[j];
+    const segLen = Math.sqrt((pts[j].x - pts[i].x) ** 2 + (pts[j].y - pts[i].y) ** 2) || 1;
+    edgeLengthsPx[edgeIdx] += segLen;
+  }
+  let enabledEdgeCount = 0;
+  for (let e = 0; e < numLogicalEdges; e++) {
+    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled[e] === false) continue;
+    enabledEdgeCount++;
+  }
+  const frameAngleCuts = frameJointType === 'miter45' ? enabledEdgeCount : 0;
+
+  let totalFrameBlocks = 0;
+  const sides: Array<{ length: number; blocks: number }> = [];
+  for (let e = 0; e < numLogicalEdges; e++) {
+    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled[e] === false) continue;
+    const edgeLenPx = edgeLengthsPx[e];
     const blocksPerEdge = Math.ceil((edgeLenPx + jointPx) / stepLengthPx);
     const sideLengthM = toMeters(edgeLenPx);
-
     sides.push({ length: sideLengthM, blocks: blocksPerEdge });
     totalFrameBlocks += blocksPerEdge;
   }
@@ -506,7 +588,7 @@ export function drawMonoblockFrame(
   const framePieceLengthCm = Number(inputs?.framePieceLengthCm ?? 60);
   if (framePieceWidthCm <= 0) return;
 
-  const pts = getEffectivePolygon(shape);
+  const { points: pts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
   if (pts.length < 3 || !shape.closed) return;
 
   const pieceLengthPx = toPixels(framePieceLengthCm / 100);
@@ -530,8 +612,11 @@ export function drawMonoblockFrame(
 
   const innerPts = miter ? shrinkPolygon(pts, pieceWidthPx) : null;
 
+  const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
   const n = pts.length;
   for (let i = 0; i < n; i++) {
+    const edgeIdx = edgeIndices[(i + 1) % n];
+    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled[edgeIdx] === false) continue;
     const j = (i + 1) % n;
     const a = pts[i];
     const b = pts[j];

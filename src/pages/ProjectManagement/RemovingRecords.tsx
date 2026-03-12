@@ -44,8 +44,6 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
   const { data: requests = [], isLoading, refetch } = useQuery({
     queryKey: ['deletion_requests_all'],
     queryFn: async () => {
-      console.log('Fetching deletion requests');
-      
       const { data, error } = await supabase
         .from('deletion_requests')
         .select('*');
@@ -55,7 +53,6 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
         throw error;
       }
       
-      console.log('Deletion requests data:', data);
       return data as DeletionRequest[];
     },
     enabled: showRequests
@@ -73,13 +70,6 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
     mutationFn: async (requestId: string) => {
       const request = requests.find(r => r.id === requestId);
       if (!request) throw new Error('Request not found');
-      
-      console.log('Starting deletion process for:', {
-        requestId,
-        recordType: request.record_type,
-        recordId: request.record_id,
-        details: request.record_details
-      });
 
       try {
         // Check if user has admin permissions
@@ -98,9 +88,6 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
           throw new Error('You must be an admin to delete records');
         }
 
-        // Start a transaction
-        console.log('Starting transaction');
-        
         // First verify the record exists
         const { data: recordExists, error: recordCheckError } = await supabase
           .from(request.record_type)
@@ -114,7 +101,6 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
         }
         
         if (!recordExists) {
-          console.log('Record not found, proceeding to delete request only');
           const { error: requestError } = await supabase
             .from('deletion_requests')
             .delete()
@@ -128,7 +114,6 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
         }
 
         // Attempt to delete the record
-        console.log('Record found, attempting to delete from table:', request.record_type);
         const { error: deleteError } = await supabase
           .from(request.record_type)
           .delete()
@@ -155,8 +140,6 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
           throw new Error('Record deletion failed - record still exists');
         }
 
-        console.log('Record deleted successfully, now deleting request');
-
         // Delete the request itself
         const { error: requestError } = await supabase
           .from('deletion_requests')
@@ -168,15 +151,13 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
           throw new Error(`Failed to delete request: ${requestError.message}`);
         }
         
-        console.log('Deletion process completed successfully');
         return { success: true, message: 'Record and request deleted successfully' };
       } catch (error) {
         console.error('Error in deletion process:', error);
         throw error;
       }
     },
-    onSuccess: (result) => {
-      console.log('Deletion mutation completed:', result);
+    onSuccess: () => {
       refetch();
     },
     onError: (error: any) => {
@@ -188,8 +169,6 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
   // Reject deletion request
   const rejectDeletion = useMutation({
     mutationFn: async (requestId: string) => {
-      console.log('Rejecting deletion for request ID:', requestId);
-      
       // Just delete the request
       const { error } = await supabase
         .from('deletion_requests')

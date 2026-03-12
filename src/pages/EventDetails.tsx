@@ -360,7 +360,6 @@ const EventDetails = () => {
         .order('sort_order', { ascending: true });
 
       if (error) throw error;
-      console.log('Fetched folders:', data);
       return data as TaskFolder[];
     },
     enabled: !!companyId && !!id
@@ -538,8 +537,6 @@ const EventDetails = () => {
   // Delete task mutation
   const deleteTaskMutation = useMutation({
     mutationFn: async (taskId: string) => {
-      console.log('Starting to delete task:', taskId);
-      
       try {
         // First delete all task progress entries
         const { data: progressData, error: progressError } = await supabase
@@ -549,7 +546,6 @@ const EventDetails = () => {
           .eq('company_id', companyId)
           .select();
 
-        console.log('Progress entries deleted:', progressData);
         if (progressError) {
           console.error('Error deleting task progress:', progressError);
           throw progressError;
@@ -563,7 +559,6 @@ const EventDetails = () => {
           .eq('company_id', companyId)
           .select();
 
-        console.log('Task deleted:', taskData);
         if (taskError) {
           console.error('Error deleting task:', taskError);
           throw taskError;
@@ -574,7 +569,6 @@ const EventDetails = () => {
       }
     },
     onSuccess: async () => {
-      console.log('Task deletion completed successfully');
       await queryClient.invalidateQueries({ queryKey: ['tasks', id, companyId] });
       await queryClient.refetchQueries({ queryKey: ['tasks', id, companyId] });
       setShowDeleteConfirm(false);
@@ -616,7 +610,6 @@ const EventDetails = () => {
   // Delete task group mutation
   const deleteTaskGroupMutation = useMutation({
     mutationFn: async ({ groupName }: { groupName: string }) => {
-      console.log('Starting to delete task group:', groupName);
       try {
         // Get all tasks in the group
         const groupTasks = tasks.filter(task => {
@@ -634,17 +627,11 @@ const EventDetails = () => {
             ? groupName === 'Excavation and Preparation'
             : task.task_name === groupName;
 
-          if (isInGroup) {
-            console.log('Found task in group:', task.id, task.name);
-          }
           return isInGroup;
         });
 
-        console.log('Found tasks to delete:', groupTasks.length);
-
         // Delete all tasks in the group
         for (const task of groupTasks) {
-          console.log('Deleting task:', task.id);
           // First delete all task progress entries
           const { data: progressData, error: progressError } = await supabase
             .from('task_progress_entries')
@@ -652,7 +639,6 @@ const EventDetails = () => {
             .eq('task_id', task.id)
             .select();
 
-          console.log('Progress entries deleted:', progressData);
           if (progressError) {
             console.error('Error deleting progress:', progressError);
             throw progressError;
@@ -665,20 +651,17 @@ const EventDetails = () => {
             .eq('id', task.id)
             .select();
 
-          console.log('Task deleted:', taskData);
           if (taskError) {
             console.error('Error deleting task:', taskError);
             throw taskError;
           }
         }
-        console.log('Successfully deleted all tasks in group');
       } catch (error) {
         console.error('Error in delete task group mutation:', error);
         throw error;
       }
     },
     onSuccess: async () => {
-      console.log('Task group deletion completed successfully');
       await queryClient.invalidateQueries({ queryKey: ['tasks', id] });
       await queryClient.refetchQueries({ queryKey: ['tasks', id] });
       setShowDeleteConfirm(false);
@@ -788,8 +771,6 @@ const EventDetails = () => {
   // Add moveUpFolderMutation
   const moveUpFolderMutation = useMutation({
     mutationFn: async (folderId: string) => {
-      console.log('Moving folder up:', folderId);
-      
       // Get all folders in current display order (ascending)
       const { data: allFolders } = await supabase
         .from('task_folders')
@@ -797,17 +778,13 @@ const EventDetails = () => {
         .eq('event_id', id)
         .order('sort_order', { ascending: true });
 
-      console.log('All folders before fix:', allFolders);
-
       if (!allFolders || allFolders.length < 2) {
-        console.log('Not enough folders to move');
         return;
       }
 
       // Check if folders have proper sort_order values (not all zeros)
       const allZeros = allFolders.every(f => f.sort_order === 0);
       if (allZeros) {
-        console.log('Fixing sort orders for all folders...');
         // Fix sort orders: assign 1000, 2000, 3000, etc.
         for (let i = 0; i < allFolders.length; i++) {
           const { error } = await supabase
@@ -821,26 +798,18 @@ const EventDetails = () => {
           }
           allFolders[i].sort_order = (i + 1) * 1000;
         }
-        console.log('Fixed sort orders:', allFolders);
       }
 
       // Find current folder's position
       const currentIndex = allFolders.findIndex(f => f.id === folderId);
-      console.log('Current folder index:', currentIndex);
 
       if (currentIndex <= 0) {
-        console.log('Already at the top');
         return;
       }
 
       // Get the two folders we want to swap
       const currentFolder = allFolders[currentIndex];
       const targetFolder = allFolders[currentIndex - 1]; // The folder above it
-
-      console.log('Swapping folders:', {
-        current: { name: currentFolder.name, sort_order: currentFolder.sort_order },
-        target: { name: targetFolder.name, sort_order: targetFolder.sort_order }
-      });
 
       // Swap their sort_order values
       const tempSortOrder = currentFolder.sort_order;
@@ -866,11 +835,8 @@ const EventDetails = () => {
         console.error('Error updating target folder:', error2);
         throw error2;
       }
-
-      console.log('Successfully swapped folders');
     },
     onSuccess: () => {
-      console.log('Move up successful, invalidating queries');
       queryClient.invalidateQueries({ queryKey: ['task_folders', id] });
       setContextMenu(null);
     },
@@ -884,20 +850,15 @@ const EventDetails = () => {
   };
 
   const handleDelete = () => {
-    console.log('handleDelete called with itemToDelete:', itemToDelete);
     if (!itemToDelete) return;
 
     if (itemToDelete.type === 'task') {
-      console.log('Deleting single task:', itemToDelete.id);
       deleteTaskMutation.mutate(itemToDelete.id);
     } else if (itemToDelete.type === 'task_group' && itemToDelete.groupName) {
-      console.log('Deleting task group:', itemToDelete.groupName);
       deleteTaskGroupMutation.mutate({ groupName: itemToDelete.groupName });
     } else if (itemToDelete.type === 'material') {
-      console.log('Deleting material:', itemToDelete.id);
       deleteMaterialMutation.mutate(itemToDelete.id);
     } else if (itemToDelete.type === 'folder') {
-      console.log('Deleting folder:', itemToDelete.id);
       deleteFolderMutation.mutate(itemToDelete.id);
     }
   };
@@ -1229,7 +1190,6 @@ const EventDetails = () => {
 
     const handleMoveUp = (e: React.MouseEvent) => {
       e.stopPropagation();
-      console.log('Move Up clicked for folder:', folderId);
       moveUpFolderMutation.mutate(folderId);
     };
 
@@ -1243,7 +1203,6 @@ const EventDetails = () => {
 
     const handleDelete = (e: React.MouseEvent) => {
       e.stopPropagation();
-      console.log('Delete clicked for folder:', folderId);
       deleteFolderMutation.mutate(folderId);
       setContextMenu(null);
     };

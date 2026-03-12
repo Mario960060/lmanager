@@ -159,7 +159,6 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
       brokenQuantity?: number;
       restoreQuantity?: number;
     }) => {
-      console.log('[MUTATION] Called with:', { id, status, usage, brokenQuantity: brokenQtyParam, restoreQuantity: restoreQtyParam });
       if (status === 'in_use' && usage) {
         // First, check if there's enough available quantity
         const { data: currentEquipment } = await supabase
@@ -236,7 +235,6 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
           .eq('company_id', companyId);
 
         if (updateError) throw updateError;
-        console.log('[MUTATION] Set', toBreak, 'as broken. New broken_quantity:', newBroken, 'Status:', newStatus);
       } else if (status === 'free_to_use') {
         // Check if there are broken units and restoreQuantity is set
         const { data: currentEquipment } = await supabase
@@ -267,7 +265,6 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
             .eq('company_id', companyId);
 
           if (updateError) throw updateError;
-          console.log('[MUTATION] Restored', toRestore, 'from broken. New broken_quantity:', newBroken, 'Status:', newStatus);
         } else {
           // Fallback to your old logic for free_to_use
           if (!currentEquipment) throw new Error(t('form:equipment_not_found'));
@@ -286,7 +283,6 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
       }
     },
     onSuccess: () => {
-      console.log('[MUTATION] Status update successful, invalidating equipment query');
       queryClient.invalidateQueries({ queryKey: ['equipment', companyId] });
       setShowStatusModal(false);
       setNewStatus('free_to_use');
@@ -386,9 +382,6 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
   const handleReleaseEquipment = async (equipmentId, eventId) => {
     try {
-      console.log('Starting equipment release process');
-      console.log('Parameters:', { equipmentId, eventId });
-      
       // 1. First, check if the equipment_usage record exists
       const { data: usageCheck, error: checkError } = await supabase
         .from('equipment_usage')
@@ -398,8 +391,6 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
         .eq('is_returned', false)
         .single();
       
-      console.log('Usage check result:', { usageCheck, checkError });
-      
       if (checkError || !usageCheck) {
         console.error('Equipment usage record not found or already returned');
         alert(t('form:equipment_usage_not_found'));
@@ -407,7 +398,6 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
       }
       
       // 2. Try to update the equipment_usage record
-      console.log('Attempting to update equipment_usage');
       const { data: usageData, error: usageError } = await supabase
         .from('equipment_usage')
         .update({ 
@@ -417,8 +407,6 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
         .eq('id', usageCheck.id)
         .select();
       
-      console.log('Usage update result:', { usageData, usageError });
-      
       if (usageError) {
         console.error('Failed to update equipment_usage:', usageError);
         alert(t('form:failed_update_equipment_usage', { error: usageError.message }));
@@ -426,14 +414,11 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
       }
       
       // 3. Check if the equipment record exists
-      console.log('Checking equipment record');
       const { data: equipCheck, error: equipCheckError } = await supabase
         .from('equipment')
         .select('*')
         .eq('id', equipmentId)
         .single();
-      
-      console.log('Equipment check result:', { equipCheck, equipCheckError });
       
       if (equipCheckError || !equipCheck) {
         console.error('Equipment record not found');
@@ -442,14 +427,11 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
       }
       
       // 4. Try to update the equipment status
-      console.log('Attempting to update equipment status');
       const { data: equipData, error: equipError } = await supabase
         .from('equipment')
         .update({ status: 'free_to_use' })
         .eq('id', equipmentId)
         .select();
-      
-      console.log('Equipment update result:', { equipData, equipError });
       
       if (equipError) {
         console.error('Failed to update equipment status:', equipError);
@@ -457,7 +439,6 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
         return;
       }
       
-      console.log('Equipment release completed successfully');
       alert(t('form:equipment_released_success'));
       
       // Refresh the equipment list

@@ -3,11 +3,16 @@
 // Badge and indicator rendering for shapes
 // ══════════════════════════════════════════════════════════════
 
-import { Shape, labelAnchorInsidePolygon, C, toPixels, Point, polylineMidpointAndAngle } from "./geometry";
+import { Shape, labelAnchorInsidePolygon, C, toPixels, Point, polylineMidpointAndAngle, polylineLengthMeters, areaM2 } from "./geometry";
 import { getEffectivePolygon } from "./arcMath";
 import { computeThickPolyline, getPathPolygon, getPolygonLinearOutline, isLinearElement, isPathElement } from "./linearElements";
 
 type WorldToScreen = (wx: number, wy: number) => { x: number; y: number };
+
+/** Font size scaled by zoom, clamped to [8, 18] for readable labels at any zoom level. */
+export function scaledFontSize(baseFontSize: number, zoom: number): number {
+  return Math.max(8, Math.min(18, baseFontSize * zoom));
+}
 
 // Layer colors for excavation breakdown (tape1, sand, mortar, slab, etc.)
 const EXCAVATION_LAYER_COLORS: Record<string, string> = {
@@ -38,6 +43,37 @@ export function getTypeBadgeText(calculatorType: string | undefined): string {
     foundation: "FD",
   };
   return map[calculatorType] ?? calculatorType.slice(0, 2).toUpperCase();
+}
+
+/** Build rich label for path elements: slab dims, length, width, area, full/cut counts. */
+export function getPathLabel(shape: Shape): string {
+  const inp = shape.calculatorInputs ?? {};
+  const pathCenterline = inp.pathCenterline as Point[] | undefined;
+  const outline = inp.pathIsOutline ? shape.points : getEffectivePolygon(shape);
+  const parts: string[] = [];
+  const w = Number(inp.vizSlabWidth);
+  const l = Number(inp.vizSlabLength);
+  if (w && l) parts.push(`${w}×${l} cm`);
+  if (pathCenterline && pathCenterline.length >= 2) {
+    const lenM = polylineLengthMeters(pathCenterline);
+    parts.push(`${lenM.toFixed(2)} m`);
+  }
+  if (outline.length >= 3) {
+    const area = areaM2(outline);
+    parts.push(`${area.toFixed(2)} m²`);
+    const pathCenterline2 = inp.pathCenterline as Point[] | undefined;
+    if (pathCenterline2 && pathCenterline2.length >= 2 && area > 0.0001) {
+      const lenM = polylineLengthMeters(pathCenterline2);
+      const widthM = lenM > 0 ? area / lenM : 0;
+      if (widthM > 0) parts.push(`szer. ${(widthM * 100).toFixed(0)} cm`);
+    }
+  }
+  const full = inp.vizFullSlabCount;
+  const cut = inp.cutSlabs != null ? Number(inp.cutSlabs) : undefined;
+  if (typeof full === "number" || typeof cut === "number") {
+    parts.push(`${full ?? 0} full, ${cut ?? 0} cut`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : (shape.label || "Path");
 }
 
 export function getTypeBadgeColor(calculatorType: string | undefined): string {
@@ -92,19 +128,24 @@ export function drawShapeBadge(
 }
 
 /** Draw full object name in large font (like surface area) — replaces small badge for L2 shapes.
- * For linear elements (foundation, wall, fence, kerb) text is drawn along the polyline so the full label is visible. */
+ * For linear elements (foundation, wall, fence, kerb) text is drawn along the polyline so the full label is visible.
+ * Font and offsets scale with zoom so labels stay proportional to shapes. */
 export function drawShapeObjectLabel(
   ctx: CanvasRenderingContext2D,
   shape: Shape,
   worldToScreen: WorldToScreen,
-  displayName: string
+  displayName: string,
+  zoom: number
 ): void {
   if (shape.layer !== 2 || !displayName) return;
 
-  ctx.font = "bold 16px 'JetBrains Mono',monospace";
+  const baseFontSize = 16;
+  const scaledFont = scaledFontSize(baseFontSize, zoom);
+  const lineHeight = scaledFont * 1.2;
+  ctx.font = `bold ${scaledFont}px 'JetBrains Mono',monospace`;
   ctx.fillStyle = "#ffffff";
 
-  if ((isLinearElement(shape) || isPathElement(shape)) && shape.points.length >= 2) {
+  if (isLinearElement(shape) && shape.points.length >= 2) {
     const ma = polylineMidpointAndAngle(shape.points);
     if (ma) {
       const sc = worldToScreen(ma.point.x, ma.point.y);
@@ -119,12 +160,31 @@ export function drawShapeObjectLabel(
     }
   }
 
+  if (isPathElement(shape)) {
+    const pathCenterline = shape.calculatorInputs?.pathCenterline as { x: number; y: number }[] | undefined;
+    if (pathCenterline && Array.isArray(pathCenterline) && pathCenterline.length >= 2) {
+      const ma = polylineMidpointAndAngle(pathCenterline);
+      if (ma) {
+        const sc = worldToScreen(ma.point.x, ma.point.y);
+        ctx.save();
+        ctx.translate(sc.x, sc.y);
+        ctx.rotate(ma.angleRad);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(displayName, 0, 0);
+        ctx.restore();
+        return;
+      }
+    }
+  }
+
   const pts = isPathElement(shape) ? getPathPolygon(shape) : getEffectivePolygon(shape);
   const anchor = pts.length >= 3 ? labelAnchorInsidePolygon(pts) : { x: shape.points[0]?.x ?? 0, y: shape.points[0]?.y ?? 0 };
   const sc = worldToScreen(anchor.x, anchor.y);
+  const offsetY = -lineHeight * 1.5;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(displayName, sc.x, sc.y - 24);
+  ctx.fillText(displayName, sc.x, sc.y + offsetY);
 }
 
 export interface ExcavationLayer {

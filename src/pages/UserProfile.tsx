@@ -119,27 +119,18 @@ const UserProfile = () => {
       if (!user?.id) throw new Error('User not authenticated');
       if (!profile?.company_id) throw new Error('Not part of any company');
 
-      console.log('🚪 Starting abandon team for user:', user.id);
-
       // Pobierz token z timeoutem
-      console.log('🔑 Getting session...');
-      
       const sessionPromise = supabase.auth.getSession();
       const timeout = new Promise((_, reject) => 
         setTimeout(() => reject(new Error('getSession timeout')), 3000)
       );
       
       const { data: sessionData } = await Promise.race([sessionPromise, timeout]) as any;
-      console.log('🔑 Got session:', !!sessionData?.session);
-      
       const token = sessionData?.session?.access_token;
 
       if (!token) throw new Error('No auth token');
-      
-      console.log('🔑 Token length:', token.length);
 
       // DELETE przez REST API
-      console.log('🔄 Deleting from company_members...');
       const deleteResponse = await fetch(
         `https://trtlrllpgbxwnpqzcarz.supabase.co/rest/v1/company_members?user_id=eq.${user.id}&company_id=eq.${profile.company_id}`,
         {
@@ -153,17 +144,12 @@ const UserProfile = () => {
         }
       );
 
-      console.log('🔄 Delete response status:', deleteResponse.status);
-
       if (!deleteResponse.ok) {
         const errorData = await deleteResponse.json();
         throw new Error(`Delete failed: ${JSON.stringify(errorData)}`);
       }
 
-      console.log('🔄 Delete completed');
-
       // UPDATE przez REST API
-      console.log('🔄 Updating profiles.company_id to null...');
       const updateResponse = await fetch(
         `https://trtlrllpgbxwnpqzcarz.supabase.co/rest/v1/profiles?id=eq.${user.id}`,
         {
@@ -178,14 +164,11 @@ const UserProfile = () => {
         }
       );
 
-      console.log('🔄 Update response status:', updateResponse.status);
-
       if (!updateResponse.ok) {
         const errorData = await updateResponse.json();
         throw new Error(`Update failed: ${JSON.stringify(errorData)}`);
       }
 
-      console.log('✅ Successfully left team');
       return true;
     },
     onSuccess: () => {
@@ -223,8 +206,6 @@ const UserProfile = () => {
       if (!profile?.company_id) throw new Error('Not part of any company');
       if (!isAdmin) throw new Error('Only admins can delete a company');
 
-      console.log('🗑️ Starting delete company for company:', profile.company_id);
-
       // Get session
       const sessionPromise = supabase.auth.getSession();
       const timeout = new Promise((_, reject) => 
@@ -237,7 +218,6 @@ const UserProfile = () => {
       if (!token) throw new Error('No auth token');
 
       // DELETE company through REST API
-      console.log('🗑️ Deleting company...');
       const deleteResponse = await fetch(
         `https://trtlrllpgbxwnpqzcarz.supabase.co/rest/v1/companies?id=eq.${profile.company_id}`,
         {
@@ -251,14 +231,11 @@ const UserProfile = () => {
         }
       );
 
-      console.log('🗑️ Delete response status:', deleteResponse.status);
-
       if (!deleteResponse.ok) {
         const errorData = await deleteResponse.json();
         throw new Error(`Delete failed: ${JSON.stringify(errorData)}`);
       }
 
-      console.log('✅ Successfully deleted company');
       return true;
     },
     onSuccess: () => {

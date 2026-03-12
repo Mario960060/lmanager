@@ -511,7 +511,6 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
 
     setResults(newResults);
     if (onResultsChange) {
-      console.debug('[TileInstallationCalculator] onResultsChange payload:', formattedResults);
       onResultsChange(formattedResults);
     }
   };

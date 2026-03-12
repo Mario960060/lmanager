@@ -107,7 +107,6 @@
       queryKey: ['slab_frame_tasks', companyId || 'no-company'],
       queryFn: async () => {
         if (!companyId) return [];
-        console.log('Fetching frame task templates...');
         const { data, error } = await supabase
           .from('event_tasks_with_dynamic_estimates')
           .select('id, name, unit, estimated_hours')
@@ -119,7 +118,6 @@
           console.error('Error fetching frame tasks:', error);
           throw error;
         }
-        console.log('Fetched frame tasks:', data);
         return data;
       },
       enabled: !!companyId
@@ -154,18 +152,15 @@
       const lengthM = parseFloat(pieceLengthCm) / 100;
       const widthM = parseFloat(pieceWidthCm) / 100;
       const pieceAreaM2 = lengthM * widthM;
-      console.log('Piece area:', pieceAreaM2, 'm²');
 
       // Determine which task template to use
       const taskName = pieceAreaM2 < 0.3 
         ? 'laying slab frame belove 0.3m2' 
         : 'laying slab frame above 0.3m2';
-      console.log('Looking for task template:', taskName);
 
       const frameTask = frameTaskTemplates.find(task => 
         task.name && task.name.toLowerCase().includes(taskName.toLowerCase())
       );
-      console.log('Found frame task:', frameTask);
 
       // Calculate total frame slabs needed
       const totalFrameSlabs = sides.reduce((sum, side) => sum + side.slabs, 0);
@@ -202,7 +197,6 @@
           cuttingHours = (totalCuts * minutesPerCut) / 60;
           cuttingTaskName = isPorcelain ? 'Cutting porcelain (frame)' : 'Cutting sandstones (frame)';
         }
-        console.log('Total cutting hours:', cuttingHours);
       }
 
       // Calculate total frame area in m²

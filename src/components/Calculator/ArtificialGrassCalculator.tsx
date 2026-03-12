@@ -149,7 +149,6 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
     queryKey: ['artificial_grass_laying_task', companyId || 'no-company'],
     queryFn: async () => {
       if (!companyId) throw new Error('No company ID');
-      console.log('Fetching artificial grass laying task...');
       const { data, error } = await supabase
         .from('event_tasks_with_dynamic_estimates')
         .select('id, name, unit, estimated_hours')
@@ -162,7 +161,6 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
         throw error;
       }
       
-      console.log('Fetched laying task:', data);
       if (!data) {
         throw new Error('No task found for laying artificial grass');
       }
@@ -472,15 +470,11 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
 
       // Calculate base hours needed for installation
       let mainTaskHours = 0;
-      console.log('Laying task data:', layingTask);
       
       if (layingTask?.unit && layingTask?.estimated_hours !== undefined && layingTask?.estimated_hours !== null) {
-        console.log(`Task: ${layingTask.name}, Unit: ${layingTask.unit}, Estimated hours: ${layingTask.estimated_hours}`);
-        
         const unitLower = layingTask.unit.toLowerCase();
         if (unitLower === 'm2' || unitLower === 'square meters') {
           mainTaskHours = areaNum * layingTask.estimated_hours;
-          console.log(`Calculated main task hours: ${areaNum} m² × ${layingTask.estimated_hours} hours/m² = ${mainTaskHours} hours`);
         } else {
           console.warn('Task unit is not m2 or square meters:', layingTask.unit);
           mainTaskHours = areaNum * layingTask.estimated_hours;
@@ -531,11 +525,8 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
         { task: 'Laying Artificial Grass', hours: mainTaskHours, amount: areaNum.toString(), unit: 'square meters' }
       ];
 
-      console.log('DEBUG: ArtificialGrassCalculator - Initial breakdown:', JSON.parse(JSON.stringify(breakdown)));
-
       // Add sand screeding task if available
       if (sandScreedingTask && sandScreedingTask.estimated_hours !== undefined && sandScreedingTask.estimated_hours !== null) {
-        console.log('DEBUG: Adding sand screeding task:', sandScreedingTask);
         breakdown.push({
           task: 'sand screeding',
           hours: areaNum * sandScreedingTask.estimated_hours,
@@ -548,7 +539,6 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
       const effectiveJointsLength = hideEdgeAndJointInputs ? (savedInputs?.jointsLength ?? '') : (savedInputs?.jointsLength ?? jointsLength);
       const jointsLengthNum = parseFloat(effectiveJointsLength);
       if (jointingTask && jointingTask.estimated_hours !== undefined && jointingTask.estimated_hours !== null && effectiveJointsLength && !isNaN(jointsLengthNum) && jointsLengthNum > 0) {
-        console.log('DEBUG: Adding jointing task:', jointingTask);
         breakdown.push({
           task: 'jointing artificial grass',
           hours: jointsLengthNum * jointingTask.estimated_hours,
@@ -561,7 +551,6 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
       const effectiveTrimLength = hideEdgeAndJointInputs ? (savedInputs?.trimLength ?? '') : (savedInputs?.trimLength ?? trimLength);
       const trimLengthNum = parseFloat(effectiveTrimLength);
       if (trimmingEdgesTask && trimmingEdgesTask.estimated_hours !== undefined && trimmingEdgesTask.estimated_hours !== null && effectiveTrimLength && !isNaN(trimLengthNum) && trimLengthNum > 0) {
-        console.log('DEBUG: Adding trimming edges task:', trimmingEdgesTask);
         breakdown.push({
           task: 'trimming edges (artificial grass)',
           hours: trimLengthNum * trimmingEdgesTask.estimated_hours,
@@ -572,7 +561,6 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
 
       // Add final leveling sand task if available
       if (finalLevelingSandTask && finalLevelingSandTask.estimated_hours !== undefined && finalLevelingSandTask.estimated_hours !== null) {
-        console.log('DEBUG: Adding final leveling sand task:', finalLevelingSandTask);
         breakdown.push({
           task: 'final leveling (sand)',
           hours: areaNum * finalLevelingSandTask.estimated_hours,
@@ -580,8 +568,6 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
           unit: 'square meters'
         });
       }
-
-      console.log('DEBUG: ArtificialGrassCalculator - Final breakdown:', JSON.parse(JSON.stringify(breakdown)));
 
       // Add transport tasks if applicable
       if (effectiveCalculateTransport && sandTransportTime > 0) {
@@ -648,7 +634,6 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
 
         if (soilExcavationTemplate && soilExcavationTemplate.estimated_hours) {
           soilExcavationTime = soilExcavationTemplate.estimated_hours * soilTonnes;
-          console.log('Found soil excavation template:', soilExcavationTemplate.name, 'Time:', soilExcavationTime);
         } else {
           console.warn('Soil excavation template not found for:', `Excavation soil with ${excavatorName} (${excavatorSize}t)`);
           soilExcavationTime = 0;
@@ -668,7 +653,6 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
 
           if (tape1Template && tape1Template.estimated_hours) {
             tape1LoadingTime = tape1Template.estimated_hours * tape1Tons;
-            console.log('Found tape1 loading template:', tape1Template.name, 'Time:', tape1LoadingTime);
           } else {
             console.warn('Tape1 loading template not found for:', `Loading tape1 with ${excavatorName} (${excavatorSize}t)`);
             tape1LoadingTime = 0;

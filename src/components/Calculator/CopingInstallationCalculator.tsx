@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { colors, radii } from '../../themes/designTokens';
 
 interface TaskTemplate {
   id: string;
@@ -24,6 +25,27 @@ interface CopingInstallationCalculatorProps {
   setTransportDistance?: (value: string) => void;
   carriers?: any[];
   selectedExcavator?: any;
+  /** From wall segments on canvas — length and corners auto-filled from wall */
+  fromWallSegments?: boolean;
+  initialSegmentLengths?: number[];
+  initialCornerCount?: number;
+  /** Canvas Object Card dark UI */
+  canvasMode?: boolean;
+  /** When Wall Calculate is clicked, parent increments this to trigger calc */
+  calculateTrigger?: number;
+  /** Controlled inputs when embedded in WallCalculator (from parent state) */
+  slabLength?: string;
+  slabWidth?: string;
+  selectedGap?: number;
+  adhesiveThickness?: string;
+  apply45DegreeCut?: boolean;
+  selectedGroutingId?: string;
+  onSlabLengthChange?: (v: string) => void;
+  onSlabWidthChange?: (v: string) => void;
+  onSelectedGapChange?: (v: number) => void;
+  onAdhesiveThicknessChange?: (v: string) => void;
+  onApply45DegreeCutChange?: (v: boolean) => void;
+  onSelectedGroutingIdChange?: (v: string) => void;
 }
 
 interface Material {
@@ -64,18 +86,50 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
   setSelectedTransportCarrier: propSetSelectedTransportCarrier,
   transportDistance: propTransportDistance,
   setTransportDistance: propSetTransportDistance,
-  carriers: propCarriers = []
+  carriers: propCarriers = [],
+  fromWallSegments = false,
+  initialSegmentLengths,
+  initialCornerCount,
+  canvasMode = false,
+  calculateTrigger = 0,
+  slabLength: propSlabLength,
+  slabWidth: propSlabWidth,
+  selectedGap: propSelectedGap,
+  adhesiveThickness: propAdhesiveThickness,
+  apply45DegreeCut: propApply45DegreeCut,
+  selectedGroutingId: propSelectedGroutingId,
+  onSlabLengthChange,
+  onSlabWidthChange,
+  onSelectedGapChange,
+  onAdhesiveThicknessChange,
+  onApply45DegreeCutChange,
+  onSelectedGroutingIdChange,
 }: CopingInstallationCalculatorProps) => {
   const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
   const [wallLength, setWallLength] = useState<string>('');
-  const [slabLength, setSlabLength] = useState<string>('90');
-  const [slabWidth, setSlabWidth] = useState<string>('60');
-  const [selectedGap, setSelectedGap] = useState<number>(GAP_OPTIONS[0]);
-  const [adhesiveThickness, setAdhesiveThickness] = useState<string>('0.5');
+  const [slabLength, setSlabLength] = useState<string>(propSlabLength ?? '90');
+  const [slabWidth, setSlabWidth] = useState<string>(propSlabWidth ?? '60');
+  const [selectedGap, setSelectedGap] = useState<number>(propSelectedGap ?? GAP_OPTIONS[0]);
+  const [adhesiveThickness, setAdhesiveThickness] = useState<string>(propAdhesiveThickness ?? '0.5');
   const [amountOfCorners, setAmountOfCorners] = useState<string>('2');
-  const [apply45DegreeCut, setApply45DegreeCut] = useState<boolean>(false);
-  const [selectedGroutingId, setSelectedGroutingId] = useState<string>('');
+  const [apply45DegreeCut, setApply45DegreeCut] = useState<boolean>(propApply45DegreeCut ?? false);
+  const [selectedGroutingId, setSelectedGroutingId] = useState<string>(propSelectedGroutingId ?? '');
+
+  const slabLengthVal = fromWallSegments && propSlabLength != null ? propSlabLength : slabLength;
+  const slabWidthVal = fromWallSegments && propSlabWidth != null ? propSlabWidth : slabWidth;
+  const selectedGapVal = fromWallSegments && propSelectedGap != null ? propSelectedGap : selectedGap;
+  const adhesiveThicknessVal = fromWallSegments && propAdhesiveThickness != null ? propAdhesiveThickness : adhesiveThickness;
+  const apply45DegreeCutVal = fromWallSegments && propApply45DegreeCut != null ? propApply45DegreeCut : apply45DegreeCut;
+  const selectedGroutingIdVal = fromWallSegments && propSelectedGroutingId != null ? propSelectedGroutingId : selectedGroutingId;
+
+  const setSlabLengthFn = onSlabLengthChange ?? setSlabLength;
+  const setSlabWidthFn = onSlabWidthChange ?? setSlabWidth;
+  const setSelectedGapFn = onSelectedGapChange ?? setSelectedGap;
+  const setAdhesiveThicknessFn = onAdhesiveThicknessChange ?? setAdhesiveThickness;
+  const setApply45DegreeCutFn = onApply45DegreeCutChange ?? setApply45DegreeCut;
+  const setSelectedGroutingIdFn = onSelectedGroutingIdChange ?? setSelectedGroutingId;
+
   const [transportDistance, setTransportDistance] = useState<string>('30');
   const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
   const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
@@ -215,20 +269,33 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
   };
 
   const calculateResults = () => {
-    if (!wallLength || !slabLength || !slabWidth) return;
+    const slabLengthCm = parseFloat(slabLengthVal);
+    const slabWidthCm = parseFloat(slabWidthVal);
+    if (!slabLengthCm || !slabWidthCm) return;
 
-    // Convert to centimeters for calculations
-    const wallLengthCm = parseFloat(wallLength) * 100;
-    const slabLengthCm = parseFloat(slabLength);
-    const slabWidthCm = parseFloat(slabWidth);
-    const gapCm = selectedGap / 10;
+    const gapCm = selectedGapVal / 10;
 
-    // Calculate number of slabs: wallLength / (slabLength + gap)
-    const numberOfSlabs = Math.floor(wallLengthCm / (slabLengthCm + gapCm));
+    let numberOfSlabs: number;
+    let wallLengthCm: number;
 
-    // Calculate corner cuts
-    const corners = parseInt(amountOfCorners) || 2;
-    const cutsPerCorner = apply45DegreeCut ? 2 : 1;
+    if (fromWallSegments && initialSegmentLengths && initialSegmentLengths.length > 0) {
+      // Per-segment: ceil(segmentLength / (slabLength + gap)) then sum
+      numberOfSlabs = initialSegmentLengths.reduce((sum, segLenM) => {
+        const segLenCm = segLenM * 100;
+        const slabsForSeg = Math.ceil(segLenCm / (slabLengthCm + gapCm));
+        return sum + slabsForSeg;
+      }, 0);
+      wallLengthCm = initialSegmentLengths.reduce((a, b) => a + b, 0) * 100;
+    } else {
+      if (!wallLength) return;
+      wallLengthCm = parseFloat(wallLength) * 100;
+      // ceil: enough slabs to cover the length (1 full + docinek = 2 slabs)
+      numberOfSlabs = Math.ceil(wallLengthCm / (slabLengthCm + gapCm));
+    }
+
+    // Calculate corner cuts: from wall segments or manual input
+    const corners = fromWallSegments && initialCornerCount != null ? initialCornerCount : (parseInt(amountOfCorners) || 2);
+    const cutsPerCorner = apply45DegreeCutVal ? 2 : 1;
     const totalCuts = corners * cutsPerCorner;
 
     // Calculate adhesive needed and wall area in m²
@@ -241,9 +308,9 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
     const adhesiveMaterial = materialsTable.find((m: Material) => m.name.toLowerCase().includes('adhesive'));
     let materials: { name: string; amount: number; unit: string; price_per_unit: number | null; total_price: number | null }[] = [];
     
-    // Add copings as first material
+    // Add copings as first material (with dimensions in breakdown)
     materials.push({
-      name: 'Copings',
+      name: `Copings (${slabLengthCm} × ${slabWidthCm})`,
       amount: numberOfSlabs,
       unit: 'pieces',
       price_per_unit: null,
@@ -277,8 +344,6 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
     
     // If exact match not found, try best match approach (similar to StairCalculator)
     if (!tileTaskTemplate) {
-      console.log(`[Tile] No exact match for: "${tileTaskName}", trying best match...`);
-      
       // Extract dimensions from available tasks and find best match
       const dimensionPattern = /(\d+)\s*[×x]\s*(\d+)/;
       const targetLength = slabLengthCm;
@@ -315,9 +380,6 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
       
       if (bestMatch) {
         tileTaskTemplate = bestMatch;
-        console.log(`[Tile] Found best match: "${bestMatch.name}" (score: ${bestScore})`);
-      } else {
-        console.log(`[Tile] No suitable match found, using default`);
       }
     }
     
@@ -348,8 +410,8 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
     ];
 
     // Add grouting method if selected
-    if (selectedGroutingId) {
-      const groutingTask = groutingMethods.find((g: any) => g.id.toString() === selectedGroutingId);
+    if (selectedGroutingIdVal) {
+      const groutingTask = groutingMethods.find((g: any) => g.id.toString() === selectedGroutingIdVal);
       if (groutingTask && groutingTask.estimated_hours !== undefined && groutingTask.estimated_hours !== null) {
         let groutingHours = groutingTask.estimated_hours;
         const unitLower = groutingTask.unit ? groutingTask.unit.toLowerCase() : '';
@@ -437,10 +499,16 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
 
     setResults(newResults);
     if (onResultsChange) {
-      console.debug('[CopingInstallationCalculator] onResultsChange payload:', formattedResults);
       onResultsChange(formattedResults);
     }
   };
+
+  // Auto-calculate when Wall Calculate is clicked (fromWallSegments + canvas mode)
+  useEffect(() => {
+    if (fromWallSegments && (canvasMode || isInProjectCreating) && calculateTrigger > 0 && initialSegmentLengths && initialSegmentLengths.length > 0) {
+      calculateResults();
+    }
+  }, [calculateTrigger, fromWallSegments, canvasMode, isInProjectCreating, initialSegmentLengths?.length]);
 
   // Scroll to results when they appear
   useEffect(() => {
@@ -456,28 +524,39 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
     }
   }, [results]);
 
+  const inputStyle = canvasMode
+    ? { width: '100%', padding: '6px 10px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: radii.md, color: colors.textPrimaryLight, fontSize: 13 } as React.CSSProperties
+    : undefined;
+  const inputCls = canvasMode ? undefined : "mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500";
+  const labelCls = canvasMode ? undefined : "block text-sm font-medium text-gray-700";
+  const labelStyle = canvasMode ? { display: 'block', fontSize: '0.7rem', color: colors.textLabel, marginBottom: 2 } as React.CSSProperties : undefined;
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-4">{t('calculator:coping_installation_calculator_title')}</h2>
+    <div className={canvasMode ? "space-y-4" : "space-y-6"}>
+      {!canvasMode && <h2 className="text-2xl font-bold text-gray-900 mb-4">{t('calculator:coping_installation_calculator_title')}</h2>}
       
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:wall_length_m_label')}</label>
-        <input
-          type="number"
-          value={wallLength}
-          onChange={(e) => setWallLength(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder={t('calculator:enter_wall_length')}
-          step="0.01"
-        />
-      </div>
+      {!fromWallSegments && (
+        <div>
+          <label className={labelCls} style={labelStyle}>{t('calculator:wall_length_m_label')}</label>
+          <input
+            type="number"
+            value={wallLength}
+            onChange={(e) => setWallLength(e.target.value)}
+            className={inputCls}
+            style={inputStyle}
+            placeholder={t('calculator:enter_wall_length')}
+            step="0.01"
+          />
+        </div>
+      )}
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:slab_length_cm_label')}</label>
+        <label className={labelCls} style={labelStyle}>{t('calculator:slab_length_cm_label')}</label>
         <select
-          value={slabLength}
-          onChange={(e) => setSlabLength(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          value={slabLengthVal}
+          onChange={(e) => setSlabLengthFn(e.target.value)}
+          className={inputCls}
+          style={inputStyle}
         >
           <option value="120">120 cm</option>
           <option value="90">90 cm</option>
@@ -489,11 +568,12 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:slab_width_cm_label')}</label>
+        <label className={labelCls} style={labelStyle}>{t('calculator:slab_width_cm_label')}</label>
         <select
-          value={slabWidth}
-          onChange={(e) => setSlabWidth(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          value={slabWidthVal}
+          onChange={(e) => setSlabWidthFn(e.target.value)}
+          className={inputCls}
+          style={inputStyle}
         >
           <option value="120">120 cm</option>
           <option value="90">90 cm</option>
@@ -507,11 +587,12 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:gaps_mm_label')}</label>
+        <label className={labelCls} style={labelStyle}>{t('calculator:gaps_mm_label')}</label>
         <select
-          value={selectedGap}
-          onChange={(e) => setSelectedGap(Number(e.target.value))}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          value={selectedGapVal}
+          onChange={(e) => setSelectedGapFn(Number(e.target.value))}
+          className={inputCls}
+          style={inputStyle}
         >
           {GAP_OPTIONS.map((gap) => (
             <option key={gap} value={gap}>
@@ -522,50 +603,58 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:adhesive_thickness_label')}</label>
+        <label className={labelCls} style={labelStyle}>{t('calculator:adhesive_thickness_label')}</label>
         <input
           type="number"
-          value={adhesiveThickness}
-          onChange={(e) => setAdhesiveThickness(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+          value={adhesiveThicknessVal}
+          onChange={(e) => setAdhesiveThicknessFn(e.target.value)}
+          className={inputCls}
+          style={inputStyle}
           placeholder="cm"
           min="0"
           step="0.1"
         />
-        <p className="text-xs text-gray-500 mt-1">
-          Consumption: {((parseFloat(adhesiveThickness) || 0.5) * 12).toFixed(1)} kg/m²
-        </p>
+        {!canvasMode && (
+          <p className="text-xs text-gray-500 mt-1">
+            Consumption: {((parseFloat(adhesiveThicknessVal) || 0.5) * 12).toFixed(1)} kg/m²
+          </p>
+        )}
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:amount_of_corners_label')}</label>
-        <input
-          type="number"
-          value={amountOfCorners}
-          onChange={(e) => setAmountOfCorners(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder={t('calculator:enter_amount_of_corners')}
-          min="0"
-          step="1"
-        />
-      </div>
+      {!fromWallSegments && (
+        <div>
+          <label className={labelCls} style={labelStyle}>{t('calculator:amount_of_corners_label')}</label>
+          <input
+            type="number"
+            value={amountOfCorners}
+            onChange={(e) => setAmountOfCorners(e.target.value)}
+            className={inputCls}
+            style={inputStyle}
+            placeholder={t('calculator:enter_amount_of_corners')}
+            min="0"
+            step="1"
+          />
+        </div>
+      )}
 
       <label className="flex items-center space-x-2">
         <input
           type="checkbox"
-          checked={apply45DegreeCut}
-          onChange={(e) => setApply45DegreeCut(e.target.checked)}
+          checked={apply45DegreeCutVal}
+          onChange={(e) => setApply45DegreeCutFn(e.target.checked)}
           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          style={canvasMode ? { accentColor: colors.green } : undefined}
         />
-        <span className="text-sm font-medium text-gray-700">{t('calculator:degree_cut_corners')}</span>
+        <span className="text-sm font-medium text-gray-700" style={canvasMode ? { color: colors.textPrimaryLight } : undefined}>{t('calculator:degree_cut_corners')}</span>
       </label>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:grouting_method_label')}</label>
+        <label className={labelCls} style={labelStyle}>{t('calculator:grouting_method_label')}</label>
         <select
-          value={selectedGroutingId}
-          onChange={e => setSelectedGroutingId(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-select"
+          value={selectedGroutingIdVal}
+          onChange={e => setSelectedGroutingIdFn(e.target.value)}
+          className={inputCls}
+          style={inputStyle}
           disabled={isLoadingGrouting}
         >
           <option value="">{t('calculator:select_grouting_method_placeholder')}</option>
@@ -577,7 +666,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
         <p className="text-xs text-red-600 mt-1">{t('calculator:grouting_method_note')}</p>
       </div>
 
-      {!isInProjectCreating && (
+      {!isInProjectCreating && !fromWallSegments && (
         <label className="flex items-center space-x-2">
           <input
             type="checkbox"
@@ -590,7 +679,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
       )}
 
       {/* Transport Carrier Selection */}
-      {!isInProjectCreating && calculateTransport && (
+      {!isInProjectCreating && !fromWallSegments && calculateTransport && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier_label')}</label>
           <div className="space-y-2">
@@ -653,16 +742,18 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
         </div>
       )}
 
-      <div className="flex justify-center">
-        <button
-          onClick={calculateResults}
-          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          Calculate
-        </button>
-      </div>
+      {!fromWallSegments && (
+        <div className="flex justify-center">
+          <button
+            onClick={calculateResults}
+            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            Calculate
+          </button>
+        </div>
+      )}
 
-      {results && (
+      {results && !fromWallSegments && (
         <div className="mt-6 space-y-4" ref={resultsRef}>
           {/* Estimated Time Breakdown */}
           <div className="bg-transparent p-0">

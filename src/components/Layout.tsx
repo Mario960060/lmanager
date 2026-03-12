@@ -355,7 +355,6 @@ const Layout = () => {
                                         const event = new CustomEvent('selectSubCalculator', { 
                                           detail: { calculatorType: calc.type, subType: subType.type, subTypeLabel: subType.label }
                                         });
-                                        console.log('Dispatching event:', event.detail);
                                         window.dispatchEvent(event);
                                       }, 50);
                                     } else {
@@ -363,7 +362,6 @@ const Layout = () => {
                                       const event = new CustomEvent('selectSubCalculator', { 
                                         detail: { calculatorType: calc.type, subType: subType.type, subTypeLabel: subType.label }
                                       });
-                                      console.log('Dispatching event:', event.detail);
                                       window.dispatchEvent(event);
                                     }
                                     

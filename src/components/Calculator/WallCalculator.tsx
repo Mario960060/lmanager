@@ -8,6 +8,7 @@ import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapa
 import { translateTaskName, translateUnit } from '../../lib/translationMap';
 import { WallTileSidesSelector } from '../../projectmanagement/canvacreator/objectCard/WallTileSidesSelector';
 import TileInstallationCalculator from './TileInstallationCalculator';
+import CopingInstallationCalculator from './CopingInstallationCalculator';
 import {
   colors,
   fonts,
@@ -144,6 +145,14 @@ const WallCalculator: React.FC<CalculatorProps> = ({
   const [includeTileInstallation, setIncludeTileInstallation] = useState<boolean>(savedInputs?.includeTileInstallation ?? false);
   const [tileInstallationResults, setTileInstallationResults] = useState<any>(null);
   const [tileCalculateTrigger, setTileCalculateTrigger] = useState(0);
+  const [copingInstallationResults, setCopingInstallationResults] = useState<any>(null);
+  const [copingCalculateTrigger, setCopingCalculateTrigger] = useState(0);
+  const [copingSlabLength, setCopingSlabLength] = useState<string>(savedInputs?.copingSlabLength ?? '90');
+  const [copingSlabWidth, setCopingSlabWidth] = useState<string>(savedInputs?.copingSlabWidth ?? '60');
+  const [copingGap, setCopingGap] = useState<number>(savedInputs?.copingGap ?? 2);
+  const [copingAdhesiveThickness, setCopingAdhesiveThickness] = useState<string>(savedInputs?.copingAdhesiveThickness ?? '0.5');
+  const [coping45Cut, setCoping45Cut] = useState<boolean>(savedInputs?.coping45Cut ?? false);
+  const [copingGroutingId, setCopingGroutingId] = useState<string>(savedInputs?.copingGroutingId ?? '');
   const [segmentTileSides, setSegmentTileSides] = useState<boolean[][]>(() => {
     const existing = savedInputs?.segmentTileSides as boolean[][] | undefined;
     const n = savedInputs?.segmentLengths?.length ?? 0;
@@ -199,12 +208,21 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       setSegmentTileSides(existing.map((row) => [...row]));
     } else if (segLens.length > 0) {
       setSegmentTileSides((prev) =>
-        segLens.map((_, i) => (prev[i] ? [...prev[i]] : [false, false]))
+        segLens.map((_: unknown, i: number) => (prev[i] ? [...prev[i]] : [false, false]))
       );
     }
     const ff = savedInputs?.frontFacesTiled as [boolean, boolean] | undefined;
     if (ff) setFrontFacesTiled([...ff]);
   }, [savedInputs?.segmentLengths, savedInputs?.segmentTileSides, savedInputs?.frontFacesTiled, segmentLengths]);
+
+  useEffect(() => {
+    if (savedInputs?.copingSlabLength != null) setCopingSlabLength(String(savedInputs.copingSlabLength));
+    if (savedInputs?.copingSlabWidth != null) setCopingSlabWidth(String(savedInputs.copingSlabWidth));
+    if (savedInputs?.copingGap != null) setCopingGap(Number(savedInputs.copingGap));
+    if (savedInputs?.copingAdhesiveThickness != null) setCopingAdhesiveThickness(String(savedInputs.copingAdhesiveThickness));
+    if (savedInputs?.coping45Cut != null) setCoping45Cut(Boolean(savedInputs.coping45Cut));
+    if (savedInputs?.copingGroutingId != null) setCopingGroutingId(String(savedInputs.copingGroutingId));
+  }, [savedInputs?.copingSlabLength, savedInputs?.copingSlabWidth, savedInputs?.copingGap, savedInputs?.copingAdhesiveThickness, savedInputs?.coping45Cut, savedInputs?.copingGroutingId]);
 
   const updateSegmentHeight = (idx: number, field: 'startH' | 'endH', value: number) => {
     setSegmentHeights(prev => {
@@ -249,12 +267,20 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         inputs.wallTileSlabThicknessCm = wallTileSlabThicknessCm;
         inputs.wallTileAdhesiveThicknessCm = wallTileAdhesiveThicknessCm;
       }
+      if (includeCopings) {
+        inputs.copingSlabLength = copingSlabLength;
+        inputs.copingSlabWidth = copingSlabWidth;
+        inputs.copingGap = copingGap;
+        inputs.copingAdhesiveThickness = copingAdhesiveThickness;
+        inputs.coping45Cut = coping45Cut;
+        inputs.copingGroutingId = copingGroutingId;
+      }
     }
     const key = JSON.stringify(inputs);
     if (lastInputsSentRef.current === key) return;
     lastInputsSentRef.current = key;
     onInputsChange(inputs);
-  }, [length, height, layingMethod, postMethod, includeFoundation, foundationLength, foundationWidth, foundationDepthCm, foundationDiggingMethod, foundationSoilType, segmentHeights, segmentLengths, segmentTileSides, frontFacesTiled, wallTileSlabThicknessCm, wallTileAdhesiveThicknessCm, wallConfigMode, canvasMode, totalLengthCanvas, onInputsChange, isInProjectCreating, type, includeCopings, includeTileInstallation]);
+  }, [length, height, layingMethod, postMethod, includeFoundation, foundationLength, foundationWidth, foundationDepthCm, foundationDiggingMethod, foundationSoilType, segmentHeights, segmentLengths, segmentTileSides, frontFacesTiled, wallTileSlabThicknessCm, wallTileAdhesiveThicknessCm, wallConfigMode, canvasMode, totalLengthCanvas, onInputsChange, isInProjectCreating, type, includeCopings, includeTileInstallation, copingSlabLength, copingSlabWidth, copingGap, copingAdhesiveThickness, coping45Cut, copingGroutingId]);
 
   // Use carriers from props if available (from ProjectCreating), otherwise use local state
   const carriers = propCarriers && propCarriers.length > 0 ? propCarriers : carriersLocal;
@@ -342,7 +368,6 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       const { data, error } = await query.order('name');
       
       if (error) throw error;
-      console.log('Task templates fetched:', data);
       return data;
     },
     enabled: !!companyId
@@ -1110,7 +1135,6 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         }
       }
 
-      console.log('Selected task:', relevantTask); // Add logging to debug
 
       if (relevantTask && relevantTask.estimated_hours) {
         const taskHours = units * relevantTask.estimated_hours;
@@ -1181,11 +1205,8 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         }
 
         totalHours += brickTransportTime + blockTransportTime + sandTransportTime + cementTransportTime;
-      } else {
-        console.log('No estimated hours found for task'); // Add logging to debug
       }
     } else {
-      console.log('No task templates found'); // Add logging to debug
     }
 
     // Prepare materials list
@@ -1230,8 +1251,9 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       taskBreakdown,
       materials: materialsWithPrices
     });
-    if (canvasMode && (type === 'block4' || type === 'block7') && includeTileInstallation) {
-      setTileCalculateTrigger(prev => prev + 1);
+    if (canvasMode && (type === 'block4' || type === 'block7')) {
+      if (includeTileInstallation) setTileCalculateTrigger(prev => prev + 1);
+      if (includeCopings) setCopingCalculateTrigger(prev => prev + 1);
     }
   };
 
@@ -1282,6 +1304,11 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         materials = [...materials, ...(tileInstallationResults.materials?.map((m: any) => ({ name: m.name, quantity: m.quantity, unit: m.unit })) ?? [])];
         taskBreakdown = [...taskBreakdown, ...(tileInstallationResults.taskBreakdown ?? [])];
       }
+      if (canvasMode && (type === 'block4' || type === 'block7') && includeCopings && copingInstallationResults) {
+        totalHours += copingInstallationResults.labor ?? 0;
+        materials = [...materials, ...(copingInstallationResults.materials?.map((m: any) => ({ name: m.name, quantity: m.quantity, unit: m.unit })) ?? [])];
+        taskBreakdown = [...taskBreakdown, ...(copingInstallationResults.taskBreakdown ?? [])];
+      }
 
       // Format results for database storage
       const formattedResults = {
@@ -1299,6 +1326,14 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             segmentTileSides,
             frontFacesTiled,
           }),
+          ...(includeCopings && {
+            copingSlabLength,
+            copingSlabWidth,
+            copingGap,
+            copingAdhesiveThickness,
+            coping45Cut,
+            copingGroutingId,
+          }),
         }),
         materials,
         taskBreakdown,
@@ -1306,6 +1341,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         tileTaskBreakdown: tileInstallationResults?.taskBreakdown ?? [],
         wallMaterials: result.materials.map((m: Material) => ({ name: m.name, quantity: m.amount, unit: m.unit })),
         tileMaterials: tileInstallationResults?.materials?.map((m: any) => ({ name: m.name, quantity: m.quantity, unit: m.unit })) ?? [],
+        copingMaterials: copingInstallationResults?.materials?.map((m: any) => ({ name: m.name, quantity: m.quantity, unit: m.unit })) ?? [],
       };
 
       // Store results in a data attribute for the modal to access
@@ -1317,7 +1353,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       // Notify parent component of results
       onResultsChange(formattedResults);
     }
-  }, [result, type, layingMethod, onResultsChange, includeFoundation, effectiveFoundationDiggingMethod, canvasMode, includeCopings, includeTileInstallation, segmentTileSides, frontFacesTiled, segmentLengths, segmentHeights, defH, tileInstallationResults, wallTileSlabThicknessCm, wallTileAdhesiveThicknessCm]);
+  }, [result, type, layingMethod, onResultsChange, includeFoundation, effectiveFoundationDiggingMethod, canvasMode, includeCopings, includeTileInstallation, segmentTileSides, frontFacesTiled, segmentLengths, segmentHeights, defH, tileInstallationResults, copingInstallationResults, wallTileSlabThicknessCm, wallTileAdhesiveThicknessCm]);
 
   // Scroll to results when they appear
   useEffect(() => {
@@ -1523,7 +1559,48 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             />
             <span>{t('calculator:include_foundation')}</span>
           </label>
-          {/* Include copings & tile installation - canvas only, block4/block7 */}
+          {includeFoundation && (
+            <div style={{ background: colors.bgDeep, border: `1px solid ${colors.bgDeepBorder}`, borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 600, color: colors.textLabel, textTransform: 'uppercase' }}>{t('calculator:foundation_details_label')}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: colors.textLabel, marginBottom: 2, display: 'block' }}>{t('calculator:input_length_m')}</label>
+                  <input type="number" value={foundationLength} onChange={(e) => setFoundationLength(e.target.value)} placeholder="m" min={0} step={0.1} style={{ width: '100%', padding: '6px 10px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontSize: 13 }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: colors.textLabel, marginBottom: 2, display: 'block' }}>{t('calculator:input_width_m')}</label>
+                  <input type="number" value={foundationWidth} onChange={(e) => setFoundationWidth(e.target.value)} placeholder="m" min={0} step={0.1} style={{ width: '100%', padding: '6px 10px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontSize: 13 }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: colors.textLabel, marginBottom: 2, display: 'block' }}>{t('calculator:input_depth_in_cm')}</label>
+                  <input type="number" value={foundationDepthCm} onChange={(e) => setFoundationDepthCm(e.target.value)} placeholder="cm" min={0} step={1} style={{ width: '100%', padding: '6px 10px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontSize: 13 }} />
+                </div>
+              </div>
+              {!isInProjectCreating && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: colors.textLabel, marginBottom: 2, display: 'block' }}>{t('calculator:digging_method')}</label>
+                  <select value={foundationDiggingMethod} onChange={(e) => setFoundationDiggingMethod(e.target.value as any)} style={{ width: '100%', padding: '6px 10px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontSize: 13 }}>
+                    <option value="shovel">Shovel (Manual)</option>
+                    <option value="small">Small Excavator (1-3t)</option>
+                    <option value="medium">Medium Excavator (3-7t)</option>
+                    <option value="large">Large Excavator (7+t)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: colors.textLabel, marginBottom: 2, display: 'block' }}>{t('calculator:soil_type')}</label>
+                  <select value={foundationSoilType} onChange={(e) => setFoundationSoilType(e.target.value as any)} style={{ width: '100%', padding: '6px 10px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontSize: 13 }}>
+                    <option value="clay">{t('calculator:soil_type_clay')}</option>
+                    <option value="sand">{t('calculator:soil_type_sand')}</option>
+                    <option value="rock">{t('calculator:soil_type_rock')}</option>
+                  </select>
+                </div>
+              </div>
+              )}
+            </div>
+          )}
+
+          {/* Include copings - canvas only, block4/block7 */}
           {(type === 'block4' || type === 'block7') && (
             <>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem', color: colors.textPrimaryLight }}>
@@ -1535,6 +1612,39 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 />
                 <span>{t('calculator:include_copings')}</span>
               </label>
+              {includeCopings && segmentLengths.length > 0 && (
+                <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ background: colors.bgDeep, border: `1px solid ${colors.bgDeepBorder}`, borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 600, color: colors.textLabel, textTransform: 'uppercase', marginBottom: 10 }}>{t('calculator:coping_installation_calculator_title')}</div>
+                    <CopingInstallationCalculator
+                      fromWallSegments
+                      initialSegmentLengths={segmentLengths}
+                      initialCornerCount={Math.max(0, segmentLengths.length - 1)}
+                      canvasMode
+                      isInProjectCreating
+                      calculateTrigger={copingCalculateTrigger}
+                      slabLength={copingSlabLength}
+                      slabWidth={copingSlabWidth}
+                      selectedGap={copingGap}
+                      adhesiveThickness={copingAdhesiveThickness}
+                      apply45DegreeCut={coping45Cut}
+                      selectedGroutingId={copingGroutingId}
+                      onSlabLengthChange={setCopingSlabLength}
+                      onSlabWidthChange={setCopingSlabWidth}
+                      onSelectedGapChange={setCopingGap}
+                      onAdhesiveThicknessChange={setCopingAdhesiveThickness}
+                      onApply45DegreeCutChange={setCoping45Cut}
+                      onSelectedGroutingIdChange={setCopingGroutingId}
+                      onResultsChange={(r) => setCopingInstallationResults(r)}
+                      calculateTransport={effectiveCalculateTransport}
+                      selectedTransportCarrier={effectiveSelectedTransportCarrier}
+                      transportDistance={effectiveTransportDistance}
+                      carriers={carriers}
+                    />
+                  </div>
+                </div>
+              )}
+
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem', color: colors.textPrimaryLight }}>
                 <input
                   type="checkbox"
@@ -1662,47 +1772,6 @@ const WallCalculator: React.FC<CalculatorProps> = ({
               )}
             </>
           )}
-          {includeFoundation && (
-            <div style={{ background: colors.bgDeep, border: `1px solid ${colors.bgDeepBorder}`, borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 600, color: colors.textLabel, textTransform: 'uppercase' }}>{t('calculator:foundation_details_label')}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                <div>
-                  <label style={{ fontSize: '0.7rem', color: colors.textLabel, marginBottom: 2, display: 'block' }}>{t('calculator:input_length_m')}</label>
-                  <input type="number" value={foundationLength} onChange={(e) => setFoundationLength(e.target.value)} placeholder="m" min={0} step={0.1} style={{ width: '100%', padding: '6px 10px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontSize: 13 }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.7rem', color: colors.textLabel, marginBottom: 2, display: 'block' }}>{t('calculator:input_width_m')}</label>
-                  <input type="number" value={foundationWidth} onChange={(e) => setFoundationWidth(e.target.value)} placeholder="m" min={0} step={0.1} style={{ width: '100%', padding: '6px 10px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontSize: 13 }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.7rem', color: colors.textLabel, marginBottom: 2, display: 'block' }}>{t('calculator:input_depth_in_cm')}</label>
-                  <input type="number" value={foundationDepthCm} onChange={(e) => setFoundationDepthCm(e.target.value)} placeholder="cm" min={0} step={1} style={{ width: '100%', padding: '6px 10px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontSize: 13 }} />
-                </div>
-              </div>
-              {/* Digging method & soil type — hidden when in project mode (from Project Card Equipment) */}
-              {!isInProjectCreating && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div>
-                  <label style={{ fontSize: '0.7rem', color: colors.textLabel, marginBottom: 2, display: 'block' }}>{t('calculator:digging_method')}</label>
-                  <select value={foundationDiggingMethod} onChange={(e) => setFoundationDiggingMethod(e.target.value as any)} style={{ width: '100%', padding: '6px 10px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontSize: 13 }}>
-                    <option value="shovel">Shovel (Manual)</option>
-                    <option value="small">Small Excavator (1-3t)</option>
-                    <option value="medium">Medium Excavator (3-7t)</option>
-                    <option value="large">Large Excavator (7+t)</option>
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: '0.7rem', color: colors.textLabel, marginBottom: 2, display: 'block' }}>{t('calculator:soil_type')}</label>
-                  <select value={foundationSoilType} onChange={(e) => setFoundationSoilType(e.target.value as any)} style={{ width: '100%', padding: '6px 10px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontSize: 13 }}>
-                    <option value="clay">{t('calculator:soil_type_clay')}</option>
-                    <option value="sand">{t('calculator:soil_type_sand')}</option>
-                    <option value="rock">{t('calculator:soil_type_rock')}</option>
-                  </select>
-                </div>
-              </div>
-              )}
-            </div>
-          )}
         </div>
 
         <button onClick={calculate} style={{ width: '100%', padding: '9px 20px', borderRadius: 8, background: colors.green, color: colors.textOnAccent, fontWeight: 600, fontSize: '0.85rem', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
@@ -1716,7 +1785,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
               <p style={{ fontSize: '0.9rem', color: colors.textPrimaryLight }}>{t('calculator:total_rows')} <strong>{Math.ceil(result.rows)}</strong> <span style={{ fontSize: '0.8rem', color: colors.accentBlue }}>{t('calculator:rounded_up_from', { val: result.rows.toFixed(2) })}</span></p>
               <p style={{ fontSize: '0.9rem', color: colors.textPrimaryLight }}>{t('calculator:rounded_up_height')} <strong>{result.roundedUpHeight} m</strong></p>
             </div>
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: colors.textPrimaryLight, marginTop: 12 }}>{t('calculator:total_labor_hours_label')} <span style={{ color: colors.green }}>{(result.totalHours + (tileInstallationResults?.labor ?? 0)).toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: colors.textPrimaryLight, marginTop: 12 }}>{t('calculator:total_labor_hours_label')} <span style={{ color: colors.green }}>{(result.totalHours + (tileInstallationResults?.labor ?? 0) + (copingInstallationResults?.labor ?? 0)).toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
             <div style={{ marginTop: 8 }}>
               <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{type === 'block4' ? t('calculator:block4_wall_label') : type === 'block7' ? t('calculator:block7_wall_label') : t('calculator:wall_label')} — {t('calculator:task_breakdown_label')}</h4>
               <ul style={{ listStyle: 'disc', paddingLeft: 20, color: colors.textPrimaryLight, fontSize: '0.85rem' }}>
@@ -1725,6 +1794,16 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 ))}
               </ul>
             </div>
+            {includeCopings && copingInstallationResults?.taskBreakdown?.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{t('calculator:coping_installation_calculator_title')} — {t('calculator:task_breakdown_label')}</h4>
+                <ul style={{ listStyle: 'disc', paddingLeft: 20, color: colors.textPrimaryLight, fontSize: '0.85rem' }}>
+                  {copingInstallationResults.taskBreakdown.map((task: any, i: number) => (
+                    <li key={i}><span style={{ fontWeight: 500 }}>{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {includeTileInstallation && tileInstallationResults?.taskBreakdown?.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{t('calculator:tile_installation_label')} — {t('calculator:task_breakdown_label')}</h4>
@@ -1766,6 +1845,31 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 </table>
               </div>
             </div>
+            {includeCopings && copingInstallationResults?.materials?.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{t('calculator:coping_installation_calculator_title')} — {t('calculator:materials_required_label')}</h4>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ background: colors.bgDeep }}>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>{t('calculator:material_label')}</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>{t('calculator:quantity_label')}</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>{t('calculator:unit_label')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {copingInstallationResults.materials.map((m: any, i: number) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${colors.bgDeepBorder}` }}>
+                          <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.name}</td>
+                          <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.amount?.toFixed?.(2) ?? m.quantity}</td>
+                          <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateUnit(m.unit, t)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
             {includeTileInstallation && tileInstallationResults?.materials?.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{t('calculator:tile_installation_label')} — {t('calculator:materials_required_label')}</h4>

@@ -110,28 +110,19 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
   // Invite user mutation
   const inviteUserMutation = useMutation({
     mutationFn: async ({ email, role }: { email: string; role: string }) => {
-      console.log('🔍 Starting invite for:', email);
-      
       if (!profile?.company_id) throw new Error('Company ID not found');
 
       try {
-        console.log('📧 Checking if user exists...');
-        console.log('📧 About to query with email:', email);
-        
         // Use regular select instead of maybeSingle - same style as members query which works
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('id, company_id, email')
           .ilike('email', email);
 
-        console.log('📧 Query done!', { profileData, profileError });
-
         const user = profileData && profileData.length > 0 ? profileData[0] : null;
 
         if (profileError) throw profileError;
         if (!user) throw new Error(t('event:user_no_account'));
-
-        console.log('✅ Found user ID:', user.id);
 
         // If user already belongs to another company
         if (user.company_id) {
@@ -139,7 +130,6 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
         }
 
         // Add user to company members
-        console.log('➕ Adding to company_members...');
         const { data: memberData, error: memberError } = await supabase
           .from('company_members')
           .insert({
@@ -156,10 +146,7 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
           throw memberError;
         }
 
-        console.log('✅ User added to company_members');
-
         // Update user's company_id
-        console.log('🔄 Updating profiles.company_id...');
         const { data: updateData, error: updateError } = await supabase
           .from('profiles')
           .update({ company_id: profile.company_id })
@@ -171,7 +158,6 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
           throw updateError;
         }
 
-        console.log('✅ User profile updated successfully');
         return { email, role };
       } catch (error: any) {
         console.error('❌ Catch block error:', error.message);
@@ -179,7 +165,6 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
       }
     },
     onSuccess: (data) => {
-      console.log('🎉 Success:', data);
       queryClient.invalidateQueries({ queryKey: ['company_members'] });
       setUpdateSuccess(`User ${data.email} ${t('event:user_invited_success')}`);
       setUpdateError(null);
@@ -192,7 +177,7 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
       }, 3000);
     },
     onError: (error: Error) => {
-      console.error('💥 Error:', error.message);
+      console.error('Invite user error:', error.message);
       setUpdateError(error.message);
       setUpdateSuccess(null);
     }

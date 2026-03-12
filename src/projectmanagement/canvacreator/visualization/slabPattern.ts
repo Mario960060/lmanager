@@ -3,8 +3,10 @@
 // Slab pattern rendering on polygon shapes (grid, brick)
 // ══════════════════════════════════════════════════════════════
 
-import { Point, Shape, toPixels, toMeters, labelAnchorInsidePolygon, areaM2, polygonCentroidByArea, pointInPolygon } from "../geometry";
-import { getEffectivePolygon } from "../arcMath";
+import { Point, Shape, toPixels, toMeters, labelAnchorInsidePolygon, areaM2, polygonCentroidByArea, pointInPolygon, polylineMidpointAndAngle } from "../geometry";
+import { scaledFontSize } from "../canvasRenderers";
+import { getEffectivePolygon, getEffectivePolygonWithEdgeIndices } from "../arcMath";
+import { isPathElement, getPathPolygon } from "../linearElements";
 
 type WorldToScreen = (wx: number, wy: number) => { x: number; y: number };
 
@@ -52,6 +54,74 @@ export function shrinkPolygon(pts: Point[], dist: number): Point[] {
     const next = (i + 1) % n;
     const segPrev = offset(pts[prev], pts[i]);
     const segNext = offset(pts[i], pts[next]);
+    const isect = lineIntersection(segPrev.p, segPrev.q, segNext.p, segNext.q);
+    if (isect) result.push(isect);
+    else result.push(pts[i]);
+  }
+  return result;
+}
+
+/**
+ * Shrink polygon inward only on edges where frame is enabled.
+ * On frame-disabled edges the boundary stays at the original edge — pattern extends to element boundary.
+ * edgeIndices[i] = logical edge for segment from pts[i] to pts[(i+1)%n].
+ * frameSidesEnabled[edgeIdx] = whether that logical edge has frame.
+ */
+export function shrinkPolygonByEdges(
+  pts: Point[],
+  dist: number,
+  edgeIndices: number[],
+  frameSidesEnabled: boolean[]
+): Point[] {
+  const n = pts.length;
+  if (n < 3 || dist <= 0 || edgeIndices.length !== n) return pts;
+
+  const numLogicalEdges = Math.max(...edgeIndices, -1) + 1;
+  const anyEnabled = Array.from({ length: numLogicalEdges }, (_, i) => frameSidesEnabled[i] !== false).some(Boolean);
+  const allEnabled = Array.from({ length: numLogicalEdges }, (_, i) => frameSidesEnabled[i] !== false).every(Boolean);
+  if (!anyEnabled) return pts;
+  if (allEnabled) return shrinkPolygon(pts, dist);
+
+  let signedArea = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    signedArea += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
+  }
+  signedArea /= 2;
+  const isCCW = signedArea > 0;
+  const sign = isCCW ? 1 : -1;
+
+  const getOffsetLine = (a: Point, b: Point, doOffset: boolean): { p: Point; q: Point } => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    if (!doOffset) return { p: a, q: b };
+    const d = dist * sign;
+    return {
+      p: { x: a.x + nx * d, y: a.y + ny * d },
+      q: { x: b.x + nx * d, y: b.y + ny * d },
+    };
+  };
+
+  const lineIntersection = (a: Point, b: Point, c: Point, d: Point): Point | null => {
+    const denom = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
+    if (Math.abs(denom) < 1e-10) return null;
+    const t = ((a.x - c.x) * (c.y - d.y) - (a.y - c.y) * (c.x - d.x)) / denom;
+    return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+  };
+
+  const result: Point[] = [];
+  for (let i = 0; i < n; i++) {
+    const prev = (i - 1 + n) % n;
+    const next = (i + 1) % n;
+    const edgePrev = edgeIndices[i];
+    const edgeNext = edgeIndices[next];
+    const shrinkPrev = frameSidesEnabled[edgePrev] !== false;
+    const shrinkNext = frameSidesEnabled[edgeNext] !== false;
+    const segPrev = getOffsetLine(pts[prev], pts[i], shrinkPrev);
+    const segNext = getOffsetLine(pts[i], pts[next], shrinkNext);
     const isect = lineIntersection(segPrev.p, segPrev.q, segNext.p, segNext.q);
     if (isect) result.push(isect);
     else result.push(pts[i]);
@@ -368,8 +438,15 @@ export function drawPathSlabPattern(
   if (!pathCenterline || !Array.isArray(pathCenterline) || pathCenterline.length < 2) return false;
   if (!inputs?.vizSlabWidth || !inputs?.vizSlabLength) return false;
 
-  const outline = shape.calculatorInputs?.pathIsOutline ? shape.points : getEffectivePolygon(shape);
+  let outline = shape.calculatorInputs?.pathIsOutline ? shape.points : getEffectivePolygon(shape);
   if (outline.length < 3 || !shape.closed) return false;
+
+  const frameWidthCm = Number(inputs?.framePieceWidthCm ?? 0);
+  if (frameWidthCm > 0 && !hasConcaveVertex(outline)) {
+    const frameWidthPx = toPixels(frameWidthCm / 100);
+    outline = shrinkPolygon(outline, frameWidthPx);
+    if (outline.length < 3) return false;
+  }
 
   const n = outline.length / 2;
   if (pathCenterline.length !== n) return false;
@@ -382,10 +459,13 @@ export function drawPathSlabPattern(
   const slabLengthPx = toPixels(slabLengthCm / 100);
   const groutPx = toPixels(groutMm / 1000);
 
-  const alongPx = slabOrientation === "along" ? slabLengthPx : slabWidthPx;
-  const acrossPx = slabOrientation === "along" ? slabWidthPx : slabLengthPx;
+  const alongPx = slabOrientation === "along" ? slabWidthPx : slabLengthPx;
+  const acrossPx = slabOrientation === "along" ? slabLengthPx : slabWidthPx;
   const stepLength = alongPx + groutPx;
   const stepWidth = acrossPx + groutPx;
+  const pattern = inputs.vizPattern ?? "grid";
+  const pathWidthMode = inputs.pathWidthMode as string | undefined;
+  const rowCenterOffset = (pathWidthMode === "slab1" || pathWidthMode === "slab1_5") ? -0.5 : 0;
 
   const slabAreaPx2 = slabWidthPx * slabLengthPx;
   const vizWaste = inputs?.vizWasteSatisfied;
@@ -462,8 +542,11 @@ export function drawPathSlabPattern(
 
     for (let r = -EXTEND; r <= EXTEND; r++) {
       for (let c = -EXTEND; c <= EXTEND; c++) {
-        const cx = origin.x + c * stepLength * dir.x + r * stepWidth * perp.x;
-        const cy = origin.y + c * stepLength * dir.y + r * stepWidth * perp.y;
+        let offsetR = r + rowCenterOffset;
+        if (pattern === "brick" && c % 2 !== 0) offsetR += 0.5;
+        else if (pattern === "onethird") offsetR += [0, 2 / 3, 1 / 3][((c % 3) + 3) % 3];
+        const cx = origin.x + c * stepLength * dir.x + offsetR * stepWidth * perp.x;
+        const cy = origin.y + c * stepLength * dir.y + offsetR * stepWidth * perp.y;
         const corners: Point[] = [
           { x: cx, y: cy },
           { x: cx + alongPx * dir.x, y: cy + alongPx * dir.y },
@@ -491,16 +574,32 @@ export function drawPathSlabPattern(
 
   if (total > 0) {
     const poly = outline.length >= 3 ? outline : shape.points;
-    const anchor = labelAnchorInsidePolygon(poly);
-    const sc = worldToScreen(anchor.x, anchor.y);
     const area = areaM2(poly);
-    ctx.font = "bold 14px 'JetBrains Mono',monospace";
+    const baseFontSize = 14;
+    const scaledFont = scaledFontSize(baseFontSize, zoom);
+    const lineHeight = scaledFont * 1.2;
+    ctx.font = `bold ${scaledFont}px 'JetBrains Mono',monospace`;
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + 8);
-    ctx.fillText(`${fullCount} full, ${cutCount} cut`, sc.x, sc.y + 24);
-    ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + 40);
+    const pathCenterline = inputs?.pathCenterline as Point[] | undefined;
+    const ma = pathCenterline && pathCenterline.length >= 2 ? polylineMidpointAndAngle(pathCenterline) : null;
+    if (ma) {
+      const sc = worldToScreen(ma.point.x, ma.point.y);
+      ctx.save();
+      ctx.translate(sc.x, sc.y);
+      ctx.rotate(ma.angleRad);
+      ctx.fillText(area.toFixed(2) + " m²", 0, lineHeight * 0.5);
+      ctx.fillText(`${fullCount} full, ${cutCount} cut`, 0, lineHeight * 1.5);
+      ctx.fillText(`~${wastePct}% waste`, 0, lineHeight * 2.5);
+      ctx.restore();
+    } else {
+      const anchor = labelAnchorInsidePolygon(poly);
+      const sc = worldToScreen(anchor.x, anchor.y);
+      ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + lineHeight * 0.5);
+      ctx.fillText(`${fullCount} full, ${cutCount} cut`, sc.x, sc.y + lineHeight * 1.5);
+      ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + lineHeight * 2.5);
+    }
   }
   return true;
 }
@@ -522,13 +621,19 @@ export function drawSlabPattern(
   const inputs = shape.calculatorInputs;
   if (!inputs?.vizSlabWidth || !inputs?.vizSlabLength) return;
 
-  let pts = getEffectivePolygon(shape);
+  const { points: ptsRaw, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
+  let pts = ptsRaw;
   if (pts.length < 3 || !shape.closed) return;
 
   const frameWidthCm = Number(inputs?.framePieceWidthCm ?? 0);
+  const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
   if (frameWidthCm > 0 && !hasConcaveVertex(pts)) {
     const frameWidthPx = toPixels(frameWidthCm / 100);
-    pts = shrinkPolygon(pts, frameWidthPx);
+    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled.length > 0) {
+      pts = shrinkPolygonByEdges(pts, frameWidthPx, edgeIndices, frameSidesEnabled);
+    } else {
+      pts = shrinkPolygon(pts, frameWidthPx);
+    }
   }
   if (pts.length < 3) return;
 
@@ -545,7 +650,10 @@ export function drawSlabPattern(
   const groutPx = toPixels(groutMm / 1000);
 
   const off = originOffset ?? { x: Number(inputs.vizOriginOffsetX ?? 0), y: Number(inputs.vizOriginOffsetY ?? 0) };
-  const origin = { x: origPts[startCorner].x + off.x, y: origPts[startCorner].y + off.y };
+  // When frame exists, align origin to inner edge (frame boundary), not outer corner
+  const originBase = frameWidthCm > 0 && !hasConcaveVertex(origPts) ? pts[Math.min(startCorner, pts.length - 1)] : origPts[startCorner];
+  if (!originBase) return;
+  const origin = { x: originBase.x + off.x, y: originBase.y + off.y };
   // Same as kostka: 0° = along +X, 90° = along +Y
   const angle = (directionDeg * Math.PI) / 180;
   const cos = Math.cos(angle);
@@ -596,9 +704,7 @@ export function drawSlabPattern(
   };
 
   const hasArcs = !!(shape.edgeArcs?.some(a => a && a.length > 0));
-  const polygonForIntersection = hasArcs
-    ? (frameWidthCm > 0 && !hasConcaveVertex(origPts) ? shrinkPolygon(origPts, toPixels(frameWidthCm / 100)) : origPts)
-    : pts;
+  const polygonForIntersection = hasArcs ? pts : pts;
 
   const countOrigVertsInSlab = (corners: Point[]): number => {
     let n = 0;
@@ -644,11 +750,14 @@ export function drawSlabPattern(
 
   for (let r = -extend; r <= extend; r++) {
     for (let c = -extend; c <= extend; c++) {
-        // Brick: stagger columns (not rows) so zigzag lines run horizontally
-        // Rows: slab next to slab; row below starts at half slab
+        // Brick: stagger columns — odd columns shift by 1/2
+        // OneThird: like Brick but column 0=0, column 1=2/3, column 2=1/3 (repeat)
         let offsetR = r;
         if (pattern === "brick" && c % 2 !== 0) {
           offsetR = r + 0.5;
+        } else if (pattern === "onethird") {
+          const colOffset = [0, 2 / 3, 1 / 3][((c % 3) + 3) % 3];
+          offsetR = r + colOffset;
         }
         const cx = origin.x + c * stepLength * dir.x + offsetR * stepWidth * perp.x;
         const cy = origin.y + c * stepLength * dir.y + offsetR * stepWidth * perp.y;
@@ -684,13 +793,16 @@ export function drawSlabPattern(
     const anchor = pointInPolygon(areaCtr, pts) ? areaCtr : labelAnchorInsidePolygon(pts);
     const sc = worldToScreen(anchor.x, anchor.y);
     const area = areaM2(getEffectivePolygon(shape));
-    ctx.font = "bold 14px 'JetBrains Mono',monospace";
+    const baseFontSize = 14;
+    const scaledFont = scaledFontSize(baseFontSize, zoom);
+    const lineHeight = scaledFont * 1.2;
+    ctx.font = `bold ${scaledFont}px 'JetBrains Mono',monospace`;
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + 8);
-    ctx.fillText(`${fullCount} full, ${cutCount} cut`, sc.x, sc.y + 24);
-    ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + 40);
+    ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + lineHeight * 0.5);
+    ctx.fillText(`${fullCount} full, ${cutCount} cut`, sc.x, sc.y + lineHeight * 1.5);
+    ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + lineHeight * 2.5);
   }
 }
 
@@ -710,7 +822,7 @@ export function drawSlabFrame(
   const framePieceLengthCm = Number(inputs?.framePieceLengthCm ?? 60);
   if (framePieceWidthCm <= 0) return;
 
-  const pts = getEffectivePolygon(shape);
+  const { points: pts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
   if (pts.length < 3 || !shape.closed) return;
 
   const pieceLengthM = framePieceLengthCm / 100;
@@ -736,8 +848,11 @@ export function drawSlabFrame(
 
   const innerPts = miter ? shrinkPolygon(pts, pieceWidthPx) : null;
 
+  const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
   const n = pts.length;
   for (let i = 0; i < n; i++) {
+    const edgeIdx = edgeIndices[(i + 1) % n];
+    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled[edgeIdx] === false) continue;
     const j = (i + 1) % n;
     const a = pts[i];
     const b = pts[j];
@@ -824,6 +939,100 @@ export interface CutInfo {
   lengthCm: number;
 }
 
+/** Check if point p lies on segment (a,b) within tolerance. */
+function pointOnSegment(p: Point, a: Point, b: Point, tol: number = 1e-6): boolean {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-20) return (p.x - a.x) ** 2 + (p.y - a.y) ** 2 < tol * tol;
+  const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+  if (t < -tol || t > 1 + tol) return false;
+  const proj = { x: a.x + t * dx, y: a.y + t * dy };
+  return (p.x - proj.x) ** 2 + (p.y - proj.y) ** 2 < tol * tol * Math.max(lenSq, 1);
+}
+
+/** Check if point p is at a slab corner (within tolerance). */
+function pointAtSlabCorner(p: Point, slabCorners: Point[], tol: number = 1e-4): boolean {
+  for (const c of slabCorners) {
+    if ((p.x - c.x) ** 2 + (p.y - c.y) ** 2 < tol * tol * 2) return true;
+  }
+  return false;
+}
+
+/**
+ * Extract cut operations from demand polygon. Each continuous chain of polygon edges
+ * (not slab edges) = 1 cut. Diagonal/curved cut = 1 cut; corner cut = 2 cuts.
+ * When 2 chains share a boundary vertex that is NOT a block corner, it's a diagonal
+ * (one cut split by geometry) — merge to 1.
+ */
+export function collectCutOperationsFromDemand(
+  demandPolygon: Point[],
+  slabCorners: Point[],
+  _polygon: Point[]
+): CutInfo[] {
+  if (demandPolygon.length < 3) return [];
+  const tol = 1e-4;
+  const chains: { lengthCm: number; boundaryVertexIdx: number }[] = [];
+  let chainLength = 0;
+  const n = demandPolygon.length;
+
+  for (let i = 0; i < n; i++) {
+    const a = demandPolygon[i];
+    const b = demandPolygon[(i + 1) % n];
+    const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+
+    let onSlab = false;
+    for (let e = 0; e < 4; e++) {
+      const sa = slabCorners[e];
+      const sb = slabCorners[(e + 1) % 4];
+      if (pointOnSegment(mid, sa, sb, tol)) {
+        onSlab = true;
+        break;
+      }
+    }
+
+    if (onSlab) {
+      if (chainLength > 0) {
+        chains.push({
+          lengthCm: toMeters(Math.sqrt(chainLength)) * 100,
+          boundaryVertexIdx: i,
+        });
+        chainLength = 0;
+      }
+    } else {
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      chainLength += Math.sqrt(dx * dx + dy * dy);
+      const bIsCorner = pointAtSlabCorner(b, slabCorners, tol);
+      if (bIsCorner && chainLength > 0) {
+        chains.push({
+          lengthCm: toMeters(Math.sqrt(chainLength)) * 100,
+          boundaryVertexIdx: (i + 1) % n,
+        });
+        chainLength = 0;
+      }
+    }
+  }
+  if (chainLength > 0) {
+    chains.push({
+      lengthCm: toMeters(Math.sqrt(chainLength)) * 100,
+      boundaryVertexIdx: 0,
+    });
+  }
+
+  const result: CutInfo[] = [];
+  if (chains.length === 2) {
+    const boundaryV = demandPolygon[chains[0].boundaryVertexIdx];
+    const atBlockCorner = pointAtSlabCorner(boundaryV, slabCorners, tol);
+    if (!atBlockCorner) {
+      result.push({ lengthCm: chains[0].lengthCm + chains[1].lengthCm });
+      return result;
+    }
+  }
+  for (const ch of chains) result.push({ lengthCm: ch.lengthCm });
+  return result;
+}
+
 /**
  * Line segment (a,b) parametric intersection with (p,q).
  * Returns t in [0,1] for point on (a,b), or null.
@@ -861,13 +1070,19 @@ function fitsWithRotation(waste: { w: number; l: number }, demand: { w: number; 
 }
 
 export function computeSlabCuts(shape: Shape, inputs: Record<string, any>): SlabCutsResult {
-  let pts = getEffectivePolygon(shape);
+  const { points: effectivePts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
+  let pts = effectivePts;
   if (pts.length < 3 || !shape.closed) return { cuts: [], cutSlabCount: 0, fullSlabCount: 0, wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
 
   const frameWidthCm = Number(inputs?.framePieceWidthCm ?? 0);
-  if (frameWidthCm > 0 && !hasConcaveVertex(pts)) {
+  const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
+  if (frameWidthCm > 0 && !hasConcaveVertex(effectivePts)) {
     const frameWidthPx = toPixels(frameWidthCm / 100);
-    pts = shrinkPolygon(pts, frameWidthPx);
+    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled.length > 0) {
+      pts = shrinkPolygonByEdges(pts, frameWidthPx, edgeIndices, frameSidesEnabled);
+    } else {
+      pts = shrinkPolygon(pts, frameWidthPx);
+    }
   }
   if (pts.length < 3) return { cuts: [], cutSlabCount: 0, fullSlabCount: 0, wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
 
@@ -886,7 +1101,12 @@ export function computeSlabCuts(shape: Shape, inputs: Record<string, any>): Slab
   const groutPx = toPixels(groutMm / 1000);
   const offX = Number(inputs?.vizOriginOffsetX ?? 0);
   const offY = Number(inputs?.vizOriginOffsetY ?? 0);
-  const origin = { x: origPts[startCorner].x + offX, y: origPts[startCorner].y + offY };
+  // When frame exists, align origin to inner edge (frame boundary)
+  const originBase = frameWidthCm > 0 && !hasConcaveVertex(effectivePts) ? pts : shape.points;
+  const cornerIdx = Math.max(0, Math.min(startCorner, originBase.length - 1));
+  const cornerPt = originBase[cornerIdx];
+  if (!cornerPt) return { cuts: [], cutSlabCount: 0, fullSlabCount: 0, wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
+  const origin = { x: cornerPt.x + offX, y: cornerPt.y + offY };
   const angle = (directionDeg * Math.PI) / 180;
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
@@ -920,7 +1140,9 @@ export function computeSlabCuts(shape: Shape, inputs: Record<string, any>): Slab
 
   for (let r = -extend; r <= extend; r++) {
     for (let c = -extend; c <= extend; c++) {
-      let offsetR = pattern === "brick" && c % 2 !== 0 ? r + 0.5 : r;
+      let offsetR = r;
+      if (pattern === "brick" && c % 2 !== 0) offsetR = r + 0.5;
+      else if (pattern === "onethird") offsetR = r + [0, 2 / 3, 1 / 3][((c % 3) + 3) % 3];
       const cx = origin.x + c * stepLength * dir.x + offsetR * stepWidth * perp.x;
       const cy = origin.y + c * stepLength * dir.y + offsetR * stepWidth * perp.y;
       const corners: Point[] = [
@@ -939,31 +1161,13 @@ export function computeSlabCuts(shape: Shape, inputs: Record<string, any>): Slab
 
       cutSlabCount++;
 
-      // Collect cut segments for display (kept from original approach)
-      for (let e = 0; e < 4; e++) {
-        const a = corners[e];
-        const b = corners[(e + 1) % 4];
-        const ts: number[] = [0, 1];
-        for (let i = 0; i < pts.length; i++) {
-          const p = pts[i];
-          const q = pts[(i + 1) % pts.length];
-          const t = segmentIntersection(a, b, p, q);
-          if (t != null && t > 0.001 && t < 0.999) ts.push(t);
-        }
-        ts.sort((x, y) => x - y);
-        for (let i = 0; i < ts.length - 1; i++) {
-          const t0 = ts[i];
-          const t1 = ts[i + 1];
-          const midT = (t0 + t1) / 2;
-          const mid = { x: a.x + midT * (b.x - a.x), y: a.y + midT * (b.y - a.y) };
-          const lenCm = toMeters(Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2) * (t1 - t0)) * 100;
-          if (!pointInPolygon(mid, pts)) cuts.push({ lengthCm: lenCm });
-        }
-      }
-
       const slabOrigin = { x: cx, y: cy };
       const demandPolygon = rectPolygonIntersection(corners, pts);
       if (demandPolygon.length < 3) continue;
+
+      // Collect cut operations: one continuous chain of polygon edges = 1 cut (diagonal/curved = 1, corner = 2)
+      const slabCuts = collectCutOperationsFromDemand(demandPolygon, corners, pts);
+      for (const c of slabCuts) cuts.push(c);
 
       const demandBbox = polygonBboxCm(demandPolygon, slabOrigin, dir, perp);
       const demandWCm = demandBbox.w;
@@ -1051,8 +1255,15 @@ export function computePathSlabCuts(shape: Shape, inputs: Record<string, any>): 
   if (!pathCenterline || !Array.isArray(pathCenterline) || pathCenterline.length < 2) {
     return { cuts: [], cutSlabCount: 0, fullSlabCount: 0, wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
   }
-  const outline = inputs?.pathIsOutline ? shape.points : getEffectivePolygon(shape);
+  let outline = inputs?.pathIsOutline ? shape.points : getEffectivePolygon(shape);
   if (outline.length < 3 || !shape.closed) return { cuts: [], cutSlabCount: 0, fullSlabCount: 0, wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
+
+  const frameWidthCm = Number(inputs?.framePieceWidthCm ?? 0);
+  if (frameWidthCm > 0 && !hasConcaveVertex(outline)) {
+    const frameWidthPx = toPixels(frameWidthCm / 100);
+    outline = shrinkPolygon(outline, frameWidthPx);
+    if (outline.length < 3) return { cuts: [], cutSlabCount: 0, fullSlabCount: 0, wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
+  }
 
   const n = outline.length / 2;
   if (pathCenterline.length !== n) return { cuts: [], cutSlabCount: 0, fullSlabCount: 0, wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
@@ -1066,10 +1277,13 @@ export function computePathSlabCuts(shape: Shape, inputs: Record<string, any>): 
   const slabWidthPx = toPixels(slabWidthCm / 100);
   const slabLengthPx = toPixels(slabLengthCm / 100);
   const groutPx = toPixels(groutMm / 1000);
-  const alongPx = slabOrientation === "along" ? slabLengthPx : slabWidthPx;
-  const acrossPx = slabOrientation === "along" ? slabWidthPx : slabLengthPx;
+  const alongPx = slabOrientation === "along" ? slabWidthPx : slabLengthPx;
+  const acrossPx = slabOrientation === "along" ? slabLengthPx : slabWidthPx;
   const stepLength = alongPx + groutPx;
   const stepWidth = acrossPx + groutPx;
+  const pattern = inputs?.vizPattern ?? "grid";
+  const pathWidthMode = inputs?.pathWidthMode as string | undefined;
+  const rowCenterOffset = (pathWidthMode === "slab1" || pathWidthMode === "slab1_5") ? -0.5 : 0;
 
   const pathCuts: CutInfo[] = [];
   const cutSlabData: { segIdx: number; r: number; c: number; demandW: number; demandL: number; wasteW: number; wasteL: number; demandPolygon?: Point[]; wastePolygon?: Point[] }[] = [];
@@ -1097,8 +1311,11 @@ export function computePathSlabCuts(shape: Shape, inputs: Record<string, any>): 
 
     for (let r = -EXTEND; r <= EXTEND; r++) {
       for (let c = -EXTEND; c <= EXTEND; c++) {
-        const cx = origin.x + c * stepLength * dir.x + r * stepWidth * perp.x;
-        const cy = origin.y + c * stepLength * dir.y + r * stepWidth * perp.y;
+        let offsetR = r + rowCenterOffset;
+        if (pattern === "brick" && c % 2 !== 0) offsetR += 0.5;
+        else if (pattern === "onethird") offsetR += [0, 2 / 3, 1 / 3][((c % 3) + 3) % 3];
+        const cx = origin.x + c * stepLength * dir.x + offsetR * stepWidth * perp.x;
+        const cy = origin.y + c * stepLength * dir.y + offsetR * stepWidth * perp.y;
         const corners: Point[] = [
           { x: cx, y: cy },
           { x: cx + alongPx * dir.x, y: cy + alongPx * dir.y },
@@ -1111,30 +1328,12 @@ export function computePathSlabCuts(shape: Shape, inputs: Record<string, any>): 
         if (clipped.length < 3) continue;
         cutSlabCount++;
 
-        // Collect cut segments for task breakdown (same logic as computeSlabCuts)
-        for (let e = 0; e < 4; e++) {
-          const a = corners[e];
-          const b = corners[(e + 1) % 4];
-          const ts: number[] = [0, 1];
-          for (let i = 0; i < outline.length; i++) {
-            const p = outline[i];
-            const q = outline[(i + 1) % outline.length];
-            const t = segmentIntersection(a, b, p, q);
-            if (t != null && t > 0.001 && t < 0.999) ts.push(t);
-          }
-          ts.sort((x, y) => x - y);
-          for (let i = 0; i < ts.length - 1; i++) {
-            const t0 = ts[i];
-            const t1 = ts[i + 1];
-            const midT = (t0 + t1) / 2;
-            const mid = { x: a.x + midT * (b.x - a.x), y: a.y + midT * (b.y - a.y) };
-            const lenCm = toMeters(Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2) * (t1 - t0)) * 100;
-            if (!pointInPolygon(mid, outline)) pathCuts.push({ lengthCm: lenCm });
-          }
-        }
-
         const slabOrigin = { x: cx, y: cy };
         const demandPolygon = clipped;
+
+        // Collect cut operations: one continuous chain = 1 cut (diagonal/curved = 1, corner = 2)
+        const slabCuts = collectCutOperationsFromDemand(demandPolygon, corners, outline);
+        for (const c of slabCuts) pathCuts.push(c);
         const demandBbox = polygonBboxCm(demandPolygon, slabOrigin, dir, perp);
         const demandWCm = demandBbox.w;
         const demandLCm = demandBbox.l;
@@ -1208,9 +1407,9 @@ export function computePatternSnap(
   offset: { x: number; y: number },
   threshold: number
 ): { snappedOffset: { x: number; y: number }; alignedEdges: number[] } {
-  const pts = shape.points;
+  const origPts = shape.points;
   const inputs = shape.calculatorInputs;
-  if (!pts.length || !shape.closed || !inputs) {
+  if (!origPts.length || !shape.closed || !inputs) {
     return { snappedOffset: offset, alignedEdges: [] };
   }
 
@@ -1218,6 +1417,7 @@ export function computePatternSnap(
   let stepWidth: number;
   let directionDeg: number;
   let startCorner: number;
+  let frameWidthCm = 0;
 
   if (shape.calculatorType === "paving") {
     const blockWidthCm = Number(inputs?.blockWidthCm ?? 20);
@@ -1229,7 +1429,8 @@ export function computePatternSnap(
     stepLength = blockLengthPx + jointPx;
     stepWidth = blockWidthPx + jointPx;
     directionDeg = Number(inputs?.vizDirection ?? 0);
-    startCorner = Math.max(0, Math.min(pts.length - 1, Math.floor(Number(inputs?.vizStartCorner ?? 0))));
+    startCorner = Math.max(0, Math.min(origPts.length - 1, Math.floor(Number(inputs?.vizStartCorner ?? 0))));
+    frameWidthCm = inputs?.addFrameToMonoblock ? Number(inputs?.framePieceWidthCm ?? 0) : 0;
   } else {
     const slabWidthCm = Number(inputs?.vizSlabWidth);
     const slabLengthCm = Number(inputs?.vizSlabLength);
@@ -1241,10 +1442,37 @@ export function computePatternSnap(
     stepLength = slabLengthPx + groutPx;
     stepWidth = slabWidthPx + groutPx;
     directionDeg = Number(inputs?.vizDirection ?? 0);
-    startCorner = Math.max(0, Math.min(pts.length - 1, Math.floor(Number(inputs?.vizStartCorner ?? 0))));
+    startCorner = Math.max(0, Math.min(origPts.length - 1, Math.floor(Number(inputs?.vizStartCorner ?? 0))));
+    frameWidthCm = Number(inputs?.framePieceWidthCm ?? 0);
   }
 
-  const origin = { x: pts[startCorner].x + offset.x, y: pts[startCorner].y + offset.y };
+  // Use same polygon as drawing: path outline for paths, effective polygon for polygons
+  let pts: Point[];
+  let edgeIndices: number[];
+  if (isPathElement(shape)) {
+    pts = getPathPolygon(shape);
+    edgeIndices = pts.map((_, i) => i);
+  } else {
+    const eff = getEffectivePolygonWithEdgeIndices(shape);
+    pts = eff.points;
+    edgeIndices = eff.edgeIndices;
+  }
+  const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
+  if (frameWidthCm > 0 && pts.length >= 3 && !hasConcaveVertex(pts)) {
+    const frameWidthPx = toPixels(frameWidthCm / 100);
+    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled.length > 0) {
+      pts = shrinkPolygonByEdges(pts, frameWidthPx, edgeIndices, frameSidesEnabled);
+    } else {
+      pts = shrinkPolygon(pts, frameWidthPx);
+    }
+  }
+  if (pts.length < 3) pts = origPts;
+  if (pts.length === 0) return { snappedOffset: offset, alignedEdges: [] };
+  startCorner = Math.max(0, Math.min(startCorner, pts.length - 1));
+
+  const originPt = pts[startCorner];
+  if (!originPt) return { snappedOffset: offset, alignedEdges: [] };
+  const origin = { x: originPt.x + offset.x, y: originPt.y + offset.y };
   const angle = (directionDeg * Math.PI) / 180;
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);

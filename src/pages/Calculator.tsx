@@ -91,20 +91,16 @@ const CalculatorPage: React.FC = () => {
   // Handle calculator selection from sidebar
   useEffect(() => {
     const handleSelectSubCalculator = (e: any) => {
-      console.log('selectSubCalculator event received:', e.detail);
       const { calculatorType, subType, subTypeLabel } = e.detail;
-      console.log('Setting activeCalculator to:', calculatorType, 'and activeSubType to:', subType);
       setActiveCalculator(calculatorType);
       setActiveSubType(subType);
       setActiveCalculatorLabel(subTypeLabel ?? null);
     };
     
     window.addEventListener('selectSubCalculator', handleSelectSubCalculator);
-    console.log('selectSubCalculator event listener attached');
     
     return () => {
       window.removeEventListener('selectSubCalculator', handleSelectSubCalculator);
-      console.log('selectSubCalculator event listener removed');
     };
   }, []);
 
@@ -118,8 +114,6 @@ const CalculatorPage: React.FC = () => {
 
   const renderCalculator = () => {
     if (!activeCalculator || !activeSubType) return null;
-
-    console.log(`Calculator.tsx: Rendering calculator for ${activeCalculator} with subType ${activeSubType}`);
 
     const calculatorKey = `${activeCalculator}-${activeSubType}`;
 
@@ -149,7 +143,6 @@ const CalculatorPage: React.FC = () => {
       case 'time':
         return <TimeEstimator key={calculatorKey} />;
       case 'fence':
-        console.log(`Calculator.tsx: Rendering FenceCalculator with fenceType=${activeSubType}`);
         if (activeSubType === 'venetian') {
           return <VenetianFenceCalculator key={calculatorKey} />;
         } else if (activeSubType === 'composite') {
@@ -169,7 +162,6 @@ const CalculatorPage: React.FC = () => {
         }
         return <StairCalculator key={calculatorKey} />;
       case 'deck':
-        console.log(`Calculator.tsx: Rendering DeckCalculator`);
         return <DeckCalculator key={calculatorKey} />;
       case 'grass':
         return <ArtificialGrassCalculator key={calculatorKey} savedInputs={grassDefaults} />;

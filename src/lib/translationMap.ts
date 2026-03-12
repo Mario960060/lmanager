@@ -65,6 +65,7 @@ export const taskNameTranslationMap: Record<string, string> = {
 
   // Coping Installation Calculator tasks
   'transport coping': 'calculator:task_transport_coping',
+  'cutting coping': 'calculator:task_cutting_coping',
 
   // Composite Fence Calculator tasks
   'Composite Fence Installation': 'calculator:task_composite_fence_installation',
@@ -194,6 +195,14 @@ export const taskNameTranslationMap: Record<string, string> = {
   'Tile Installation 80 x 80': 'calculator:task_tile_installation_80x80',
   'Tile Installation 90 x 30': 'calculator:task_tile_installation_90x30',
   'Tile Installation 90 x 60': 'calculator:task_tile_installation_90x60',
+  'Tile Installation 90 × 60': 'calculator:task_tile_installation_90x60',
+  'Tile Installation 120 × 30': 'calculator:task_tile_installation_120x30',
+  'Tile Installation 30 × 30': 'calculator:task_tile_installation_30x30',
+  'Tile Installation 60 × 30': 'calculator:task_tile_installation_60x30',
+  'Tile Installation 60 × 60': 'calculator:task_tile_installation_60x60',
+  'Tile Installation 80 × 40': 'calculator:task_tile_installation_80x40',
+  'Tile Installation 80 × 80': 'calculator:task_tile_installation_80x80',
+  'Tile Installation 90 × 30': 'calculator:task_tile_installation_90x30',
   'underground cable installation (machinery)': 'calculator:task_underground_cable_machinery',
   'underground cable installation (manual)': 'calculator:task_underground_cable_manual',
   'water pipe installation (machinery)': 'calculator:task_water_pipe_machinery',
@@ -308,6 +317,11 @@ const DYNAMIC_TASK_PATTERNS: Array<{
   key: string;
   extractParams: (m: RegExpMatchArray) => Record<string, string>;
 }> = [
+  {
+    regex: /^Tile Installation (\d+) × (\d+)$/,
+    key: 'calculator:task_tile_installation_dimensions',
+    extractParams: (m) => ({ width: m[1], height: m[2] }),
+  },
   {
     regex: /^Excavation soil with (.+?) \((\d+(?:\.\d+)?)t\)$/,
     key: 'calculator:task_excavation_soil_with_excavator',

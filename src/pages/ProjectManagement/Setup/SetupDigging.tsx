@@ -147,15 +147,6 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
     mutationFn: async (equipment: Omit<DiggingEquipment, 'id' | 'created_at' | 'updated_at' | 'status' | 'in_use_quantity'> & { "size (in tones)": number; speed_m_per_hour?: number }) => {
       const sizeInTones = equipment["size (in tones)"];
       
-      console.log('Adding equipment to setup_digging:', {
-        name: equipment.name,
-        description: equipment.description,
-        type: equipment.type,
-        quantity: equipment.quantity,
-        "size (in tones)": sizeInTones,
-        speed_m_per_hour: equipment.speed_m_per_hour
-      });
-      
       // First, add to setup_digging table
       const { data, error } = await supabase
         .from('setup_digging')
@@ -176,8 +167,6 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
         console.error('Error adding to setup_digging:', error);
         throw error;
       }
-      
-      console.log('Successfully added to setup_digging:', data);
       
       // Equipment type for equipment table: excavators = machine; barrows/dumpers split by size
       // < 0.29t = tools (taczki/wheelbarrows), >= 0.29t = machines (dumpers, petrol barrows)
@@ -201,8 +190,6 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
       
       if (equipmentError) {
         console.error('Error adding to equipment:', equipmentError);
-      } else {
-        console.log('Successfully added to equipment');
       }
       
       // If it's an excavator, automatically create task templates
@@ -231,11 +218,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
           
           if (taskError) {
             console.error('Error creating excavation task:', taskError);
-          } else {
-            console.log('✅ Auto-created excavation task:', excavationTaskName);
           }
-        } else {
-          console.log('ℹ️ Excavation task already exists:', excavationTaskName);
         }
         
         // Create Loading Tape1 task
@@ -259,17 +242,8 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
           
           if (tape1Error) {
             console.error('Error creating tape1 loading task:', tape1Error);
-          } else {
-            console.log('✅ Auto-created tape1 loading task:', tape1TaskName);
           }
-        } else {
-          console.log('ℹ️ Tape1 loading task already exists:', tape1TaskName);
         }
-      }
-      
-      // If it's a carrier, log that transport will be dynamic
-      if (equipment.type === 'barrows_dumpers') {
-        console.log('ℹ️ Carrier added - transport tasks will be created dynamically in projects');
       }
       
       return data;

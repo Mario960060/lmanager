@@ -123,6 +123,7 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
         d.addFrameToMonoblock = !!c.addFrameToMonoblock;
         if (c.framePieceWidthCm != null) d.framePieceWidthCm = String(c.framePieceWidthCm);
         if (c.framePieceLengthCm != null) d.framePieceLengthCm = String(c.framePieceLengthCm);
+        if (Array.isArray(c.frameSidesEnabled)) d.frameSidesEnabled = c.frameSidesEnabled;
       }
       return d;
     }
@@ -220,49 +221,56 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
   }, [subType, selectedSlabId, slabTypes]);
 
   const computedWidthM = useMemo(() => {
+    let baseM: number;
     if (subType === "slabs") {
-      if (widthMode === "centimeters") return (parseFloat(widthCentimeters) || 60) / 100;
-      if (widthMode === "meters") return parseFloat(widthMeters) || 0.6;
-      if (!slabDims) return 0.6;
-      const w = slabDims.widthCm / 100;
-      const l = slabDims.lengthCm / 100;
-      const longer = Math.max(w, l);
-      const shorter = Math.min(w, l);
-      const dim = slabOrientation === "along" ? shorter : longer;
-      const grout = (parseFloat(groutWidthMm) || 5) / 1000;
-      switch (widthMode) {
-        case "slab1": return dim + grout;
-        case "slab1_5": return (dim * 1.5) + grout;
-        case "slab2": return (dim * 2) + grout;
-        default: return 0.6;
+      if (widthMode === "centimeters") baseM = (parseFloat(widthCentimeters) || 60) / 100;
+      else if (widthMode === "meters") baseM = parseFloat(widthMeters) || 0.6;
+      else if (!slabDims) baseM = 0.6;
+      else {
+        const w = slabDims.widthCm / 100;
+        const l = slabDims.lengthCm / 100;
+        const longer = Math.max(w, l);
+        const shorter = Math.min(w, l);
+        const dim = slabOrientation === "along" ? shorter : longer;
+        const grout = (parseFloat(groutWidthMm) || 5) / 1000;
+        switch (widthMode) {
+          case "slab1": baseM = dim + grout; break;
+          case "slab1_5": baseM = (dim * 1.5) + grout; break;
+          case "slab2": baseM = (dim * 2) + grout; break;
+          default: baseM = 0.6;
+        }
       }
-    }
-    if (subType === "concreteSlabs") {
-      if (widthMode === "centimeters") return (parseFloat(widthCentimeters) || 60) / 100;
-      if (widthMode === "meters") return parseFloat(widthMeters) || 0.6;
-      const dims = concreteSlabSizeKey === "40x40" ? { w: 40, l: 40 } : concreteSlabSizeKey === "90x60" ? { w: 90, l: 60 } : { w: 60, l: 60 };
-      const longer = Math.max(dims.w, dims.l) / 100;
-      const shorter = Math.min(dims.w, dims.l) / 100;
-      const dim = slabOrientation === "along" ? shorter : longer;
-      switch (widthMode) {
-        case "slab1": return dim;
-        case "slab1_5": return dim * 1.5;
-        case "slab2": return dim * 2;
-        default: return 0.6;
+    } else if (subType === "concreteSlabs") {
+      if (widthMode === "centimeters") baseM = (parseFloat(widthCentimeters) || 60) / 100;
+      else if (widthMode === "meters") baseM = parseFloat(widthMeters) || 0.6;
+      else {
+        const dims = concreteSlabSizeKey === "40x40" ? { w: 40, l: 40 } : concreteSlabSizeKey === "90x60" ? { w: 90, l: 60 } : { w: 60, l: 60 };
+        const longer = Math.max(dims.w, dims.l) / 100;
+        const shorter = Math.min(dims.w, dims.l) / 100;
+        const dim = slabOrientation === "along" ? shorter : longer;
+        switch (widthMode) {
+          case "slab1": baseM = dim; break;
+          case "slab1_5": baseM = dim * 1.5; break;
+          case "slab2": baseM = dim * 2; break;
+          default: baseM = 0.6;
+        }
       }
-    }
-    if (subType === "monoblock") {
-      if (widthMode === "centimeters") return (parseFloat(widthCentimeters) || 60) / 100;
-      if (widthMode === "meters") return parseFloat(widthMeters) || 0.6;
-      const bw = (parseFloat(blockWidthCm) || 20) / 100;
-      const bl = (parseFloat(blockLengthCm) || 10) / 100;
-      const gap = (parseFloat(jointGapMm) || 1) / 1000;
-      const n = parseInt(blockCount, 10) || 2;
-      const dim = Math.max(bw, bl);
-      return n * dim + (n - 1) * gap;
-    }
-    return 0.6;
-  }, [subType, widthMode, widthMeters, widthCentimeters, slabDims, slabOrientation, groutWidthMm, blockWidthCm, blockLengthCm, blockCount, jointGapMm, concreteSlabSizeKey]);
+    } else if (subType === "monoblock") {
+      if (widthMode === "centimeters") baseM = (parseFloat(widthCentimeters) || 60) / 100;
+      else if (widthMode === "meters") baseM = parseFloat(widthMeters) || 0.6;
+      else {
+        const bw = (parseFloat(blockWidthCm) || 20) / 100;
+        const bl = (parseFloat(blockLengthCm) || 10) / 100;
+        const gap = (parseFloat(jointGapMm) || 1) / 1000;
+        const n = parseInt(blockCount, 10) || 2;
+        baseM = n * Math.max(bw, bl) + (n - 1) * gap;
+      }
+    } else if (widthMode === "centimeters") baseM = (parseFloat(widthCentimeters) || 60) / 100;
+    else if (widthMode === "meters") baseM = parseFloat(widthMeters) || 0.6;
+    else baseM = 0.6;
+    const frameW = (addFrame && subType !== "concreteSlabs") ? (parseFloat(framePieceWidthCm) || 0) / 100 : 0;
+    return baseM + 2 * frameW;
+  }, [subType, widthMode, widthMeters, widthCentimeters, slabDims, slabOrientation, groutWidthMm, blockWidthCm, blockLengthCm, blockCount, jointGapMm, concreteSlabSizeKey, addFrame, framePieceWidthCm]);
 
   useEffect(() => {
     if ((widthMode === "meters" || widthMode === "centimeters") && addFrame) {
@@ -317,7 +325,7 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
         calculatorInputs.addFrameToMonoblock = true;
       }
     }
-    return { ...calculatorInputs, ...lastInputsRef.current };
+    return { ...lastInputsRef.current, ...calculatorInputs };
   }, [
     computedWidthM, subType, vizPattern, vizDirection, vizStartCorner, frameJointType,
     groutWidthMm, selectedSlabId, slabDims, slabOrientation,
@@ -687,7 +695,7 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 600, marginBottom: 6, color: C.text, fontSize: 13 }}>{t("project:path_pattern")}</div>
             <div style={{ display: "flex", gap: 8 }}>
-              {["grid", "brick"].map((p) => (
+              {["grid", "brick", "onethird"].map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -702,7 +710,7 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
                     fontSize: 12,
                   }}
                 >
-                  {p === "grid" ? t("project:path_pattern_grid") : t("project:path_pattern_brick")}
+                  {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
                 </button>
               ))}
             </div>

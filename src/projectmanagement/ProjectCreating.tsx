@@ -195,7 +195,6 @@ const ProjectCreating = () => {
   const createEventMutation = useMutation({
     mutationFn: async (eventData: FormData) => {
       const companyId = useAuthStore.getState().getCompanyId();
-      console.log('DEBUG: Creating event with companyId:', companyId);
       
       if (!companyId) {
         throw new Error('No company_id available! User must have a company assigned.');
@@ -546,13 +545,10 @@ const ProjectCreating = () => {
     if (task.template_id && task.name && task.quantity) {
       // First try exact match
       let matchingTemplate = findExactTemplate(task.name);
-      console.log('Task name:', task.name);
-      console.log('Found template:', matchingTemplate?.name || 'No match');
       
       // If no exact match and it's a cutting task, try specialized matching
       if (!matchingTemplate && normalizeTaskName(task.name).includes('cutting')) {
         matchingTemplate = findCuttingTemplate(task.name);
-        console.log('Trying cutting template match:', matchingTemplate?.name || 'No match');
       }
       
       // Only if still no match, try includes matching
@@ -560,7 +556,6 @@ const ProjectCreating = () => {
         matchingTemplate = taskTemplates.find(template => 
           template.name && normalizeTaskName(template.name || '').includes(normalizeTaskName(task.name))
         );
-        console.log('Trying partial match:', matchingTemplate?.name || 'No match');
       }
 
       if (matchingTemplate) {
@@ -668,7 +663,6 @@ const ProjectCreating = () => {
     try {
       // Get fresh companyId from store
       const freshCompanyId = useAuthStore.getState().getCompanyId();
-      console.log('DEBUG: Fresh companyId in handleSubmit =', freshCompanyId);
       
       if (!freshCompanyId) {
         throw new Error('No company_id available');
@@ -732,18 +726,9 @@ const ProjectCreating = () => {
             mainTaskFolderId = createdFolders.get(folderName) || null;
           }
 
-          // Log the full calculator results and breakdown
-          console.log('DEBUG: Calculator results received:', mainTask.results);
-          console.log('DEBUG: Task breakdown array:', mainTask.results.taskBreakdown);
-          // Log all available template names and IDs before matching
-          console.log('DEBUG: Available taskTemplates:', taskTemplates.map(t => ({ id: t.id, name: t.name })));
           // Create a task for each item in the task breakdown
           for (const taskItem of mainTask.results.taskBreakdown) {
-            // Log each taskItem before inserting
-            console.log('DEBUG: Current taskItem:', taskItem);
-            // Use the original task name for template matching
             const taskName = taskItem.task;
-            console.log('Processing task:', taskName, 'with amount:', taskItem.amount);
 
             // Determine if we're dealing with porcelain or sandstone
             let matchingTaskTemplateId = null;
@@ -845,17 +830,8 @@ const ProjectCreating = () => {
               });
               if (matchingTemplate) {
                 matchStage = 'partial';
-                console.log('Found partial match:', matchingTemplate.name);
               }
             }
-
-            // Log the matching results
-            console.log('Template matching results:', {
-              taskName: actualTaskName,
-              matchStage,
-              matchedTemplate: matchingTemplate?.name || 'No match found',
-              matchedId: matchingTemplate?.id || null
-            });
 
             if (!matchingTemplate) {
               console.warn('WARNING: No template found for task:', actualTaskName, '- event_task_id will be NULL');
@@ -883,47 +859,18 @@ const ProjectCreating = () => {
                   company_id: freshCompanyId
                 });
 
-              // Log the object being inserted
-              console.log('DEBUG: Inserting into tasks_done:', {
-                event_id: event.id,
-                user_id: user?.id,
-                name: actualTaskName.toLowerCase() === 'bricklaying' ? 'Bricklaying' : actualTaskName.toLowerCase(),
-                task_name: mainTask.name,
-                description: mainTask.results.name || '',
-                unit: taskName.toLowerCase() === 'cutting slabs' ? 'slabs' : (taskItem.unit || ''),
-                amount: `${taskItem.amount || 0} ${taskName.toLowerCase() === 'cutting slabs' ? 'slabs' : (taskItem.unit || '')}`.trim(),
-                hours_worked: taskItem.hours,
-                is_finished: false,
-                event_task_id: matchingTaskTemplateId
-              });
-
               if (taskError) {
                 console.error('Error creating task:', taskError);
                 throw new Error('Failed to create task');
               }
-            } else {
-              // Log skipped tasks with 0 or negative hours
-              console.log('Skipping task with zero/negative hours:', {
-                taskName: actualTaskName,
-                hours: taskItem.hours
-              });
             }
           }
 
           // Add "Loading Sand" task if excavator is selected and sand is present
-          console.log('DEBUG: Checking for Loading Sand:', {
-            hasExcavator: !!selectedExcavator,
-            excavator: selectedExcavator,
-            hasMaterials: !!mainTask.results.materials,
-            materials: mainTask.results.materials
-          });
-          
           if (selectedExcavator && mainTask.results.materials) {
             const sandMaterial = mainTask.results.materials.find((m: any) => 
               m.name && m.name.toLowerCase().includes('sand')
             );
-            
-            console.log('DEBUG: Found sand material:', sandMaterial);
             
             if (sandMaterial && sandMaterial.quantity > 0) {
               // Get sand amount
@@ -985,19 +932,11 @@ const ProjectCreating = () => {
                   folder_id: mainTaskFolderId
                 });
 
-                console.log('Added Loading Sand task:', {
-                  excavatorSize,
-                  sandAmount: sandAmount,
-                  hours: loadingSandHours
-                });
               }
           }
         } else if (mainTask.results) {
           // If no task breakdown but we have results, create a single task
           const taskName = mainTask.name || mainTask.results.name || 'Unnamed Task';
-          
-          console.log('Task breakdown:', mainTask.results.taskBreakdown); // Debug log
-          console.log('Full results:', mainTask.results); // Debug log
 
           // Find matching task template for the main task
           const matchingTemplate = taskTemplates.find(template => 
@@ -1031,8 +970,6 @@ const ProjectCreating = () => {
                 console.error('Error creating task:', taskError);
                 throw new Error('Failed to create task');
               }
-            } else {
-              console.log('Skipping single task with zero hours:', { taskName, hours: taskHours });
             }
           }
         }
@@ -1086,7 +1023,6 @@ const ProjectCreating = () => {
             console.error('Error creating excavation folder:', excavationFolderError);
             throw new Error('Failed to create excavation folder');
           } else {
-            console.log('✅ Created excavation folder:', excavationFolder);
             createdFolders.set(excavationFolderName, excavationFolder.id);
             excavationFolderId = excavationFolder.id;
           }
@@ -1110,15 +1046,6 @@ const ProjectCreating = () => {
           const excavationHours = excavationTaskTemplate?.estimated_hours 
             ? totalSoilExcavation * excavationTaskTemplate.estimated_hours
             : 0;
-          
-          console.log('Creating Soil Excavation task:', {
-            excavator: selectedExcavator.name,
-            size: selectedExcavator["size (in tones)"],
-            template: excavationTaskTemplate?.name,
-            templateId: excavationTaskTemplate?.id,
-            hours: excavationHours,
-            tons: totalSoilExcavation
-          });
           
           // Create Excavation task (always create, even if template not found)
           const { error: excavationError } = await supabase
@@ -1161,15 +1088,6 @@ const ProjectCreating = () => {
             const trips = Math.ceil(totalSoilExcavation / capacity);
             const roundTripDistance = distance * 2;
             
-            console.log('Creating Transport task:', {
-              carrier: selectedCarrier.name,
-              speed: carrierSpeed,
-              distance,
-              hours: transportHours,
-              trips,
-              tons: totalSoilExcavation
-            });
-            
             const { error: transportError } = await supabase
               .from('tasks_done')
               .insert({
@@ -1208,15 +1126,6 @@ const ProjectCreating = () => {
           const loadingHours = tape1TaskTemplate?.estimated_hours 
             ? totalTape1 * tape1TaskTemplate.estimated_hours
             : 0;
-          
-          console.log('Creating Tape 1 Loading task:', {
-            excavator: selectedExcavator.name,
-            size: selectedExcavator["size (in tones)"],
-            template: tape1TaskTemplate?.name,
-            templateId: tape1TaskTemplate?.id,
-            hours: loadingHours,
-            tons: totalTape1
-          });
           
           // Create Loading task (always create, even if template not found)
           const { error: loadingError } = await supabase
@@ -1258,15 +1167,6 @@ const ProjectCreating = () => {
             const capacity = getMaterialCapacity('soil', selectedCarrier["size (in tones)"] || 0);
             const trips = Math.ceil(totalTape1 / capacity);
             const roundTripDistance = distance * 2;
-            
-            console.log('Creating Tape1 Transport task:', {
-              carrier: selectedCarrier.name,
-              speed: carrierSpeed,
-              distance,
-              hours: transportHours,
-              trips,
-              tons: totalTape1
-            });
             
             const { error: transportError } = await supabase
               .from('tasks_done')
@@ -1317,10 +1217,7 @@ const ProjectCreating = () => {
             throw new Error('Failed to create minor task');
           }
         } else if (minorTask.template_id) {
-          console.log('Skipping minor task with zero/missing hours:', {
-            taskName: minorTask.name,
-            hours: minorTask.estimated_hours
-          });
+          // Skip - zero/missing hours
         }
 
           // Process materials from minor task

@@ -117,8 +117,6 @@ const CreateTeamPage = () => {
         throw new Error('Company created but ID is missing: ' + JSON.stringify(company));
       }
 
-      console.log('Company created successfully with ID:', company.id);
-
       // Update profile with company_id FIRST - needed for RLS policies
       const { error: profileError } = await ((supabase
         .from('profiles')
@@ -128,8 +126,6 @@ const CreateTeamPage = () => {
       if (profileError) {
         throw new Error(profileError.message);
       }
-
-      console.log('Profile updated with company_id');
 
       // Update Zustand store so Setup components get company_id immediately
       setProfile({

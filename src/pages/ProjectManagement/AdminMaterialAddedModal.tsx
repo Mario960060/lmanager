@@ -39,8 +39,6 @@ const AdminMaterialAddedModal: React.FC<AdminMaterialAddedModalProps> = ({ onClo
   const { data: userGroups = [], isLoading, isError } = useQuery({
     queryKey: ['admin_materials_delivered_records'],
     queryFn: async () => {
-      console.log('Fetching all materials delivered records');
-      
       // Fetch all materials delivered with material names
       const { data: records, error } = await supabase
         .from('material_deliveries')
@@ -56,8 +54,6 @@ const AdminMaterialAddedModal: React.FC<AdminMaterialAddedModalProps> = ({ onClo
         console.error('Error fetching material deliveries records:', error);
         throw error;
       }
-      
-      console.log(`Found ${records?.length || 0} material deliveries records`);
       
       // Fetch all profiles to get user names
       const { data: profiles, error: profilesError } = await supabase
@@ -111,8 +107,6 @@ const AdminMaterialAddedModal: React.FC<AdminMaterialAddedModalProps> = ({ onClo
   // Delete record mutation
   const deleteRecord = useMutation({
     mutationFn: async (recordId: string) => {
-      console.log(`Deleting material delivery record: ${recordId}`);
-      
       const { error } = await supabase
         .from('material_deliveries')
         .delete()

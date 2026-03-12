@@ -38,8 +38,6 @@ const AdminDayNotesModal: React.FC<AdminDayNotesModalProps> = ({ onClose }) => {
   const { data: userGroups = [], isLoading, isError } = useQuery({
     queryKey: ['admin_day_notes_records', companyId],
     queryFn: async () => {
-      console.log('Fetching all day notes records');
-      
       // Fetch all day notes with event titles
       const { data: records, error } = await supabase
         .from('day_notes')
@@ -57,11 +55,6 @@ const AdminDayNotesModal: React.FC<AdminDayNotesModalProps> = ({ onClose }) => {
       if (error) {
         console.error('Error fetching day notes records:', error);
         throw error;
-      }
-      
-      console.log(`Found ${records?.length || 0} day notes records`);
-      if (records && records.length > 0) {
-        console.log('Sample record:', records[0]);
       }
       
       // Fetch all profiles to get user names
@@ -129,8 +122,6 @@ const AdminDayNotesModal: React.FC<AdminDayNotesModalProps> = ({ onClose }) => {
   // Delete record mutation
   const deleteRecord = useMutation({
     mutationFn: async (recordId: string) => {
-      console.log(`Deleting day note record: ${recordId}`);
-      
       const { error } = await supabase
         .from('day_notes')
         .delete()

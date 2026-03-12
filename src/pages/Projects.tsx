@@ -425,13 +425,9 @@ const Projects = () => {
       console.error('Error fetching task templates:', fetchTemplatesError);
       return;
     }
-    
-    console.log('[TEMPLATES FETCHED]', taskTemplates?.map((t: any) => ({ id: t.id, name: t.name })));
 
     if (breakdown && breakdown.length > 0) {
-      console.log('DEBUG: Full breakdown array:', breakdown);
       for (const taskItem of breakdown) {
-        console.log('DEBUG: Current taskItem:', taskItem);
         let taskName = taskItem.task;
         let actualTaskName = taskName;
         // Special handling for cutting slabs (as in ProjectCreating)
@@ -500,7 +496,6 @@ const Projects = () => {
           event_task_id: matchingTaskTemplateId,
           company_id: companyId
         };
-        console.log('Inserting breakdown task into tasks_done:', insertObj);
         const { error } = await supabase.from('tasks_done').insert(insertObj);
         if (error) {
           console.error('Supabase insert error (breakdown):', error);

@@ -159,7 +159,6 @@ const SoilExcavationCalculator: React.FC<SoilExcavationCalculatorProps> = ({ onR
     let excavationTime = 0;
     if (excavationTemplate && excavationTemplate.estimated_hours) {
       excavationTime = excavationTemplate.estimated_hours * totalTons;
-      console.log('Found excavation template:', excavationTemplate.name, 'Time:', excavationTime);
     } else {
       console.warn('Excavation template not found for:', `Excavation soil with ${excavatorName} (${excavatorSize}t)`);
       alert(t('calculator:template_not_found_excavator'));
@@ -184,14 +183,6 @@ const SoilExcavationCalculator: React.FC<SoilExcavationCalculatorProps> = ({ onR
         
         // Total transport time
         transportTime = trips * transportTimePerTrip;
-        
-        console.log('Transport calculation:', {
-          carrier: selectedCarrier.name,
-          speed: carrierSpeed,
-          distance,
-          trips,
-          transportTime
-        });
       }
     }
     

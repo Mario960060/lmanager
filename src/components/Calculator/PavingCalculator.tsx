@@ -8,6 +8,10 @@ import { translateTaskName, translateUnit } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
 import { computeCobblestoneCuts, computeMonoblockFrameBlocks } from '../../projectmanagement/canvacreator/visualization/cobblestonePattern';
+import { groupCutsByLength } from '../../projectmanagement/canvacreator/visualization/slabPattern';
+import { isPathElement, getPathPolygon } from '../../projectmanagement/canvacreator/linearElements';
+import { getEffectivePolygon, getEffectivePolygonWithEdgeIndices } from '../../projectmanagement/canvacreator/arcMath';
+import { FrameSidesSelector } from '../../projectmanagement/canvacreator/objectCard/FrameSidesSelector';
 import {
   colors,
   fonts,
@@ -119,12 +123,14 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
   const [framePieceLengthCm, setFramePieceLengthCm] = useState<string>(savedInputs?.framePieceLengthCm ?? '60');
   const [framePieceWidthCm, setFramePieceWidthCm] = useState<string>(savedInputs?.framePieceWidthCm ?? '10');
   const [frameJointType, setFrameJointType] = useState<'butt' | 'miter45'>(savedInputs?.frameJointType ?? 'butt');
+  const [frameSidesEnabled, setFrameSidesEnabled] = useState<boolean[]>(Array.isArray(savedInputs?.frameSidesEnabled) ? savedInputs.frameSidesEnabled : []);
   useEffect(() => {
     if (savedInputs?.addFrameToMonoblock !== undefined) setAddFrameToMonoblock(!!savedInputs.addFrameToMonoblock);
     if (savedInputs?.framePieceLengthCm != null) setFramePieceLengthCm(String(savedInputs.framePieceLengthCm));
     if (savedInputs?.framePieceWidthCm != null) setFramePieceWidthCm(String(savedInputs.framePieceWidthCm));
     if (savedInputs?.frameJointType === 'butt' || savedInputs?.frameJointType === 'miter45') setFrameJointType(savedInputs.frameJointType);
-  }, [savedInputs?.addFrameToMonoblock, savedInputs?.framePieceLengthCm, savedInputs?.framePieceWidthCm, savedInputs?.frameJointType]);
+    if (Array.isArray(savedInputs?.frameSidesEnabled)) setFrameSidesEnabled(savedInputs.frameSidesEnabled);
+  }, [savedInputs?.addFrameToMonoblock, savedInputs?.framePieceLengthCm, savedInputs?.framePieceWidthCm, savedInputs?.frameJointType, savedInputs?.frameSidesEnabled]);
 
   useEffect(() => {
     if (savedInputs?.tape1ThicknessCm != null && savedInputs.tape1ThicknessCm !== '') setTape1ThicknessCm(String(savedInputs.tape1ThicknessCm));
@@ -137,18 +143,28 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
     frameAngleCuts: number;
     sides: Array<{ length: number; blocks: number }>;
   } | null>(null);
+  const [canvasCutGroups, setCanvasCutGroups] = useState<{ lengthCm: number; count: number }[]>([]);
 
   useEffect(() => {
-    if (!isInProjectCreating || !shape?.calculatorInputs || !shape.closed || shape.points.length < 3) return;
+    if (!isInProjectCreating || !shape?.calculatorInputs || !shape.closed || shape.points.length < 3) {
+      setCanvasCutGroups([]);
+      return;
+    }
     const inputs = { ...shape.calculatorInputs, blockWidthCm: shape.calculatorInputs?.blockWidthCm ?? 20, blockLengthCm: shape.calculatorInputs?.blockLengthCm ?? 10, jointGapMm: shape.calculatorInputs?.jointGapMm ?? 1 };
-    const { cutBlockCount, wasteSatisfiedPositions } = computeCobblestoneCuts(shape as any, inputs);
+    const { cutBlockCount, cuts, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(shape as any, inputs);
     setCutBlocks(String(cutBlockCount));
+    setCanvasCutGroups(cuts.length > 0 ? groupCutsByLength(cuts) : []);
     if (onInputsChange) {
-      const next = wasteSatisfiedPositions ?? [];
-      const prev = shape.calculatorInputs?.vizWasteSatisfied ?? [];
-      if (JSON.stringify(prev) !== JSON.stringify(next)) {
-        onInputsChange({ vizWasteSatisfied: next });
-      }
+      const prev = shape.calculatorInputs ?? {};
+      const next = {
+        vizWasteSatisfied: wasteSatisfiedPositions ?? [],
+        vizWasteAreaCm2: wasteAreaCm2,
+        vizReusedAreaCm2: reusedAreaCm2,
+      };
+      const same = prev.vizWasteAreaCm2 === next.vizWasteAreaCm2
+        && prev.vizReusedAreaCm2 === next.vizReusedAreaCm2
+        && JSON.stringify(prev.vizWasteSatisfied ?? []) === JSON.stringify(next.vizWasteSatisfied);
+      if (!same) onInputsChange(next);
     }
   }, [isInProjectCreating, shape?.calculatorInputs?.blockWidthCm, shape?.calculatorInputs?.blockLengthCm, shape?.calculatorInputs?.jointGapMm, shape?.calculatorInputs?.vizPattern, shape?.calculatorInputs?.vizDirection, shape?.calculatorInputs?.vizStartCorner, shape?.calculatorInputs?.vizOriginOffsetX, shape?.calculatorInputs?.vizOriginOffsetY, shape?.calculatorInputs?.addFrameToMonoblock, shape?.calculatorInputs?.framePieceWidthCm, JSON.stringify(shape?.points), shape?.closed, onInputsChange]);
 
@@ -162,12 +178,13 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       framePieceLengthCm: addFrameToMonoblock ? framePieceLengthCm : undefined,
       framePieceWidthCm: addFrameToMonoblock ? framePieceWidthCm : undefined,
       frameJointType: addFrameToMonoblock ? frameJointType : undefined,
+      frameSidesEnabled: addFrameToMonoblock ? frameSidesEnabled : undefined,
     };
     const key = JSON.stringify(next);
     if (lastInputsSentRef.current === key) return;
     lastInputsSentRef.current = key;
     onInputsChange(next);
-  }, [area, sandThicknessCm, tape1ThicknessCm, monoBlocksHeightCm, cutBlocks, soilExcessCm, addFrameToMonoblock, framePieceLengthCm, framePieceWidthCm, frameJointType, onInputsChange, isInProjectCreating]);
+  }, [area, sandThicknessCm, tape1ThicknessCm, monoBlocksHeightCm, cutBlocks, soilExcessCm, addFrameToMonoblock, framePieceLengthCm, framePieceWidthCm, frameJointType, frameSidesEnabled, onInputsChange, isInProjectCreating]);
 
   useEffect(() => {
     if (!isInProjectCreating || !addFrameToMonoblock || !shape?.closed || !shape.points || shape.points.length < 3) {
@@ -180,10 +197,11 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       framePieceLengthCm: parseFloat(framePieceLengthCm) || 60,
       framePieceWidthCm: parseFloat(framePieceWidthCm) || 10,
       frameJointType: frameJointType,
+      frameSidesEnabled: frameSidesEnabled,
     };
     const result = computeMonoblockFrameBlocks(shape as any, inputs);
     setFrameResults(result);
-  }, [isInProjectCreating, addFrameToMonoblock, framePieceLengthCm, framePieceWidthCm, frameJointType, shape?.closed, shape?.calculatorInputs, JSON.stringify(shape?.points)]);
+  }, [isInProjectCreating, addFrameToMonoblock, framePieceLengthCm, framePieceWidthCm, frameJointType, frameSidesEnabled, shape?.closed, shape?.calculatorInputs, JSON.stringify(shape?.points)]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [totalHours, setTotalHours] = useState<number | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
@@ -214,7 +232,6 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
   const { data: layingTask, isLoading } = useQuery({
     queryKey: ['monoblock_laying_task', companyId],
     queryFn: async () => {
-      console.log('Fetching monoblock laying task...');
       const { data, error } = await supabase
         .from('event_tasks_with_dynamic_estimates')
         .select('id, name, unit, estimated_hours')
@@ -227,7 +244,6 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
         throw error;
       }
       
-      console.log('Fetched laying task:', data);
       if (!data) {
         throw new Error('No task found for laying monoblocks');
       }
@@ -497,24 +513,27 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       // Calculate base hours needed for installation
       let mainTaskHours = 0;
       let frameTaskHours = 0;
-      console.log('Laying task data:', layingTask);
       
       if (layingTask?.unit && layingTask?.estimated_hours !== undefined) {
-        console.log(`Task: ${layingTask.name}, Unit: ${layingTask.unit}, Estimated hours: ${layingTask.estimated_hours}`);
-        
         mainTaskHours = effectiveAreaM2 * layingTask.estimated_hours;
         if (addFrameToMonoblock && frameResults && frameResults.totalFrameAreaM2 > 0) {
           frameTaskHours = frameResults.totalFrameAreaM2 * layingTask.estimated_hours;
         }
-        console.log(`Calculated main task hours: ${effectiveAreaM2} square meters × ${layingTask.estimated_hours} = ${mainTaskHours} hours`);
       } else {
         console.warn('Laying task has no unit or estimated_hours:', layingTask);
       }
 
       // Add time for cuts. Use cutting blocks task if available, else 2 min per cut. Include frame corner cuts when miter45.
+      // When in project mode with canvasCutGroups, use cut operations count (1 per diagonal/curved, 2 per corner) instead of block count
       const cuttingBlocksTask = (taskTemplates as any[])?.find((t: any) => (t.name || '').toLowerCase().includes('cutting') && (t.name || '').toLowerCase().includes('block'));
       const hoursPerCut = cuttingBlocksTask?.estimated_hours ?? (2 / 60);
-      const cuttingHours = (cutBlocksNum + frameAngleCuts) * hoursPerCut;
+      let cuttingHours = 0;
+      if (isInProjectCreating && canvasCutGroups.length > 0) {
+        const cutOpsCount = canvasCutGroups.reduce((sum, g) => sum + g.count, 0);
+        cuttingHours = (cutOpsCount + frameAngleCuts) * hoursPerCut;
+      } else {
+        cuttingHours = (cutBlocksNum + frameAngleCuts) * hoursPerCut;
+      }
 
       // Calculate materials needed
       const totalDepthM = sandThicknessM + tape1ThicknessM + monoBlocksHeightM + soilExcessM;
@@ -658,12 +677,15 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
         });
       }
 
-      if (cutBlocksNum > 0 || frameAngleCuts > 0) {
+      const cuttingAmount = isInProjectCreating && canvasCutGroups.length > 0
+        ? canvasCutGroups.reduce((sum, g) => sum + g.count, 0) + frameAngleCuts
+        : cutBlocksNum + frameAngleCuts;
+      if (cuttingAmount > 0) {
         breakdown.push({ 
-          task: `(${cutBlocksNum + frameAngleCuts}) cutting blocks`,
+          task: `(${cuttingAmount}) cutting blocks`,
           hours: cuttingHours,
-          amount: cutBlocksNum + frameAngleCuts,
-          unit: 'blocks',
+          amount: cuttingAmount,
+          unit: 'cuts',
           event_task_id: cuttingBlocksTask?.id
         });
       }
@@ -702,7 +724,6 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
 
         if (soilExcavationTemplate && soilExcavationTemplate.estimated_hours) {
           soilExcavationTime = soilExcavationTemplate.estimated_hours * soilTonnes;
-          console.log('Found soil excavation template:', soilExcavationTemplate.name, 'Time:', soilExcavationTime);
         } else {
           console.warn('Soil excavation template not found for:', `Excavation soil with ${excavatorName} (${excavatorSize}t)`);
           soilExcavationTime = 0;
@@ -722,7 +743,6 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
 
           if (tape1Template && tape1Template.estimated_hours) {
             tape1LoadingTime = tape1Template.estimated_hours * tape1Tonnes;
-            console.log('Found tape1 loading template:', tape1Template.name, 'Time:', tape1LoadingTime);
           } else {
             console.warn('Tape1 loading template not found for:', `Loading tape1 with ${excavatorName} (${excavatorSize}t)`);
             tape1LoadingTime = 0;
@@ -972,6 +992,37 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
                   width="100%"
                   placeholder={t('calculator:frame_joint_butt')}
                 />
+                {shape && (() => {
+                  if (isPathElement(shape)) {
+                    const pts = getPathPolygon(shape);
+                    if (!pts || pts.length < 3) return null;
+                    return (
+                      <div style={{ marginTop: 12 }}>
+                        <FrameSidesSelector
+                          points={pts}
+                          frameSidesEnabled={frameSidesEnabled}
+                          onChange={setFrameSidesEnabled}
+                          width={280}
+                          height={180}
+                        />
+                      </div>
+                    );
+                  }
+                  const { points: pts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
+                  if (!pts || pts.length < 3) return null;
+                  return (
+                    <div style={{ marginTop: 12 }}>
+                      <FrameSidesSelector
+                        points={pts}
+                        edgeIndices={edgeIndices}
+                        frameSidesEnabled={frameSidesEnabled}
+                        onChange={setFrameSidesEnabled}
+                        width={280}
+                        height={180}
+                      />
+                    </div>
+                  );
+                })()}
               </div>
             )}
             {frameResults && addFrameToMonoblock && (

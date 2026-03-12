@@ -35,6 +35,42 @@ export function arcPointToWorld(A: Point, B: Point, arcPoint: ArcPoint): Point {
 }
 
 /**
+ * Fit quadratic Bézier control point to a set of points between A and B.
+ * Curve: B(s) = (1-s)²A + 2(1-s)s*C + s²B. Returns C (control point).
+ * Uses arc-length parameterization for s. Returns null if pts too few.
+ */
+export function fitQuadraticBezierControlToPoints(A: Point, B: Point, pts: Point[]): Point | null {
+  if (pts.length < 2) return null;
+  const n = pts.length;
+  let totalLen = 0;
+  const segLens: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    const d = distance(pts[i], pts[i + 1]);
+    segLens.push(d);
+    totalLen += d;
+  }
+  if (totalLen < 1e-9) return { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
+
+  let cxSum = 0, cySum = 0, weightSum = 0;
+  let accLen = 0;
+  for (let k = 1; k < n - 1; k++) {
+    accLen += segLens[k - 1];
+    const s = accLen / totalLen;
+    if (s <= 0.001 || s >= 0.999) continue;
+    const w = 2 * (1 - s) * s;
+    if (w < 1e-9) continue;
+    const P = pts[k];
+    const rhsX = P.x - (1 - s) * (1 - s) * A.x - s * s * B.x;
+    const rhsY = P.y - (1 - s) * (1 - s) * A.y - s * s * B.y;
+    cxSum += rhsX / w;
+    cySum += rhsY / w;
+    weightSum += 1;
+  }
+  if (weightSum < 0.5) return { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 };
+  return { x: cxSum / weightSum, y: cySum / weightSum };
+}
+
+/**
  * Inverse: given world position, compute { t, offset } for edge A→B.
  */
 export function worldToArcPoint(A: Point, B: Point, world: Point): { t: number; offset: number } {
@@ -55,6 +91,177 @@ export function worldToArcPoint(A: Point, B: Point, world: Point): { t: number; 
   const offset = (world.x - bx) * nx + (world.y - by) * ny;
 
   return { t, offset };
+}
+
+/**
+ * Convert ArcPoint to world coordinate ON THE ACTUAL ARC CURVE.
+ * Uses the same quadratic Bézier as drawCurvedEdge: control = centroid of arc points.
+ * Parameter ap.t maps to curve parameter s, so the handle follows the curve.
+ */
+export function arcPointToWorldOnCurve(
+  A: Point,
+  B: Point,
+  arcPoints: ArcPoint[],
+  arcPoint: ArcPoint
+): Point {
+  const sorted = [...arcPoints].sort((a, b) => a.t - b.t);
+  let cx = 0, cy = 0;
+  for (const ap of sorted) {
+    const p = arcPointToWorld(A, B, ap);
+    cx += p.x;
+    cy += p.y;
+  }
+  cx /= sorted.length;
+  cy /= sorted.length;
+
+  const s = Math.max(0.01, Math.min(0.99, arcPoint.t));
+  const u = 1 - s;
+  return {
+    x: u * u * A.x + 2 * u * s * cx + s * s * B.x,
+    y: u * u * A.y + 2 * u * s * cy + s * s * B.y,
+  };
+}
+
+// ── Inverse helpers (iterative search, not chord projection) ───
+
+/**
+ * For given curve param t, compute offset so curve passes through targetWorld.
+ * Uses: centroid = (target - u²A - t²B)/(2ut), ourChordPos = n*centroid - others, offset = (ourChordPos - base)·normal.
+ */
+function solveOffsetForTarget(
+  A: Point,
+  B: Point,
+  t: number,
+  othersX: number,
+  othersY: number,
+  n: number,
+  targetWorld: Point
+): number {
+  const dx = B.x - A.x;
+  const dy = B.y - A.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-9) return 0;
+  const denom = 2 * (1 - t) * t;
+  if (Math.abs(denom) < 1e-9) return 0;
+  const u = 1 - t;
+  const centroidX = (targetWorld.x - u * u * A.x - t * t * B.x) / denom;
+  const centroidY = (targetWorld.y - u * u * A.y - t * t * B.y) / denom;
+  const Cx = n * centroidX - othersX;
+  const Cy = n * centroidY - othersY;
+  const len = Math.sqrt(lenSq);
+  const nx = -dy / len;
+  const ny = dx / len;
+  const baseX = A.x + t * dx;
+  const baseY = A.y + t * dy;
+  return (Cx - baseX) * nx + (Cy - baseY) * ny;
+}
+
+/**
+ * Evaluate curve at (t, offset) with given others. Same formula as arcPointToWorldOnCurve.
+ * Use to validate: evalCurveAtT(A, B, ap.t, ap.offset, othersX, othersY, n) === arcPointToWorldOnCurve(A, B, arcs, ap).
+ */
+function evalCurveAtT(
+  A: Point,
+  B: Point,
+  t: number,
+  offset: number,
+  othersX: number,
+  othersY: number,
+  n: number
+): Point {
+  const dx = B.x - A.x;
+  const dy = B.y - A.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1e-9) return { x: A.x, y: A.y };
+  const nx = -dy / len;
+  const ny = dx / len;
+  const baseX = A.x + t * dx;
+  const baseY = A.y + t * dy;
+  const ourChordX = baseX + offset * nx;
+  const ourChordY = baseY + offset * ny;
+  const cx = (othersX + ourChordX) / n;
+  const cy = (othersY + ourChordY) / n;
+  const u = 1 - t;
+  return {
+    x: u * u * A.x + 2 * u * t * cx + t * t * B.x,
+    y: u * u * A.y + 2 * u * t * cy + t * t * B.y,
+  };
+}
+
+/**
+ * Inverse of arcPointToWorldOnCurve: given target world position, compute { t, offset } for the arcpoint.
+ * Uses iterative search along the curve (not chord projection) — for strongly curved arcs, chord projection
+ * gives wrong t, causing snap/link jumps. Search minimizes distance B(t) to targetWorld.
+ */
+export function worldToArcPointOnCurve(
+  A: Point,
+  B: Point,
+  arcPoints: ArcPoint[],
+  arcPoint: ArcPoint,
+  targetWorld: Point
+): { t: number; offset: number } {
+  const dx = B.x - A.x;
+  const dy = B.y - A.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-9) return { t: 0.5, offset: 0 };
+
+  let othersX = 0;
+  let othersY = 0;
+  for (const ap of arcPoints) {
+    if (ap.id === arcPoint.id) continue;
+    const p = arcPointToWorld(A, B, ap);
+    othersX += p.x;
+    othersY += p.y;
+  }
+  const n = arcPoints.length;
+
+  let bestT = 0.5;
+  let bestDist = Infinity;
+
+  // Coarse sampling t ∈ [0.01, 0.99]
+  for (let i = 1; i <= 99; i++) {
+    const t = i / 100;
+    const offset = solveOffsetForTarget(A, B, t, othersX, othersY, n, targetWorld);
+    const pos = evalCurveAtT(A, B, t, offset, othersX, othersY, n);
+    const d = (pos.x - targetWorld.x) ** 2 + (pos.y - targetWorld.y) ** 2;
+    if (d < bestDist) {
+      bestDist = d;
+      bestT = t;
+    }
+  }
+
+  // Refine around bestT
+  for (let i = -10; i <= 10; i++) {
+    const t = Math.max(0.01, Math.min(0.99, bestT + i / 1000));
+    const offset = solveOffsetForTarget(A, B, t, othersX, othersY, n, targetWorld);
+    const pos = evalCurveAtT(A, B, t, offset, othersX, othersY, n);
+    const d = (pos.x - targetWorld.x) ** 2 + (pos.y - targetWorld.y) ** 2;
+    if (d < bestDist) {
+      bestDist = d;
+      bestT = t;
+    }
+  }
+
+  const finalOffset = solveOffsetForTarget(A, B, bestT, othersX, othersY, n, targetWorld);
+  return { t: bestT, offset: finalOffset };
+}
+
+/**
+ * Validate forward/inverse consistency: arcPointToWorldOnCurve → worldToArcPointOnCurve → arcPointToWorldOnCurve
+ * should return the same point within 0.01px. Call in dev to verify evalCurveAtT matches arcPointToWorldOnCurve.
+ */
+export function validateArcPointRoundtrip(
+  A: Point,
+  B: Point,
+  arcPoints: ArcPoint[],
+  arcPoint: ArcPoint,
+  tolerance = 0.01
+): { ok: boolean; error: number } {
+  const world = arcPointToWorldOnCurve(A, B, arcPoints, arcPoint);
+  const { t, offset } = worldToArcPointOnCurve(A, B, arcPoints, arcPoint, world);
+  const back = arcPointToWorldOnCurve(A, B, arcPoints, { ...arcPoint, t, offset });
+  const err = distance(world, back);
+  return { ok: err < tolerance, error: err };
 }
 
 // ── Catmull-Rom → Bézier ────────────────────────────────────
@@ -86,112 +293,66 @@ export function catmullRomToBezier(
 // ── Curve Drawing ───────────────────────────────────────────
 
 /**
- * Draw a curved edge using Catmull-Rom spline via cubic Bézier segments.
- * ctx should already have moveTo(A) called before this.
- * For a single arc point: uses quadratic Bézier so the curve bulges outward smoothly
- * without "turning back" at endpoints (no S-curve).
+ * Draw a curved edge using quadratic Bézier — same as single-point case.
+ * One segment A→B with control = centroid of arc points. Ends exactly at vertices.
  */
 export function drawCurvedEdge(
   ctx: CanvasRenderingContext2D,
   A: Point,
   B: Point,
   arcPoints: ArcPoint[],
-  worldToScreen: (x: number, y: number) => Point
+  worldToScreen: (x: number, y: number) => Point,
+  _prev?: Point,
+  _next?: Point
 ): void {
   const sorted = [...arcPoints].sort((a, b) => a.t - b.t);
 
-  const pts: Point[] = [A];
+  let cx = 0, cy = 0;
   for (const ap of sorted) {
-    pts.push(arcPointToWorld(A, B, ap));
+    const p = arcPointToWorld(A, B, ap);
+    cx += p.x;
+    cy += p.y;
   }
-  pts.push(B);
+  cx /= sorted.length;
+  cy /= sorted.length;
 
-  const pBefore: Point = {
-    x: 2 * pts[0].x - pts[1].x,
-    y: 2 * pts[0].y - pts[1].y,
-  };
-  const pAfter: Point = {
-    x: 2 * pts[pts.length - 1].x - pts[pts.length - 2].x,
-    y: 2 * pts[pts.length - 1].y - pts[pts.length - 2].y,
-  };
-  const padded = [pBefore, ...pts, pAfter];
-
-  for (let s = 1; s < padded.length - 2; s++) {
-    const p0 = padded[s - 1];
-    const p1 = padded[s];
-    const p2 = padded[s + 1];
-    const p3 = padded[s + 2];
-    const { cp1, cp2 } = catmullRomToBezier(p0, p1, p2, p3);
-    const end = p2;
-    const scp1 = worldToScreen(cp1.x, cp1.y);
-    const scp2 = worldToScreen(cp2.x, cp2.y);
-    const send = worldToScreen(end.x, end.y);
-    ctx.bezierCurveTo(scp1.x, scp1.y, scp2.x, scp2.y, send.x, send.y);
-  }
+  const sControl = worldToScreen(cx, cy);
+  const sB = worldToScreen(B.x, B.y);
+  ctx.quadraticCurveTo(sControl.x, sControl.y, sB.x, sB.y);
 }
 
 // ── Sampling ─────────────────────────────────────────────────
 
 /**
- * Sample an arc edge into N points for geometry calculations.
- * Returns array of Points along the curve, including A (first) and B (last).
+ * Sample an arc edge into N points. Uses quadratic Bézier (same as drawCurvedEdge).
  */
 export function sampleArcEdge(
   A: Point,
   B: Point,
   arcPoints: ArcPoint[],
-  numSamples = 32
+  numSamples = 32,
+  _prev?: Point,
+  _next?: Point
 ): Point[] {
   const sorted = [...arcPoints].sort((a, b) => a.t - b.t);
 
-  const pts: Point[] = [A];
+  let cx = 0, cy = 0;
   for (const ap of sorted) {
-    pts.push(arcPointToWorld(A, B, ap));
+    const p = arcPointToWorld(A, B, ap);
+    cx += p.x;
+    cy += p.y;
   }
-  pts.push(B);
+  cx /= sorted.length;
+  cy /= sorted.length;
 
-  const pBefore: Point = {
-    x: 2 * pts[0].x - pts[1].x,
-    y: 2 * pts[0].y - pts[1].y,
-  };
-  const pAfter: Point = {
-    x: 2 * pts[pts.length - 1].x - pts[pts.length - 2].x,
-    y: 2 * pts[pts.length - 1].y - pts[pts.length - 2].y,
-  };
-  const padded = [pBefore, ...pts, pAfter];
-
-  const result: Point[] = [];
-  const segCount = padded.length - 3;
-
-  for (let seg = 0; seg < segCount; seg++) {
-    const p0 = padded[seg];
-    const p1 = padded[seg + 1];
-    const p2 = padded[seg + 2];
-    const p3 = padded[seg + 3];
-
-    const samplesThisSeg = seg === 0 ? Math.ceil(numSamples / segCount) + 1 : Math.ceil(numSamples / segCount);
-    const step = 1 / samplesThisSeg;
-
-    for (let k = 0; k < samplesThisSeg; k++) {
-      const u = k * step;
-      const t = u;
-      const t2 = t * t;
-      const t3 = t2 * t;
-
-      const x =
-        0.5 *
-        (2 * p1.x +
-          (-p0.x + p2.x) * t +
-          (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-          (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
-      const y =
-        0.5 *
-        (2 * p1.y +
-          (-p0.y + p2.y) * t +
-          (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-          (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
-      result.push({ x, y });
-    }
+  const result: Point[] = [A];
+  for (let k = 1; k < numSamples; k++) {
+    const t = k / numSamples;
+    const u = 1 - t;
+    result.push({
+      x: u * u * A.x + 2 * u * t * cx + t * t * B.x,
+      y: u * u * A.y + 2 * u * t * cy + t * t * B.y,
+    });
   }
   result.push(B);
   return result;
@@ -242,7 +403,9 @@ export function getEffectivePolygon(shape: Shape): Point[] {
     if (!arcs || arcs.length === 0) {
       result.push(pts[j]);
     } else {
-      const sampled = sampleArcEdge(pts[i], pts[j], arcs, 48);
+      const prev = pts[(i - 1 + n) % n];
+      const next = pts[(j + 1) % n];
+      const sampled = sampleArcEdge(pts[i], pts[j], arcs, 48, prev, next);
       for (let k = 1; k < sampled.length; k++) {
         result.push(sampled[k]);
       }
@@ -279,7 +442,9 @@ export function getEffectivePolygonWithEdgeIndices(shape: Shape): { points: Poin
       points.push(pts[j]);
       edgeIndices.push(i);
     } else {
-      const sampled = sampleArcEdge(pts[i], pts[j], arcs, 48);
+      const prev = pts[(i - 1 + n) % n];
+      const next = pts[(j + 1) % n];
+      const sampled = sampleArcEdge(pts[i], pts[j], arcs, 48, prev, next);
       for (let k = 1; k < sampled.length; k++) {
         points.push(sampled[k]);
         edgeIndices.push(i);
@@ -398,33 +563,29 @@ export function dragArcPoint(
 
 // ── Arc Snap Magnet ────────────────────────────────────────
 
-/**
- * Snap arc point to nearby arc points from other edges when dragging.
- * When current arc point's world position is within threshold of another arc point,
- * snap to align them (same world position = similar curve bend).
- */
-export function snapArcPoint(
-  A: Point,
-  B: Point,
-  currentT: number,
-  currentOffset: number,
-  shapes: Shape[],
-  excludeShapeIdx: number,
-  excludeEdge: { shapeIdx: number; edgeIdx: number },
-  threshold: number
-): { t: number; offset: number; didSnap: boolean } {
-  const currentWorld = arcPointToWorld(A, B, { id: "", t: currentT, offset: currentOffset });
-  let bestDist = threshold;
-  let bestTarget: Point | null = null;
+export interface ArcPointCacheEntry {
+  si: number;
+  ei: number;
+  ap: ArcPoint;
+  pos: Point;
+}
 
+/**
+ * Build cache of arc point positions (on curve) for fast snap lookup.
+ * Rebuild when shapes change.
+ */
+export function buildArcPointPositionCache(
+  shapes: Shape[],
+  isOnActiveLayer?: (si: number) => boolean
+): ArcPointCacheEntry[] {
+  const out: ArcPointCacheEntry[] = [];
   for (let si = 0; si < shapes.length; si++) {
-    if (si === excludeShapeIdx) continue;
+    if (isOnActiveLayer && !isOnActiveLayer(si)) continue;
     const shape = shapes[si];
     const pts = shape.points;
     const edgeCount = shape.closed ? pts.length : pts.length - 1;
 
     for (let ei = 0; ei < edgeCount; ei++) {
-      if (si === excludeEdge.shapeIdx && ei === excludeEdge.edgeIdx) continue;
       const arcs = shape.edgeArcs?.[ei];
       if (!arcs || arcs.length === 0) continue;
 
@@ -432,19 +593,80 @@ export function snapArcPoint(
       const edgeB = pts[(ei + 1) % pts.length];
 
       for (const ap of arcs) {
-        const world = arcPointToWorld(edgeA, edgeB, ap);
-        const d = distance(currentWorld, world);
-        if (d < bestDist) {
-          bestDist = d;
-          bestTarget = world;
-        }
+        const pos = arcPointToWorldOnCurve(edgeA, edgeB, arcs, ap);
+        out.push({ si, ei, ap, pos });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Snap arc point to nearby arc points when dragging (any edge, any shape).
+ * Element A edge → element B edge: magnet aligns arcpoints at same world position on curve.
+ * @param targetWorld - where user wants to drag (cursor); used for unlock check so snap releases when cursor moves away
+ * @param cache - optional precomputed positions; when provided, uses cache instead of iterating shapes
+ */
+export function snapArcPoint(
+  A: Point,
+  B: Point,
+  currentT: number,
+  currentOffset: number,
+  currentArcs: ArcPoint[],
+  shapes: Shape[],
+  excludeArcId: string,
+  threshold: number,
+  isOnActiveLayer?: (si: number) => boolean,
+  cache?: ArcPointCacheEntry[],
+  lockedTarget?: { si: number; ei: number; arcId: string } | null,
+  targetWorld?: Point
+): { t: number; offset: number; didSnap: boolean; bestTarget?: Point; lockedTarget?: { si: number; ei: number; arcId: string } } {
+  const callerEdge = (globalThis as any).__arcSnapCallerEdge as { si: number; ei: number } | undefined;
+  const currentAp = { id: excludeArcId, t: currentT, offset: currentOffset };
+  const currentWorld = arcPointToWorldOnCurve(A, B, currentArcs, currentAp);
+  let bestDist = threshold;
+  let bestTarget: Point | null = null;
+  let bestTargetAp: ArcPoint | null = null;
+  let bestTargetSi = -1;
+  let bestTargetEi = -1;
+
+  const entries = cache ?? buildArcPointPositionCache(shapes, isOnActiveLayer);
+  const unlockThreshold = threshold;
+
+  if (lockedTarget) {
+    const lockedEntry = entries.find((e) => e.si === lockedTarget.si && e.ei === lockedTarget.ei && e.ap.id === lockedTarget.arcId);
+    if (lockedEntry) {
+      const d = (targetWorld ? distance(targetWorld, lockedEntry.pos) : distance(currentWorld, lockedEntry.pos));
+      if (d <= unlockThreshold) {
+        bestTarget = lockedEntry.pos;
+        bestTargetAp = lockedEntry.ap;
+        bestTargetSi = lockedEntry.si;
+        bestTargetEi = lockedEntry.ei;
+        bestDist = d;
       }
     }
   }
 
-  if (bestTarget) {
-    const { t, offset } = worldToArcPoint(A, B, bestTarget);
-    return { t, offset, didSnap: true };
+  if (!bestTarget || !bestTargetAp) {
+    for (const { si, ei, ap, pos } of entries) {
+      if (ap.id === excludeArcId) continue;
+      const d = distance(currentWorld, pos);
+      if (d < bestDist) {
+        bestDist = d;
+        bestTarget = pos;
+        bestTargetAp = ap;
+        bestTargetSi = si;
+        bestTargetEi = ei;
+      }
+    }
+  }
+
+  if (bestTarget && bestTargetAp) {
+    const sameEdge = callerEdge && bestTargetSi === callerEdge.si && bestTargetEi === callerEdge.ei;
+    const res = sameEdge
+      ? { t: bestTargetAp.t, offset: bestTargetAp.offset }
+      : worldToArcPointOnCurve(A, B, currentArcs, currentAp, bestTarget);
+    return { t: res.t, offset: res.offset, didSnap: true, bestTarget, lockedTarget: { si: bestTargetSi, ei: bestTargetEi, arcId: bestTargetAp.id } };
   }
   return { t: currentT, offset: currentOffset, didSnap: false };
 }
@@ -455,6 +677,7 @@ type WorldToScreen = (wx: number, wy: number) => Point;
 
 /**
  * Hit test arc point: returns the arc point if mouse (world coords) is within threshold of its handle.
+ * Uses position on curve so hit test matches the visible handle.
  * threshold: world units (pixels in world space)
  */
 export function hitTestArcPoint(
@@ -465,7 +688,7 @@ export function hitTestArcPoint(
   threshold: number
 ): ArcPoint | null {
   for (const ap of arcPoints) {
-    const world = arcPointToWorld(A, B, ap);
+    const world = arcPointToWorldOnCurve(A, B, arcPoints, ap);
     const d = distance(wp, world);
     if (d <= threshold) return ap;
   }
@@ -474,7 +697,8 @@ export function hitTestArcPoint(
 
 /**
  * Draw arc point handles when shape is selected.
- * Dashed line from base (on straight edge) to arc point, small circle at arc point.
+ * Dashed line from base (on straight edge) to arc point on curve, small circle at arc point.
+ * Handle is drawn ON the arc curve so it follows the line when the shape moves.
  */
 export function drawArcHandles(
   ctx: CanvasRenderingContext2D,
@@ -486,7 +710,7 @@ export function drawArcHandles(
   linkedArcIds?: Set<string>
 ): void {
   for (const ap of arcPoints) {
-    const world = arcPointToWorld(A, B, ap);
+    const world = arcPointToWorldOnCurve(A, B, arcPoints, ap);
     const base = { x: A.x + ap.t * (B.x - A.x), y: A.y + ap.t * (B.y - A.y) };
     const sBase = worldToScreen(base.x, base.y);
     const sWorld = worldToScreen(world.x, world.y);

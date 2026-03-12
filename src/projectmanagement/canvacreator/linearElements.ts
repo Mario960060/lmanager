@@ -205,6 +205,35 @@ export function computeThickPolyline(points: Point[], thicknessPx: number): Poin
 }
 
 /**
+ * Compute path polygon on one side of line A-B only.
+ * side: "left" = path on left when going A→B, "right" = path on right.
+ * Returns 4-point quadrilateral [A, B, offset1, offset0].
+ */
+export function computePathPolygonOneSide(A: Point, B: Point, pathWidthM: number, side: "left" | "right"): Point[] {
+  const half = toPixels(pathWidthM) / 2;
+  const dx = B.x - A.x;
+  const dy = B.y - A.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 0.001) return [];
+  const nx = -dy / len;
+  const ny = dx / len;
+  const sign = side === "left" ? 1 : -1;
+  const offset0 = { x: A.x + sign * nx * half, y: A.y + sign * ny * half };
+  const offset1 = { x: B.x + sign * nx * half, y: B.y + sign * ny * half };
+  return [A, B, offset1, offset0];
+}
+
+/**
+ * Which side of line A→B is point P on? Cross product (P-A) × (B-A).
+ * > 0 = left, < 0 = right, ≈ 0 = on line.
+ */
+export function pointSideOfLine(P: Point, A: Point, B: Point): "left" | "right" | "on" {
+  const cross = (P.x - A.x) * (B.y - A.y) - (P.y - A.y) * (B.x - A.x);
+  if (Math.abs(cross) < 0.0001) return "on";
+  return cross > 0 ? "left" : "right";
+}
+
+/**
  * Get polygon outline for wall/kerb/foundation. If stored as polygon (closed), return points.
  * If stored as polyline, compute from centerline + thickness.
  */
@@ -223,17 +252,27 @@ export function getPolygonLinearOutline(shape: Shape): Point[] {
 /**
  * Extract segment lengths from wall/kerb/foundation polygon outline.
  * Outline has 2n+2 points for n segments: [left0..left_n, right_n..right0].
+ * Length = distance along centerline (between cap centers).
  */
 export function polygonToSegmentLengths(outline: Point[]): number[] {
   const n = outline.length;
   if (n < 4 || n % 2 !== 0) return [];
   const segCount = (n - 2) / 2;
   const lengths: number[] = [];
-  for (let i = 0; i < segCount; i++) {
-    const leftMid = midpoint(outline[i], outline[i + 1]);
-    const rightIdx = n - 1 - i;
-    const rightMid = midpoint(outline[rightIdx], outline[rightIdx - 1]);
-    lengths.push(toMeters(distance(leftMid, rightMid)));
+
+  if (segCount === 1) {
+    // Single segment: centerline would give same point twice. Use cap centers directly.
+    // centerStart = midpoint(left0, right0), centerEnd = midpoint(left1, right1)
+    const centerStart = midpoint(outline[0], outline[n - 1]);
+    const centerEnd = midpoint(outline[1], outline[2]);
+    lengths.push(toMeters(distance(centerStart, centerEnd)));
+    return lengths;
+  }
+
+  const centerline = polygonToCenterline(outline);
+  if (centerline.length < 2) return [];
+  for (let i = 0; i < centerline.length - 1; i++) {
+    lengths.push(toMeters(distance(centerline[i], centerline[i + 1])));
   }
   return lengths;
 }

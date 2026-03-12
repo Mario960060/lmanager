@@ -4,6 +4,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { Point, Shape, toPixels, toMeters, areaM2, distance, formatLength, midpoint, edgeNormalAngle, labelAnchorInsidePolygon, centroid, readableTextAngle } from "../geometry";
+import { scaledFontSize } from "../canvasRenderers";
 import { getEffectivePolygon as getEffectivePolygonWithArcs } from "../arcMath";
 import { shrinkPolygon } from "./slabPattern";
 
@@ -864,6 +865,26 @@ export function drawGrassPieces(
     }
   };
 
+  const drawLabels = () => {
+    const cov = validateCoverage(shape, pieces);
+    const anchor = labelAnchorInsidePolygon(pts);
+    const sc = worldToScreen(anchor.x, anchor.y);
+    const area = pts.length >= 3 ? areaM2(pts) : 0;
+    const baseFontSize = 14;
+    const scaledFont = scaledFontSize(baseFontSize, zoom);
+    const lineHeight = scaledFont * 1.2;
+    ctx.font = `bold ${scaledFont}px 'JetBrains Mono',monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + lineHeight * 0.5);
+    ctx.fillStyle = cov.coveragePercent < 99.99 ? "#e74c3c" : "#ffffff";
+    ctx.fillText(`Coverage: ${cov.coveragePercent.toFixed(1)}%`, sc.x, sc.y + lineHeight * 1.5);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(`Waste: ${cov.wastePercent.toFixed(1)}%`, sc.x, sc.y + lineHeight * 2.5);
+    ctx.fillText(`Joins: ${cov.joinLengthM.toFixed(1)}m`, sc.x, sc.y + lineHeight * 3.5);
+  };
+
   const doDraw = () => {
   if (!isSelected) {
     ctx.save();
@@ -877,8 +898,9 @@ export function drawGrassPieces(
     ctx.clip();
     ctx.fillStyle = "rgba(39,174,96,0.4)";
     ctx.fill();
-    ctx.restore();
     drawJointLines();
+    ctx.restore();
+    drawLabels();
     return;
   }
 
@@ -1036,21 +1058,7 @@ export function drawGrassPieces(
   }
 
   drawJointLines();
-
-  const cov = validateCoverage(shape, pieces);
-  const anchor = labelAnchorInsidePolygon(pts);
-  const sc = worldToScreen(anchor.x, anchor.y);
-  const area = pts.length >= 3 ? areaM2(pts) : 0;
-  ctx.font = "bold 14px 'JetBrains Mono',monospace";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.fillStyle = "#ffffff";
-  ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + 8);
-  ctx.fillStyle = cov.coveragePercent < 99.99 ? "#e74c3c" : "#ffffff";
-  ctx.fillText(`Coverage: ${cov.coveragePercent.toFixed(1)}%`, sc.x, sc.y + 24);
-  ctx.fillStyle = "#ffffff";
-  ctx.fillText(`Waste: ${cov.wastePercent.toFixed(1)}%`, sc.x, sc.y + 40);
-  ctx.fillText(`Joins: ${cov.joinLengthM.toFixed(1)}m`, sc.x, sc.y + 56);
+  drawLabels();
   };
 
   if (clipToShape) {

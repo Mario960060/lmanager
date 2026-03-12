@@ -170,7 +170,6 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         throw error;
       }
 
-      console.log('Fetched deck tasks:', data);
 
       // Convert array to object for easy lookup
       const taskMap: Record<string, any> = {};
@@ -179,7 +178,6 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
           taskMap[task.name] = task;
         });
       }
-      console.log('Task map:', taskMap);
       return taskMap;
     },
     enabled: !!companyId
@@ -258,7 +256,6 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
   };
 
   const calculate = async () => {
-    console.log(`DeckCalculator.tsx: calculate called`);
 
     if (!totalLength || !totalWidth || !joistLength || !distanceBetweenJoists || !boardLength || !boardWidth || !jointGaps) {
       setCalculationError(t('calculator:fill_all_required_fields'));

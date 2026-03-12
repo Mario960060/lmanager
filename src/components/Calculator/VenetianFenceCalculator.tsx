@@ -67,7 +67,6 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
 }) => {
   const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
-  console.log(`VenetianFenceCalculator.tsx: Component mounted`);
 
   const initLength = savedInputs?.length != null ? String(savedInputs.length) : (initialLength != null ? initialLength.toFixed(3) : '');
   const [length, setLength] = useState(initLength);
@@ -132,7 +131,6 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
         return null;
       }
       
-      console.log(`Found venetian fence laying task: ${taskName}`);
       return data;
     },
     enabled: !!companyId
@@ -228,7 +226,6 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
   };
 
   const calculate = async () => {
-    console.log(`VenetianFenceCalculator.tsx: calculate called`);
 
     if (!length || !height) {
       setCalculationError(t('calculator:fill_all_required_fields'));

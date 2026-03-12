@@ -7,15 +7,11 @@ import { supabase } from './supabase';
  * @returns Promise<boolean> True if the equipment was successfully released
  */
 export const releaseEquipment = async (equipmentId: string, eventId: string): Promise<boolean> => {
-  console.log('Attempting to release equipment:', { equipmentId, eventId });
-  
   try {
     const { data, error } = await supabase.rpc('release_equipment_by_ids', {
       equipment_id: equipmentId,
       event_id: eventId
     });
-    
-    console.log('Release equipment response:', { data, error });
     
     if (error) {
       console.error('Error releasing equipment:', error);
@@ -30,8 +26,6 @@ export const releaseEquipment = async (equipmentId: string, eventId: string): Pr
 };
 
 export const releaseEquipmentDirect = async (equipmentId: string, eventId: string): Promise<boolean> => {
-  console.log('Attempting direct equipment release:', { equipmentId, eventId });
-  
   try {
     // Update the equipment_usage table
     const { data: usageData, error: usageError } = await supabase
@@ -45,8 +39,6 @@ export const releaseEquipmentDirect = async (equipmentId: string, eventId: strin
         event_id: eventId,
         is_returned: false
       });
-    
-    console.log('Update response:', { usageData, usageError });
     
     if (usageError) {
       console.error('Error updating equipment usage:', usageError);

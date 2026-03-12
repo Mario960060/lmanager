@@ -5,16 +5,16 @@ import {
   HitResult, EdgeHitResult, OpenEndHit,
   SelectionRect, DimEdit, ContextMenuInfo, LinkedEntry, isArcEntry,
   PIXELS_PER_METER, GRID_SPACING, POINT_RADIUS, EDGE_HIT_THRESHOLD, GRASS_EDGE_HIT_PX,
-  SNAP_TO_START_RADIUS, SNAP_TO_LAST_RADIUS, MIN_ZOOM, MAX_ZOOM, SNAP_MAGNET_PX, ARC_SNAP_PX, PATTERN_SNAP_PX,
+  SNAP_TO_START_RADIUS, SNAP_TO_LAST_RADIUS, MIN_ZOOM, MAX_ZOOM, SNAP_MAGNET_PX, PATTERN_SNAP_PX,
   distance, toMeters, toPixels, formatLength, midpoint, angleDeg, areaM2, polylineLengthMeters, rotatePointAround,
   projectOntoSegment, edgeNormalAngle, readableTextAngle, snapTo45, snapTo45Soft, snapAngleTo45, snapShiftSmart, interiorAngleDir, centroid, labelAnchorInsidePolygon,
   constrainLockedEdges,
   snapMagnet, snapMagnetShape, pointInPolygon, pointInOrNearPolygon,
   makeSquare, makeRectangle, makeTriangle, makeTrapezoid, C, C_LIGHT,
 } from "./geometry";
-import { calcEdgeSlopes, calcShapeGradient, formatSlope, slopeColor, interpolateHeightAtPoint, fillShapeHeightHeatmap, computeGlobalHeightRange } from "./geodesy.ts";
-import { isLinearElement, isGroundworkLinear, isPathElement, isPolygonLinearElement, groundworkLabel, drawLinearElement, drawLinearElementInactive, hitTestLinearElement, hitTestPathElement, computeThickPolyline, getPathPolygon, getLinearElementPath, getPolygonThicknessM, polygonToSegmentLengths, polygonEdgeToSegmentIndex, removeSegmentFromPolygonOutline } from "./linearElements";
-import { drawShapeObjectLabel, drawExcavationLayers } from "./canvasRenderers";
+import { calcEdgeSlopes, calcShapeGradient, formatSlope, slopeColor, interpolateHeightAtPoint, fillShapeHeightHeatmap, computeGlobalHeightRange } from "./geodesy";
+import { isLinearElement, isGroundworkLinear, isPathElement, isPolygonLinearElement, groundworkLabel, drawLinearElement, drawLinearElementInactive, hitTestLinearElement, hitTestPathElement, computeThickPolyline, getPathPolygon, getLinearElementPath, getPolygonThicknessM, polygonToSegmentLengths, polygonToCenterline, polygonEdgeToSegmentIndex, removeSegmentFromPolygonOutline, computePathPolygonOneSide, pointSideOfLine } from "./linearElements";
+import { drawShapeObjectLabel, drawExcavationLayers, getPathLabel } from "./canvasRenderers";
 import { drawDeckPattern } from "./visualization/deckBoards";
 import { drawSlabPattern, drawPathSlabPattern, drawSlabFrame, computePatternSnap, computeSlabCuts, computePathSlabCuts } from "./visualization/slabPattern";
 import { drawCobblestonePattern, drawMonoblockFrame, computeCobblestoneCuts } from "./visualization/cobblestonePattern";
@@ -30,10 +30,10 @@ import WallSegmentHeightModal from "./WallSegmentHeightModal";
 import ProjectSummaryPanel from "./ProjectSummaryPanel";
 import ProjectCardModal from "./ProjectCardModal";
 import { computePreparation } from "./preparationLogic";
-import { computeEmptyAreas, computeOverflowAreas, computeOverlaps, clipShapeToGarden, removeOverlapFromShape, findTouchingElementsForEmptyArea, extendShapeToCoverEmptyArea, extendShapeToGardenEdge, clipSurfaceToOutsideLinear, findSurfacesOverlappingLinear } from "./adjustmentLogic";
+import { computeEmptyAreas, computeOverflowAreas, computeOverlaps, clipShapeToGarden, removeOverlapFromShape, findTouchingElementsForEmptyArea, extendShapeToCoverEmptyArea, extendShapeToGardenEdge, clipSurfaceToOutsideLinear, findSurfacesOverlappingLinear, fitUnionResultToShape } from "./adjustmentLogic";
 import { computeGroundworkLinearResults, isManualExcavation, getFoundationDiggingMethodFromExcavator } from "./GroundworkLinearCalculator";
 import { drawAlternatingLinkedHalf } from "./linkedEdgeDrawing";
-import { drawCurvedEdge, calcEdgeLengthWithArcs, getEffectivePolygon, getEffectivePolygonWithEdgeIndices, drawSmoothPolygonPath, drawSmoothPolygonStroke, projectOntoArcEdge, drawArcHandles, hitTestArcPoint, dragArcPoint, snapArcPoint, arcPointToWorld, worldToArcPoint } from "./arcMath";
+import { drawCurvedEdge, calcEdgeLengthWithArcs, getEffectivePolygon, getEffectivePolygonWithEdgeIndices, drawSmoothPolygonPath, drawSmoothPolygonStroke, projectOntoArcEdge, drawArcHandles, hitTestArcPoint, snapArcPoint, buildArcPointPositionCache, arcPointToWorldOnCurve, worldToArcPoint, worldToArcPointOnCurve, type ArcPointCacheEntry } from "./arcMath";
 import CreatePreviewModal from "./CreatePreviewModal";
 import PlanPdfExportModal from "./PlanPdfExportModal";
 import { submitProject } from "./projectSubmit";
@@ -82,8 +82,12 @@ function edgesMatch(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
   );
 }
 
-/** Apply polygon points from adjustment operations (extend/fill). Preserves edgeArcs only on edges that weren't modified. */
+/** Apply polygon points from adjustment operations (extend/fill).
+ * When shape has arcs, fits union result to preserve arc structure (no extra points).
+ * Otherwise preserves edgeArcs only on edges that weren't modified. */
 function applyPolygonPointsToShape(shape: Shape, newPts: Point[]): Shape {
+  const fitted = fitUnionResultToShape(shape, newPts);
+  if (fitted) return fitted;
   const s = { ...shape, points: newPts };
   if (isPathElement(s)) {
     s.calculatorInputs = { ...s.calculatorInputs, pathIsOutline: true };
@@ -159,6 +163,7 @@ export default function MasterProject() {
     edgeIdx: number;
     arcPoint: ArcPoint;
     startMouse: Point;
+    startArcPointWorld: Point;
   } | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point | null>(null);
@@ -228,11 +233,15 @@ export default function MasterProject() {
   const [stairsCreationModal, setStairsCreationModal] = useState<{ subType: "standard" | "l_shape" | "u_shape"; name: string } | null>(null);
   const [pathCreationModal, setPathCreationModal] = useState<{ subType: "slabs" | "concreteSlabs" | "monoblock"; name: string } | null>(null);
   const [pathConfig, setPathConfig] = useState<PathConfig | null>(null);
+  /** Path side selection: after A-B defined, user picks which side of the line the path polygon appears on */
+  const [pathSideSelection, setPathSideSelection] = useState<{ shapeIdx: number; pointA: Point; pointB: Point } | null>(null);
   const [shapeCreationModal, setShapeCreationModal] = useState<{ type: "square" | "rectangle" | "triangle" | "trapezoid" } | null>(null);
   const [segmentHeightModal, setSegmentHeightModal] = useState<{ shapeIdx: number } | null>(null);
   const [setAngleModal, setSetAngleModal] = useState<{ shapeIdx: number; pointIdx: number } | null>(null);
   const [setAngleTargetValue, setSetAngleTargetValue] = useState("");
   const [setAngleMode, setSetAngleMode] = useState<"a" | "b" | "split">("split");
+  const [measureStart, setMeasureStart] = useState<Point | null>(null);
+  const [measureEnd, setMeasureEnd] = useState<Point | null>(null);
   const [resultsModalShapeIdx, setResultsModalShapeIdx] = useState<number | null>(null);
   const [showCreatePreview, setShowCreatePreview] = useState(false);
   const [recalculateTrigger, setRecalculateTrigger] = useState(0);
@@ -256,12 +265,22 @@ export default function MasterProject() {
   const gardenDragChildrenRef = useRef<{ idx: number; startPoints: Point[]; startVizPieces: GrassPiece[] | null }[]>([]);
   const projectSummaryMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const arcSnapLockedTargetRef = useRef<{ si: number; ei: number; arcId: string } | null>(null);
+  const arcSnapCacheRef = useRef<ArcPointCacheEntry[] | null>(null);
+  const arcDragRafRef = useRef<number | null>(null);
+  const arcDragPendingRef = useRef<{ mouseX: number; mouseY: number } | null>(null);
 
   const isOnActiveLayer = useCallback((si: number): boolean => {
     if (activeLayer === 3 || activeLayer === 4) return false; // Pattern and Preparation are read-only
     if (activeLayer === 5) return shapes[si]?.layer === 1 || shapes[si]?.layer === 2; // Adjustment: L1 + L2
     return shapes[si]?.layer === activeLayer;
   }, [shapes, activeLayer]);
+
+  /** Cache of arc point positions (on curve) for snap during drag */
+  const arcPointPositionCache = useMemo(
+    () => buildArcPointPositionCache(shapes, isOnActiveLayer),
+    [shapes, isOnActiveLayer]
+  );
 
   /** For right-click scale: Layer 2 shapes when activeLayer=3, else normal active layer */
   const isOnActiveLayerForScale = useCallback((si: number): boolean => {
@@ -561,11 +580,15 @@ export default function MasterProject() {
               return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [], vizFullSlabCount: fullSlabCount, vizWasteAreaCm2: wasteAreaCm2, vizReusedAreaCm2: reusedAreaCm2, cutSlabs: String(cutSlabCount) } };
             }
           } else if (shape.calculatorType === "paving" && (inputs?.blockWidthCm || inputs?.blockLengthCm)) {
-            const { wasteSatisfiedPositions } = computeCobblestoneCuts(pathShape, inputs);
+            const { wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(pathShape, inputs);
             const cur = shape.calculatorInputs;
-            if (!arrEqual(cur?.vizWasteSatisfied as string[] | undefined, wasteSatisfiedPositions ?? [])) {
+            if (
+              !arrEqual(cur?.vizWasteSatisfied as string[] | undefined, wasteSatisfiedPositions ?? []) ||
+              cur?.vizWasteAreaCm2 !== wasteAreaCm2 ||
+              cur?.vizReusedAreaCm2 !== reusedAreaCm2
+            ) {
               changed = true;
-              return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [] } };
+              return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [], vizWasteAreaCm2: wasteAreaCm2, vizReusedAreaCm2: reusedAreaCm2 } };
             }
           }
         }
@@ -586,11 +609,15 @@ export default function MasterProject() {
       }
       if (!isPathElement(shape) && shape.calculatorType === "paving" && shape.closed && shape.points.length >= 3 && (shape.calculatorInputs?.blockWidthCm || shape.calculatorInputs?.blockLengthCm)) {
         const inputs = { ...shape.calculatorInputs };
-        const { wasteSatisfiedPositions } = computeCobblestoneCuts(shape, inputs);
+        const { wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(shape, inputs);
         const cur = shape.calculatorInputs;
-        if (!arrEqual(cur?.vizWasteSatisfied as string[] | undefined, wasteSatisfiedPositions ?? [])) {
+        if (
+          !arrEqual(cur?.vizWasteSatisfied as string[] | undefined, wasteSatisfiedPositions ?? []) ||
+          cur?.vizWasteAreaCm2 !== wasteAreaCm2 ||
+          cur?.vizReusedAreaCm2 !== reusedAreaCm2
+        ) {
           changed = true;
-          return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [] } };
+          return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [], vizWasteAreaCm2: wasteAreaCm2, vizReusedAreaCm2: reusedAreaCm2 } };
         }
       }
       return shape;
@@ -747,6 +774,31 @@ export default function MasterProject() {
         }
       }
 
+      if (activeLayer === 2 && shape.layer === 1 && shape.closed && pts.length >= 3) {
+        const edgeLabelOffset = 28;
+        for (let i = 0; i < edgeCount; i++) {
+          const j = (i + 1) % pts.length;
+          const sa = worldToScreen(pts[i].x, pts[i].y);
+          const sb = worldToScreen(pts[j].x, pts[j].y);
+          const mid = midpoint(sa, sb);
+          const norm = edgeNormalAngle(sa, sb);
+          const arcs = shape.edgeArcs?.[i];
+          const len = calcEdgeLengthWithArcs(pts[i], pts[j], arcs);
+          const edgeAngle = Math.atan2(sb.y - sa.y, sb.x - sa.x);
+          const textAngle = readableTextAngle(edgeAngle);
+          const lx = mid.x - Math.cos(norm) * edgeLabelOffset;
+          const ly = mid.y - Math.sin(norm) * edgeLabelOffset;
+          ctx.save();
+          ctx.translate(lx, ly);
+          ctx.rotate(textAngle);
+          ctx.font = "12px 'JetBrains Mono','Fira Code',monospace";
+          ctx.fillStyle = "#ffffff";
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(formatLength(len), 0, 0);
+          ctx.restore();
+        }
+      }
+
       if (shape.closed && pts.length >= 3) {
         const hasPatternLabel = shape.layer === 2 && (
           ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth) ||
@@ -839,7 +891,7 @@ export default function MasterProject() {
             drawSlabFrame(ctx, shape, worldToScreen, zoom);
           }
           if ((shape.calculatorInputs?.vizPieces?.length ?? 0) > 0) {
-            drawGrassPieces(ctx, shape, worldToScreen, zoom, true, grassScaleInfo, si, isExportingRef.current, grassDir);
+            drawGrassPieces(ctx, shape, worldToScreen, zoom, isSel, grassScaleInfo, si, isExportingRef.current, grassDir);
           }
         }
       });
@@ -847,14 +899,19 @@ export default function MasterProject() {
         const si = patternDragInfo.shapeIdx;
         const shape = shapes[si];
         if (shape?.closed && shape.points.length >= 3) {
-          const pts = shape.points;
+          // Use same polygon as computePatternSnap (effective polygon for paths, getEffectivePolygon for polygons)
+          const pts = isPathElement(shape) ? getPathPolygon(shape) : getEffectivePolygon(shape);
+          if (pts.length >= 3) {
           const alignedSet = new Set(patternAlignedEdges);
           ctx.strokeStyle = "#27ae60";
           ctx.lineWidth = 3;
           for (const ei of patternAlignedEdges) {
+            if (ei < 0 || ei >= pts.length) continue;
             const j = (ei + 1) % pts.length;
-            const sa = worldToScreen(pts[ei].x, pts[ei].y);
-            const sb = worldToScreen(pts[j].x, pts[j].y);
+            const pA = pts[ei], pB = pts[j];
+            if (!pA || !pB) continue;
+            const sa = worldToScreen(pA.x, pA.y);
+            const sb = worldToScreen(pB.x, pB.y);
             ctx.beginPath();
             ctx.moveTo(sa.x, sa.y);
             ctx.lineTo(sb.x, sb.y);
@@ -863,12 +920,16 @@ export default function MasterProject() {
           for (const vi of pts.keys()) {
             const prev = (vi - 1 + pts.length) % pts.length;
             if (alignedSet.has(prev) && alignedSet.has(vi)) {
-              const sp = worldToScreen(pts[vi].x, pts[vi].y);
-              ctx.fillStyle = "#27ae60";
-              ctx.beginPath();
-              ctx.arc(sp.x, sp.y, 3, 0, Math.PI * 2);
-              ctx.fill();
+              const p = pts[vi];
+              if (p) {
+                const sp = worldToScreen(p.x, p.y);
+                ctx.fillStyle = "#27ae60";
+                ctx.beginPath();
+                ctx.arc(sp.x, sp.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+              }
             }
+          }
           }
         }
       }
@@ -973,7 +1034,7 @@ export default function MasterProject() {
           ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sm.x, sm.y); ctx.stroke();
           ctx.setLineDash([]);
         }
-        if (pts.length >= 2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || groundworkLabel(shape));
+        if (pts.length >= 2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || groundworkLabel(shape), zoom);
       });
     }
 
@@ -1004,10 +1065,44 @@ export default function MasterProject() {
       const edgeHovColor = isOpen ? CC.openHover : isL2 ? CC.layer2 : CC.edgeHover;
 
       if (isPathElement(shape)) {
-        const outline = getPathPolygon(shape);
         const pts = (shape.calculatorInputs?.pathIsOutline && shape.calculatorInputs?.pathCenterlineOriginal) ? (shape.calculatorInputs.pathCenterlineOriginal as Point[]) : (shape.calculatorInputs?.pathIsOutline && shape.calculatorInputs?.pathCenterline ? (shape.calculatorInputs.pathCenterline as Point[]) : shape.points);
-        if (outline.length >= 3) {
-            const pathShape = { ...shape, points: outline, closed: true } as Shape;
+        const outline = getPathPolygon(shape);
+        const pointsToShow = (shape.calculatorInputs?.pathIsOutline && shape.closed && outline.length >= 3) ? outline : pts;
+        const inSideSelection = (pathSideSelection && pathSideSelection.shapeIdx === si) || (isDraw && !shape.closed && pts.length === 2);
+        if (inSideSelection) {
+          const A = pathSideSelection ? pathSideSelection.pointA : pts[0]!;
+          const B = pathSideSelection ? pathSideSelection.pointB : pts[1]!;
+          const pathWidthM = Number(shape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
+          const half = toPixels(pathWidthM) / 2;
+          const dx = B.x - A.x, dy = B.y - A.y;
+          const len = Math.sqrt(dx * dx + dy * dy);
+          const nx = len > 0.001 ? -dy / len : 0, ny = len > 0.001 ? dx / len : 0;
+          const left0 = { x: A.x + nx * half, y: A.y + ny * half }, left1 = { x: B.x + nx * half, y: B.y + ny * half };
+          const right0 = { x: A.x - nx * half, y: A.y - ny * half }, right1 = { x: B.x - nx * half, y: B.y - ny * half };
+          const sA = worldToScreen(A.x, A.y), sB = worldToScreen(B.x, B.y);
+          const sL0 = worldToScreen(left0.x, left0.y), sL1 = worldToScreen(left1.x, left1.y);
+          const sR0 = worldToScreen(right0.x, right0.y), sR1 = worldToScreen(right1.x, right1.y);
+          const midLeft = midpoint(sL0, sL1), midRight = midpoint(sR0, sR1);
+          const animT = (Date.now() % 1200) / 1200;
+          const dashOffset = animT * 12;
+          ctx.setLineDash([8, 6]);
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = "#27ae60";
+          ctx.beginPath(); ctx.moveTo(sL0.x, sL0.y); ctx.lineTo(sL1.x, sL1.y);
+          ctx.lineDashOffset = -dashOffset; ctx.stroke();
+          ctx.strokeStyle = "#e67e22";
+          ctx.beginPath(); ctx.moveTo(sR0.x, sR0.y); ctx.lineTo(sR1.x, sR1.y);
+          ctx.lineDashOffset = dashOffset; ctx.stroke();
+          ctx.setLineDash([]); ctx.lineDashOffset = 0;
+          ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
+          ctx.font = "11px 'JetBrains Mono',monospace";
+          ctx.fillStyle = "#27ae60"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(t("project:path_click_side"), midLeft.x, midLeft.y - 16);
+          ctx.fillStyle = "#e67e22";
+          ctx.fillText(t("project:path_click_side"), midRight.x, midRight.y + 16);
+        } else {
+          if (outline.length >= 3) {
             ctx.beginPath();
             const s0 = worldToScreen(outline[0].x, outline[0].y);
             ctx.moveTo(s0.x, s0.y);
@@ -1018,19 +1113,7 @@ export default function MasterProject() {
             ctx.closePath();
             ctx.fillStyle = isSel ? "rgba(108,92,231,0.15)" : CC.layer2Dim;
             ctx.fill();
-            if ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth) {
-              if (!drawPathSlabPattern(ctx, pathShape, worldToScreen, zoom, true, !isSel)) {
-                drawSlabPattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel);
-              }
-              if (shape.calculatorInputs?.framePieceWidthCm) {
-                drawSlabFrame(ctx, pathShape, worldToScreen, zoom);
-              }
-            } else if (shape.calculatorType === "paving" && shape.calculatorInputs) {
-              if (shape.calculatorInputs?.addFrameToMonoblock && shape.calculatorInputs?.framePieceWidthCm) {
-                drawMonoblockFrame(ctx, pathShape, worldToScreen, zoom);
-              }
-              drawCobblestonePattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel);
-            }
+            // Pattern and frame drawn in Layer 3 block below
             ctx.strokeStyle = isSel ? edgeHovColor : edgeColor;
             ctx.lineWidth = isSel ? 2.5 : 1.8;
             ctx.beginPath();
@@ -1043,7 +1126,8 @@ export default function MasterProject() {
             ctx.closePath();
             ctx.stroke();
           }
-        pts.forEach((p, pi) => {
+        }
+        pointsToShow.forEach((p, pi) => {
           const sp = worldToScreen(p.x, p.y);
           const isH = hoveredPoint && hoveredPoint.shapeIdx === si && hoveredPoint.pointIdx === pi;
           const isD = dragInfo && dragInfo.shapeIdx === si && dragInfo.pointIdx === pi;
@@ -1052,7 +1136,7 @@ export default function MasterProject() {
           ctx.fillStyle = isH || isD ? CC.layer2 : CC.layer2Edge; ctx.fill();
           ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
         });
-        if ((isSel || showAllArcPoints) && shape.edgeArcs && pts.length >= 2) {
+        if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 5) && shape.edgeArcs && pts.length >= 2) {
           const linkedArcIdsForShape = new Set<string>();
           for (const g of linkedGroups) for (const p of g) { if (isArcEntry(p) && p.si === si && g.length >= 2) linkedArcIdsForShape.add(p.arcId); }
           for (let i = 0; i < pts.length - 1; i++) {
@@ -1062,7 +1146,7 @@ export default function MasterProject() {
             }
           }
         }
-        if (isDraw && pts.length > 0) {
+        if (isDraw && pts.length > 0 && !inSideSelection) {
           const last = pts[pts.length - 1];
           const sl = worldToScreen(last.x, last.y);
           const sm = worldToScreen(eMouse.x, eMouse.y);
@@ -1070,7 +1154,7 @@ export default function MasterProject() {
           ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sm.x, sm.y); ctx.stroke();
           ctx.setLineDash([]);
         }
-        if (isL2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || "Path");
+        if (isL2 && !inSideSelection) drawShapeObjectLabel(ctx, shape, worldToScreen, getPathLabel(shape), zoom);
         return;
       }
 
@@ -1097,7 +1181,7 @@ export default function MasterProject() {
           ctx.fillStyle = isH || isD ? hc : fc; ctx.fill();
           ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
         });
-        if ((isSel || showAllArcPoints) && shape.edgeArcs) {
+        if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 5) && shape.edgeArcs) {
           const linkedArcIdsForShape = new Set<string>();
           for (const g of linkedGroups) for (const p of g) { if (isArcEntry(p) && p.si === si && g.length >= 2) linkedArcIdsForShape.add(p.arcId); }
           const leEdgeCount = pts.length - 1;
@@ -1108,7 +1192,7 @@ export default function MasterProject() {
             }
           }
         }
-        if (isL2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || "Element");
+        if (isL2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || "Element", zoom);
         if (isDraw && pts.length > 0) {
           const last = pts[pts.length - 1];
           const sl = worldToScreen(last.x, last.y);
@@ -1198,9 +1282,11 @@ export default function MasterProject() {
 
         const arcs = shape.edgeArcs?.[i];
         if (!hasArcsForStroke && arcs && arcs.length > 0) {
+          const prev = pts[(i - 1 + pts.length) % pts.length];
+          const next = pts[(j + 1) % pts.length];
           ctx.beginPath();
           ctx.moveTo(sa.x, sa.y);
-          drawCurvedEdge(ctx, pts[i], pts[j], arcs, (wx, wy) => worldToScreen(wx, wy));
+          drawCurvedEdge(ctx, pts[i], pts[j], arcs, (wx, wy) => worldToScreen(wx, wy), prev, next);
           ctx.stroke();
         } else if (!hasArcsForStroke && isL2 && (isPointLinked(si, i) || isPointLinked(si, j))) {
           if (isPointLinked(si, i)) drawAlternatingLinkedHalf(ctx, sa.x, sa.y, sm.x, sm.y);
@@ -1226,15 +1312,28 @@ export default function MasterProject() {
         const textAngle = readableTextAngle(edgeAngle);
         const edgeLabelOffset = 28;
         const slopeLabelOffset = 42;
-        const lx = mid.x - Math.cos(norm) * edgeLabelOffset;
-        const ly = mid.y - Math.sin(norm) * edgeLabelOffset;
         const hideDimInAdjustment = activeLayer === 5 && shape.layer === 1;
-        if (!hideDimInAdjustment && !(editingDim && editingDim.shapeIdx === si && editingDim.edgeIdx === i)) {
+        const showEdgeLabel = !hideDimInAdjustment && !(editingDim && editingDim.shapeIdx === si && editingDim.edgeIdx === i) && !(isL2 && !isSel);
+        if (showEdgeLabel) {
+          let lx: number, ly: number;
+          if (isL2 && isSel && shape.closed) {
+            const effPts = hasArcsForStroke ? getEffectivePolygon(shape) : pts;
+            const ctr = effPts.length >= 3 ? labelAnchorInsidePolygon(effPts) : midpoint(pts[0], pts[1] ?? pts[0]);
+            const edgeMidWorld = midpoint(pts[i], pts[j]);
+            const frac = 0.92;
+            const labelWorld = { x: ctr.x + frac * (edgeMidWorld.x - ctr.x), y: ctr.y + frac * (edgeMidWorld.y - ctr.y) };
+            const sl = worldToScreen(labelWorld.x, labelWorld.y);
+            lx = sl.x;
+            ly = sl.y;
+          } else {
+            lx = mid.x - Math.cos(norm) * edgeLabelOffset;
+            ly = mid.y - Math.sin(norm) * edgeLabelOffset;
+          }
           ctx.save();
           ctx.translate(lx, ly);
           ctx.rotate(textAngle);
           ctx.font = "12px 'JetBrains Mono','Fira Code',monospace";
-          ctx.fillStyle = isLockedEdge ? CC.locked : isHov ? edgeHovColor : CC.text;
+          ctx.fillStyle = isL2 ? "#ffffff" : (isLockedEdge ? CC.locked : isHov ? edgeHovColor : CC.text);
           ctx.textAlign = "center"; ctx.textBaseline = "middle";
           ctx.fillText(formatLength(len), 0, 0);
           ctx.restore();
@@ -1291,8 +1390,8 @@ export default function MasterProject() {
         }
       }
 
-      // Arc point handles (when selected or showAllArcPoints, and shape has arcs)
-      if ((isSel || showAllArcPoints) && shape.edgeArcs && !showGeodesy) {
+      // Arc point handles (when selected, showAllArcPoints, or in L1/L2/L5 — same visibility as square points)
+      if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 5) && shape.edgeArcs && !showGeodesy) {
         const linkedArcIdsForShape = new Set<string>();
         for (const g of linkedGroups) for (const p of g) { if (isArcEntry(p) && p.si === si && g.length >= 2) linkedArcIdsForShape.add(p.arcId); }
         for (let i = 0; i < edgeCount; i++) {
@@ -1436,7 +1535,7 @@ export default function MasterProject() {
         }
       }
 
-      if (isL2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || "Element");
+      if (isL2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || "Element", zoom);
 
       // Open shape label
       if (isOpen && pts.length >= 3) {
@@ -1663,11 +1762,14 @@ export default function MasterProject() {
     else if (mode === "drawWall") hud += "  |  WALL: click to place points, Esc to finish";
     else if (mode === "drawKerb") hud += "  |  KERB: click to place points, Esc to finish";
     else if (mode === "drawFoundation") hud += "  |  FOUNDATION: click to place points, Esc to finish";
-    else if (mode === "drawPathSlabs") hud += "  |  PATH (Slabs): click to place points, PPM to finish";
-    else if (mode === "drawPathConcreteSlabs") hud += "  |  PATH (Concrete Slabs): click to place points, PPM to finish";
-    else if (mode === "drawPathMonoblock") hud += "  |  PATH (Monoblock): click to place points, PPM to finish";
+    else if (mode === "drawPathSlabs") hud += pathSideSelection ? "  |  PATH: click green or orange side" : "  |  PATH (Slabs): click A, click B, then click side";
+    else if (mode === "drawPathConcreteSlabs") hud += pathSideSelection ? "  |  PATH: click green or orange side" : "  |  PATH (Concrete Slabs): click A, click B, then click side";
+    else if (mode === "drawPathMonoblock") hud += pathSideSelection ? "  |  PATH: click green or orange side" : "  |  PATH (Monoblock): click A, click B, then click side";
     if (mode === "scale") hud += "  |  SCALE: corner = proportional, edge = move";
     if (mode === "move") hud += "  |  MOVE: left click anywhere to pan";
+    const canStartMeasure = selectedShapeIdx === null && !hoveredPoint && !hoveredEdge && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
+    if (measureStart !== null) hud += "  |  MEASURE: click point 2; click again to clear";
+    else if (shiftHeld && canStartMeasure) hud += "  |  SHIFT + click to start measure";
     if (geodesyEnabled) hud += "  |  GEODESY: click point → set height, click area → show height";
     ctx.fillText(hud, 10, H - 10);
 
@@ -1687,6 +1789,28 @@ export default function MasterProject() {
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
       ctx.fillText(text, sp.x, sp.y - 14);
+    }
+
+    // Measure (Shift-based): line + distance label
+    if (measureStart) {
+      const endPt = measureEnd ?? mouseWorld;
+      const sA = worldToScreen(measureStart.x, measureStart.y);
+      const sB = worldToScreen(endPt.x, endPt.y);
+      const lenM = distance(measureStart, endPt);
+      ctx.strokeStyle = CC.accent;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(sA.x, sA.y);
+      ctx.lineTo(sB.x, sB.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const mid = midpoint(sA, sB);
+      ctx.font = "bold 12px 'JetBrains Mono',monospace";
+      ctx.fillStyle = CC.accent;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(toMeters(lenM).toFixed(3) + " m", mid.x, mid.y - 12);
     }
 
     // Set angle overlay: dim canvas, show only edited shape with A/B labels and angle arc
@@ -1782,7 +1906,7 @@ export default function MasterProject() {
         ctx.fillText(t("project:dim_edit_point_b"), offBx, offBy);
       }
     }
-  }, [shapes, selectedShapeIdx, selectedPattern, patternDragInfo, patternDragPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id]);
+  }, [shapes, selectedShapeIdx, selectedPattern, patternDragInfo, patternDragPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id, measureStart, measureEnd, pathSideSelection, shapeDragInfo, edgeDragInfo]);
 
   // Clear height tooltip when disabling geodesy or switching away from layer 1
   useEffect(() => {
@@ -2028,7 +2152,8 @@ export default function MasterProject() {
       const hit = testShape(selectedShapeIdx);
       if (hit) return hit;
     }
-    if (showAllArcPoints) {
+    // In L1/L2/L5 arcpoints are visible on all shapes — allow hit test on non-selected shapes too
+    if (showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 5) {
       for (let si = shapes.length - 1; si >= 0; si--) {
         if (si === selectedShapeIdx) continue;
         const hit = testShape(si);
@@ -2036,7 +2161,7 @@ export default function MasterProject() {
       }
     }
     return null;
-  }, [shapes, selectedShapeIdx, zoom, isOnActiveLayer, viewFilter, showAllArcPoints]);
+  }, [shapes, selectedShapeIdx, zoom, isOnActiveLayer, viewFilter, showAllArcPoints, activeLayer]);
 
   const getWorldPos = useCallback((e: React.MouseEvent): Point => {
     const r = canvasRef.current!.getBoundingClientRect();
@@ -2162,10 +2287,74 @@ export default function MasterProject() {
       return;
     }
 
+    // Shift-measure: Shift + click to start; then click 2, click 3 to clear (when not drawing)
+    // Nie włączaj pomiaru gdy coś jest zaznaczone (punkt, linia, kształt) — Shift służy tam do blokady kąta (np. 180°)
+    const canStartMeasure = selectedShapeIdx === null && !hoveredPoint && !hoveredEdge && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
+    if (drawingShapeIdx === null) {
+      const getPointFromClick = (): Point => {
+        const pt = hitTestPoint(world);
+        if (pt) return shapes[pt.shapeIdx].points[pt.pointIdx];
+        const edge = hitTestEdge(world);
+        if (edge) return edge.pos;
+        return { ...world };
+      };
+      if (shiftHeld && measureStart === null && canStartMeasure) {
+        setMeasureStart(getPointFromClick());
+        return;
+      }
+      if (measureStart !== null) {
+        if (measureEnd !== null) {
+          setMeasureStart(null);
+          setMeasureEnd(null);
+          return;
+        }
+        setMeasureEnd(getPointFromClick());
+        return;
+      }
+    }
+
     // Currently drawing
     if (drawingShapeIdx !== null && shapes[drawingShapeIdx]) {
       const pts = shapes[drawingShapeIdx].points;
       const s = shapes[drawingShapeIdx];
+
+      // Path side selection: user clicked to pick which side of line A-B the path appears on
+      if (pathSideSelection && pathSideSelection.shapeIdx === drawingShapeIdx) {
+        const { pointA, pointB } = pathSideSelection;
+        const side = pointSideOfLine(world, pointA, pointB);
+        const chosenSide = side === "on" ? "left" : side;
+        saveHistory();
+        const pathWidthM = Number(s.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
+        const outline = computePathPolygonOneSide(pointA, pointB, pathWidthM, chosenSide);
+        if (outline.length >= 3) {
+          const pathPts = [pointA, pointB];
+          setShapes(p => {
+            const n = [...p];
+            const sh = n[drawingShapeIdx];
+            n[drawingShapeIdx] = {
+              ...sh,
+              points: outline,
+              closed: true,
+              drawingFinished: true,
+              calculatorInputs: {
+                ...sh.calculatorInputs,
+                pathIsOutline: true,
+                pathCenterline: pathPts.map(p => ({ ...p })),
+                pathCenterlineOriginal: pathPts.map(p => ({ ...p })),
+              },
+            };
+            return n;
+          });
+          setPathConfig(null);
+          setPathSideSelection(null);
+          if (!s.namePromptShown) setNamePromptShapeIdx(drawingShapeIdx);
+          setDrawingShapeIdx(null);
+          setSelectedShapeIdx(drawingShapeIdx);
+          setMode("select");
+        }
+        return;
+      }
+
       const snapFn = isPathElement(s) ? snapTo45Soft : snapTo45;
       let ep = shiftHeld && pts.length > 0 ? snapFn(pts[pts.length - 1], world) : world;
 
@@ -2249,9 +2438,10 @@ export default function MasterProject() {
             });
           } else if (isPolygonLinearElement(s)) {
             saveHistory();
-            const closedPath = [...pts, pts[0]];
+            // Use path without closing point — closing [A,B,A] would add a return segment and double/wrong lengths
+            const pathPts = pts;
             const thicknessM = getPolygonThicknessM(s);
-            const outline = computeThickPolyline(closedPath, toPixels(thicknessM));
+            const outline = computeThickPolyline(pathPts, toPixels(thicknessM));
             if (outline.length >= 3) {
               const segLengths = polygonToSegmentLengths(outline);
               setShapes(p => {
@@ -2276,12 +2466,17 @@ export default function MasterProject() {
         }
       }
       saveHistory();
+      const willHaveTwoPoints = pts.length === 1 && isPathElement(s);
       setShapes(p => {
         const n = [...p]; const s = { ...n[drawingShapeIdx] };
         s.points = [...s.points, { ...ep }];
         s.heights = [...(s.heights || []), 0];
         n[drawingShapeIdx] = s; return n;
       });
+      if (willHaveTwoPoints) {
+        const newPts = [...pts, { ...ep }];
+        setPathSideSelection({ shapeIdx: drawingShapeIdx, pointA: newPts[0]!, pointB: newPts[1]! });
+      }
       return;
     }
 
@@ -2509,7 +2704,14 @@ export default function MasterProject() {
       const arcHit = hitTestArcPointGlobal(world);
       if (arcHit) {
         saveHistory();
-        setArcDragInfo({ shapeIdx: arcHit.shapeIdx, edgeIdx: arcHit.edgeIdx, arcPoint: arcHit.arcPoint, startMouse: { ...world } });
+        const shape = shapes[arcHit.shapeIdx];
+        const A = shape.points[arcHit.edgeIdx];
+        const B = shape.points[(arcHit.edgeIdx + 1) % shape.points.length];
+        const arcs = shape.edgeArcs?.[arcHit.edgeIdx] ?? [];
+        const startArcPointWorld = arcPointToWorldOnCurve(A, B, arcs, arcHit.arcPoint);
+        arcSnapLockedTargetRef.current = null;
+        arcSnapCacheRef.current = buildArcPointPositionCache(shapes, isOnActiveLayer);
+        setArcDragInfo({ shapeIdx: arcHit.shapeIdx, edgeIdx: arcHit.edgeIdx, arcPoint: arcHit.arcPoint, startMouse: { ...world }, startArcPointWorld });
         setSelectedShapeIdx(arcHit.shapeIdx);
         return;
       }
@@ -2764,7 +2966,7 @@ export default function MasterProject() {
       setSelectedShapeIdx(null);
       setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
-  }, [mode, shapes, drawingShapeIdx, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, worldToScreen, saveHistory, selectedShapeIdx, isOnActiveLayer, activeLayer, editingGeodesyCard]);
+  }, [mode, shapes, drawingShapeIdx, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, worldToScreen, saveHistory, selectedShapeIdx, isOnActiveLayer, activeLayer, editingGeodesyCard, measureStart, measureEnd, hoveredPoint, hoveredEdge, selectedPoints, selectionRect, editingDim, rotateInfo, patternDragInfo, patternRotateInfo, shapeDragInfo, edgeDragInfo]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const world = getWorldPos(e);
@@ -3145,57 +3347,81 @@ export default function MasterProject() {
       const r = canvasRef.current!.getBoundingClientRect();
       const mouseX = e.clientX - r.left;
       const mouseY = e.clientY - r.top;
-      const sw = screenToWorld(mouseX, mouseY);
-      const A = shapes[arcDragInfo.shapeIdx].points[arcDragInfo.edgeIdx];
-      const B = shapes[arcDragInfo.shapeIdx].points[(arcDragInfo.edgeIdx + 1) % shapes[arcDragInfo.shapeIdx].points.length];
-      let { t, offset } = dragArcPoint(A, B, sw.x, sw.y);
-      const magThreshold = ARC_SNAP_PX / zoom;
-      const snapped = snapArcPoint(A, B, t, offset, shapes, arcDragInfo.shapeIdx, { shapeIdx: arcDragInfo.shapeIdx, edgeIdx: arcDragInfo.edgeIdx }, magThreshold);
-      if (snapped.didSnap) { t = snapped.t; offset = snapped.offset; }
-      setShapes(p => {
-        const n = [...p];
-        const s = { ...n[arcDragInfo.shapeIdx] };
-        const edgeArcs = s.edgeArcs ? [...s.edgeArcs] : [];
-        if (!edgeArcs[arcDragInfo.edgeIdx]) edgeArcs[arcDragInfo.edgeIdx] = [];
-        const arcs = [...(edgeArcs[arcDragInfo.edgeIdx]!)];
-        const idx = arcs.findIndex(ap => ap.id === arcDragInfo.arcPoint.id);
-        if (idx >= 0) arcs[idx] = { ...arcs[idx], t, offset };
-        edgeArcs[arcDragInfo.edgeIdx] = arcs;
-        s.edgeArcs = edgeArcs;
-        n[arcDragInfo.shapeIdx] = s;
-        // Move linked entries (arc or vertex) to match this arc point's new world position
-        const dragEntry: LinkedEntry = { si: arcDragInfo.shapeIdx, pi: -1 as const, edgeIdx: arcDragInfo.edgeIdx, arcId: arcDragInfo.arcPoint.id };
-        const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
-        if (group) {
-          const newWorldPos = arcPointToWorld(
-            n[arcDragInfo.shapeIdx].points[arcDragInfo.edgeIdx],
-            n[arcDragInfo.shapeIdx].points[(arcDragInfo.edgeIdx + 1) % n[arcDragInfo.shapeIdx].points.length],
-            { id: arcDragInfo.arcPoint.id, t, offset }
-          );
-          for (const lp of group) {
-            if (linkedEntriesMatch(lp, dragEntry)) continue;
-            if (isArcEntry(lp)) {
-              const ls = { ...n[lp.si] };
-              const lea = ls.edgeArcs ? [...ls.edgeArcs] : [];
-              const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
-              const li = lArcs.findIndex(a => a.id === lp.arcId);
-              if (li >= 0) {
-                const lA = ls.points[lp.edgeIdx];
-                const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
-                const { t: lt, offset: lo } = worldToArcPoint(lA, lB, newWorldPos);
-                lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
-                lea[lp.edgeIdx] = lArcs;
-                ls.edgeArcs = lea;
-                n[lp.si] = ls;
-              }
-            } else {
-              const ls = { ...n[lp.si] }; const lpts = [...ls.points];
-              lpts[lp.pi] = { ...newWorldPos }; ls.points = lpts; n[lp.si] = ls;
-            }
+      arcDragPendingRef.current = { mouseX, mouseY };
+      const run = () => {
+        arcDragRafRef.current = null;
+        const pending = arcDragPendingRef.current;
+        if (!pending || !arcDragInfo) return;
+        const sw = screenToWorld(pending.mouseX, pending.mouseY);
+        const A = shapes[arcDragInfo.shapeIdx].points[arcDragInfo.edgeIdx];
+        const B = shapes[arcDragInfo.shapeIdx].points[(arcDragInfo.edgeIdx + 1) % shapes[arcDragInfo.shapeIdx].points.length];
+        const arcs = shapes[arcDragInfo.shapeIdx].edgeArcs?.[arcDragInfo.edgeIdx] ?? [];
+        const dragOffsetX = arcDragInfo.startMouse.x - arcDragInfo.startArcPointWorld.x;
+        const dragOffsetY = arcDragInfo.startMouse.y - arcDragInfo.startArcPointWorld.y;
+        const targetWorld = { x: sw.x - dragOffsetX, y: sw.y - dragOffsetY };
+        let { t, offset } = worldToArcPointOnCurve(A, B, arcs, arcDragInfo.arcPoint, targetWorld);
+        const magThreshold = SNAP_MAGNET_PX / zoom;
+        (globalThis as any).__arcSnapCallerEdge = { si: arcDragInfo.shapeIdx, ei: arcDragInfo.edgeIdx };
+        const snapCache = arcSnapCacheRef.current ?? arcPointPositionCache;
+        const snapped = snapArcPoint(A, B, t, offset, arcs, shapes, arcDragInfo.arcPoint.id, magThreshold, isOnActiveLayer, snapCache, arcSnapLockedTargetRef.current ?? undefined, targetWorld);
+        if (snapped.didSnap) {
+          t = snapped.t;
+          offset = snapped.offset;
+          if (snapped.lockedTarget) arcSnapLockedTargetRef.current = snapped.lockedTarget;
+          if (snapped.bestTarget) {
+            const snapWorldPos = arcPointToWorldOnCurve(A, B, arcs, { id: arcDragInfo.arcPoint.id, t, offset });
+            const err = distance(snapWorldPos, snapped.bestTarget);
+            if (err > 2) console.warn("Arc snap error (px):", err, { bestTarget: snapped.bestTarget, snapWorldPos });
           }
         }
-        return n;
-      });
+        setShapes(p => {
+          const n = [...p];
+          const s = { ...n[arcDragInfo.shapeIdx] };
+          const edgeArcs = s.edgeArcs ? [...s.edgeArcs] : [];
+          if (!edgeArcs[arcDragInfo.edgeIdx]) edgeArcs[arcDragInfo.edgeIdx] = [];
+          const arcs = [...(edgeArcs[arcDragInfo.edgeIdx]!)];
+          const idx = arcs.findIndex(ap => ap.id === arcDragInfo.arcPoint.id);
+          if (idx >= 0) arcs[idx] = { ...arcs[idx], t, offset };
+          edgeArcs[arcDragInfo.edgeIdx] = arcs;
+          s.edgeArcs = edgeArcs;
+          n[arcDragInfo.shapeIdx] = s;
+          const dragEntry: LinkedEntry = { si: arcDragInfo.shapeIdx, pi: -1 as const, edgeIdx: arcDragInfo.edgeIdx, arcId: arcDragInfo.arcPoint.id };
+          const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
+          if (group) {
+            const newWorldPos = arcPointToWorldOnCurve(
+              n[arcDragInfo.shapeIdx].points[arcDragInfo.edgeIdx],
+              n[arcDragInfo.shapeIdx].points[(arcDragInfo.edgeIdx + 1) % n[arcDragInfo.shapeIdx].points.length],
+              n[arcDragInfo.shapeIdx].edgeArcs?.[arcDragInfo.edgeIdx] ?? [],
+              { id: arcDragInfo.arcPoint.id, t, offset }
+            );
+            for (const lp of group) {
+              if (linkedEntriesMatch(lp, dragEntry)) continue;
+              if (isArcEntry(lp)) {
+                const ls = { ...n[lp.si] };
+                const lea = ls.edgeArcs ? [...ls.edgeArcs] : [];
+                const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
+                const li = lArcs.findIndex(a => a.id === lp.arcId);
+                if (li >= 0) {
+                  const lA = ls.points[lp.edgeIdx];
+                  const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
+                  const { t: lt, offset: lo } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, newWorldPos);
+                  lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
+                  lea[lp.edgeIdx] = lArcs;
+                  ls.edgeArcs = lea;
+                  n[lp.si] = ls;
+                }
+              } else {
+                const ls = { ...n[lp.si] }; const lpts = [...ls.points];
+                lpts[lp.pi] = { ...newWorldPos }; ls.points = lpts; n[lp.si] = ls;
+              }
+            }
+          }
+          return n;
+        });
+      };
+      if (arcDragRafRef.current === null) {
+        arcDragRafRef.current = requestAnimationFrame(run);
+      }
       return;
     }
 
@@ -3259,7 +3485,7 @@ export default function MasterProject() {
                 if (li >= 0) {
                   const lA = ls.points[lp.edgeIdx];
                   const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
-                  const { t: lt, offset: lo } = worldToArcPoint(lA, lB, target);
+                  const { t: lt, offset: lo } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, target);
                   lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
                   lea[lp.edgeIdx] = lArcs;
                   ls.edgeArcs = lea;
@@ -3285,7 +3511,7 @@ export default function MasterProject() {
       setHoveredArcPoint(arcHit);
       setHoveredEdge(pt || arcHit ? null : hitTestEdge(world));
     }
-  }, [isPanning, panStart, dragInfo, arcDragInfo, draggingGrassPiece, grassScaleInfo, patternDragInfo, patternRotateInfo, mode, shapes, shiftHeld, drawingShapeIdx, selectionRect, shapeDragInfo, edgeDragInfo, rotateInfo, scaleCorner, scaleEdge, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestArcPointGlobal, zoom, geodesyEnabled, saveHistory]);
+  }, [isPanning, panStart, dragInfo, arcDragInfo, draggingGrassPiece, grassScaleInfo, patternDragInfo, patternRotateInfo, mode, shapes, shiftHeld, drawingShapeIdx, selectionRect, shapeDragInfo, edgeDragInfo, rotateInfo, scaleCorner, scaleEdge, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestArcPointGlobal, zoom, geodesyEnabled, saveHistory, arcPointPositionCache, linkedGroups, isOnActiveLayer]);
 
   const handleMouseUp = useCallback(() => {
     pendingRightClickScaleRef.current = null; // Clear pending if user released without dragging
@@ -3403,6 +3629,12 @@ export default function MasterProject() {
       return;
     }
     if (arcDragInfo) {
+      arcSnapLockedTargetRef.current = null;
+      arcSnapCacheRef.current = null;
+      if (arcDragRafRef.current !== null) {
+        cancelAnimationFrame(arcDragRafRef.current);
+        arcDragRafRef.current = null;
+      }
       setArcDragInfo(null);
       return;
     }
@@ -3613,6 +3845,20 @@ export default function MasterProject() {
     pendingRightClickScaleRef.current = null; // Single click = context menu, clear pending scale
     if (drawingShapeIdx !== null) {
       const s = shapes[drawingShapeIdx];
+      if (pathSideSelection && pathSideSelection.shapeIdx === drawingShapeIdx) {
+        setPathSideSelection(null);
+        setShapes(p => {
+          const n = [...p];
+          const sh = n[drawingShapeIdx];
+          if (sh && sh.points.length >= 2) {
+            n[drawingShapeIdx] = { ...sh, points: sh.points.slice(0, -1) };
+          }
+          return n;
+        });
+        setDrawingShapeIdx(null);
+        setMode("select");
+        return;
+      }
       if (s && s.points.length >= 2 && isPathElement(s)) {
         saveHistory();
         const pathWidthM = Number(s.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
@@ -3847,7 +4093,7 @@ export default function MasterProject() {
         setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: shapeHit, pointIdx: -1, edgeIdx: -1, interiorWorldPos: w });
       }
     }
-  }, [getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestArcPointGlobal, hitTestEdge, hitTestShape, hitTestPattern, shapes, drawingShapeIdx, activeLayer, zoom, viewFilter]);
+  }, [getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestArcPointGlobal, hitTestEdge, hitTestShape, hitTestPattern, shapes, drawingShapeIdx, activeLayer, zoom, viewFilter, pathSideSelection]);
 
   useEffect(() => { contextMenuHandlerRef.current = handleContextMenu; }, [handleContextMenu]);
 
@@ -3856,17 +4102,68 @@ export default function MasterProject() {
       setObjectCardShapeIdx(selectedPattern.shapeIdx);
       return;
     }
+    const r = canvasRef.current?.getBoundingClientRect();
+    if (!r) return;
+    const clickX = e.clientX - r.left, clickY = e.clientY - r.top;
+    const hitW = 55, hitH = 22; // hit area around label (label text can be ~50px wide)
     for (let si = 0; si < shapes.length; si++) {
-      if (!isOnActiveLayer(si)) continue;
-      const pts = shapes[si].points;
-      const ec = shapes[si].closed ? pts.length : pts.length - 1;
+      if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
+      const shape = shapes[si];
+      const pts = shape.points;
+      if (isLinearElement(shape) && isPolygonLinearElement(shape) && shape.closed && pts.length >= 4) {
+        // Linear elements (Wall, Fence, etc.): labels drawn at centerline midpoint + offset 14 (linearElements.ts)
+        const centerlinePts = polygonToCenterline(pts);
+        if (centerlinePts.length < 2) continue;
+        const segCount = centerlinePts.length - 1;
+        for (let i = 0; i < segCount; i++) {
+          const mid = midpoint(centerlinePts[i]!, centerlinePts[i + 1]!);
+          const sm = worldToScreen(mid.x, mid.y);
+          const nextPt = centerlinePts[i + 1]!;
+          const dx = nextPt.x - mid.x, dy = nextPt.y - mid.y;
+          const norm = Math.atan2(-dx, dy);
+          const offset = 14;
+          const lx = sm.x + Math.cos(norm) * offset;
+          const ly = sm.y + Math.sin(norm) * offset;
+          if (Math.abs(clickX - lx) < hitW && Math.abs(clickY - ly) < hitH) {
+            const edgeIdx = i + 1; // segment i maps to outline edge i+1 (the "length" edge)
+            const j = (edgeIdx + 1) % pts.length;
+            setEditingDim({ shapeIdx: si, edgeIdx, x: e.clientX, y: e.clientY });
+            setEditValue(toMeters(distance(pts[edgeIdx], pts[j])).toFixed(3));
+            setEditingDimMode("b");
+            return;
+          }
+        }
+        continue;
+      }
+      if (isLinearElement(shape) && !shape.closed && pts.length >= 2) {
+        // Polyline linear elements: labels at midpoint + offset 14
+        const linearOffset = 14;
+        for (let i = 0; i < pts.length - 1; i++) {
+          const mid = midpoint(pts[i], pts[i + 1]);
+          const sm = worldToScreen(mid.x, mid.y);
+          const dx = pts[i + 1].x - mid.x, dy = pts[i + 1].y - mid.y;
+          const norm = Math.atan2(-dx, dy);
+          const lx = sm.x + Math.cos(norm) * linearOffset;
+          const ly = sm.y + Math.sin(norm) * linearOffset;
+          if (Math.abs(clickX - lx) < hitW && Math.abs(clickY - ly) < hitH) {
+            setEditingDim({ shapeIdx: si, edgeIdx: i, x: e.clientX, y: e.clientY });
+            setEditValue(toMeters(distance(pts[i], pts[i + 1])).toFixed(3));
+            setEditingDimMode("b");
+            return;
+          }
+        }
+        continue;
+      }
+      // Regular shapes: label at mid - norm * 28 (same as render loop at ~L1229)
+      const edgeLabelOffset = 28;
+      const ec = shape.closed ? pts.length : pts.length - 1;
       for (let i = 0; i < ec; i++) {
         const j = (i + 1) % pts.length;
         const sa = worldToScreen(pts[i].x, pts[i].y), sb = worldToScreen(pts[j].x, pts[j].y);
         const mid = midpoint(sa, sb), norm = edgeNormalAngle(sa, sb);
-        const lx = mid.x + Math.cos(norm) * 18, ly = mid.y + Math.sin(norm) * 18;
-        const r = canvasRef.current!.getBoundingClientRect();
-        if (Math.abs(e.clientX - r.left - lx) < 40 && Math.abs(e.clientY - r.top - ly) < 15) {
+        const lx = mid.x - Math.cos(norm) * edgeLabelOffset;
+        const ly = mid.y - Math.sin(norm) * edgeLabelOffset;
+        if (Math.abs(clickX - lx) < hitW && Math.abs(clickY - ly) < hitH) {
           setEditingDim({ shapeIdx: si, edgeIdx: i, x: e.clientX, y: e.clientY });
           setEditValue(toMeters(distance(pts[i], pts[j])).toFixed(3));
           setEditingDimMode("b");
@@ -3886,6 +4183,28 @@ export default function MasterProject() {
         return;
       }
       if (e.key === "Escape") {
+        if (arcDragInfo) {
+          arcSnapLockedTargetRef.current = null;
+          arcSnapCacheRef.current = null;
+          if (arcDragRafRef.current !== null) {
+            cancelAnimationFrame(arcDragRafRef.current);
+            arcDragRafRef.current = null;
+          }
+          setArcDragInfo(null);
+          return;
+        }
+        if (pathSideSelection) {
+          setPathSideSelection(null);
+          setShapes(p => {
+            const n = [...p];
+            const s = n[pathSideSelection.shapeIdx];
+            if (s && s.points.length >= 2) {
+              n[pathSideSelection.shapeIdx] = { ...s, points: s.points.slice(0, -1) };
+            }
+            return n;
+          });
+          return;
+        }
         if (drawingShapeIdx !== null) {
           const s = shapes[drawingShapeIdx];
           if (s && s.points.length >= 2 && (isLinearElement(s) || isPathElement(s)) && (["Wall", "Fence", "Kerb", "Foundation"].includes(s.label || "") || isPathElement(s)) && !s.namePromptShown) {
@@ -3895,6 +4214,7 @@ export default function MasterProject() {
           setDrawingShapeIdx(null); setMode("select"); return;
         }
         setEditingDim(null); setEditingGeodesyCard(null); setContextMenu(null); setProjectSummaryContextMenu(null);
+        if (measureStart !== null) { setMeasureStart(null); setMeasureEnd(null); }
       }
       if (e.key === "z" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); return; }
       if (e.key === "Delete" || e.key === "Backspace") {
@@ -3925,7 +4245,7 @@ export default function MasterProject() {
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [mode, selectedShapeIdx, drawingShapeIdx, selectedPoints, saveHistory, undo, shapes]);
+  }, [mode, selectedShapeIdx, drawingShapeIdx, selectedPoints, saveHistory, undo, shapes, pathSideSelection, arcDragInfo, measureStart]);
 
   // Canvas modals: Escape = close (grassTrim, adjustmentFill, adjustmentExtend, adjustmentSpread)
   useEffect(() => {
@@ -4386,12 +4706,11 @@ export default function MasterProject() {
     return out;
   };
 
-  /** Find all nearby linkable entries (vertices + arc points on other shapes) for a given world position. */
-  const findNearbyLinkableEntries = (worldPos: Point, excludeSi: number, excludeArcId?: string): LinkedEntry[] => {
+  /** Find all nearby linkable entries (vertices + arc points) for a given world position. Uses curve position for arcpoints to match visible handles. */
+  const findNearbyLinkableEntries = (worldPos: Point, excludeArcId?: string): LinkedEntry[] => {
     const th = SNAP_MAGNET_PX / zoom * (PIXELS_PER_METER / 80);
     const out: LinkedEntry[] = [];
     for (let osi = 0; osi < shapes.length; osi++) {
-      if (osi === excludeSi) continue;
       if (shapes[osi].layer !== activeLayer) continue;
       const s = shapes[osi];
       for (let pi = 0; pi < s.points.length; pi++) {
@@ -4401,10 +4720,12 @@ export default function MasterProject() {
         for (let ei = 0; ei < s.edgeArcs.length; ei++) {
           const arcs = s.edgeArcs[ei];
           if (!arcs) continue;
+          const edgeA = s.points[ei];
+          const edgeB = s.points[(ei + 1) % s.points.length];
           for (const a of arcs) {
             if (a.id === excludeArcId) continue;
-            const ap = arcPointToWorld(s.points[ei], s.points[(ei + 1) % s.points.length], a);
-            if (distance(worldPos, ap) < th) out.push({ si: osi, pi: -1 as const, edgeIdx: ei, arcId: a.id });
+            const apWorld = arcPointToWorldOnCurve(edgeA, edgeB, arcs, a);
+            if (distance(worldPos, apWorld) < th) out.push({ si: osi, pi: -1 as const, edgeIdx: ei, arcId: a.id });
           }
         }
       }
@@ -4412,38 +4733,68 @@ export default function MasterProject() {
     return out;
   };
 
-  /** Link an arc point with nearby entries and edges. For edges: adds arc point (not vertex). */
+  /** Link an arc point with nearby entries and edges. For edges: adds arc point only if no arcpoint already there. Moves nearby arcpoints to source position. */
   const linkArcPoint = (si: number, edgeIdx: number, ap: ArcPoint) => {
     const A = shapes[si].points[edgeIdx];
     const B = shapes[si].points[(edgeIdx + 1) % shapes[si].points.length];
-    const sourcePos = arcPointToWorld(A, B, ap);
-    const nearby = findNearbyLinkableEntries(sourcePos, si, ap.id);
+    const arcs = shapes[si].edgeArcs?.[edgeIdx] ?? [];
+    const sourcePos = arcPointToWorldOnCurve(A, B, arcs, ap);
+    const nearby = findNearbyLinkableEntries(sourcePos, ap.id);
     const edges = findAllEdgesPositionTouches(sourcePos, si);
     if (nearby.length === 0 && edges.length === 0) return;
     saveHistory();
     const arcEntry: LinkedEntry = { si, pi: -1 as const, edgeIdx, arcId: ap.id };
     const toLink: LinkedEntry[] = [arcEntry];
+    const nearbyArcEdges = new Set(nearby.filter(isArcEntry).map(lp => `${lp.si},${lp.edgeIdx}`));
+    const LINK_SAME_POSITION_TOLERANCE_M = 0.002;
+    const samePosTh = toPixels(LINK_SAME_POSITION_TOLERANCE_M);
     setShapes(p => {
       let n = p.map(s => ({ ...s }));
       for (const lp of nearby) {
-        if (!isArcEntry(lp) && n[lp.si]) {
+        if (isArcEntry(lp) && n[lp.si]) {
+          const s = n[lp.si];
+          const lea = s.edgeArcs ? [...s.edgeArcs] : [];
+          const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
+          const li = lArcs.findIndex(a => a.id === lp.arcId);
+          if (li >= 0) {
+            const lA = s.points[lp.edgeIdx];
+            const lB = s.points[(lp.edgeIdx + 1) % s.points.length];
+            const targetPos = arcPointToWorldOnCurve(lA, lB, lArcs, lArcs[li]!);
+            if (distance(sourcePos, targetPos) < samePosTh) {
+              toLink.push(lp);
+              continue;
+            }
+            const { t, offset } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, sourcePos);
+            lArcs[li] = { ...lArcs[li]!, t, offset };
+            lea[lp.edgeIdx] = lArcs;
+            n[lp.si] = { ...s, edgeArcs: lea };
+          }
+        } else if (!isArcEntry(lp) && n[lp.si]) {
           const s = n[lp.si]; const pts = [...s.points];
+          const targetPos = pts[lp.pi];
+          if (distance(sourcePos, targetPos) < samePosTh) {
+            toLink.push(lp);
+            continue;
+          }
           pts[lp.pi] = { ...sourcePos }; n[lp.si] = { ...s, points: pts };
         }
         toLink.push(lp);
       }
       for (const e of edges) {
+        if (nearbyArcEdges.has(`${e.si},${e.edgeIdx}`)) continue;
         const s = n[e.si];
         if (!s || s.points.length < 2) continue;
         const pts = s.points;
         const edgeA = pts[e.edgeIdx];
         const edgeB = pts[(e.edgeIdx + 1) % pts.length];
-        const { t, offset } = worldToArcPoint(edgeA, edgeB, e.pos);
+        const existingArcs = s.edgeArcs?.[e.edgeIdx] ?? [];
+        const placeholder = { id: "__temp__", t: 0.5, offset: 0 };
+        const { t, offset } = worldToArcPointOnCurve(edgeA, edgeB, [...existingArcs, placeholder], placeholder, e.pos);
         const newArc: ArcPoint = { id: crypto.randomUUID(), t, offset };
         const edgeArcs = s.edgeArcs ? [...s.edgeArcs] : [];
         if (!edgeArcs[e.edgeIdx]) edgeArcs[e.edgeIdx] = [];
-        const arcs = [...(edgeArcs[e.edgeIdx]!), newArc].sort((a, b) => a.t - b.t);
-        edgeArcs[e.edgeIdx] = arcs;
+        const arcList = [...(edgeArcs[e.edgeIdx]!), newArc].sort((a, b) => a.t - b.t);
+        edgeArcs[e.edgeIdx] = arcList;
         n[e.si] = { ...s, edgeArcs };
         toLink.push({ si: e.si, pi: -1 as const, edgeIdx: e.edgeIdx, arcId: newArc.id });
       }
@@ -4669,7 +5020,7 @@ export default function MasterProject() {
       if (!ap) return null;
       const A = pts[entry.edgeIdx];
       const B = pts[(entry.edgeIdx + 1) % pts.length];
-      return arcPointToWorld(A, B, ap);
+      return arcPointToWorldOnCurve(A, B, arcs, ap);
     }
     return s.points[entry.pi] ?? null;
   };
@@ -4720,7 +5071,7 @@ export default function MasterProject() {
                 if (li >= 0) {
                   const lA = ls.points[lp.edgeIdx];
                   const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
-                  const { t: lt, offset: lo } = worldToArcPoint(lA, lB, newPos);
+                  const { t: lt, offset: lo } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, newPos);
                   lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
                   lea[lp.edgeIdx] = lArcs;
                   ls.edgeArcs = lea;
@@ -4804,6 +5155,8 @@ export default function MasterProject() {
     setDrawingShapeIdx(null);
     setClickedHeightTooltip(null);
     setEditingGeodesyCard(null);
+    setMeasureStart(null);
+    setMeasureEnd(null);
     setDragInfo(null);
     setShapeDragInfo(null);
     setRotateInfo(null);
@@ -4909,6 +5262,8 @@ export default function MasterProject() {
 
   let cursor = "default";
   if (mode === "freeDraw" || drawingShapeIdx !== null) cursor = "crosshair";
+  const canStartMeasure = selectedShapeIdx === null && !hoveredPoint && !hoveredEdge && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
+  if ((shiftHeld && measureStart === null && canStartMeasure) || (measureStart !== null && drawingShapeIdx === null)) cursor = "crosshair";
   else if (mode === "move") cursor = isPanning ? "grabbing" : "grab";
   else if (scaleCorner) {
     const dx = mouseWorld.x - scaleCorner.anchor.x;
@@ -5016,7 +5371,7 @@ export default function MasterProject() {
                   {mode === "freeDraw" && <><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" /><circle cx="11" cy="11" r="2" /></>}
                   {mode === "scale" && <><path d="M21 3L3 21" /><path d="M21 3h-6" /><path d="M21 3v6" /><path d="M3 21h6" /><path d="M3 21v-6" /></>}
                   {mode === "move" && <><path d="M5 9l-3 3 3 3" /><path d="M9 5l3-3 3 3" /><path d="M15 19l-3 3-3-3" /><path d="M19 9l3 3-3 3" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></>}
-                  {(mode === "select" || mode !== "freeDraw" && mode !== "scale" && mode !== "move") && <><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" /><path d="M13 13l6 6" /></>}
+                  {(mode === "select" || (mode !== "freeDraw" && mode !== "scale" && mode !== "move")) && <><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" /><path d="M13 13l6 6" /></>}
                 </svg>
                 {t("project:toolbar_mode")}
                 <svg className="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
@@ -5034,7 +5389,7 @@ export default function MasterProject() {
                         if (m === "select") { setDrawingShapeIdx(null); setMode("select"); }
                         else if (m === "freeDraw") { setMode("freeDraw"); setSelectedShapeIdx(null); }
                         else if (m === "scale") { setDrawingShapeIdx(null); setMode("scale"); }
-                        else { setDrawingShapeIdx(null); setMode("move"); setSelectedShapeIdx(null); }
+                        else if (m === "move") { setDrawingShapeIdx(null); setMode("move"); setSelectedShapeIdx(null); }
                         setModeDropdownOpen(false);
                       }}
                       style={{
@@ -5424,9 +5779,6 @@ export default function MasterProject() {
                   setContextMenu(null);
                 }} />
                 <CtxItem label={t("project:adjustment_extend_to_edge", { defaultValue: "Dosuń do krawędzi" })} color={CC.accent} onClick={() => {
-                  // #region agent log
-                  fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MasterProject.tsx:extendToEdge:click',message:'Dosun to krawedzi clicked',data:{},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-                  // #endregion
                   const { emptyAreaIdx } = contextMenu.adjustmentEmpty!;
                   const emptyArea = adjustmentData.emptyAreas[emptyAreaIdx];
                   const touching = findTouchingElementsForEmptyArea(shapes, emptyArea);
@@ -5438,9 +5790,6 @@ export default function MasterProject() {
                     saveHistory();
                     const newPts = extendShapeToGardenEdge(shapes, touching[0], emptyArea);
                     if (newPts) {
-                      // #region agent log
-                      fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MasterProject.tsx:extendToEdge:preSetShapes',message:'about to setShapes',data:{},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-                      // #endregion
                       setShapes(p => {
                         const n = [...p];
                         const s = applyPolygonPointsToShape(n[touching[0]], newPts);
@@ -5464,7 +5813,7 @@ export default function MasterProject() {
                   saveHistory();
                   setShapes(p => {
                     const n = [...p];
-                    const s = { ...n[si], points: newPts };
+                    const s = applyPolygonPointsToShape(n[si], newPts);
                     n[si] = s;
                     return n;
                   });
@@ -5478,13 +5827,12 @@ export default function MasterProject() {
                   const { shapeIdxA, overlapIdx } = contextMenu.adjustmentOverlap!;
                   const overlap = adjustmentData.overlaps[overlapIdx]?.overlapPolygon;
                   if (!overlap) return;
-                  const result = removeOverlapFromShape(shapes, shapeIdxA, overlap);
-                  if (result && result.length > 0) {
+                  const newPts = removeOverlapFromShape(shapes, shapeIdxA, overlap);
+                  if (newPts) {
                     saveHistory();
-                    const newPts = result[0];
                     setShapes(p => {
                       const n = [...p];
-                      const s = { ...n[shapeIdxA], points: newPts };
+                      const s = applyPolygonPointsToShape(n[shapeIdxA], newPts);
                       n[shapeIdxA] = s;
                       return n;
                     });
@@ -5495,13 +5843,12 @@ export default function MasterProject() {
                   const { shapeIdxB, overlapIdx } = contextMenu.adjustmentOverlap!;
                   const overlap = adjustmentData.overlaps[overlapIdx]?.overlapPolygon;
                   if (!overlap) return;
-                  const result = removeOverlapFromShape(shapes, shapeIdxB, overlap);
-                  if (result && result.length > 0) {
+                  const newPts = removeOverlapFromShape(shapes, shapeIdxB, overlap);
+                  if (newPts) {
                     saveHistory();
-                    const newPts = result[0];
                     setShapes(p => {
                       const n = [...p];
-                      const s = { ...n[shapeIdxB], points: newPts };
+                      const s = applyPolygonPointsToShape(n[shapeIdxB], newPts);
                       n[shapeIdxB] = s;
                       return n;
                     });
@@ -5561,7 +5908,8 @@ export default function MasterProject() {
                   const si = contextMenu.shapeIdx, ei = contextMenu.edgeIdx, ap = contextMenu.arcPoint!;
                   const A = shapes[si].points[ei];
                   const B = shapes[si].points[(ei + 1) % shapes[si].points.length];
-                  const worldPos = arcPointToWorld(A, B, ap);
+                  const arcs = shapes[si].edgeArcs?.[ei] ?? [];
+                  const worldPos = arcPointToWorldOnCurve(A, B, arcs, ap);
                   const insertIdx = ei + 1;
                   setShapes(p => {
                     const n = [...p]; const s = { ...n[si] };
@@ -5612,8 +5960,9 @@ export default function MasterProject() {
                   }
                   const A = shapes[si].points[ei];
                   const B = shapes[si].points[(ei + 1) % shapes[si].points.length];
-                  const worldPos = arcPointToWorld(A, B, ap);
-                  const nearby = findNearbyLinkableEntries(worldPos, si, ap.id);
+                  const arcs = shapes[si].edgeArcs?.[ei] ?? [];
+                  const worldPos = arcPointToWorldOnCurve(A, B, arcs, ap);
+                  const nearby = findNearbyLinkableEntries(worldPos, ap.id);
                   const edges = findAllEdgesPositionTouches(worldPos, si);
                   if (nearby.length === 0 && edges.length === 0) return null;
                   return <CtxItem label="🔗 Link arc point" color={CC.accent} onClick={() => {
@@ -5691,7 +6040,11 @@ export default function MasterProject() {
                   const n = pts.length;
                   const prev = (pi - 1 + n) % n, next = (pi + 1) % n;
                   const A = pts[prev], B = pts[next], V = pts[pi];
-                  const { t, offset } = worldToArcPoint(A, B, V);
+                  const { t: chordT } = worldToArcPoint(A, B, V);
+                  const arcsPrev = (s.edgeArcs?.[prev] ?? []).map(a => ({ ...a, t: a.t * chordT }));
+                  const arcsNext = (s.edgeArcs?.[pi] ?? []).map(a => ({ ...a, t: chordT + (1 - chordT) * a.t }));
+                  const placeholder = { id: "__temp__", t: 0.5, offset: 0 };
+                  const { t, offset } = worldToArcPointOnCurve(A, B, [...arcsPrev, ...arcsNext, placeholder], placeholder, V);
                   const newArc: ArcPoint = { id: crypto.randomUUID(), t, offset };
                   // The merged edge index in the new shape (after removing the vertex)
                   const newEdgeIdx = pi > 0 ? prev : n - 2;
@@ -5815,7 +6168,9 @@ export default function MasterProject() {
                   const pts = (shapes[si].calculatorInputs?.pathCenterlineOriginal as Point[]) ?? shapes[si].points;
                   if (ei < 0 || ei >= pts.length - 1) return;
                   const A = pts[ei], B = pts[ei + 1];
-                  const { t, offset } = worldToArcPoint(A, B, contextMenu.edgePos!);
+                  const arcList = shapes[si].edgeArcs?.[ei] ?? [];
+                  const placeholder = { id: "__temp__", t: 0.5, offset: 0 };
+                  const { t, offset } = worldToArcPointOnCurve(A, B, [...arcList, placeholder], placeholder, contextMenu.edgePos!);
                   setShapes(p => {
                     const n = [...p]; const s = { ...n[si] };
                     const edgeArcs = s.edgeArcs ? [...s.edgeArcs] : [];
@@ -5840,7 +6195,9 @@ export default function MasterProject() {
                   const si = contextMenu.shapeIdx, ei = contextMenu.edgeIdx;
                   const pts = shapes[si].points;
                   const A = pts[ei], B = pts[(ei + 1) % pts.length];
-                  const { t, offset } = worldToArcPoint(A, B, contextMenu.edgePos!);
+                  const arcList = shapes[si].edgeArcs?.[ei] ?? [];
+                  const placeholder = { id: "__temp__", t: 0.5, offset: 0 };
+                  const { t, offset } = worldToArcPointOnCurve(A, B, [...arcList, placeholder], placeholder, contextMenu.edgePos!);
                   setShapes(p => {
                     const n = [...p]; const s = { ...n[si] };
                     const edgeArcs = s.edgeArcs ? [...s.edgeArcs] : [];
@@ -6260,7 +6617,12 @@ export default function MasterProject() {
             const targetVal = parseFloat(setAngleTargetValue);
             if (isNaN(targetVal)) return;
             const targetAngle = Math.max(1, Math.min(359, targetVal));
-            const delta = targetAngle - currentAngle;
+            let delta = targetAngle - currentAngle;
+            const cross = (prevPt.x - V.x) * (nextPt.y - V.y) - (prevPt.y - V.y) * (nextPt.x - V.x);
+            const sa = pts.reduce((acc, p, idx) => acc + p.x * pts[(idx + 1) % n].y - pts[(idx + 1) % n].x * p.y, 0) / 2;
+            // Flip for convex vertices (cross<0 for CCW); concave vertices work without flip
+            const isConvex = (sa > 0 && cross < 0) || (sa < 0 && cross > 0);
+            if (isConvex) delta = -delta;
             if (Math.abs(delta) < 0.01) { setSetAngleModal(null); return; }
             saveHistory();
             setShapes(p => {
@@ -6269,7 +6631,7 @@ export default function MasterProject() {
               const np = [...s.points];
               const nV = np[pi];
               if (setAngleMode === "a") {
-                const newPrev = rotatePointAround(nV, np[prev], delta);
+                const newPrev = rotatePointAround(nV, np[prev], -delta);
                 np[prev] = newPrev;
                 const dragEntry: LinkedEntry = { si, pi: prev };
                 const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
@@ -6286,7 +6648,7 @@ export default function MasterProject() {
                         if (li >= 0) {
                           const lA = ls.points[lp.edgeIdx];
                           const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
-                          const { t: lt, offset: lo } = worldToArcPoint(lA, lB, newPrev);
+                          const { t: lt, offset: lo } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, newPrev);
                           lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
                           lea[lp.edgeIdx] = lArcs;
                           ls.edgeArcs = lea;
@@ -6302,7 +6664,7 @@ export default function MasterProject() {
                   }
                 }
               } else if (setAngleMode === "b") {
-                const newNext = rotatePointAround(nV, np[next], -delta);
+                const newNext = rotatePointAround(nV, np[next], delta);
                 np[next] = newNext;
                 const dragEntry: LinkedEntry = { si, pi: next };
                 const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
@@ -6319,7 +6681,7 @@ export default function MasterProject() {
                         if (li >= 0) {
                           const lA = ls.points[lp.edgeIdx];
                           const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
-                          const { t: lt, offset: lo } = worldToArcPoint(lA, lB, newNext);
+                          const { t: lt, offset: lo } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, newNext);
                           lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
                           lea[lp.edgeIdx] = lArcs;
                           ls.edgeArcs = lea;
@@ -6335,8 +6697,8 @@ export default function MasterProject() {
                   }
                 }
               } else {
-                const newPrev = rotatePointAround(nV, np[prev], delta / 2);
-                const newNext = rotatePointAround(nV, np[next], -delta / 2);
+                const newPrev = rotatePointAround(nV, np[prev], -delta / 2);
+                const newNext = rotatePointAround(nV, np[next], delta / 2);
                 np[prev] = newPrev;
                 np[next] = newNext;
                 for (const pt of [prev, next]) {
@@ -6356,7 +6718,7 @@ export default function MasterProject() {
                           if (li >= 0) {
                             const lA = ls.points[lp.edgeIdx];
                             const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
-                            const { t: lt, offset: lo } = worldToArcPoint(lA, lB, newPos);
+                            const { t: lt, offset: lo } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, newPos);
                             lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
                             lea[lp.edgeIdx] = lArcs;
                             ls.edgeArcs = lea;
@@ -6541,16 +6903,10 @@ export default function MasterProject() {
                     <button
                       key={si}
                       onClick={() => {
-                        // #region agent log
-                        fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MasterProject.tsx:extendModal:click',message:'extend modal element clicked',data:{si},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-                        // #endregion
                         const emptyArea = adjustmentData.emptyAreas[adjustmentExtendModal!.emptyAreaIdx];
                         const newPts = extendShapeToGardenEdge(shapes, si, emptyArea);
                         if (newPts) {
                           saveHistory();
-                          // #region agent log
-                          fetch('http://127.0.0.1:7243/ingest/2b18dd34-f9ef-41d3-ae49-e6d33f2c277f',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'MasterProject.tsx:extendModal:preSetShapes',message:'about to setShapes',data:{},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-                          // #endregion
                           setShapes(p => {
                             const n = [...p];
                             n[si] = applyPolygonPointsToShape(n[si], newPts);
@@ -6627,7 +6983,15 @@ export default function MasterProject() {
               saveHistory();
               setShapes(p => {
                 const n = [...p];
-                n[idx] = { ...n[idx], ...updates };
+                const s = n[idx];
+                const u = { ...updates } as Record<string, any>;
+                const inputs = { ...(s.calculatorInputs ?? {}), ...(u.calculatorInputs ?? {}) };
+                if (isPathElement(s) && inputs.pathIsOutline && Array.isArray(inputs.pathCenterline) && inputs.pathCenterline.length >= 2) {
+                  const pathWidthM = Number(inputs.pathWidthM ?? 0.6) || 0.6;
+                  const outline = computeThickPolyline(inputs.pathCenterline, toPixels(pathWidthM));
+                  if (outline.length >= 3) u.points = outline;
+                }
+                n[idx] = { ...s, ...u };
                 return n;
               });
               setObjectCardShapeIdx(null);
