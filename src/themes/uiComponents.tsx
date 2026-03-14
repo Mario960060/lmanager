@@ -488,6 +488,19 @@ export function TextInput({ label, value, onChange, placeholder, unit, helperTex
   );
 }
 
+// ─── CalculatorInputGrid ────────────────────────────────────────
+/** Responsywny grid dla inputów kalkulatora. Na mobile (<768px): 1 kolumna, szersze inputy. */
+interface CalculatorInputGridProps {
+  columns?: 2 | 3;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}
+
+export function CalculatorInputGrid({ columns = 3, children, style }: CalculatorInputGridProps) {
+  const cls = `calculator-input-grid calculator-input-grid--cols-${columns}`;
+  return <div className={cls} style={style}>{children}</div>;
+}
+
 // ─── SelectDropdown ─────────────────────────────────────────────
 interface SelectDropdownProps {
   label?: string;
@@ -560,10 +573,15 @@ interface CheckboxProps {
 
 export function Checkbox({ label, checked, onChange }: CheckboxProps) {
   return (
-    <label style={{
-      display: "flex", alignItems: "center", gap: spacing.lg,
-      padding: `${spacing.lg}px 0`, cursor: "pointer", userSelect: "none",
-    }} onClick={() => onChange(!checked)}>
+    <label
+      className="touch-friendly-checkbox"
+      style={{
+        display: "flex", alignItems: "center", gap: spacing.lg,
+        padding: `${spacing.lg}px 0`, cursor: "pointer", userSelect: "none",
+        minHeight: 44, width: "100%", WebkitTapHighlightColor: "transparent",
+      }}
+      onClick={() => onChange(!checked)}
+    >
       <div style={{
         width: 20, height: 20, borderRadius: 5, flexShrink: 0,
         background: checked ? colors.accentBlue : "transparent",
@@ -1706,9 +1724,11 @@ export function RadioGroup({ label: groupLabel, options, value, onChange, direct
             <label key={opt.value} onClick={() => onChange(opt.value)} style={{
               display: "flex", alignItems: "flex-start", gap: spacing.lg,
               padding: `${spacing.lg}px ${spacing.xl}px`,
+              minHeight: 44,
               background: selected ? colors.accentBlueBg : "transparent",
               border: `1px solid ${selected ? colors.accentBlue : colors.borderDefault}`,
               borderRadius: radii.lg, cursor: "pointer", transition: transitions.fast,
+              WebkitTapHighlightColor: "transparent",
             }}>
               <div style={{
                 width: 18, height: 18, borderRadius: radii.full, flexShrink: 0, marginTop: 1,

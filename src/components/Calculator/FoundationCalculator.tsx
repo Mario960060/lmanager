@@ -16,6 +16,7 @@ import {
 } from '../../themes/designTokens';
 import {
   TextInput,
+  CalculatorInputGrid,
   SelectDropdown,
   Checkbox,
   Button,
@@ -455,11 +456,11 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({
       </p>
 
       <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+        <CalculatorInputGrid columns={3}>
           <TextInput label={t('calculator:input_length_m')} value={length} onChange={setLength} placeholder={t('calculator:placeholder_enter_length_m')} unit="m" />
           <TextInput label={t('calculator:input_width_m')} value={width} onChange={setWidth} placeholder={t('calculator:placeholder_enter_width')} unit="m" />
           <TextInput label={t('calculator:input_depth_in_cm')} value={depthCm} onChange={setDepthCm} placeholder={t('calculator:placeholder_enter_depth_cm')} unit="cm" />
-        </div>
+        </CalculatorInputGrid>
 
         {!isInProjectCreating && (
           <>
@@ -613,17 +614,20 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({
                       {translateTaskName(task.task, t)} ({task.amount} {translateUnit(task.unit, t)})
                     </span>
                     <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>
-                      {task.hours.toFixed(2)} hrs
+                      {task.hours.toFixed(2)} {t('calculator:hours_label')}
                     </span>
                   </div>
                 ))}
               </div>
             </Card>
+            <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+              {t('calculator:material_quantification')}
+            </h3>
             <DataTable
               columns={[
-                { key: 'name', label: 'MATERIAL', width: '2fr' },
-                { key: 'quantity', label: 'QUANTITY', width: '1fr' },
-                { key: 'unit', label: 'UNIT', width: '1fr' },
+                { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+                { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+                { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
               ]}
               rows={materials.map((m: any) => ({
                 name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{m.materialKey ? t(`calculator:${m.materialKey}`, m.materialKeyParams || {}) : m.name}</span>,

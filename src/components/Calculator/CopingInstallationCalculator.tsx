@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { colors, radii } from '../../themes/designTokens';
 
 interface TaskTemplate {
@@ -537,7 +537,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
       
       {!fromWallSegments && (
         <div>
-          <label className={labelCls} style={labelStyle}>{t('calculator:wall_length_m_label')}</label>
+          <label className={labelCls} style={labelStyle}>{t('calculator:wall_length_label')}</label>
           <input
             type="number"
             value={wallLength}
@@ -734,7 +734,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
               value={transportDistance}
               onChange={(e) => setTransportDistance(e.target.value)}
               className="w-full p-2 border rounded-md"
-              placeholder={t('calculator:enter_transport_distance_cm')}
+              placeholder={t('calculator:placeholder_enter_transport_distance')}
               min="0"
               step="1"
             />
@@ -759,13 +759,13 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
           <div className="bg-transparent p-0">
             <div className="text-lg font-semibold mb-1">
               <span className="text-gray-100">{t('calculator:total_labor_hours')}</span>
-              <span className="text-blue-400 text-2xl align-middle font-bold">{(results.labor).toFixed(2)} hours</span>
+              <span className="text-blue-400 text-2xl align-middle font-bold">{(results.labor).toFixed(2)} {t('calculator:hours_label')}</span>
             </div>
             <div className="text-base font-medium text-gray-100 mb-1">{t('calculator:task_breakdown')}:</div>
             <ul className="list-disc ml-6 text-gray-100">
               {results.taskBreakdown.map((task, index) => (
                 <li key={index}>
-                  <span className="font-bold">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours
+                  <span className="font-bold">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}
                 </li>
               ))}
             </ul>
@@ -792,7 +792,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
                 <tbody className="bg-white divide-y divide-gray-200">
                   {results.materials.map((material, idx) => (
                     <tr key={idx}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{translateMaterialName(material.name, t)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.amount}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{translateUnit(material.unit, t)}</td>
                     </tr>

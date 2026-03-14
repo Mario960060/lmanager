@@ -5,7 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import KerbVisualization from './KerbVisualization';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import {
   colors,
   fonts,
@@ -18,6 +18,7 @@ import {
 } from '../../themes/designTokens';
 import {
   TextInput,
+  CalculatorInputGrid,
   SelectDropdown,
   Checkbox,
   Button,
@@ -890,7 +891,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
 
         <div>
           <Label>{t('calculator:hunch_configuration')}</Label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing["5xl"], marginTop: spacing.sm }}>
+          <CalculatorInputGrid columns={2} style={{ marginTop: spacing.sm }}>
             {Object.entries(HUNCH_CONFIGS).map(([key, config]) => (
               <button
                 key={key}
@@ -914,7 +915,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
                 />
               </button>
             ))}
-          </div>
+          </CalculatorInputGrid>
         </div>
 
         {!isInProjectCreating && (
@@ -1016,7 +1017,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
                     <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName(task.task || task.name || '', t)}</span>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
                       <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{task.hours.toFixed(2)}</span>
-                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>hrs</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
                     </div>
                   </div>
                 ))}
@@ -1025,14 +1026,14 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
             
             <DataTable
               columns={[
-                { key: 'name', label: 'MATERIAL', width: '2fr' },
-                { key: 'quantity', label: 'QUANTITY', width: '1fr' },
-                { key: 'unit', label: 'UNIT', width: '1fr' },
-                { key: 'price', label: 'PRICE/UNIT', width: '1fr' },
-                { key: 'total', label: 'TOTAL', width: '1fr' },
+                { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+                { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+                { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+                { key: 'price', label: t('calculator:table_price_per_unit_header'), width: '1fr' },
+                { key: 'total', label: t('calculator:table_total_header'), width: '1fr' },
               ]}
               rows={result.materials.map((m) => ({
-                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{m.name}</span>,
+                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName(m.name, t)}</span>,
                 quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.quantity.toFixed(2)}</span>,
                 unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
                 price: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : 'N/A'}</span>,

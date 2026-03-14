@@ -102,9 +102,14 @@ const CalendarEquipmentModal: React.FC<CalendarEquipmentModalProps> = ({ eventId
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar_equipment'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard_calendar_equipment'] });
       queryClient.invalidateQueries({ queryKey: ['equipment'] });
       queryClient.invalidateQueries({ queryKey: ['available_equipment'] });
       onClose();
+    },
+    onError: (error) => {
+      console.error('Failed to add calendar equipment:', error);
+      alert(t('project:failed_add_equipment'));
     }
   });
 

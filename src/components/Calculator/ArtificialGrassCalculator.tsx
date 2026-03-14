@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
 import { colors } from '../../themes/designTokens';
@@ -1121,7 +1121,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
                 <ul className="space-y-1 pl-5 list-disc">
                   {taskBreakdown.map((task, index) => (
                     <li key={index} className="text-sm">
-                      <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours
+                      <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}
                     </li>
                   ))}
                 </ul>
@@ -1135,19 +1135,19 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
                   <thead className="bg-gray-50">
                     <tr>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Material
+                        {t('calculator:table_material_header')}
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Quantity
+                        {t('calculator:table_quantity_header')}
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Unit
+                        {t('calculator:table_unit_header')}
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Price per Unit
+                        {t('calculator:table_price_per_unit_header')}
                       </th>
                       <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total Price
+                        {t('calculator:table_total_header')}
                       </th>
                     </tr>
                   </thead>
@@ -1155,7 +1155,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
                     {materials.map((material, index) => (
                       <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.name}
+                          {translateMaterialName(material.name, t)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                           {material.amount.toFixed(2)}

@@ -15,6 +15,7 @@ import {
 } from '../../themes/designTokens';
 import {
   TextInput,
+  CalculatorInputGrid,
   Button,
   Card,
   Label,
@@ -90,36 +91,22 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
   const [selectedCompactor, setSelectedCompactor] = useState<CompactorOption | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
-  // Fetch equipment from the database (carriers filtered by event_tasks - same logic as canvas/project creation)
+  // Fetch equipment from the database (same logic as Canvas/EquipmentPanel - fetch all carriers without filtering)
   useEffect(() => {
     const fetchEquipment = async () => {
       try {
         if (!companyId) return;
 
-        const [excRes, carRes, tasksRes] = await Promise.all([
+        const [excRes, carRes] = await Promise.all([
           supabase.from('setup_digging').select('*').eq('type', 'excavator').eq('company_id', companyId),
           supabase.from('setup_digging').select('*').eq('type', 'barrows_dumpers').eq('company_id', companyId),
-          supabase.from('event_tasks').select('name').eq('company_id', companyId),
         ]);
 
         if (excRes.error) throw excRes.error;
         if (carRes.error) throw carRes.error;
-        if (tasksRes.error) throw tasksRes.error;
-
-        const allCarriers = carRes.data || [];
-        const taskNames = (tasksRes.data || []).map((t) => t.name);
-        const validSizes = new Set<number>();
-        const re = /(\d+(?:\.\d+)?)t\b/g;
-        for (const name of taskNames) {
-          let m: RegExpExecArray | null;
-          re.lastIndex = 0;
-          while ((m = re.exec(name)) !== null) validSizes.add(parseFloat(m[1]));
-        }
-        const filtered =
-          validSizes.size === 0 ? allCarriers : allCarriers.filter((c) => c['size (in tones)'] != null && validSizes.has(c['size (in tones)']));
 
         setExcavators((excRes.data || []) as DiggingEquipment[]);
-        setCarriers(filtered as DiggingEquipment[]);
+        setCarriers((carRes.data || []) as DiggingEquipment[]);
       } catch (error) {
         console.error('Error fetching equipment:', error);
       }
@@ -349,11 +336,11 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
             </p>
           </>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: `0 ${spacing.base}` }}>
+          <CalculatorInputGrid columns={3}>
             <TextInput label={t('calculator:input_length_m')} value={length} onChange={setLength} placeholder={t('calculator:placeholder_enter_length')} unit="m" />
             <TextInput label={t('calculator:input_width_m')} value={width} onChange={setWidth} placeholder={t('calculator:placeholder_enter_width')} unit="m" />
             <TextInput label={t('calculator:input_depth_cm')} value={depth} onChange={setDepth} placeholder={t('calculator:placeholder_enter_depth_cm')} unit="cm" helperText={t('calculator:message_enter_depth_cm')} />
-          </div>
+          </CalculatorInputGrid>
         )}
         
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing["6xl"], marginTop: spacing["5xl"] }}>

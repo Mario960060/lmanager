@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo } from "react";
 import Modal from "../../../components/Modal";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { translateMaterialName } from "../../../lib/translationMap";
 import { supabase } from "../../../lib/supabase";
 import { useAuthStore } from "../../../lib/store";
 import {
@@ -11,76 +12,77 @@ import {
 } from "../../../lib/materialUsageDefaults";
 import PageInfoModal from "../../../components/PageInfoModal";
 
-const SAND_OPTIONS = ["Granite Sand", "Building sand", "Sharp Sand"];
+const SAND_OPTION_KEYS = ["form:material_usage_sand_granite", "form:material_usage_sand_building", "form:material_usage_sand_sharp"] as const;
+const SAND_OPTIONS_RAW = ["Granite Sand", "Building sand", "Sharp Sand"] as const;
 const MORTAR_RATIOS = ["1:3", "1:4", "1:5", "1:6"];
 
 const CALCULATORS = [
   {
     key: "paving_calculator",
-    label: "Paving",
+    labelKey: "form:material_usage_calc_paving",
     icon: "⬡",
     color: "#f59e0b",
     thicknesses: [
-      { key: "type1_thickness", label: "Type 1 Thickness", unit: "cm", default: 10 },
-      { key: "sand_thickness", label: "Sand Thickness", unit: "cm", default: 5 },
-      { key: "monoblock_height", label: "Monoblock Height", unit: "cm", default: 6 },
+      { key: "type1_thickness", labelKey: "form:material_usage_type1_thickness", unit: "cm", default: 10 },
+      { key: "sand_thickness", labelKey: "form:material_usage_sand_thickness", unit: "cm", default: 5 },
+      { key: "monoblock_height", labelKey: "form:material_usage_monoblock_height", unit: "cm", default: 6 },
     ],
     hasSand: true,
     supabaseId: "paving",
   },
   {
     key: "slab_calculator",
-    label: "Slabs",
+    labelKey: "form:material_usage_calc_slabs",
     icon: "◫",
     color: "#8b5cf6",
     thicknesses: [
-      { key: "type1_thickness", label: "Type 1 Thickness", unit: "cm", default: 10 },
-      { key: "mortar_thickness", label: "Mortar Thickness", unit: "cm", default: 3 },
-      { key: "slab_thickness", label: "Slab Thickness", unit: "cm", default: 2 },
+      { key: "type1_thickness", labelKey: "form:material_usage_type1_thickness", unit: "cm", default: 10 },
+      { key: "mortar_thickness", labelKey: "form:material_usage_mortar_thickness", unit: "cm", default: 3 },
+      { key: "slab_thickness", labelKey: "form:material_usage_slab_thickness", unit: "cm", default: 2 },
     ],
     hasSand: true,
     supabaseId: "slab",
   },
   {
     key: "concrete_slabs_calculator",
-    label: "Concrete Slabs",
+    labelKey: "form:material_usage_calc_concrete_slabs",
     icon: "▣",
     color: "#6b7280",
     thicknesses: [
-      { key: "type1_thickness", label: "Type 1 Thickness", unit: "cm", default: 10 },
-      { key: "sand_thickness", label: "Sand Thickness", unit: "cm", default: 5 },
-      { key: "concrete_slab_thickness", label: "Concrete Slab Thickness", unit: "cm", default: 6 },
+      { key: "type1_thickness", labelKey: "form:material_usage_type1_thickness", unit: "cm", default: 10 },
+      { key: "sand_thickness", labelKey: "form:material_usage_sand_thickness", unit: "cm", default: 5 },
+      { key: "concrete_slab_thickness", labelKey: "form:material_usage_concrete_slab_thickness", unit: "cm", default: 6 },
     ],
     hasSand: true,
     supabaseId: "concrete_slabs",
   },
   {
     key: "artificial_grass_calculator",
-    label: "Artificial Grass",
+    labelKey: "form:material_usage_calc_artificial_grass",
     icon: "▤",
     color: "#22c55e",
     thicknesses: [
-      { key: "type1_thickness", label: "Type 1 Thickness", unit: "cm", default: 10 },
-      { key: "sand_thickness", label: "Sand Thickness", unit: "cm", default: 5 },
+      { key: "type1_thickness", labelKey: "form:material_usage_type1_thickness", unit: "cm", default: 10 },
+      { key: "sand_thickness", labelKey: "form:material_usage_sand_thickness", unit: "cm", default: 5 },
     ],
     hasSand: true,
     supabaseId: "artificial_grass",
   },
   {
     key: "natural_turf_calculator",
-    label: "Natural Turf",
+    labelKey: "form:material_usage_calc_natural_turf",
     icon: "🌿",
     color: "#16a34a",
     thicknesses: [
-      { key: "type1_thickness", label: "Type 1 Thickness", unit: "cm", default: 10 },
-      { key: "soil_thickness", label: "Soil Thickness", unit: "cm", default: 5 },
+      { key: "type1_thickness", labelKey: "form:material_usage_type1_thickness", unit: "cm", default: 10 },
+      { key: "soil_thickness", labelKey: "form:material_usage_soil_thickness", unit: "cm", default: 5 },
     ],
     hasSand: false,
     supabaseId: "natural_turf",
   },
   {
     key: "wall_calculator",
-    label: "Walls",
+    labelKey: "form:material_usage_calc_walls",
     icon: "▦",
     color: "#ef4444",
     thicknesses: [],
@@ -90,8 +92,8 @@ const CALCULATORS = [
 ];
 
 const MORTAR_CONFIG = [
-  { key: "slab_mortar", label: "Slab Mortar Mix", subtitle: "Cement : Sand", default: "1:5", supabaseType: "slab" },
-  { key: "brick_mortar", label: "Brick/Block Mortar Mix", subtitle: "Cement : Sand", default: "1:4", supabaseType: "brick" },
+  { key: "slab_mortar", labelKey: "form:material_usage_slab_mortar_mix", subtitleKey: "form:material_usage_cement_sand", default: "1:5", supabaseType: "slab" },
+  { key: "brick_mortar", labelKey: "form:material_usage_brick_mortar_mix", subtitleKey: "form:material_usage_cement_sand", default: "1:4", supabaseType: "brick" },
 ];
 
 const EMPTY_CONFIGS: MaterialUsageConfig[] = [];
@@ -124,10 +126,11 @@ function SelectDropdown({
   style,
 }: {
   value: string;
-  options: string[];
+  options: string[] | { value: string; label: string }[];
   onChange: (v: string) => void;
   style?: React.CSSProperties;
 }) {
+  const opts = options.map((o) => (typeof o === "string" ? { value: o, label: o } : o));
   return (
     <div style={{ position: "relative", ...style }}>
       <select
@@ -150,9 +153,9 @@ function SelectDropdown({
         onFocus={(e) => (e.target.style.borderColor = "rgba(139,92,246,0.5)")}
         onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.1)")}
       >
-        {options.map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
+        {opts.map((opt) => (
+          <option key={opt.value} value={opt.value}>
+            {opt.label}
           </option>
         ))}
       </select>
@@ -273,10 +276,10 @@ function findMaterialIdByName(materials: Material[], sandName: string): string |
 
 /** Find sand name from material ID */
 function getSandNameFromMaterialId(materials: Material[], materialId: string | undefined): string {
-  if (!materialId) return SAND_OPTIONS[0];
+  if (!materialId) return SAND_OPTIONS_RAW[0];
   const m = materials.find((x) => x.id === materialId);
-  if (!m) return SAND_OPTIONS[0];
-  const match = SAND_OPTIONS.find((opt) => opt.toLowerCase() === m.name.toLowerCase());
+  if (!m) return SAND_OPTIONS_RAW[0];
+  const match = SAND_OPTIONS_RAW.find((opt) => opt.toLowerCase() === m.name.toLowerCase());
   if (match) return match;
   return m.name;
 }
@@ -630,6 +633,8 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
           <button
             onClick={handleClose}
             disabled={saving}
+            title={t("form:material_usage_close_button")}
+            aria-label={t("form:material_usage_close_button")}
             style={{
               background: "transparent",
               border: "none",
@@ -699,12 +704,12 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                     letterSpacing: "0.3px",
                   }}
                 >
-                  {calc.label}
+                  {t(calc.labelKey)}
                 </span>
                 <div style={{ display: "flex", gap: 6, alignItems: "center", marginRight: 8 }}>
-                  {calc.thicknesses.map((t) => (
+                  {calc.thicknesses.map((thick) => (
                     <span
-                      key={t.key}
+                      key={thick.key}
                       style={{
                         padding: "2px 8px",
                         background: "rgba(255,255,255,0.06)",
@@ -715,7 +720,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {thicknessConfig[calc.key]?.[t.key] ?? t.default} {t.unit}
+                      {thicknessConfig[calc.key]?.[thick.key] ?? thick.default} {thick.unit}
                     </span>
                   ))}
                 </div>
@@ -746,8 +751,8 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                     gap: 12,
                   }}
                 >
-                  {calc.thicknesses.map((t) => (
-                    <div key={t.key}>
+                  {calc.thicknesses.map((thick) => (
+                    <div key={thick.key}>
                       <label
                         style={{
                           display: "block",
@@ -758,12 +763,12 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                           fontWeight: 500,
                         }}
                       >
-                        {t.label}
+                        {t(thick.labelKey)}
                       </label>
                       <NumberInput
-                        value={thicknessConfig[calc.key]?.[t.key] ?? ""}
-                        onChange={(v) => handleThicknessChange(calc.key, t.key, v)}
-                        unit={t.unit}
+                        value={thicknessConfig[calc.key]?.[thick.key] ?? ""}
+                        onChange={(v) => handleThicknessChange(calc.key, thick.key, v)}
+                        unit={thick.unit}
                       />
                     </div>
                   ))}
@@ -820,11 +825,11 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                   letterSpacing: "0.3px",
                 }}
               >
-                {calc.label}
+                {t(calc.labelKey)}
               </span>
               <SelectDropdown
-                value={sandConfig[calc.key] || SAND_OPTIONS[0]}
-                options={SAND_OPTIONS}
+                value={sandConfig[calc.key] || SAND_OPTIONS_RAW[0]}
+                options={sandMaterials.length > 0 ? sandMaterials.map((m) => ({ value: m.name, label: translateMaterialName(m.name, t) })) : SAND_OPTIONS_RAW.map((raw, i) => ({ value: raw, label: t(SAND_OPTION_KEYS[i]) }))}
                 onChange={(v) => setSandConfig((prev) => ({ ...prev, [calc.key]: v }))}
                 style={{ width: 160 }}
               />
@@ -864,10 +869,10 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                     letterSpacing: "0.3px",
                   }}
                 >
-                  {item.label}
+                  {t(item.labelKey)}
                 </div>
                 <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Exo 2', sans-serif" }}>
-                  {item.subtitle}
+                  {t(item.subtitleKey)}
                 </div>
               </div>
               <SelectDropdown
@@ -898,7 +903,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
               transition: "all 0.15s",
             }}
           >
-            Close
+            {t("form:material_usage_close_button")}
           </button>
           <button
             onClick={handleSave}

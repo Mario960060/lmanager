@@ -99,7 +99,7 @@ export default function ProjectSummaryPanel({
         </button>
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
+      <div style={{ flex: 1, overflow: "auto", padding: 12, maxHeight: "clamp(200px, 45vh, 520px)", minHeight: 0 }}>
         {layer2Shapes.length === 0 ? (
           <div style={{ fontSize: 13, color: C.textDim, textAlign: "center", padding: 24 }}>
             {t("project:no_elements_layer2")}

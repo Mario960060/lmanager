@@ -1,0 +1,110 @@
+/**
+ * Mobile Layout & Calculator
+ * Na mobile: minimalny padding, pełna szerokość ekranu
+ * Breakpoint: 768px
+ */
+
+/* Mobile: minimalny padding boczny na wszystkich stronach (pełna szerokość) */
+@media (max-width: 768px) {
+  .layout-content-wrapper {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+}
+
+/* Grid dla inputów kalkulatora - desktop: 2 lub 3 kolumny */
+.calculator-input-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.calculator-input-grid--cols-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+.calculator-input-grid--cols-3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+/* Mobile: zawsze 1 kolumna, inputy na pełną szerokość */
+@media (max-width: 768px) {
+  .calculator-input-grid--cols-2,
+  .calculator-input-grid--cols-3 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Input wewnątrz kalkulatora - min. szerokość dla cyfr */
+  .calculator-input-grid input[type="number"],
+  .calculator-input-grid input[type="text"] {
+    min-width: 80px;
+    font-size: 16px; /* zapobiega zoom na iOS przy focus */
+  }
+
+  /* Wszystkie gridy w calculator-container - na mobile 1 kolumna */
+  #calculator-container [style*="grid-template-columns"],
+  #calculator-container .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Inputy w kalkulatorze - pełna szerokość, więcej miejsca na cyfry */
+  #calculator-container input[type="number"],
+  #calculator-container input[type="text"] {
+    min-width: 80px;
+    font-size: 16px;
+    box-sizing: border-box;
+    width: 100%;
+  }
+
+  /* Kalkulatory - jeszcze mniejszy padding, pełna szerokość */
+  [data-route="calculator"].layout-content-wrapper {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  .calculator-page > div {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  .calculator-page .calculator-card {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    border-radius: 0 !important;
+  }
+}
+
+/* Touch-friendly: checkboxy i radio – kliknięcie w całą etykietę zaznacza (min 44px) */
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]),
+.calculator-page label:has(input[type="checkbox"]),
+.calculator-page label:has(input[type="radio"]),
+#calculator-container label:has(input[type="checkbox"]),
+#calculator-container label:has(input[type="radio"]),
+.touch-friendly-checkbox {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Label z htmlFor (input jako sibling) – rodzic jako obszar klikalny */
+.calculator-page .flex.items-center:has(input[type="radio"]) > label,
+.calculator-page .flex.items-center:has(input[type="checkbox"]) > label,
+#calculator-container .flex.items-center:has(input[type="radio"]) > label,
+#calculator-container .flex.items-center:has(input[type="checkbox"]) > label {
+  flex: 1;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.calculator-page .flex.items-center:has(input[type="radio"]),
+.calculator-page .flex.items-center:has(input[type="checkbox"]),
+#calculator-container .flex.items-center:has(input[type="radio"]),
+#calculator-container .flex.items-center:has(input[type="checkbox"]) {
+  min-height: 44px;
+  cursor: pointer;
+}

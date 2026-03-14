@@ -642,6 +642,19 @@ export const materialNameTranslationMap: Record<string, string> = {
   'Crushed Stone': 'calculator:aggregate_material_crushed_stone',
   'underground cable': 'material:underground_cable',
   'water pipe': 'material:water_pipe',
+  // Calculator-specific materials
+  'Fill (Soil)': 'material:fill_soil',
+  'Fill (Tape1)': 'material:fill_tape1',
+  'Decking board': 'material:decking_board',
+  'Decking boards': 'material:decking_boards',
+  'Joist': 'material:joist',
+  'Joists': 'material:joists',
+  'Bearers': 'material:bearers',
+  'Frame slabs': 'material:frame_slabs',
+  // Stair calculators – masonry materials
+  '4-inch Blocks': 'calculator:lshape_material_4inch',
+  '7-inch Blocks': 'calculator:lshape_material_7inch',
+  'Standard Bricks (9x6x21)': 'calculator:lshape_material_bricks',
 };
 
 /**

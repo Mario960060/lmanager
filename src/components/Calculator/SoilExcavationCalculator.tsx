@@ -14,6 +14,7 @@ import {
 } from '../../themes/designTokens';
 import {
   TextInput,
+  CalculatorInputGrid,
   SelectDropdown,
   Button,
   Card,
@@ -292,11 +293,11 @@ const SoilExcavationCalculator: React.FC<SoilExcavationCalculatorProps> = ({ onR
             unit="tons"
           />
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: `0 ${spacing.base}` }}>
+          <CalculatorInputGrid columns={3}>
             <TextInput label={t('calculator:length_m_label')} value={length} onChange={setLength} placeholder={t('calculator:length_placeholder')} unit="m" />
             <TextInput label={t('calculator:width_m_label')} value={width} onChange={setWidth} placeholder={t('calculator:width_placeholder')} unit="m" />
             <TextInput label={t('calculator:depth_cm_label')} value={depth} onChange={setDepth} placeholder={t('calculator:depth_placeholder')} unit="cm" />
-          </div>
+          </CalculatorInputGrid>
         )}
 
         {calculationMethod === 'area' && (

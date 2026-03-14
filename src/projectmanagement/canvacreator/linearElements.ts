@@ -205,6 +205,53 @@ export function computeThickPolyline(points: Point[], thicknessPx: number): Poin
 }
 
 /**
+ * Build path outline from centerline + per-segment side choices.
+ * segmentSides[i] = side for segment from pts[i] to pts[i+1].
+ * Uses left/right offset points; forward chain uses chosen side, back chain uses opposite.
+ */
+export function computePathOutlineFromSegmentSides(
+  centerline: Point[],
+  segmentSides: ("left" | "right")[],
+  pathWidthM: number
+): Point[] {
+  if (centerline.length < 2 || segmentSides.length !== centerline.length - 1) return [];
+  const half = toPixels(pathWidthM) / 2;
+  const leftPts: Point[] = [];
+  const rightPts: Point[] = [];
+  for (let i = 0; i < centerline.length - 1; i++) {
+    const a = centerline[i];
+    const b = centerline[i + 1];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len < 0.001) continue;
+    const nx = -dy / len;
+    const ny = dx / len;
+    leftPts.push({ x: a.x + nx * half, y: a.y + ny * half });
+    rightPts.push({ x: a.x - nx * half, y: a.y - ny * half });
+  }
+  const last = centerline[centerline.length - 1];
+  const prevLast = centerline[centerline.length - 2];
+  const dx = last.x - prevLast.x;
+  const dy = last.y - prevLast.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const nx = len > 0.001 ? -dy / len : 0;
+  const ny = len > 0.001 ? dx / len : 0;
+  leftPts.push({ x: last.x + nx * half, y: last.y + ny * half });
+  rightPts.push({ x: last.x - nx * half, y: last.y - ny * half });
+  const n = centerline.length;
+  const outline: Point[] = [];
+  outline.push(segmentSides[0] === "left" ? leftPts[0] : rightPts[0]);
+  for (let i = 0; i < n - 1; i++) {
+    outline.push(segmentSides[i] === "left" ? leftPts[i + 1] : rightPts[i + 1]);
+  }
+  for (let i = n - 1; i >= 0; i--) {
+    outline.push(segmentSides[Math.max(0, i - 1)] === "left" ? rightPts[i] : leftPts[i]);
+  }
+  return outline;
+}
+
+/**
  * Compute path polygon on one side of line A-B only.
  * side: "left" = path on left when going A→B, "right" = path on right.
  * Returns 4-point quadrilateral [A, B, offset1, offset0].

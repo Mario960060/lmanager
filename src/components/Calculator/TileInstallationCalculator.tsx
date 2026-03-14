@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { colors, radii, fontSizes } from '../../themes/designTokens';
 import { Button } from '../../themes/uiComponents';
 
@@ -1097,7 +1097,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
         >
           <option value="">{t('calculator:select_grouting_method_placeholder')}</option>
           {groutingMethods.map((method: any) => (
-            <option key={method.id} value={method.id}>{method.name}</option>
+            <option key={method.id} value={method.id}>{translateTaskName(method.name, t)}</option>
           ))}
         </select>
         {isLoadingGrouting && <p className="text-sm text-gray-500 mt-1">{t('calculator:loading_grouting_methods')}</p>}
@@ -1233,8 +1233,8 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
                   {results.cuttingBreakdown.cutSlabs.filter(cut => cut.quantity > 0).map((cut, index) => (
                     <tr key={index}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {cut.width === selectedSlab.width ? 'Height Cut' : 
-                         cut.height === selectedSlab.height ? 'Length Cut' : 'Corner Cut'}
+                        {cut.width === selectedSlab.width ? t('calculator:height_cut_type') : 
+                         cut.height === selectedSlab.height ? t('calculator:length_cut_type') : t('calculator:corner_cut_type')}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                         {cut.width.toFixed(1)}
@@ -1260,9 +1260,9 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
               <h3 className="text-lg font-medium text-gray-900 mb-4">{t('calculator:slabs_per_segment_label')}</h3>
               <div className="space-y-1 text-sm text-gray-700">
                 {results.slabsPerSegment.map((count, i) => (
-                  <div key={i}>Segment {i + 1}: {count} slabs</div>
+                  <div key={i}>{t('calculator:segment_n_slabs', { n: i + 1, count })}</div>
                 ))}
-                <div className="font-semibold mt-2">Total: {results.slabsPerSegment.reduce((a, b) => a + b, 0)} slabs</div>
+                <div className="font-semibold mt-2">{t('calculator:slabs_per_segment_total', { total: results.slabsPerSegment.reduce((a, b) => a + b, 0) })}</div>
               </div>
             </div>
           )}
@@ -1283,7 +1283,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
           {!(fromWallSegments && (canvasMode || isInProjectCreating)) && (
             <div className="text-lg font-semibold mb-1">
               <span className="text-gray-100">{t('calculator:total_labor_hours')}</span>
-              <span className="text-blue-400 text-2xl align-middle font-bold">{(results.labor).toFixed(2)} hours</span>
+              <span className="text-blue-400 text-2xl align-middle font-bold">{(results.labor).toFixed(2)} {t('calculator:hours_label')}</span>
             </div>
           )}
 
@@ -1296,20 +1296,20 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
                 <thead className="bg-gray-50">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Material
+                      {t('calculator:table_material_header')}
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Quantity
+                      {t('calculator:table_quantity_header')}
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Unit
+                      {t('calculator:table_unit_header')}
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {results.materials.map((material, idx) => (
                     <tr key={idx}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{translateMaterialName(material.name, t)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.amount}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{translateUnit(material.unit, t)}</td>
                     </tr>

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import UShapeStairsSlabs from './Ushapestairsslabs';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
@@ -175,7 +175,6 @@ const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
   const [adhesiveMaterials, setAdhesiveMaterials] = useState<any[]>([]);
   const [installationTasks, setInstallationTasks] = useState<any[]>([]);
   const [adjustedStepHeightInfo, setAdjustedStepHeightInfo] = useState<string | null>(null);
-  const [showCalculationLog, setShowCalculationLog] = useState<number | false>(false);
   const resultsRef = useRef<HTMLDivElement>(null);
 
   // ─── Material Options ─────────────────────────────────────────────────────
@@ -1068,12 +1067,12 @@ const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
       </InfoBanner>
 
       <Card style={{ padding: spacing.xl }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.xl, alignItems: 'start' }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 items-start">
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
             <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, fontFamily: fonts.heading }}>{t('calculator:input_measurements_in_cm')}</h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.lg }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label style={labelStyle}>{t('calculator:input_total_height')}</label>
                 <input type="number" value={totalHeight} onChange={(e) => setTotalHeight(e.target.value)} style={inputStyle} placeholder={t('calculator:placeholder_cm')} min="0" step="0.1" />
@@ -1090,7 +1089,7 @@ const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
 
             <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginTop: spacing.lg, fontFamily: fonts.heading }}>{t('calculator:ushape_arm_lengths_title')}</h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.lg }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label style={labelStyle}>{t('calculator:ushape_arm_a_length')}</label>
                 <input type="number" value={armALength} onChange={(e) => setArmALength(e.target.value)} style={inputStyle} placeholder={t('calculator:placeholder_cm')} min="0" step="0.1" />
@@ -1103,7 +1102,7 @@ const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
 
             <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginTop: spacing.lg, fontFamily: fonts.heading }}>{t('calculator:input_slab_adhesive_thickness_cm')}</h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.lg }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label style={labelStyle}>{t('calculator:input_slab_top_of_step')}</label>
                 <input type="number" value={slabThicknessTop} onChange={(e) => setSlabThicknessTop(e.target.value)} style={inputStyle} placeholder={t('calculator:placeholder_cm')} min="0" step="0.1" />
@@ -1116,7 +1115,7 @@ const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
 
             <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginTop: spacing.lg, fontFamily: fonts.heading }}>{t('calculator:input_overhang_in_cm')}</h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.lg }}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label style={labelStyle}>{t('calculator:input_overhang_front')}</label>
                 <input type="number" value={overhangFront} onChange={(e) => setOverhangFront(e.target.value)} style={inputStyle} placeholder={t('calculator:placeholder_cm')} min="0" step="0.1" />
@@ -1304,9 +1303,9 @@ const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
                         <th style={{ padding: `${spacing.md}px ${spacing.sm}px`, textAlign: 'left', fontSize: fontSizes.xs, color: colors.textPrimary }}>{t('calculator:lshape_table_step')}</th>
                         <th style={{ padding: `${spacing.md}px ${spacing.sm}px`, textAlign: 'left', fontSize: fontSizes.xs, color: colors.textPrimary }}>{t('calculator:lshape_table_height_cm')}</th>
                         <th style={{ padding: `${spacing.md}px ${spacing.sm}px`, textAlign: 'left', fontSize: fontSizes.xs, color: colors.textPrimary }}>{t('calculator:lshape_table_total_h_cm')}</th>
-                        <th style={{ padding: `${spacing.md}px ${spacing.sm}px`, textAlign: 'left', fontSize: fontSizes.xs, color: colors.textPrimary }}>Arm A (cm)</th>
-                        <th style={{ padding: `${spacing.md}px ${spacing.sm}px`, textAlign: 'left', fontSize: fontSizes.xs, color: colors.textPrimary }}>B(L) (cm)</th>
-                        <th style={{ padding: `${spacing.md}px ${spacing.sm}px`, textAlign: 'left', fontSize: fontSizes.xs, color: colors.textPrimary }}>B(R) (cm)</th>
+                        <th style={{ padding: `${spacing.md}px ${spacing.sm}px`, textAlign: 'left', fontSize: fontSizes.xs, color: colors.textPrimary }}>{t('calculator:ushape_arm_a_cm')}</th>
+                        <th style={{ padding: `${spacing.md}px ${spacing.sm}px`, textAlign: 'left', fontSize: fontSizes.xs, color: colors.textPrimary }}>{t('calculator:ushape_arm_bl_cm')}</th>
+                        <th style={{ padding: `${spacing.md}px ${spacing.sm}px`, textAlign: 'left', fontSize: fontSizes.xs, color: colors.textPrimary }}>{t('calculator:ushape_arm_br_cm')}</th>
                         <th style={{ padding: `${spacing.md}px ${spacing.sm}px`, textAlign: 'left', fontSize: fontSizes.xs, color: colors.textPrimary }}>{t('calculator:lshape_table_total_blocks')}</th>
                         <th style={{ padding: `${spacing.md}px ${spacing.sm}px`, textAlign: 'left', fontSize: fontSizes.xs, color: colors.textPrimary }}>{t('calculator:lshape_table_total_rows')}</th>
                       </tr>
@@ -1355,7 +1354,7 @@ const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
                             <td style={{ padding: `${spacing.md}px ${spacing.sm}px`, color: colors.textPrimary }}>
                               {stepCourseDetails.map((course, idx) => (
                                 <div key={idx} style={{ color: course.needsCutting ? colors.amber : colors.textPrimary }}>
-                                  {course.blocks} (A:{course.armA_blocks || 0} + BL:{course.armBL_blocks || 0} + BR:{course.armBR_blocks || 0})
+                                  {t('calculator:ushape_blocks_format', { total: course.blocks, a: course.armA_blocks || 0, bl: course.armBL_blocks || 0, br: course.armBR_blocks || 0 })}
                                   {course.needsCutting && " ✂️"}
                                 </div>
                               ))}
@@ -1366,31 +1365,6 @@ const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
                               ))}
                             </td>
                           </tr>
-                        {stepCourseDetails.some((c: any) => c.calculationLog?.length) && (
-                          <tr key={`log-${index}`}>
-                            <td colSpan={8} style={{ padding: `${0}px ${spacing.sm}px ${spacing.md}px`, borderTop: 'none', verticalAlign: 'top' }}>
-                              <button
-                                type="button"
-                                onClick={() => setShowCalculationLog(prev => prev === stepNumber ? false : stepNumber)}
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: spacing.xs, fontSize: fontSizes.xs,
-                                  color: colors.accentBlue, marginTop: spacing.xs, background: 'none', border: 'none', cursor: 'pointer', fontFamily: fonts.body,
-                                }}
-                              >
-                                {showCalculationLog === stepNumber ? <ChevronUp style={{ width: 12, height: 12 }} /> : <ChevronDown style={{ width: 12, height: 12 }} />}
-                                {showCalculationLog === stepNumber ? 'Ukryj obliczenia' : 'Pokaż pełne obliczenia'}
-                              </button>
-                              {showCalculationLog === stepNumber && stepCourseDetails.find((c: any) => c.calculationLog?.length)?.calculationLog && (
-                                <pre style={{
-                                  marginTop: spacing.md, padding: spacing.sm, background: colors.bgCardInner, borderRadius: radii.lg,
-                                  fontSize: fontSizes.xs, color: colors.textMuted, fontFamily: fonts.mono, whiteSpace: 'pre-wrap', overflowX: 'auto',
-                                }}>
-                                  {stepCourseDetails.find((c: any) => c.calculationLog?.length)?.calculationLog?.join('\n')}
-                                </pre>
-                              )}
-                            </td>
-                          </tr>
-                        )}
                         </React.Fragment>
                         );
                       })}
@@ -1416,7 +1390,7 @@ const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
                     {taskBreakdown && taskBreakdown.length > 0 ? (
                       taskBreakdown.map((task: any, index: number) => (
                         <li key={index} style={{ fontSize: fontSizes.sm, color: colors.textMuted, fontFamily: fonts.body }}>
-                          <span style={{ fontWeight: fontWeights.medium }}>{translateTaskName(task.task, t)}</span> x {task.amount} {translateUnit(task.unit, t)} = {task.hours.toFixed(2)} hours
+                          <span style={{ fontWeight: fontWeights.medium }}>{translateTaskName(task.task, t)}</span> x {task.amount} {translateUnit(task.unit, t)} = {task.hours.toFixed(2)} {t('calculator:hours_label')}
                         </li>
                       ))
                     ) : (
@@ -1450,7 +1424,7 @@ const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
                           borderTop: `1px solid ${colors.borderDefault}`
                         }}>
                           <td style={{ padding: `${spacing.lg}px ${spacing.xl}px`, whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>
-                            {material.name}
+                            {translateMaterialName(material.name, t)}
                           </td>
                           <td style={{ padding: `${spacing.lg}px ${spacing.xl}px`, whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>
                             {material.amount.toFixed(2)}
@@ -1481,10 +1455,10 @@ const UShapeStairCalculator: React.FC<UShapeStairCalculatorProps> = ({
                 onChange={(e) => setSlabType(e.target.value)}
                 style={{ ...inputStyle, cursor: 'pointer' }}
               >
-                <option value="porcelain">Porcelain</option>
-                <option value="granite">Granite</option>
-                <option value="sandstone">Sandstone</option>
-                <option value="concrete">Concrete</option>
+                <option value="porcelain">{t('calculator:porcelain')}</option>
+                <option value="granite">{t('calculator:granite')}</option>
+                <option value="sandstone">{t('calculator:sandstones')}</option>
+                <option value="concrete">{t('calculator:concrete')}</option>
               </select>
             </div>
           </Card>

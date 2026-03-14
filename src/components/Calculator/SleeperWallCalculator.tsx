@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 
 interface SleeperWallCalculatorProps {
   onResultsChange?: (results: CalculationResult) => void;
@@ -813,7 +813,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
                     {result.materials.map((material, index) => (
                       <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.name}
+                          {translateMaterialName(material.name, t)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                           {material.amount.toFixed(2)}

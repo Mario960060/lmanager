@@ -1629,7 +1629,6 @@ const ProjectCreating = () => {
                   <DatePicker
                     value={formData.start_date}
                     onChange={(v) => setFormData(prev => ({ ...prev, start_date: v }))}
-                    placeholder={t('project:dd_mm_yyyy')}
                     required
                     className="mt-1 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                   />
@@ -1640,7 +1639,6 @@ const ProjectCreating = () => {
                   <DatePicker
                     value={formData.end_date}
                     onChange={(v) => setFormData(prev => ({ ...prev, end_date: v }))}
-                    placeholder={t('project:dd_mm_yyyy')}
                     minDate={formData.start_date}
                     required
                     className="mt-1 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -1775,14 +1773,14 @@ const ProjectCreating = () => {
                     {task.results.taskBreakdown?.map((breakdown, i) => (
                       <div key={i} className="flex justify-between" style={{ color: colors.textSecondary }}>
                         <span>{breakdown.name || breakdown.task}</span>
-                        <span>{breakdown.hours.toFixed(2)} {t('utilities:hours')}</span>
+                        <span>{breakdown.hours.toFixed(2)} {t('common:hrs_abbr')}</span>
                       </div>
                     ))}
                     <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${colors.borderDefault}` }}>
                       <div className="flex justify-between font-medium" style={{ color: colors.textPrimary }}>
                         <span>{t('utilities:total_labor_hours')}</span>
                         <span>
-                          {task.results.taskBreakdown?.reduce((sum, breakdown) => sum + (breakdown.hours || 0), 0).toFixed(2) || '0.00'} {t('utilities:hours')}
+                          {task.results.taskBreakdown?.reduce((sum, breakdown) => sum + (breakdown.hours || 0), 0).toFixed(2) || '0.00'} {t('common:hrs_abbr')}
                         </span>
                       </div>
                     </div>
@@ -2328,7 +2326,7 @@ const ProjectCreating = () => {
           <div className="mb-6">
             <div className="flex justify-between text-white font-medium">
               <span>{t('project:total_labor_hours')}</span>
-              <span>{calculateTotalHours().toFixed(2)} hours</span>
+              <span>{calculateTotalHours().toFixed(2)} {t('common:hrs_abbr')}</span>
                           </div>
                             </div>
 

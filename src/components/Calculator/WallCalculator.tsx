@@ -5,7 +5,7 @@ import { Info, Check, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { WallTileSidesSelector } from '../../projectmanagement/canvacreator/objectCard/WallTileSidesSelector';
 import TileInstallationCalculator from './TileInstallationCalculator';
 import CopingInstallationCalculator from './CopingInstallationCalculator';
@@ -1790,7 +1790,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
               <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{type === 'block4' ? t('calculator:block4_wall_label') : type === 'block7' ? t('calculator:block7_wall_label') : t('calculator:wall_label')} — {t('calculator:task_breakdown_label')}</h4>
               <ul style={{ listStyle: 'disc', paddingLeft: 20, color: colors.textPrimaryLight, fontSize: '0.85rem' }}>
                 {result.taskBreakdown.map((task, i) => (
-                  <li key={i}><span style={{ fontWeight: 500 }}>{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours</li>
+                  <li key={i}><span style={{ fontWeight: 500 }}>{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}</li>
                 ))}
               </ul>
             </div>
@@ -1799,7 +1799,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{t('calculator:coping_installation_calculator_title')} — {t('calculator:task_breakdown_label')}</h4>
                 <ul style={{ listStyle: 'disc', paddingLeft: 20, color: colors.textPrimaryLight, fontSize: '0.85rem' }}>
                   {copingInstallationResults.taskBreakdown.map((task: any, i: number) => (
-                    <li key={i}><span style={{ fontWeight: 500 }}>{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours</li>
+                    <li key={i}><span style={{ fontWeight: 500 }}>{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}</li>
                   ))}
                 </ul>
               </div>
@@ -1809,7 +1809,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{t('calculator:tile_installation_label')} — {t('calculator:task_breakdown_label')}</h4>
                 <ul style={{ listStyle: 'disc', paddingLeft: 20, color: colors.textPrimaryLight, fontSize: '0.85rem' }}>
                   {tileInstallationResults.taskBreakdown.map((task: any, i: number) => (
-                    <li key={i}><span style={{ fontWeight: 500 }}>{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours</li>
+                    <li key={i}><span style={{ fontWeight: 500 }}>{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}</li>
                   ))}
                 </ul>
               </div>
@@ -1820,17 +1820,17 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
                     <tr style={{ background: colors.bgDeep }}>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>Material</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>Quantity</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>Unit</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>Price</th>
-                      <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>Total</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>{t('calculator:table_material_header')}</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>{t('calculator:table_quantity_header')}</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>{t('calculator:table_unit_header')}</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>{t('calculator:table_price_per_unit_header')}</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', color: colors.textCool, fontWeight: 600 }}>{t('calculator:table_total_header')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {result.materials.map((m, i) => (
                       <tr key={i} style={{ borderBottom: `1px solid ${colors.bgDeepBorder}` }}>
-                        <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.name}</td>
+                        <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateMaterialName(m.name, t)}</td>
                         <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.amount.toFixed(2)}</td>
                         <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateUnit(m.unit, t)}</td>
                         <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : t('calculator:na')}</td>
@@ -1860,7 +1860,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                     <tbody>
                       {copingInstallationResults.materials.map((m: any, i: number) => (
                         <tr key={i} style={{ borderBottom: `1px solid ${colors.bgDeepBorder}` }}>
-                          <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.name}</td>
+                          <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateMaterialName(m.name, t)}</td>
                           <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.amount?.toFixed?.(2) ?? m.quantity}</td>
                           <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateUnit(m.unit, t)}</td>
                         </tr>
@@ -1885,7 +1885,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                     <tbody>
                       {tileInstallationResults.materials.map((m: any, i: number) => (
                         <tr key={i} style={{ borderBottom: `1px solid ${colors.bgDeepBorder}` }}>
-                          <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.name}</td>
+                          <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateMaterialName(m.name, t)}</td>
                           <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.amount?.toFixed?.(2) ?? m.quantity}</td>
                           <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateUnit(m.unit, t)}</td>
                         </tr>
@@ -2166,7 +2166,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
               <ul className="space-y-1 pl-5 list-disc">
                 {result.taskBreakdown.map((task, index) => (
                   <li key={index} className="text-sm">
-                    <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours
+                    <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}
                   </li>
                 ))}
               </ul>
@@ -2180,19 +2180,19 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 <thead className="bg-gray-50">
                   <tr>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Material
+                      {t('calculator:table_material_header')}
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Quantity
+                      {t('calculator:table_quantity_header')}
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Unit
+                      {t('calculator:table_unit_header')}
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Price per Unit
+                      {t('calculator:table_price_per_unit_header')}
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      Total Price
+                      {t('calculator:table_total_header')}
                     </th>
                   </tr>
                 </thead>
@@ -2200,7 +2200,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                   {result.materials.map((material, index) => (
                     <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {material.name}
+                        {translateMaterialName(material.name, t)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                         {material.amount.toFixed(2)}

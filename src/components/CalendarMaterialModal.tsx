@@ -23,7 +23,7 @@ interface CalendarMaterialModalProps {
 }
 
 const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, date, onClose }) => {
-  const { t, i18n } = useTranslation(['common', 'form', 'utilities', 'event']);
+  const { t, i18n } = useTranslation(['common', 'form', 'utilities', 'event', 'project']);
   const dateLocale = i18n.language === 'pl' ? pl : undefined;
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -95,9 +95,14 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['calendar_materials', format(date, 'yyyy-MM-dd'), companyId] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard_calendar_materials', companyId] });
+      // Use broad keys - DayDetailsModal uses Date object in key, Dashboard uses different key structure
+      queryClient.invalidateQueries({ queryKey: ['calendar_materials'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard_calendar_materials'] });
       onClose();
+    },
+    onError: (error) => {
+      console.error('Failed to add calendar material:', error);
+      alert(t('project:failed_add_material'));
     }
   });
 

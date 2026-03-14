@@ -12,6 +12,7 @@ import {
 } from '../../themes/designTokens';
 import {
   TextInput,
+  CalculatorInputGrid,
   SelectDropdown,
   Button,
   Card,
@@ -132,11 +133,11 @@ const AggregateCalculator: React.FC<AggregateCalculatorProps> = ({ onResultsChan
           onChange={(val) => setSelectedMaterial(materials.find((m) => translateMaterialName(m.name, t) === val) || materials[0])}
           placeholder={t('calculator:input_select_material')}
         />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+        <CalculatorInputGrid columns={3}>
           <TextInput label={t('calculator:input_length_m')} value={length} onChange={setLength} placeholder="0" unit="m" />
           <TextInput label={t('calculator:input_width_m')} value={width} onChange={setWidth} placeholder="0" unit="m" />
           <TextInput label={t('calculator:input_depth_cm')} value={depth} onChange={setDepth} placeholder={t('calculator:placeholder_enter_depth_cm')} unit="cm" />
-        </div>
+        </CalculatorInputGrid>
         <Button onClick={calculate} variant="primary" fullWidth>
           {t('calculator:calculate_button')}
         </Button>

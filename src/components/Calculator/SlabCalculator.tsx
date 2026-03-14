@@ -6,7 +6,7 @@ import { useAuthStore } from '../../lib/store';
 import SlabFrameCalculator from './SlabFrameCalculator';
 import type {} from 'react/jsx-runtime';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
 import {
@@ -21,6 +21,7 @@ import {
 } from '../../themes/designTokens';
 import {
   TextInput,
+  CalculatorInputGrid,
   SelectDropdown,
   Checkbox,
   Button,
@@ -179,18 +180,23 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     sides: Array<{ length: number; slabs: number }>;
     taskName: string;
     task_id?: string;
-    frameSlabsName: string;
+    frameSlabsName?: string;
+    framePieceLengthCm?: string;
+    framePieceWidthCm?: string;
     cuttingHours: number;
     cuttingTaskName: string;
     cutting_task_id?: string;
     transportTime?: number;
   } | null>(null);
 
+  // Ref to avoid infinite loop: only call onInputsChange when payload actually changed
+  const lastInputsPayloadRef = useRef<string>('');
+
   useEffect(() => {
     if (onInputsChange && isInProjectCreating) {
       const selectedSlab = taskTemplates?.find((t: SlabType) => t.id?.toString() === selectedSlabId);
       const selectedSlabName = selectedSlab?.name ?? "";
-      onInputsChange({
+      const payload = {
         area: area,
         tape1ThicknessCm,
         mortarThicknessCm,
@@ -205,7 +211,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         framePieceWidthCm: addFrameBoard ? framePieceWidthCm : undefined,
         frameJointType: addFrameBoard ? frameJointType : undefined,
         frameSidesEnabled: addFrameBoard ? frameSidesEnabled : undefined,
-      });
+      };
+      const payloadStr = JSON.stringify(payload);
+      if (payloadStr !== lastInputsPayloadRef.current) {
+        lastInputsPayloadRef.current = payloadStr;
+        onInputsChange(payload);
+      }
     }
   }, [area, tape1ThicknessCm, mortarThicknessCm, slabThicknessCm, selectedSlabId, canvasCutSlabs, soilExcessCm, selectedGroutingId, addFrameBoard, framePieceLengthCm, framePieceWidthCm, frameJointType, frameSidesEnabled, onInputsChange, isInProjectCreating, taskTemplates?.length]);
 
@@ -277,7 +288,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       if (error) throw error;
       return data;
     },
-    enabled: !!companyId && isInProjectCreating && addFrameBoard
+    enabled: !!companyId
   });
   const frameTaskTemplates = useMemo(() => frameTaskTemplatesData ?? [], [frameTaskTemplatesData]);
 
@@ -363,17 +374,24 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       }
     }
     const totalFrameAreaM2 = sides.reduce((sum, s) => sum + s.length * widthM, 0);
-    setFrameResults({
+    const nextResults = {
       totalFrameSlabs,
       totalHours: totalHours + cuttingHours,
       totalFrameAreaM2,
       sides,
       taskName: frameTask?.name || taskName,
       task_id: frameTask?.id,
-      frameSlabsName: `Frame slabs ${framePieceLengthCm}x${framePieceWidthCm}`,
+      framePieceLengthCm,
+      framePieceWidthCm,
       cuttingHours,
       cuttingTaskName,
       cutting_task_id: cuttingTaskId,
+    };
+    setFrameResults((prev) => {
+      if (!prev || prev.totalFrameSlabs !== nextResults.totalFrameSlabs || prev.totalHours !== nextResults.totalHours || prev.totalFrameAreaM2 !== nextResults.totalFrameAreaM2) {
+        return nextResults;
+      }
+      return prev;
     });
   }, [isInProjectCreating, addFrameBoard, shape, frameSidesEnabled, shape?.calculatorInputs?.vizGroutWidthMm, shape?.calculatorInputs?.vizGroutWidth, framePieceLengthCm, framePieceWidthCm, frameTaskTemplates, cuttingTasks, taskTemplates, selectedSlabId]);
 
@@ -398,28 +416,30 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
   const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
 
   useEffect(() => {
-    if (savedInputs?.addFrameBoard !== undefined) setAddFrameBoard(!!savedInputs.addFrameBoard);
-    if (savedInputs?.framePieceLengthCm != null) setFramePieceLengthCm(String(savedInputs.framePieceLengthCm));
-    if (savedInputs?.framePieceWidthCm != null) setFramePieceWidthCm(String(savedInputs.framePieceWidthCm));
-    if (savedInputs?.frameJointType === 'butt' || savedInputs?.frameJointType === 'miter45') setFrameJointType(savedInputs.frameJointType);
-    if (Array.isArray(savedInputs?.frameSidesEnabled)) setFrameSidesEnabled(savedInputs.frameSidesEnabled);
+    if (savedInputs?.addFrameBoard !== undefined) setAddFrameBoard((prev) => (!!savedInputs.addFrameBoard !== prev ? !!savedInputs.addFrameBoard : prev));
+    if (savedInputs?.framePieceLengthCm != null) setFramePieceLengthCm((prev) => (String(savedInputs.framePieceLengthCm) !== prev ? String(savedInputs.framePieceLengthCm) : prev));
+    if (savedInputs?.framePieceWidthCm != null) setFramePieceWidthCm((prev) => (String(savedInputs.framePieceWidthCm) !== prev ? String(savedInputs.framePieceWidthCm) : prev));
+    if (savedInputs?.frameJointType === 'butt' || savedInputs?.frameJointType === 'miter45') setFrameJointType((prev) => (savedInputs.frameJointType !== prev ? savedInputs.frameJointType : prev));
+    if (Array.isArray(savedInputs?.frameSidesEnabled)) {
+      const next = savedInputs.frameSidesEnabled;
+      setFrameSidesEnabled((prev) => (JSON.stringify(prev) !== JSON.stringify(next) ? next : prev));
+    }
   }, [savedInputs?.addFrameBoard, savedInputs?.framePieceLengthCm, savedInputs?.framePieceWidthCm, savedInputs?.frameJointType, savedInputs?.frameSidesEnabled]);
 
   useEffect(() => {
-    if (savedInputs?.tape1ThicknessCm != null && savedInputs.tape1ThicknessCm !== '') setTape1ThicknessCm(String(savedInputs.tape1ThicknessCm));
-    if (savedInputs?.mortarThicknessCm != null && savedInputs.mortarThicknessCm !== '') setMortarThicknessCm(String(savedInputs.mortarThicknessCm));
-    if (savedInputs?.slabThicknessCm != null && savedInputs.slabThicknessCm !== '') setSlabThicknessCm(String(savedInputs.slabThicknessCm));
+    if (savedInputs?.tape1ThicknessCm != null && savedInputs.tape1ThicknessCm !== '') setTape1ThicknessCm((prev) => (String(savedInputs.tape1ThicknessCm) !== prev ? String(savedInputs.tape1ThicknessCm) : prev));
+    if (savedInputs?.mortarThicknessCm != null && savedInputs.mortarThicknessCm !== '') setMortarThicknessCm((prev) => (String(savedInputs.mortarThicknessCm) !== prev ? String(savedInputs.mortarThicknessCm) : prev));
+    if (savedInputs?.slabThicknessCm != null && savedInputs.slabThicknessCm !== '') setSlabThicknessCm((prev) => (String(savedInputs.slabThicknessCm) !== prev ? String(savedInputs.slabThicknessCm) : prev));
   }, [savedInputs?.tape1ThicknessCm, savedInputs?.mortarThicknessCm, savedInputs?.slabThicknessCm]);
 
   // Sync transport props to local state when in ProjectCreating (one-way: parent → child)
   useEffect(() => {
-    if (isInProjectCreating) {
-      if (propCalculateTransport !== undefined) setCalculateTransport(propCalculateTransport);
-      if (propSelectedTransportCarrier !== undefined) setSelectedTransportCarrier(propSelectedTransportCarrier);
-      if (propTransportDistance !== undefined) {
-        setTransportDistance(propTransportDistance);
-        setMaterialTransportDistance(propTransportDistance);
-      }
+    if (!isInProjectCreating) return;
+    if (propCalculateTransport !== undefined) setCalculateTransport((prev) => (propCalculateTransport !== prev ? propCalculateTransport : prev));
+    if (propSelectedTransportCarrier !== undefined) setSelectedTransportCarrier((prev) => (propSelectedTransportCarrier !== prev ? propSelectedTransportCarrier : prev));
+    if (propTransportDistance !== undefined) {
+      setTransportDistance((prev) => (propTransportDistance !== prev ? propTransportDistance : prev));
+      setMaterialTransportDistance((prev) => (propTransportDistance !== prev ? propTransportDistance : prev));
     }
   }, [
     isInProjectCreating,
@@ -585,37 +605,23 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     }
   };
 
-  // Add equipment fetching (carriers filtered by event_tasks - same logic as canvas/project creation)
+  // Add equipment fetching (same logic as Canvas/EquipmentPanel - fetch all carriers without filtering)
   useEffect(() => {
     const fetchEquipment = async () => {
       try {
         const companyId = useAuthStore.getState().getCompanyId();
         if (!companyId) return;
 
-        const [excRes, carRes, tasksRes] = await Promise.all([
+        const [excRes, carRes] = await Promise.all([
           supabase.from('setup_digging').select('*').eq('type', 'excavator').eq('company_id', companyId),
           supabase.from('setup_digging').select('*').eq('type', 'barrows_dumpers').eq('company_id', companyId),
-          supabase.from('event_tasks').select('name').eq('company_id', companyId),
         ]);
 
         if (excRes.error) throw excRes.error;
         if (carRes.error) throw carRes.error;
-        if (tasksRes.error) throw tasksRes.error;
-
-        const allCarriers = carRes.data || [];
-        const taskNames = (tasksRes.data || []).map((t) => t.name);
-        const validSizes = new Set<number>();
-        const re = /(\d+(?:\.\d+)?)t\b/g;
-        for (const name of taskNames) {
-          let m: RegExpExecArray | null;
-          re.lastIndex = 0;
-          while ((m = re.exec(name)) !== null) validSizes.add(parseFloat(m[1]));
-        }
-        const filtered =
-          validSizes.size === 0 ? allCarriers : allCarriers.filter((c) => c['size (in tones)'] != null && validSizes.has(c['size (in tones)']));
 
         setExcavators(excRes.data || []);
-        setCarriersLocal(filtered);
+        setCarriersLocal(carRes.data || []);
       } catch (error) {
         console.error('Error fetching equipment:', error);
       }
@@ -1209,8 +1215,10 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       
       // Add frame slabs to materials if applicable
       if (addFrameBoard && frameResults && frameResults.totalFrameSlabs > 0) {
+        const frameLen = frameResults.framePieceLengthCm ?? framePieceLengthCm;
+        const frameWid = frameResults.framePieceWidthCm ?? framePieceWidthCm;
         materialsList.push({
-          name: frameResults.frameSlabsName,
+          name: t('calculator:frame_slabs_format', { length: frameLen, width: frameWid }),
           amount: frameResults.totalFrameSlabs,
           unit: 'pieces',
           price_per_unit: null,
@@ -1365,7 +1373,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         )}
         
         {!compactForPath && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+          <CalculatorInputGrid columns={2}>
             <SelectDropdown
               label={t('calculator:slab_type_label')}
               value={selectedSlabName}
@@ -1388,7 +1396,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
               placeholder={t('calculator:select_grouting_method_placeholder')}
               helperText={t('calculator:grouting_method_note_info')}
             />
-          </div>
+          </CalculatorInputGrid>
         )}
         
         {/* Compactor Type Selection - hidden in project mode (set in project card) and path mode */}
@@ -1476,15 +1484,15 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
           )}
           {addFrameBoard && !isInProjectCreating && (
             <Button onClick={() => setIsFrameModalOpen(true)} variant="primary" style={{ marginTop: spacing.lg, fontSize: fontSizes.md }}>
-              Configure Frame Slabs
+              {t('calculator:configure_frame_slabs_button')}
             </Button>
           )}
           {frameResults && (
             <div style={{ marginTop: spacing.md, padding: spacing.base, background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>
               <p style={{ fontSize: fontSizes.base, color: colors.textSecondary, fontFamily: fonts.body }}>
-                <strong>{frameResults.frameSlabsName}:</strong> {frameResults.totalFrameSlabs} pieces, {frameResults.totalHours.toFixed(2)} hours
+                <strong>{t('calculator:frame_slabs_format', { length: frameResults.framePieceLengthCm ?? framePieceLengthCm, width: frameResults.framePieceWidthCm ?? framePieceWidthCm })}:</strong> {frameResults.totalFrameSlabs} pieces, {frameResults.totalHours.toFixed(2)} {t('calculator:hours_label')}
                 <br />
-                <strong>Frame Area:</strong> {frameResults.totalFrameAreaM2.toFixed(2)} m²
+                <strong>{t('calculator:frame_area_label')}:</strong> {frameResults.totalFrameAreaM2.toFixed(2)} m²
               </p>
             </div>
           )}
@@ -1715,7 +1723,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
                       <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>
                         {task.hours.toFixed(2)}
                       </span>
-                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>hrs</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
                     </div>
                   </div>
                 ))}
@@ -1724,14 +1732,14 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
             
             <DataTable
               columns={[
-                { key: 'name', label: 'MATERIAL', width: '2fr' },
-                { key: 'quantity', label: 'QUANTITY', width: '1fr' },
-                { key: 'unit', label: 'UNIT', width: '1fr' },
-                { key: 'price', label: 'PRICE/UNIT', width: '1fr' },
-                { key: 'total', label: 'TOTAL', width: '1fr' },
+                { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+                { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+                { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+                { key: 'price', label: t('calculator:table_price_per_unit_header'), width: '1fr' },
+                { key: 'total', label: t('calculator:table_total_header'), width: '1fr' },
               ]}
               rows={materials.map((m) => ({
-                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{m.name}</span>,
+                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName(m.name, t)}</span>,
                 quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.amount.toFixed(2)}</span>,
                 unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
                 price: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : 'N/A'}</span>,

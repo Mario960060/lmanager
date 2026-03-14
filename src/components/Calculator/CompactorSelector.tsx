@@ -113,7 +113,7 @@ const CompactorSelector: React.FC<CompactorSelectorProps> = ({
         <option value="">{t('calculator:select_compactor_type')}</option>
         {COMPACTORS.map((compactor) => (
           <option key={compactor.id} value={compactor.id}>
-            {compactor.name} ({compactor.weightRange})
+            {t(`calculator:compactor_${compactor.id}`)} ({compactor.weightRange})
           </option>
         ))}
       </select>

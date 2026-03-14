@@ -18,7 +18,7 @@ import { parseSlabDimensions } from "../visualization/slabPattern";
 import { autoLayoutGrassPieces, autoJoinAdjacentPieces, validateCoverage, getEffectiveTotalArea, getEffectivePieceDimensionsForInput, type GrassPiece } from "../visualization/grassRolls";
 import { computePreparation } from "../preparationLogic";
 import { getCalculatorInputDefaults } from "../../../lib/materialUsageDefaults";
-import { translateUnit } from "../../../lib/translationMap";
+import { translateUnit, translateMaterialName, translateTaskName } from "../../../lib/translationMap";
 
 import WallCalculator from "../../../components/Calculator/WallCalculator";
 import SleeperWallCalculator from "../../../components/Calculator/SleeperWallCalculator";
@@ -527,22 +527,22 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
               {calculatorResults.hours_worked != null && (
                 <div style={{ color: C.text }}>{t("project:object_card_total_hours")} <span style={{ color: "#2ecc71", fontWeight: 600 }}>{Number(calculatorResults.hours_worked).toFixed(2)} h</span></div>
               )}
+              {calculatorResults.taskBreakdown && calculatorResults.taskBreakdown.length > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ color: C.textDim, marginBottom: 4 }}>{t("project:object_card_tasks")}</div>
+                  {calculatorResults.taskBreakdown.map((tb: any, i: number) => (
+                    <div key={i} style={{ color: C.text, paddingLeft: 8 }}>
+                      {translateTaskName(tb.task ?? tb.name, t)}: {Number(tb.hours).toFixed(2)} h
+                    </div>
+                  ))}
+                </div>
+              )}
               {calculatorResults.materials && calculatorResults.materials.length > 0 && (
                 <div style={{ marginTop: 6 }}>
                   <div style={{ color: C.textDim, marginBottom: 4 }}>{t("project:object_card_materials")}</div>
                   {calculatorResults.materials.map((m: any, i: number) => (
                     <div key={i} style={{ color: C.text, paddingLeft: 8 }}>
-                      {m.name}: {m.quantity ?? m.amount} {translateUnit(m.unit, t)}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {calculatorResults.taskBreakdown && calculatorResults.taskBreakdown.length > 0 && (
-                <div style={{ marginTop: 6 }}>
-                  <div style={{ color: C.textDim, marginBottom: 4 }}>{t("project:object_card_tasks")}</div>
-                  {calculatorResults.taskBreakdown.map((t: any, i: number) => (
-                    <div key={i} style={{ color: C.text, paddingLeft: 8 }}>
-                      {t.task ?? t.name}: {Number(t.hours).toFixed(2)} h
+                      {translateMaterialName(m.name, t)}: {m.quantity ?? m.amount} {translateUnit(m.unit, t)}
                     </div>
                   ))}
                 </div>

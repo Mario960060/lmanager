@@ -16,7 +16,7 @@ interface SlabGapOption {
 
 interface SlabCuttingOption {
   type: string;
-  description: string;
+  descriptionKey: string;
 }
 
 interface StepDimension {
@@ -106,23 +106,23 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
   ];
 
   const slabPlacementOptions = [
-    { id: 'longWay', label: 'Slabs long way' },
-    { id: 'sideWays', label: 'Slabs side ways' },
+    { id: 'longWay', labelKey: 'calculator:lshape_slabs_long_way' },
+    { id: 'sideWays', labelKey: 'calculator:lshape_slabs_side_ways' },
   ];
 
   const cuttingOptions: SlabCuttingOption[] = [
-    { type: 'oneCut', description: '1 cut' },
-    { type: 'twoCuts', description: '2 cuts (same on both sides)' },
+    { type: 'oneCut', descriptionKey: 'calculator:lshape_cut_1' },
+    { type: 'twoCuts', descriptionKey: 'calculator:lshape_cut_2' },
   ];
 
   const cornerJointOptions = [
-    { id: 'buttJoint', label: 'Butt joint (one arm overlaps)' },
-    { id: 'mitre45', label: '45° mitre cut' },
+    { id: 'buttJoint', labelKey: 'calculator:lshape_corner_butt_joint' },
+    { id: 'mitre45', labelKey: 'calculator:lshape_corner_mitre45' },
   ];
 
   const armDominanceOptions = [
-    { id: 'armA', label: 'Arm A dominates (covers corner)' },
-    { id: 'armB', label: 'Arm B dominates (covers corner)' },
+    { id: 'armA', labelKey: 'calculator:lshape_arm_a_dominates' },
+    { id: 'armB', labelKey: 'calculator:lshape_arm_b_dominates' },
   ];
 
   // ─── State ──────────────────────────────────────────────────────────────
@@ -1309,18 +1309,15 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
             <h4 className="text-lg font-medium text-white mb-2">{t('calculator:slab_dimensions_label')}</h4>
             <div className="space-y-2">
               {slabDimensions.map((slab) => (
-                <div key={slab.size} className="flex items-center">
+                <label key={slab.size} className="flex items-center cursor-pointer min-h-[44px] py-2">
                   <input
                     type="radio"
-                    id={`lshape-slab-${slab.size}`}
                     checked={selectedSlabDimension === slab.size}
                     onChange={() => setSelectedSlabDimension(slab.size)}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
-                  <label htmlFor={`lshape-slab-${slab.size}`} className="ml-2 text-sm text-gray-300">
-                    {slab.size} cm
-                  </label>
-                </div>
+                  <span className="ml-2 text-sm text-gray-300">{slab.size} cm</span>
+                </label>
               ))}
             </div>
           </div>
@@ -1330,39 +1327,33 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
             <h4 className="text-lg font-medium text-white mb-2">{t('calculator:fronts_and_front_steps_label')}</h4>
             <div className="space-y-2">
               {slabPlacementOptions.map((option) => (
-                <div key={option.id} className="flex items-center">
+                <label key={option.id} className="flex items-center cursor-pointer min-h-[44px] py-2">
                   <input
                     type="radio"
-                    id={`lshape-placement-${option.id}`}
                     checked={selectedPlacement === option.id}
                     onChange={() => setSelectedPlacement(option.id)}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
-                  <label htmlFor={`lshape-placement-${option.id}`} className="ml-2 text-sm text-gray-300">
-                    {option.label}
-                  </label>
-                </div>
+                  <span className="ml-2 text-sm text-gray-300">{t(option.labelKey)}</span>
+                </label>
               ))}
             </div>
           </div>
 
           {/* Corner joint type */}
           <div>
-            <h4 className="text-lg font-medium text-white mb-2">Corner Joint Type (Top Slabs)</h4>
+            <h4 className="text-lg font-medium text-white mb-2">{t('calculator:lshape_slabs_corner_joint_type')}</h4>
             <div className="space-y-2">
               {cornerJointOptions.map((option) => (
-                <div key={option.id} className="flex items-center">
+                <label key={option.id} className="flex items-center cursor-pointer min-h-[44px] py-2">
                   <input
                     type="radio"
-                    id={`lshape-corner-${option.id}`}
                     checked={cornerJoint === option.id}
                     onChange={() => setCornerJoint(option.id)}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
-                  <label htmlFor={`lshape-corner-${option.id}`} className="ml-2 text-sm text-gray-300">
-                    {option.label}
-                  </label>
-                </div>
+                  <span className="ml-2 text-sm text-gray-300">{t(option.labelKey)}</span>
+                </label>
               ))}
             </div>
           </div>
@@ -1370,21 +1361,18 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
           {/* Top dominant arm (only for butt joint) */}
           {cornerJoint === 'buttJoint' && (
             <div>
-              <h4 className="text-lg font-medium text-white mb-2">Top Slab Dominant Arm</h4>
+              <h4 className="text-lg font-medium text-white mb-2">{t('calculator:lshape_top_slab_dominant_arm')}</h4>
               <div className="space-y-2">
                 {armDominanceOptions.map((option) => (
-                  <div key={option.id} className="flex items-center">
+                  <label key={option.id} className="flex items-center cursor-pointer min-h-[44px] py-2">
                     <input
                       type="radio"
-                      id={`lshape-topdom-${option.id}`}
                       checked={topDominantArm === option.id}
                       onChange={() => setTopDominantArm(option.id)}
                       className="h-4 w-4 text-blue-600 rounded"
                     />
-                    <label htmlFor={`lshape-topdom-${option.id}`} className="ml-2 text-sm text-gray-300">
-                      {option.label}
-                    </label>
-                  </div>
+                    <span className="ml-2 text-sm text-gray-300">{t(option.labelKey)}</span>
+                  </label>
                 ))}
               </div>
             </div>
@@ -1392,21 +1380,18 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
 
           {/* Front dominant arm */}
           <div>
-            <h4 className="text-lg font-medium text-white mb-2">Front Slab Dominant Arm</h4>
+            <h4 className="text-lg font-medium text-white mb-2">{t('calculator:lshape_front_slab_dominant_arm')}</h4>
             <div className="space-y-2">
               {armDominanceOptions.map((option) => (
-                <div key={option.id} className="flex items-center">
+                <label key={option.id} className="flex items-center cursor-pointer min-h-[44px] py-2">
                   <input
                     type="radio"
-                    id={`lshape-frontdom-${option.id}`}
                     checked={frontDominantArm === option.id}
                     onChange={() => setFrontDominantArm(option.id)}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
-                  <label htmlFor={`lshape-frontdom-${option.id}`} className="ml-2 text-sm text-gray-300">
-                    {option.label}
-                  </label>
-                </div>
+                  <span className="ml-2 text-sm text-gray-300">{t(option.labelKey)}</span>
+                </label>
               ))}
             </div>
           </div>
@@ -1427,7 +1412,7 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
               step="0.1"
             />
             <p className="text-xs text-gray-400 mt-1">
-              Consumption: {((parseFloat(adhesiveThickness) || 0.5) * 12).toFixed(1)} kg/m²
+              {t('calculator:consumption_label')}: {((parseFloat(adhesiveThickness) || 0.5) * 12).toFixed(1)} kg/m²
             </p>
           </div>
 
@@ -1436,18 +1421,15 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
             <h4 className="text-lg font-medium text-white mb-2">{t('calculator:slab_cutting_long_ways_label')}</h4>
             <div className="space-y-2">
               {cuttingOptions.map((option) => (
-                <div key={option.type} className="flex items-center">
+                <label key={option.type} className="flex items-center cursor-pointer min-h-[44px] py-2">
                   <input
                     type="radio"
-                    id={`lshape-cutting-${option.type}`}
                     checked={selectedCutting === option.type}
                     onChange={() => setSelectedCutting(option.type)}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
-                  <label htmlFor={`lshape-cutting-${option.type}`} className="ml-2 text-sm text-gray-300">
-                    {option.description}
-                  </label>
-                </div>
+                  <span className="ml-2 text-sm text-gray-300">{t(option.descriptionKey)}</span>
+                </label>
               ))}
             </div>
           </div>
@@ -1462,9 +1444,9 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
           {/* Corner joint info */}
           <div className="bg-blue-900 text-white text-sm rounded p-3 mb-3 border border-blue-700">
             <p className="font-semibold">
-              Corner: {cornerJoint === 'mitre45' ? '45° Mitre Cut' : `Butt Joint (${topDominantArm === 'armA' ? 'Arm A' : 'Arm B'} dominant on top)`}
+              {t('calculator:lshape_corner_label')} {cornerJoint === 'mitre45' ? t('calculator:lshape_corner_info_mitre') : t('calculator:lshape_corner_info_butt', { arm: topDominantArm === 'armA' ? t('calculator:lshape_arm_a') : t('calculator:lshape_arm_b') })}
             </p>
-            <p>Front dominant: {frontDominantArm === 'armA' ? 'Arm A' : 'Arm B'}</p>
+            <p>{t('calculator:lshape_front_dominant', { arm: frontDominantArm === 'armA' ? t('calculator:lshape_arm_a') : t('calculator:lshape_arm_b') })}</p>
           </div>
 
           {/* Step-by-step slab details table */}
@@ -1472,12 +1454,12 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
             <table className="w-full bg-gray-700 rounded-lg text-sm">
               <thead>
                 <tr className="border-b border-gray-600">
-                  <th className="py-2 px-3 text-left text-gray-300">Step</th>
-                  <th className="py-2 px-3 text-left text-gray-300">Surface</th>
-                  <th className="py-2 px-3 text-left text-gray-300">Arm</th>
-                  <th className="py-2 px-3 text-left text-gray-300">Slabs</th>
-                  <th className="py-2 px-3 text-left text-gray-300">Dimensions</th>
-                  <th className="py-2 px-3 text-left text-gray-300">Surface Size (cm)</th>
+                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:step_label')}</th>
+                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_surface')}</th>
+                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_arm')}</th>
+                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_slabs')}</th>
+                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_dimensions')}</th>
+                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_surface_size_cm')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1487,11 +1469,11 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
                     <tr className="border-b border-gray-600">
                       <td className="py-2 px-3 text-gray-300" rowSpan={4}>
                         {result.step}
-                        {result.isPlatform && <span className="text-xs text-blue-400 block">Platform</span>}
+                        {result.isPlatform && <span className="text-xs text-blue-400 block">{t('calculator:lshape_platform_label')}</span>}
                       </td>
-                      <td className="py-2 px-3 text-gray-300">Top</td>
+                      <td className="py-2 px-3 text-gray-300">{t('calculator:lshape_top_surface')}</td>
                       <td className="py-2 px-3 text-gray-300">
-                        A {cornerJoint === 'buttJoint' && topDominantArm === 'armA' ? '★' : ''}
+                        {t('calculator:lshape_arm_a')} {cornerJoint === 'buttJoint' && topDominantArm === 'armA' ? '★' : ''}
                       </td>
                       <td className="py-2 px-3 text-gray-300">{result.topArmA_slabsNeeded}</td>
                       <td className="py-2 px-3">
@@ -1508,9 +1490,9 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
                     </tr>
                     {/* Top Arm B */}
                     <tr className="border-b border-gray-600">
-                      <td className="py-2 px-3 text-gray-300">Top</td>
+                      <td className="py-2 px-3 text-gray-300">{t('calculator:lshape_top_surface')}</td>
                       <td className="py-2 px-3 text-gray-300">
-                        B {cornerJoint === 'buttJoint' && topDominantArm === 'armB' ? '★' : ''}
+                        {t('calculator:lshape_arm_b')} {cornerJoint === 'buttJoint' && topDominantArm === 'armB' ? '★' : ''}
                       </td>
                       <td className="py-2 px-3 text-gray-300">{result.topArmB_slabsNeeded}</td>
                       <td className="py-2 px-3">
@@ -1527,9 +1509,9 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
                     </tr>
                     {/* Front Arm A */}
                     <tr className="border-b border-gray-600">
-                      <td className="py-2 px-3 text-gray-300">Front</td>
+                      <td className="py-2 px-3 text-gray-300">{t('calculator:lshape_front_surface')}</td>
                       <td className="py-2 px-3 text-gray-300">
-                        A {frontDominantArm === 'armA' ? '★' : ''}
+                        {t('calculator:lshape_arm_a')} {frontDominantArm === 'armA' ? '★' : ''}
                       </td>
                       <td className="py-2 px-3 text-gray-300">{result.frontArmA_slabsNeeded}</td>
                       <td className="py-2 px-3">
@@ -1546,9 +1528,9 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
                     </tr>
                     {/* Front Arm B */}
                     <tr className="border-b border-gray-600">
-                      <td className="py-2 px-3 text-gray-300">Front</td>
+                      <td className="py-2 px-3 text-gray-300">{t('calculator:lshape_front_surface')}</td>
                       <td className="py-2 px-3 text-gray-300">
-                        B {frontDominantArm === 'armB' ? '★' : ''}
+                        {t('calculator:lshape_arm_b')} {frontDominantArm === 'armB' ? '★' : ''}
                       </td>
                       <td className="py-2 px-3 text-gray-300">{result.frontArmB_slabsNeeded}</td>
                       <td className="py-2 px-3">
@@ -1591,11 +1573,10 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
               <p className="text-xl">{slabCalculationResult.totalSlabs}</p>
             </div>
             <div className="bg-gray-700 p-4 rounded">
-              <h5 className="font-medium mb-2">Adhesive Needed</h5>
+              <h5 className="font-medium mb-2">{t('calculator:lshape_adhesive_needed')}</h5>
               <p className="text-xl">{slabCalculationResult.totalAdhesiveNeeded.toFixed(1)} kg</p>
               <p className="text-sm text-gray-400">
-                Top: {slabCalculationResult.topAdhesiveNeeded.toFixed(1)} kg |
-                Front: {slabCalculationResult.frontAdhesiveNeeded.toFixed(1)} kg
+                {t('calculator:lshape_adhesive_top_front', { top: slabCalculationResult.topAdhesiveNeeded.toFixed(1), front: slabCalculationResult.frontAdhesiveNeeded.toFixed(1) })}
               </p>
             </div>
           </div>
@@ -1608,7 +1589,7 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
                 <table className="w-full bg-gray-700 rounded-lg text-sm">
                   <thead>
                     <tr className="border-b border-gray-600">
-                      <th className="py-2 px-4 text-left text-gray-300">Source</th>
+                      <th className="py-2 px-4 text-left text-gray-300">{t('calculator:lshape_source')}</th>
                       <th className="py-2 px-4 text-left text-gray-300">Dimensions</th>
                       <th className="py-2 px-4 text-left text-gray-300">{t('calculator:can_be_rotated')}</th>
                     </tr>

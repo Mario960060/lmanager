@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { translateMaterialName, translateUnit } from '../../lib/translationMap';
 import {
   colors,
   fonts,
@@ -11,6 +12,7 @@ import {
 } from '../../themes/designTokens';
 import {
   TextInput,
+  CalculatorInputGrid,
   Button,
   Card,
   DataTable,
@@ -127,7 +129,7 @@ const MortarCalculator: React.FC<CalculatorProps> = ({ type, onResultsChange }) 
             unit="m²"
           />
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+          <CalculatorInputGrid columns={2}>
             <TextInput
               label={t('calculator:input_length_m')}
               value={length}
@@ -149,7 +151,7 @@ const MortarCalculator: React.FC<CalculatorProps> = ({ type, onResultsChange }) 
               placeholder="0"
               unit="cm"
             />
-          </div>
+          </CalculatorInputGrid>
         )}
 
         <Button onClick={calculate} variant="primary" fullWidth>
@@ -177,18 +179,18 @@ const MortarCalculator: React.FC<CalculatorProps> = ({ type, onResultsChange }) 
               </h3>
               <DataTable
                 columns={[
-                  { key: 'name', label: 'MATERIAL', width: '2fr' },
-                  { key: 'quantity', label: 'QUANTITY', width: '1fr' },
-                  { key: 'unit', label: 'UNIT', width: '1fr' },
+                  { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+                  { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+                  { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
                 ]}
                 rows={[
                   {
-                    name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Cement</span>,
+                    name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName('Cement', t)}</span>,
                     quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{result.cementBags}</span>,
-                    unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>bags (25kg each)</span>,
+                    unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit('bags', t)}</span>,
                   },
                   {
-                    name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Sand</span>,
+                    name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName('Sand', t)}</span>,
                     quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{result.sand.toFixed(2)}</span>,
                     unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>kg</span>,
                   },

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateUnit } from '../../lib/translationMap';
+import { translateUnit, translateMaterialName } from '../../lib/translationMap';
 
 interface TaskTemplate {
   id: string;
@@ -913,7 +913,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
                 <tbody className="bg-white divide-y divide-gray-200">
                   {results.materials.map((material, idx) => (
                     <tr key={idx}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{translateMaterialName(material.name, t)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.amount}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{translateUnit(material.unit, t)}</td>
                     </tr>

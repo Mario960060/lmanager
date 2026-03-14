@@ -28,7 +28,8 @@
       sides: Array<{ length: number; slabs: number }>;
       taskName: string;
       task_id?: string;
-      frameSlabsName: string;
+      framePieceLengthCm?: string;
+      framePieceWidthCm?: string;
       cuttingHours: number;
       cuttingTaskName: string;
       cutting_task_id?: string;
@@ -57,7 +58,8 @@
       totalFrameAreaM2: number;
       taskName: string;
       task_id?: string;
-      frameSlabsName: string;
+      framePieceLengthCm?: string;
+      framePieceWidthCm?: string;
       cuttingHours: number;
       cuttingTaskName: string;
       cutting_task_id?: string;
@@ -423,7 +425,7 @@
               <div ref={resultsRef} className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <h3 className="text-lg font-medium text-gray-900 mb-2">{t('calculator:frame_slab_results_title')}</h3>
                 <div className="space-y-2 text-sm">
-                  <p><strong>{results.frameSlabsName} {t('calculator:needed_label')}:</strong> {results.totalFrameSlabs}</p>
+                  <p><strong>{t('calculator:frame_slabs_format', { length: results.framePieceLengthCm ?? pieceLengthCm, width: results.framePieceWidthCm ?? pieceWidthCm })} {t('calculator:needed_label')}:</strong> {results.totalFrameSlabs}</p>
                   <p><strong>{t('calculator:total_labor_hours_label')}:</strong> {results.totalHours.toFixed(2)} {t('calculator:hours_label')}</p>
                   <p><strong>{t('calculator:total_frame_area_label')}:</strong> {results.totalFrameAreaM2.toFixed(2)} m²</p>
                   {calculateTransport && results && results.transportTime !== undefined && results.transportTime > 0 && (

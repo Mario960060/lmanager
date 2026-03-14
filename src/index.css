@@ -79,6 +79,16 @@
     }
   }
 
+  /* Day details modal: 1 column on mobile, 2+ on desktop */
+  .day-details-events-grid {
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 640px) {
+    .day-details-events-grid {
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    }
+  }
+
   /* Date picker calendar icon styling */
   input[type="date"]::-webkit-calendar-picker-indicator {
     cursor: pointer;

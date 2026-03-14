@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { computeDeckCalculation } from './deckCalculatorLogic';
 import {
   colors,
@@ -17,6 +17,7 @@ import {
 } from '../../themes/designTokens';
 import {
   TextInput,
+  CalculatorInputGrid,
   SelectDropdown,
   Checkbox,
   Button,
@@ -591,7 +592,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       </p>
 
       <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+        <CalculatorInputGrid columns={2}>
           <TextInput label={t('calculator:input_length_m')} value={totalLength} onChange={setTotalLength} placeholder={t('calculator:placeholder_enter_length_m')} unit="m" helperText={t('calculator:along_direction_boards_run')} />
           <TextInput label={t('calculator:input_width_m')} value={totalWidth} onChange={setTotalWidth} placeholder={t('calculator:placeholder_enter_width')} unit="m" />
           <TextInput label={t('calculator:deck_joist_length_label')} value={joistLength} onChange={setJoistLength} placeholder={t('calculator:each_joist_length')} unit="m" />
@@ -600,7 +601,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
           <TextInput label={t('calculator:deck_board_width_label')} value={boardWidth} onChange={setBoardWidth} placeholder={t('calculator:board_width')} unit="m" />
           <TextInput label={t('calculator:deck_gaps_between_boards_label')} value={jointGaps} onChange={setJointGaps} placeholder={t('calculator:gap_between_boards')} unit="mm" />
           <TextInput label={t('calculator:postmix_per_post_label')} value={postmixPerPost} onChange={setPostmixPerPost} placeholder={t('calculator:enter_postmix_per_post')} />
-        </div>
+        </CalculatorInputGrid>
 
         <SelectDropdown
           label={t('calculator:pattern_label')}
@@ -747,7 +748,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
                       <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>
                         {task.hours.toFixed(2)}
                       </span>
-                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>hrs</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
                     </div>
                   </div>
                 ))}
@@ -755,14 +756,14 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
             </Card>
             <DataTable
               columns={[
-                { key: 'name', label: 'MATERIAL', width: '2fr' },
-                { key: 'quantity', label: 'QUANTITY', width: '1fr' },
-                { key: 'unit', label: 'UNIT', width: '1fr' },
-                { key: 'price', label: 'PRICE/UNIT', width: '1fr' },
-                { key: 'total', label: 'TOTAL', width: '1fr' },
+                { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+                { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+                { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+                { key: 'price', label: t('calculator:table_price_per_unit_header'), width: '1fr' },
+                { key: 'total', label: t('calculator:table_total_header'), width: '1fr' },
               ]}
               rows={materials.map((m) => ({
-                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{m.name}</span>,
+                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName(m.name, t)}</span>,
                 quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.amount.toFixed(2)}</span>,
                 unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
                 price: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : 'N/A'}</span>,

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import StandardStairsSlabs from './StandardStairsSlabs';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
@@ -309,7 +309,6 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
   const [result, setResult] = useState<StairResult | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
   const [adjustedStepHeightInfo, setAdjustedStepHeightInfo] = useState<string | null>(null);
-  const [showCalculationLog, setShowCalculationLog] = useState<number | false>(false);
   const resultsRef = useRef<HTMLDivElement>(null);
   
   // Add useEffect to notify parent of result changes
@@ -1063,15 +1062,15 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.xl }}>
       <InfoBanner>
-        <strong>{t('calculator:important_information_label')}</strong> — This calculator accounts for slab thickness and adhesive on each step. These built stairs will be shorter than raw measurements but after adding slabs will be exact same like measurements. All measurements should be in centimeters.
+        <strong>{t('calculator:important_information_label')}</strong> — {t('calculator:standard_important_info')}
       </InfoBanner>
       
       <Card style={{ padding: spacing.xl }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.xl, alignItems: 'start' }}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 items-start">
           <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
             <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, fontFamily: fonts.heading }}>{t('calculator:input_measurements_in_cm')}</h3>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.lg }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label style={labelStyle}>{t('calculator:input_total_height')}</label>
               <input type="number" value={totalHeight} onChange={(e) => setTotalHeight(e.target.value)} style={inputStyle} placeholder={t('calculator:placeholder_cm')} min="0" step="0.1" />
@@ -1109,7 +1108,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
           
           <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginTop: spacing.lg, fontFamily: fonts.heading }}>{t('calculator:input_overhang_in_cm')}</h3>
           
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.lg }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label style={labelStyle}>{t('calculator:input_overhang_front')}</label>
               <input type="number" value={overhangFront} onChange={(e) => setOverhangFront(e.target.value)} style={inputStyle} placeholder={t('calculator:placeholder_cm')} min="0" step="0.1" />
@@ -1162,7 +1161,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
             {materialOptions.map(material => (
               <Checkbox
                 key={material.id}
-                label={material.name}
+                label={translateMaterialName(material.name, t)}
                 checked={selectedMaterials.includes(material.id)}
                 onChange={() => toggleMaterial(material.id)}
               />
@@ -1284,8 +1283,8 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
               }}>
                 <p style={{ fontWeight: fontWeights.semibold, marginBottom: spacing.md, margin: 0, fontFamily: fonts.body }}>{t('calculator:calculation_logic')}:</p>
                 <ul style={{ listStyle: 'disc', paddingLeft: spacing.xl, margin: 0, display: 'flex', flexDirection: 'column', gap: spacing.xs }}>
-                  <li>Each step is calculated as a separate row from the ground</li>
-                  <li>Sidewall starts at the same height as 1st step (buried the same amount)</li>
+                  <li>{t('calculator:standard_logic_step_row')}</li>
+                  <li>{t('calculator:standard_logic_sidewall')}</li>
                 </ul>
               </div>
               <div className="overflow-x-auto" style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii["2xl"] }}>
@@ -1302,11 +1301,11 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${colors.borderDefault}`, background: colors.bgOverlay }}>
                       <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:step_label')}</th>
-                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>Height (cm)</th>
-                        <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>Total Height (cm)</th>
-                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>Tread (cm)</th>
-                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>Length (cm)</th>
-                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>Mortar (cm)</th>
+                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:table_height_cm')}</th>
+                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:standard_table_total_height_cm')}</th>
+                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:lshape_table_tread_cm')}</th>
+                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:table_length_cm')}</th>
+                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:lshape_table_mortar_cm')}</th>
                       <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:materials')}</th>
                     </tr>
                   </thead>
@@ -1339,8 +1338,8 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
                               {stepNumber}
                               <div style={{ fontSize: fontSizes.xs, color: colors.red }}>
                                 {buriedDepth > 0 ? 
-                                  `Starts at: -${buriedDepth.toFixed(1)}cm (buried)` : 
-                                  'Starts at: 0.0cm'}
+                                  t('calculator:standard_starts_at_buried', { value: buriedDepth.toFixed(1) }) : 
+                                  t('calculator:standard_starts_at_zero')}
                               </div>
                             </td>
                             <td className="py-2 px-4" style={{ color: colors.textPrimary }}>
@@ -1359,39 +1358,14 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
                           <td style={{ padding: `${spacing.md}px ${spacing.lg}px`, borderTop: `1px solid ${colors.borderDefault}` }}>
                             {stepCourseDetails.map((course, idx) => (
                               <div key={idx} style={{ color: course.needsCutting ? colors.amber : colors.textPrimary }}>
-                                {course.blocks} x {course.material === 'Standard Bricks (9x6x21)' ? 'brick' : course.material} {course.material === 'Standard Bricks (9x6x21)' ? 
-                                  (course.mortarHeight === 9 || step.height === 9 ? 'laid on side' : 'laid flat') : 
+                                {course.blocks} x {translateMaterialName(course.material, t)} {course.material === 'Standard Bricks (9x6x21)' ? 
+                                  (course.mortarHeight === 9 || step.height === 9 ? t('calculator:laid_on_side') : t('calculator:laid_flat')) : 
                                   ''}
-                                {course.needsCutting && " (needs cutting)"}
+                                {course.needsCutting && ` ${t('calculator:needs_cutting')}`}
                               </div>
                             ))}
                           </td>
                         </tr>
-                        {stepCourseDetails.some(c => c.calculationLog?.length) && (
-                          <tr key={`log-${index}`}>
-                            <td colSpan={7} className="py-0 px-4 pb-2" style={{ borderTop: 'none', verticalAlign: 'top' }}>
-                              <button
-                                type="button"
-                                onClick={() => setShowCalculationLog(prev => prev === index + 1 ? false : index + 1)}
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: spacing.xs, fontSize: fontSizes.xs,
-                                  color: colors.accentBlue, marginTop: spacing.xs, background: 'none', border: 'none', cursor: 'pointer', fontFamily: fonts.body,
-                                }}
-                              >
-                                {showCalculationLog === index + 1 ? <ChevronUp style={{ width: 12, height: 12 }} /> : <ChevronDown style={{ width: 12, height: 12 }} />}
-                                {showCalculationLog === index + 1 ? 'Ukryj obliczenia' : 'Pokaż pełne obliczenia'}
-                              </button>
-                              {showCalculationLog === index + 1 && stepCourseDetails.find(c => c.calculationLog?.length)?.calculationLog && (
-                                <pre style={{
-                                  marginTop: spacing.md, padding: spacing.sm, background: colors.bgCardInner, borderRadius: radii.lg,
-                                  fontSize: fontSizes.xs, color: colors.textMuted, fontFamily: fonts.mono, whiteSpace: 'pre-wrap', overflowX: 'auto',
-                                }}>
-                                  {stepCourseDetails.find(c => c.calculationLog?.length)?.calculationLog?.join('\n')}
-                                </pre>
-                              )}
-                            </td>
-                          </tr>
-                        )}
                         </React.Fragment>
                       );
                     })}
@@ -1415,7 +1389,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
                   {taskBreakdown && taskBreakdown.length > 0 ? (
                     taskBreakdown.map((task: any, index: number) => (
                       <li key={index} style={{ fontSize: fontSizes.sm, color: colors.textMuted, fontFamily: fonts.body }}>
-                        <span style={{ fontWeight: fontWeights.medium }}>{translateTaskName(task.task, t)}</span> x {task.amount} {translateUnit(task.unit, t)} = {task.hours.toFixed(2)} hours
+                        <span style={{ fontWeight: fontWeights.medium }}>{translateTaskName(task.task, t)}</span> x {task.amount} {translateUnit(task.unit, t)} = {task.hours.toFixed(2)} {t('calculator:hours_label')}
                       </li>
                     ))
                   ) : (
@@ -1449,7 +1423,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
                         borderTop: `1px solid ${colors.borderDefault}`
                       }}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: colors.textPrimary }}>
-                          {material.name}
+                          {translateMaterialName(material.name, t)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: colors.textPrimary }}>
                           {material.amount.toFixed(2)}
@@ -1466,7 +1440,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
                         borderTop: `1px solid ${colors.borderDefault}`
                       }}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: colors.textPrimary }}>
-                          {material.name}
+                          {translateMaterialName(material.name, t)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: colors.textPrimary }}>
                           {material.amount}

@@ -13,7 +13,7 @@ import {
   makeSquare, makeRectangle, makeTriangle, makeTrapezoid, C, C_LIGHT,
 } from "./geometry";
 import { calcEdgeSlopes, calcShapeGradient, formatSlope, slopeColor, interpolateHeightAtPoint, fillShapeHeightHeatmap, computeGlobalHeightRange } from "./geodesy";
-import { isLinearElement, isGroundworkLinear, isPathElement, isPolygonLinearElement, groundworkLabel, drawLinearElement, drawLinearElementInactive, hitTestLinearElement, hitTestPathElement, computeThickPolyline, getPathPolygon, getLinearElementPath, getPolygonThicknessM, polygonToSegmentLengths, polygonToCenterline, polygonEdgeToSegmentIndex, removeSegmentFromPolygonOutline, computePathPolygonOneSide, pointSideOfLine } from "./linearElements";
+import { isLinearElement, isGroundworkLinear, isPathElement, isPolygonLinearElement, groundworkLabel, drawLinearElement, drawLinearElementInactive, hitTestLinearElement, hitTestPathElement, computeThickPolyline, getPathPolygon, getLinearElementPath, getPolygonThicknessM, polygonToSegmentLengths, polygonToCenterline, polygonEdgeToSegmentIndex, removeSegmentFromPolygonOutline, computePathPolygonOneSide, computePathOutlineFromSegmentSides, pointSideOfLine } from "./linearElements";
 import { drawShapeObjectLabel, drawExcavationLayers, getPathLabel } from "./canvasRenderers";
 import { drawDeckPattern } from "./visualization/deckBoards";
 import { drawSlabPattern, drawPathSlabPattern, drawSlabFrame, computePatternSnap, computeSlabCuts, computePathSlabCuts } from "./visualization/slabPattern";
@@ -220,6 +220,7 @@ export default function MasterProject() {
   const modeDropdownRef = useRef<HTMLDivElement>(null);
   const [layersDropdownOpen, setLayersDropdownOpen] = useState(false);
   const layersDropdownRef = useRef<HTMLDivElement>(null);
+  const switchLayerRef = useRef<(layer: ActiveLayer) => void>(() => {});
   const [shapesDropdownOpen, setShapesDropdownOpen] = useState(false);
   const shapesDropdownRef = useRef<HTMLDivElement>(null);
   const [pathDropdownOpen, setPathDropdownOpen] = useState(false);
@@ -233,8 +234,8 @@ export default function MasterProject() {
   const [stairsCreationModal, setStairsCreationModal] = useState<{ subType: "standard" | "l_shape" | "u_shape"; name: string } | null>(null);
   const [pathCreationModal, setPathCreationModal] = useState<{ subType: "slabs" | "concreteSlabs" | "monoblock"; name: string } | null>(null);
   const [pathConfig, setPathConfig] = useState<PathConfig | null>(null);
-  /** Path side selection: after A-B defined, user picks which side of the line the path polygon appears on */
-  const [pathSideSelection, setPathSideSelection] = useState<{ shapeIdx: number; pointA: Point; pointB: Point } | null>(null);
+  /** Path segment side selection: after centerline drawn, user picks side for each segment (all visible at once) */
+  const [pathSegmentSideSelection, setPathSegmentSideSelection] = useState<{ shapeIdx: number; segmentSides: ("left" | "right" | null)[] } | null>(null);
   const [shapeCreationModal, setShapeCreationModal] = useState<{ type: "square" | "rectangle" | "triangle" | "trapezoid" } | null>(null);
   const [segmentHeightModal, setSegmentHeightModal] = useState<{ shapeIdx: number } | null>(null);
   const [setAngleModal, setSetAngleModal] = useState<{ shapeIdx: number; pointIdx: number } | null>(null);
@@ -1068,39 +1069,41 @@ export default function MasterProject() {
         const pts = (shape.calculatorInputs?.pathIsOutline && shape.calculatorInputs?.pathCenterlineOriginal) ? (shape.calculatorInputs.pathCenterlineOriginal as Point[]) : (shape.calculatorInputs?.pathIsOutline && shape.calculatorInputs?.pathCenterline ? (shape.calculatorInputs.pathCenterline as Point[]) : shape.points);
         const outline = getPathPolygon(shape);
         const pointsToShow = (shape.calculatorInputs?.pathIsOutline && shape.closed && outline.length >= 3) ? outline : pts;
-        const inSideSelection = (pathSideSelection && pathSideSelection.shapeIdx === si) || (isDraw && !shape.closed && pts.length === 2);
-        if (inSideSelection) {
-          const A = pathSideSelection ? pathSideSelection.pointA : pts[0]!;
-          const B = pathSideSelection ? pathSideSelection.pointB : pts[1]!;
+        const inSegmentSideSelection = pathSegmentSideSelection && pathSegmentSideSelection.shapeIdx === si;
+        if (inSegmentSideSelection) {
           const pathWidthM = Number(shape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
-          const half = toPixels(pathWidthM) / 2;
-          const dx = B.x - A.x, dy = B.y - A.y;
-          const len = Math.sqrt(dx * dx + dy * dy);
-          const nx = len > 0.001 ? -dy / len : 0, ny = len > 0.001 ? dx / len : 0;
-          const left0 = { x: A.x + nx * half, y: A.y + ny * half }, left1 = { x: B.x + nx * half, y: B.y + ny * half };
-          const right0 = { x: A.x - nx * half, y: A.y - ny * half }, right1 = { x: B.x - nx * half, y: B.y - ny * half };
-          const sA = worldToScreen(A.x, A.y), sB = worldToScreen(B.x, B.y);
-          const sL0 = worldToScreen(left0.x, left0.y), sL1 = worldToScreen(left1.x, left1.y);
-          const sR0 = worldToScreen(right0.x, right0.y), sR1 = worldToScreen(right1.x, right1.y);
-          const midLeft = midpoint(sL0, sL1), midRight = midpoint(sR0, sR1);
+          const halfPx = toPixels(pathWidthM) / 2;
           const animT = (Date.now() % 1200) / 1200;
           const dashOffset = animT * 12;
           ctx.setLineDash([8, 6]);
           ctx.lineWidth = 2;
-          ctx.strokeStyle = "#27ae60";
-          ctx.beginPath(); ctx.moveTo(sL0.x, sL0.y); ctx.lineTo(sL1.x, sL1.y);
-          ctx.lineDashOffset = -dashOffset; ctx.stroke();
-          ctx.strokeStyle = "#e67e22";
-          ctx.beginPath(); ctx.moveTo(sR0.x, sR0.y); ctx.lineTo(sR1.x, sR1.y);
-          ctx.lineDashOffset = dashOffset; ctx.stroke();
+          for (let i = 0; i < pts.length - 1; i++) {
+            const A = pts[i];
+            const B = pts[i + 1];
+            const dx = B.x - A.x, dy = B.y - A.y;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            const nx = len > 0.001 ? -dy / len : 0, ny = len > 0.001 ? dx / len : 0;
+            const left0 = { x: A.x + nx * halfPx, y: A.y + ny * halfPx }, left1 = { x: B.x + nx * halfPx, y: B.y + ny * halfPx };
+            const right0 = { x: A.x - nx * halfPx, y: A.y - ny * halfPx }, right1 = { x: B.x - nx * halfPx, y: B.y - ny * halfPx };
+            const sA = worldToScreen(A.x, A.y), sB = worldToScreen(B.x, B.y);
+            const sL0 = worldToScreen(left0.x, left0.y), sL1 = worldToScreen(left1.x, left1.y);
+            const sR0 = worldToScreen(right0.x, right0.y), sR1 = worldToScreen(right1.x, right1.y);
+            const midLeft = midpoint(sL0, sL1), midRight = midpoint(sR0, sR1);
+            ctx.strokeStyle = "#27ae60";
+            ctx.beginPath(); ctx.moveTo(sL0.x, sL0.y); ctx.lineTo(sL1.x, sL1.y);
+            ctx.lineDashOffset = -dashOffset; ctx.stroke();
+            ctx.strokeStyle = "#e67e22";
+            ctx.beginPath(); ctx.moveTo(sR0.x, sR0.y); ctx.lineTo(sR1.x, sR1.y);
+            ctx.lineDashOffset = dashOffset; ctx.stroke();
+            ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
+            ctx.font = "10px 'JetBrains Mono',monospace";
+            ctx.fillStyle = "#27ae60"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText(t("project:path_click_side"), midLeft.x, midLeft.y - 12);
+            ctx.fillStyle = "#e67e22";
+            ctx.fillText(t("project:path_click_side"), midRight.x, midRight.y + 12);
+          }
           ctx.setLineDash([]); ctx.lineDashOffset = 0;
-          ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5;
-          ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
-          ctx.font = "11px 'JetBrains Mono',monospace";
-          ctx.fillStyle = "#27ae60"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillText(t("project:path_click_side"), midLeft.x, midLeft.y - 16);
-          ctx.fillStyle = "#e67e22";
-          ctx.fillText(t("project:path_click_side"), midRight.x, midRight.y + 16);
         } else {
           if (outline.length >= 3) {
             ctx.beginPath();
@@ -1146,7 +1149,7 @@ export default function MasterProject() {
             }
           }
         }
-        if (isDraw && pts.length > 0 && !inSideSelection) {
+        if (isDraw && pts.length > 0 && !inSegmentSideSelection) {
           const last = pts[pts.length - 1];
           const sl = worldToScreen(last.x, last.y);
           const sm = worldToScreen(eMouse.x, eMouse.y);
@@ -1154,7 +1157,7 @@ export default function MasterProject() {
           ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sm.x, sm.y); ctx.stroke();
           ctx.setLineDash([]);
         }
-        if (isL2 && !inSideSelection) drawShapeObjectLabel(ctx, shape, worldToScreen, getPathLabel(shape), zoom);
+        if (isL2 && !inSegmentSideSelection) drawShapeObjectLabel(ctx, shape, worldToScreen, getPathLabel(shape), zoom);
         return;
       }
 
@@ -1726,6 +1729,22 @@ export default function MasterProject() {
             ctx.fillText(t("project:canvas_continue"), sp.x, sp.y - 18);
           });
         }
+        if (isPathElement(shape) && shape.closed && shape.calculatorInputs?.pathCenterline) {
+          const pathCenterline = shape.calculatorInputs.pathCenterline as Point[];
+          if (pathCenterline.length >= 2) {
+            const ends = [pathCenterline[0], pathCenterline[pathCenterline.length - 1]];
+            ends.forEach(lp => {
+              const sp = worldToScreen(lp.x, lp.y);
+              const pulseT = (Date.now() % 2000) / 2000;
+              const pulse = 10 + Math.sin(pulseT * Math.PI * 2) * 3;
+              ctx.beginPath(); ctx.arc(sp.x, sp.y, pulse, 0, Math.PI * 2);
+              ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+              ctx.font = "10px 'JetBrains Mono',monospace";
+              ctx.fillStyle = CC.open; ctx.textAlign = "center";
+              ctx.fillText(t("project:canvas_continue"), sp.x, sp.y - 18);
+            });
+          }
+        }
       });
     }
 
@@ -1762,9 +1781,9 @@ export default function MasterProject() {
     else if (mode === "drawWall") hud += "  |  WALL: click to place points, Esc to finish";
     else if (mode === "drawKerb") hud += "  |  KERB: click to place points, Esc to finish";
     else if (mode === "drawFoundation") hud += "  |  FOUNDATION: click to place points, Esc to finish";
-    else if (mode === "drawPathSlabs") hud += pathSideSelection ? "  |  PATH: click green or orange side" : "  |  PATH (Slabs): click A, click B, then click side";
-    else if (mode === "drawPathConcreteSlabs") hud += pathSideSelection ? "  |  PATH: click green or orange side" : "  |  PATH (Concrete Slabs): click A, click B, then click side";
-    else if (mode === "drawPathMonoblock") hud += pathSideSelection ? "  |  PATH: click green or orange side" : "  |  PATH (Monoblock): click A, click B, then click side";
+    else if (mode === "drawPathSlabs") hud += pathSegmentSideSelection ? "  |  PATH: click green or orange side for each segment" : "  |  PATH (Slabs): click points (like wall), snap to start to finish, then pick sides";
+    else if (mode === "drawPathConcreteSlabs") hud += pathSegmentSideSelection ? "  |  PATH: click green or orange side for each segment" : "  |  PATH (Concrete Slabs): click points (like wall), snap to start to finish, then pick sides";
+    else if (mode === "drawPathMonoblock") hud += pathSegmentSideSelection ? "  |  PATH: click green or orange side for each segment" : "  |  PATH (Monoblock): click points (like wall), snap to start to finish, then pick sides";
     if (mode === "scale") hud += "  |  SCALE: corner = proportional, edge = move";
     if (mode === "move") hud += "  |  MOVE: left click anywhere to pan";
     const canStartMeasure = selectedShapeIdx === null && !hoveredPoint && !hoveredEdge && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
@@ -1906,7 +1925,7 @@ export default function MasterProject() {
         ctx.fillText(t("project:dim_edit_point_b"), offBx, offBy);
       }
     }
-  }, [shapes, selectedShapeIdx, selectedPattern, patternDragInfo, patternDragPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id, measureStart, measureEnd, pathSideSelection, shapeDragInfo, edgeDragInfo]);
+  }, [shapes, selectedShapeIdx, selectedPattern, patternDragInfo, patternDragPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id, measureStart, measureEnd, pathSegmentSideSelection, shapeDragInfo, edgeDragInfo]);
 
   // Clear height tooltip when disabling geodesy or switching away from layer 1
   useEffect(() => {
@@ -2132,6 +2151,20 @@ export default function MasterProject() {
     return null;
   }, [shapes, zoom, isOnActiveLayer, viewFilter]);
 
+  const hitTestPathContinuation = useCallback((wp: Point): { shapeIdx: number; end: "first" | "last" } | null => {
+    const th = SNAP_TO_LAST_RADIUS / zoom * (PIXELS_PER_METER / 80);
+    for (let si = shapes.length - 1; si >= 0; si--) {
+      if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
+      const s = shapes[si];
+      if (!isPathElement(s) || !s.closed || !s.calculatorInputs?.pathCenterline) continue;
+      const pathCenterline = s.calculatorInputs.pathCenterline as Point[];
+      if (pathCenterline.length < 2) continue;
+      if (distance(wp, pathCenterline[pathCenterline.length - 1]) < th) return { shapeIdx: si, end: "last" };
+      if (distance(wp, pathCenterline[0]) < th) return { shapeIdx: si, end: "first" };
+    }
+    return null;
+  }, [shapes, zoom, isOnActiveLayer, viewFilter]);
+
   const arcHitThreshold = (pointRadiusEffective / zoom + 4) * (PIXELS_PER_METER / 80);
   const hitTestArcPointGlobal = useCallback((wp: Point): { shapeIdx: number; edgeIdx: number; arcPoint: ArcPoint } | null => {
     const testShape = (si: number) => {
@@ -2313,47 +2346,65 @@ export default function MasterProject() {
       }
     }
 
+    // Path segment side selection: click on green or orange zone for any segment
+    if (pathSegmentSideSelection && e.button === 0) {
+      const { shapeIdx: si, segmentSides } = pathSegmentSideSelection;
+      const shape = shapes[si];
+      if (!shape || !isPathElement(shape)) { setPathSegmentSideSelection(null); return; }
+      const pts = shape.points;
+      const pathWidthM = Number(shape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
+      const half = toPixels(pathWidthM) / 2;
+      const th = (20 / zoom) * (PIXELS_PER_METER / 80);
+      let bestSeg = -1;
+      let bestD = th;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const d = projectOntoSegment(world, pts[i], pts[i + 1]).dist;
+        if (d < bestD) { bestD = d; bestSeg = i; }
+      }
+      if (bestSeg >= 0) {
+        const side = pointSideOfLine(world, pts[bestSeg], pts[bestSeg + 1]);
+        const chosenSide = side === "on" ? "left" : side;
+        saveHistory();
+        const newSides = [...segmentSides];
+        newSides[bestSeg] = chosenSide;
+        const allChosen = newSides.every(s => s !== null);
+        if (allChosen) {
+          const outline = computePathOutlineFromSegmentSides(pts, newSides as ("left" | "right")[], pathWidthM);
+          if (outline.length >= 3) {
+            setShapes(p => {
+              const n = [...p];
+              const sh = n[si];
+              n[si] = {
+                ...sh,
+                points: outline,
+                closed: true,
+                drawingFinished: true,
+                calculatorInputs: {
+                  ...sh.calculatorInputs,
+                  pathIsOutline: true,
+                  pathCenterline: pts.map(p => ({ ...p })),
+                  pathCenterlineOriginal: pts.map(p => ({ ...p })),
+                },
+              };
+              return n;
+            });
+            setPathConfig(null);
+            setPathSegmentSideSelection(null);
+            if (!shape.namePromptShown) setNamePromptShapeIdx(si);
+            setSelectedShapeIdx(si);
+            setMode("select");
+          }
+        } else {
+          setPathSegmentSideSelection({ shapeIdx: si, segmentSides: newSides });
+        }
+      }
+      return;
+    }
+
     // Currently drawing
     if (drawingShapeIdx !== null && shapes[drawingShapeIdx]) {
       const pts = shapes[drawingShapeIdx].points;
       const s = shapes[drawingShapeIdx];
-
-      // Path side selection: user clicked to pick which side of line A-B the path appears on
-      if (pathSideSelection && pathSideSelection.shapeIdx === drawingShapeIdx) {
-        const { pointA, pointB } = pathSideSelection;
-        const side = pointSideOfLine(world, pointA, pointB);
-        const chosenSide = side === "on" ? "left" : side;
-        saveHistory();
-        const pathWidthM = Number(s.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
-        const outline = computePathPolygonOneSide(pointA, pointB, pathWidthM, chosenSide);
-        if (outline.length >= 3) {
-          const pathPts = [pointA, pointB];
-          setShapes(p => {
-            const n = [...p];
-            const sh = n[drawingShapeIdx];
-            n[drawingShapeIdx] = {
-              ...sh,
-              points: outline,
-              closed: true,
-              drawingFinished: true,
-              calculatorInputs: {
-                ...sh.calculatorInputs,
-                pathIsOutline: true,
-                pathCenterline: pathPts.map(p => ({ ...p })),
-                pathCenterlineOriginal: pathPts.map(p => ({ ...p })),
-              },
-            };
-            return n;
-          });
-          setPathConfig(null);
-          setPathSideSelection(null);
-          if (!s.namePromptShown) setNamePromptShapeIdx(drawingShapeIdx);
-          setDrawingShapeIdx(null);
-          setSelectedShapeIdx(drawingShapeIdx);
-          setMode("select");
-        }
-        return;
-      }
 
       const snapFn = isPathElement(s) ? snapTo45Soft : snapTo45;
       let ep = shiftHeld && pts.length > 0 ? snapFn(pts[pts.length - 1], world) : world;
@@ -2389,34 +2440,14 @@ export default function MasterProject() {
           const isGroundwork = isGroundworkLinear(s);
           const isPath = isPathElement(s);
           if (isPath) {
-            const pathWidthM = Number(s.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
-            const thicknessPx = toPixels(pathWidthM);
             const pathPts = s.edgeArcs?.some(a => a && a.length > 0) ? getLinearElementPath(s) : s.points;
-            const outline = computeThickPolyline(pathPts, thicknessPx);
-            setShapes(p => {
-              const n = [...p];
-              const sh = n[drawingShapeIdx];
-              if (outline.length >= 3) {
-                n[drawingShapeIdx] = {
-                  ...sh,
-                  points: outline,
-                  closed: true,
-                  drawingFinished: true,
-                  calculatorInputs: {
-                    ...sh.calculatorInputs,
-                    pathIsOutline: true,
-                    pathCenterline: pathPts.map(p => ({ ...p })),
-                    pathCenterlineOriginal: s.points.map(p => ({ ...p })),
-                  },
-                };
-              } else {
-                n[drawingShapeIdx] = { ...sh, closed: true, drawingFinished: true };
-              }
-              return n;
-            });
-            setPathConfig(null);
-            if (!s.namePromptShown) setNamePromptShapeIdx(drawingShapeIdx);
-            setDrawingShapeIdx(null); setSelectedShapeIdx(drawingShapeIdx); setMode("select"); return;
+            const segCount = pathPts.length - 1;
+            if (segCount >= 1) {
+              setPathSegmentSideSelection({ shapeIdx: drawingShapeIdx, segmentSides: Array(segCount).fill(null) });
+              setDrawingShapeIdx(null);
+              setSelectedShapeIdx(drawingShapeIdx);
+            }
+            return;
           }
           if (isGroundwork) {
             const totalLenM = polylineLengthMeters(pts) + distance(pts[pts.length - 1], pts[0]);
@@ -2466,17 +2497,12 @@ export default function MasterProject() {
         }
       }
       saveHistory();
-      const willHaveTwoPoints = pts.length === 1 && isPathElement(s);
       setShapes(p => {
-        const n = [...p]; const s = { ...n[drawingShapeIdx] };
-        s.points = [...s.points, { ...ep }];
-        s.heights = [...(s.heights || []), 0];
-        n[drawingShapeIdx] = s; return n;
+        const n = [...p]; const sh = { ...n[drawingShapeIdx] };
+        sh.points = [...sh.points, { ...ep }];
+        sh.heights = [...(sh.heights || []), 0];
+        n[drawingShapeIdx] = sh; return n;
       });
-      if (willHaveTwoPoints) {
-        const newPts = [...pts, { ...ep }];
-        setPathSideSelection({ shapeIdx: drawingShapeIdx, pointA: newPts[0]!, pointB: newPts[1]! });
-      }
       return;
     }
 
@@ -2838,11 +2864,45 @@ export default function MasterProject() {
     // Path drawing modes (Slabs, Monoblock) — requires pathConfig from PathCreationModal
     if ((mode === "drawPathSlabs" || mode === "drawPathConcreteSlabs" || mode === "drawPathMonoblock") && pathConfig && drawingShapeIdx === null) {
       const elementType = mode === "drawPathSlabs" ? "pathSlabs" : mode === "drawPathConcreteSlabs" ? "pathConcreteSlabs" : "pathMonoblock";
-      const label = mode === "drawPathSlabs" ? "Path Slabs" : mode === "drawPathConcreteSlabs" ? "Path Concrete Slabs" : "Path Monoblock";
+      const pathContinuation = hitTestPathContinuation(world);
+      if (pathContinuation && shapes[pathContinuation.shapeIdx].elementType === elementType) {
+        const si = pathContinuation.shapeIdx;
+        const s = shapes[si];
+        const pathCenterline = (s.calculatorInputs?.pathCenterline as Point[]) ?? s.points;
+        if (pathContinuation.end === "first") {
+          setShapes(p => {
+            const n = [...p];
+            const sh = n[si];
+            const reversed = [...pathCenterline].reverse();
+            n[si] = {
+              ...sh,
+              points: reversed,
+              closed: false,
+              calculatorInputs: { ...sh.calculatorInputs, pathIsOutline: undefined, pathCenterline: undefined, pathCenterlineOriginal: undefined },
+            };
+            return n;
+          });
+        } else {
+          setShapes(p => {
+            const n = [...p];
+            const sh = n[si];
+            n[si] = {
+              ...sh,
+              points: pathCenterline.map(p => ({ ...p })),
+              closed: false,
+              calculatorInputs: { ...sh.calculatorInputs, pathIsOutline: undefined, pathCenterline: undefined, pathCenterlineOriginal: undefined },
+            };
+            return n;
+          });
+        }
+        setDrawingShapeIdx(si);
+        setSelectedShapeIdx(si);
+        return;
+      }
       const newIdx = shapes.length;
       setShapes(p => [...p, {
         points: [{ ...world }], closed: false,
-        label,
+        label: mode === "drawPathSlabs" ? "Path Slabs" : mode === "drawPathConcreteSlabs" ? "Path Concrete Slabs" : "Path Monoblock",
         layer: 2 as LayerID,
         lockedEdges: [], lockedAngles: [], heights: [0],
         elementType: elementType as "pathSlabs" | "pathConcreteSlabs" | "pathMonoblock",
@@ -2966,7 +3026,7 @@ export default function MasterProject() {
       setSelectedShapeIdx(null);
       setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
-  }, [mode, shapes, drawingShapeIdx, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, worldToScreen, saveHistory, selectedShapeIdx, isOnActiveLayer, activeLayer, editingGeodesyCard, measureStart, measureEnd, hoveredPoint, hoveredEdge, selectedPoints, selectionRect, editingDim, rotateInfo, patternDragInfo, patternRotateInfo, shapeDragInfo, edgeDragInfo]);
+  }, [mode, shapes, drawingShapeIdx, pathSegmentSideSelection, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPathContinuation, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, worldToScreen, saveHistory, selectedShapeIdx, isOnActiveLayer, activeLayer, editingGeodesyCard, measureStart, measureEnd, hoveredPoint, hoveredEdge, selectedPoints, selectionRect, editingDim, rotateInfo, patternDragInfo, patternRotateInfo, shapeDragInfo, edgeDragInfo]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const world = getWorldPos(e);
@@ -3843,52 +3903,22 @@ export default function MasterProject() {
     e.preventDefault();
     if (rightClickScaleTriggeredRef.current) { rightClickScaleTriggeredRef.current = false; return; }
     pendingRightClickScaleRef.current = null; // Single click = context menu, clear pending scale
+    if (pathSegmentSideSelection) {
+      setPathSegmentSideSelection(null);
+      setSelectedShapeIdx(pathSegmentSideSelection.shapeIdx);
+      return;
+    }
     if (drawingShapeIdx !== null) {
       const s = shapes[drawingShapeIdx];
-      if (pathSideSelection && pathSideSelection.shapeIdx === drawingShapeIdx) {
-        setPathSideSelection(null);
-        setShapes(p => {
-          const n = [...p];
-          const sh = n[drawingShapeIdx];
-          if (sh && sh.points.length >= 2) {
-            n[drawingShapeIdx] = { ...sh, points: sh.points.slice(0, -1) };
-          }
-          return n;
-        });
-        setDrawingShapeIdx(null);
-        setMode("select");
-        return;
-      }
       if (s && s.points.length >= 2 && isPathElement(s)) {
-        saveHistory();
-        const pathWidthM = Number(s.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
-        const thicknessPx = toPixels(pathWidthM);
         const pathPts = s.edgeArcs?.some(a => a && a.length > 0) ? getLinearElementPath(s) : s.points;
-        const outline = computeThickPolyline(pathPts, thicknessPx);
-        setShapes(p => {
-          const n = [...p];
-          const sh = n[drawingShapeIdx];
-          if (outline.length >= 3) {
-            n[drawingShapeIdx] = {
-              ...sh,
-              points: outline,
-              closed: true,
-              drawingFinished: true,
-              calculatorInputs: {
-                ...sh.calculatorInputs,
-                pathIsOutline: true,
-                pathCenterline: pathPts.map(p => ({ ...p })),
-                pathCenterlineOriginal: s.points.map(p => ({ ...p })),
-              },
-            };
-          } else {
-            n[drawingShapeIdx] = { ...sh, drawingFinished: true };
-          }
-          return n;
-        });
-        setPathConfig(null);
-        if (!s.namePromptShown) setNamePromptShapeIdx(drawingShapeIdx);
-        setDrawingShapeIdx(null); setMode("select"); return;
+        const segCount = pathPts.length - 1;
+        if (segCount >= 1) {
+          setPathSegmentSideSelection({ shapeIdx: drawingShapeIdx, segmentSides: Array(segCount).fill(null) });
+          setDrawingShapeIdx(null);
+          setSelectedShapeIdx(drawingShapeIdx);
+        }
+        return;
       }
       if (s && s.points.length >= 2 && isLinearElement(s)) {
         const isGroundwork = isGroundworkLinear(s);
@@ -4093,7 +4123,7 @@ export default function MasterProject() {
         setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: shapeHit, pointIdx: -1, edgeIdx: -1, interiorWorldPos: w });
       }
     }
-  }, [getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestArcPointGlobal, hitTestEdge, hitTestShape, hitTestPattern, shapes, drawingShapeIdx, activeLayer, zoom, viewFilter, pathSideSelection]);
+  }, [getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestArcPointGlobal, hitTestEdge, hitTestShape, hitTestPattern, shapes, drawingShapeIdx, activeLayer, zoom, viewFilter, pathSegmentSideSelection]);
 
   useEffect(() => { contextMenuHandlerRef.current = handleContextMenu; }, [handleContextMenu]);
 
@@ -4182,6 +4212,20 @@ export default function MasterProject() {
         if (e.key === "Escape") { setEditingDim(null); setEditingGeodesyCard(null); }
         return;
       }
+      // Layer shortcuts: 1–5 → switch layer
+      if (["1", "2", "3", "4", "5"].includes(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const layer = parseInt(e.key, 10) as ActiveLayer;
+        if (layer !== activeLayer) switchLayerRef.current(layer);
+        e.preventDefault();
+        return;
+      }
+      // G → toggle geodesy
+      if (e.key === "g" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        setGeodesyEnabled(v => !v);
+        if (geodesyEnabled) setEditingGeodesyCard(null);
+        e.preventDefault();
+        return;
+      }
       if (e.key === "Escape") {
         if (arcDragInfo) {
           arcSnapLockedTargetRef.current = null;
@@ -4193,16 +4237,9 @@ export default function MasterProject() {
           setArcDragInfo(null);
           return;
         }
-        if (pathSideSelection) {
-          setPathSideSelection(null);
-          setShapes(p => {
-            const n = [...p];
-            const s = n[pathSideSelection.shapeIdx];
-            if (s && s.points.length >= 2) {
-              n[pathSideSelection.shapeIdx] = { ...s, points: s.points.slice(0, -1) };
-            }
-            return n;
-          });
+        if (pathSegmentSideSelection) {
+          setPathSegmentSideSelection(null);
+          setSelectedShapeIdx(pathSegmentSideSelection.shapeIdx);
           return;
         }
         if (drawingShapeIdx !== null) {
@@ -4245,7 +4282,7 @@ export default function MasterProject() {
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [mode, selectedShapeIdx, drawingShapeIdx, selectedPoints, saveHistory, undo, shapes, pathSideSelection, arcDragInfo, measureStart]);
+  }, [mode, selectedShapeIdx, drawingShapeIdx, selectedPoints, saveHistory, undo, shapes, pathSegmentSideSelection, arcDragInfo, measureStart, activeLayer, geodesyEnabled]);
 
   // Canvas modals: Escape = close (grassTrim, adjustmentFill, adjustmentExtend, adjustmentSpread)
   useEffect(() => {
@@ -5171,6 +5208,7 @@ export default function MasterProject() {
     setPatternRotatePreview(null);
     setMode("select");
   };
+  switchLayerRef.current = switchLayer;
 
   const clearDraft = useCallback(() => {
     try {
@@ -5301,7 +5339,7 @@ export default function MasterProject() {
   const l2Count = shapes.filter(s => s.layer === 2).length;
 
   return (
-    <div style={{ width: "100%", height: "100vh", display: "flex", flexDirection: "column", background: CC.bg, fontFamily: "'JetBrains Mono','Fira Code','Courier New',monospace", color: CC.text, overflow: "hidden", userSelect: "none" }}>
+    <div style={{ width: "100%", height: "100%", minHeight: 0, minWidth: 0, flex: 1, display: "flex", flexDirection: "column", background: CC.bg, fontFamily: "'JetBrains Mono','Fira Code','Courier New',monospace", color: CC.text, overflow: "hidden", userSelect: "none" }}>
       {showRestoredToast && (
         <div style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: CC.accent, color: CC.bg, padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
           ✓ {t("project:restored_unsaved_sketch")}
@@ -5660,8 +5698,8 @@ export default function MasterProject() {
       </div>
 
       {/* Canvas + Summary */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-      <div ref={containerRef} style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", overflow: "hidden" }}>
+      <div ref={containerRef} style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden" }}>
         <canvas ref={canvasRef} style={{ width: canvasSize.w, height: canvasSize.h, cursor, display: "block", touchAction: "none" }}
           onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp} onContextMenu={handleContextMenu} onDoubleClick={handleDoubleClick}
@@ -5719,6 +5757,12 @@ export default function MasterProject() {
             >
               <div style={{ fontWeight: 600, marginBottom: 10, color: CC.accent }}>{t("project:canvas_shortcuts_title")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div>{t("project:canvas_shortcut_layer_1")}</div>
+                <div>{t("project:canvas_shortcut_layer_2")}</div>
+                <div>{t("project:canvas_shortcut_layer_3")}</div>
+                <div>{t("project:canvas_shortcut_layer_4")}</div>
+                <div>{t("project:canvas_shortcut_layer_5")}</div>
+                <div>{t("project:canvas_shortcut_geodesy")}</div>
                 <div>{t("project:canvas_shortcut_left_object")}</div>
                 <div>{t("project:canvas_shortcut_left_empty_ctrl")}</div>
                 <div>{t("project:canvas_shortcut_left_empty")}</div>

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
 interface SlabDimension { size: string; width: number; length: number; }
-interface SlabCuttingOption { type: string; description: string; }
+interface SlabCuttingOption { type: string; descriptionKey: string; }
 
 interface StepDimension {
   height: number; tread: number; isFirst: boolean; remainingTread: number; buriedDepth?: number;
@@ -52,18 +52,18 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
   ];
 
   const slabPlacementOptions = [
-    { id: 'longWay', label: 'Slabs long way' },
-    { id: 'sideWays', label: 'Slabs side ways' },
+    { id: 'longWay', labelKey: 'calculator:lshape_slabs_long_way' },
+    { id: 'sideWays', labelKey: 'calculator:lshape_slabs_side_ways' },
   ];
 
   const cuttingOptions: SlabCuttingOption[] = [
-    { type: 'oneCut', description: '1 cut' },
-    { type: 'twoCuts', description: '2 cuts (same on both sides)' },
+    { type: 'oneCut', descriptionKey: 'calculator:lshape_cut_1' },
+    { type: 'twoCuts', descriptionKey: 'calculator:lshape_cut_2' },
   ];
 
   const cornerJointOptions = [
-    { id: 'buttJoint', label: 'Butt joint (Arm A covers both corners)' },
-    { id: 'mitre45', label: '45° mitre cut (both corners)' },
+    { id: 'buttJoint', labelKey: 'calculator:ushape_corner_butt_a' },
+    { id: 'mitre45', labelKey: 'calculator:ushape_corner_mitre45_both' },
   ];
 
   const [selectedSlabDimension, setSelectedSlabDimension] = useState<string>(slabDimensions[0].size);
@@ -649,18 +649,15 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
             <h4 className="text-lg font-medium text-white mb-2">{t('calculator:slab_dimensions_label')}</h4>
             <div className="space-y-2">
               {slabDimensions.map((slab) => (
-                <div key={slab.size} className="flex items-center">
+                <label key={slab.size} className="flex items-center cursor-pointer min-h-[44px] py-2">
                   <input
                     type="radio"
-                    id={`ushape-slab-${slab.size}`}
                     checked={selectedSlabDimension === slab.size}
                     onChange={() => setSelectedSlabDimension(slab.size)}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
-                  <label htmlFor={`ushape-slab-${slab.size}`} className="ml-2 text-sm text-gray-300">
-                    {slab.size} cm
-                  </label>
-                </div>
+                  <span className="ml-2 text-sm text-gray-300">{slab.size} cm</span>
+                </label>
               ))}
             </div>
           </div>
@@ -679,7 +676,7 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
                     className="h-4 w-4 text-blue-600 rounded"
                   />
                   <label htmlFor={`ushape-placement-${option.id}`} className="ml-2 text-sm text-gray-300">
-                    {option.label}
+                    {t(option.labelKey)}
                   </label>
                 </div>
               ))}
@@ -688,21 +685,18 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
 
           {/* Corner joint type */}
           <div>
-            <h4 className="text-lg font-medium text-white mb-2">Corner Joint Type (Top Slabs)</h4>
+            <h4 className="text-lg font-medium text-white mb-2">{t('calculator:lshape_slabs_corner_joint_type')}</h4>
             <div className="space-y-2">
               {cornerJointOptions.map((option) => (
-                <div key={option.id} className="flex items-center">
+                <label key={option.id} className="flex items-center cursor-pointer min-h-[44px] py-2">
                   <input
                     type="radio"
-                    id={`ushape-corner-${option.id}`}
                     checked={cornerJoint === option.id}
                     onChange={() => setCornerJoint(option.id)}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
-                  <label htmlFor={`ushape-corner-${option.id}`} className="ml-2 text-sm text-gray-300">
-                    {option.label}
-                  </label>
-                </div>
+                  <span className="ml-2 text-sm text-gray-300">{t(option.labelKey)}</span>
+                </label>
               ))}
             </div>
           </div>
@@ -723,7 +717,7 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
               step="0.1"
             />
             <p className="text-xs text-gray-400 mt-1">
-              Consumption: {((parseFloat(adhesiveThickness) || 0.5) * 12).toFixed(1)} kg/m²
+              {t('calculator:consumption_label')} {((parseFloat(adhesiveThickness) || 0.5) * 12).toFixed(1)} kg/m²
             </p>
           </div>
 
@@ -732,18 +726,15 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
             <h4 className="text-lg font-medium text-white mb-2">{t('calculator:slab_cutting_long_ways_label')}</h4>
             <div className="space-y-2">
               {cuttingOptions.map((option) => (
-                <div key={option.type} className="flex items-center">
+                <label key={option.type} className="flex items-center cursor-pointer min-h-[44px] py-2">
                   <input
                     type="radio"
-                    id={`ushape-cutting-${option.type}`}
                     checked={selectedCutting === option.type}
                     onChange={() => setSelectedCutting(option.type)}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
-                  <label htmlFor={`ushape-cutting-${option.type}`} className="ml-2 text-sm text-gray-300">
-                    {option.description}
-                  </label>
-                </div>
+                  <span className="ml-2 text-sm text-gray-300">{t(option.descriptionKey)}</span>
+                </label>
               ))}
             </div>
           </div>
@@ -758,21 +749,21 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
           {/* Corner joint info - U-shape: A always dominates */}
           <div className="bg-blue-900 text-white text-sm rounded p-3 mb-3 border border-blue-700">
             <p className="font-semibold">
-              Corner: {cornerJoint === 'mitre45' ? '45° Mitre Cut' : 'Butt Joint (Arm A dominant on top)'}
+              {t('calculator:lshape_corner_label')} {cornerJoint === 'mitre45' ? t('calculator:ushape_corner_info_mitre') : t('calculator:ushape_corner_info_butt')}
             </p>
-            <p>Front dominant: Arm A</p>
+            <p>{t('calculator:ushape_front_dominant_a')}</p>
           </div>
 
           <div className="overflow-x-auto border border-gray-700 rounded-lg">
             <table className="w-full bg-gray-700 rounded-lg text-sm">
               <thead>
                 <tr className="text-gray-400 border-b border-gray-700">
-                  <th className="py-2 px-2 text-left">Step</th>
-                  <th className="py-2 px-2 text-left">Surface</th>
-                  <th className="py-2 px-2 text-left">Arm</th>
-                  <th className="py-2 px-2 text-left">Slabs</th>
-                  <th className="py-2 px-2 text-left">Dimensions</th>
-                  <th className="py-2 px-2 text-left">Size (cm)</th>
+                  <th className="py-2 px-2 text-left">{t('calculator:step_label')}</th>
+                  <th className="py-2 px-2 text-left">{t('calculator:lshape_table_surface')}</th>
+                  <th className="py-2 px-2 text-left">{t('calculator:lshape_table_arm')}</th>
+                  <th className="py-2 px-2 text-left">{t('calculator:lshape_table_slabs')}</th>
+                  <th className="py-2 px-2 text-left">{t('calculator:lshape_table_dimensions')}</th>
+                  <th className="py-2 px-2 text-left">{t('calculator:ushape_table_size_cm')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -783,8 +774,8 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
                       <td className="py-1 px-2 text-white" rowSpan={6}>
                         {sr.step}{sr.isPlatform ? ' (P)' : ''}
                       </td>
-                      <td className="py-1 px-2 text-blue-300">Top</td>
-                      <td className="py-1 px-2 text-white">A</td>
+                      <td className="py-1 px-2 text-blue-300">{t('calculator:lshape_top_surface')}</td>
+                      <td className="py-1 px-2 text-white">{t('calculator:lshape_arm_a')}</td>
                       <td className="py-1 px-2 text-gray-300">{sr.topArmA_slabsNeeded}</td>
                       <td className="py-1 px-2 text-xs">
                         {(sr.topArmA_dimensionsParts ?? [{ text: sr.topArmA_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
@@ -798,7 +789,7 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
                     </tr>
                     {/* Top Bl */}
                     <tr className="border-b border-gray-700">
-                      <td className="py-1 px-2 text-blue-300">Top</td>
+                      <td className="py-1 px-2 text-blue-300">{t('calculator:lshape_top_surface')}</td>
                       <td className="py-1 px-2 text-white">B<sub>{t('calculator:ushape_arm_left_subscript')}</sub></td>
                       <td className="py-1 px-2 text-gray-300">{sr.topArmB_slabsNeeded_single}</td>
                       <td className="py-1 px-2 text-xs">
@@ -813,7 +804,7 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
                     </tr>
                     {/* Top Bp */}
                     <tr className="border-b border-gray-700">
-                      <td className="py-1 px-2 text-blue-300">Top</td>
+                      <td className="py-1 px-2 text-blue-300">{t('calculator:lshape_top_surface')}</td>
                       <td className="py-1 px-2 text-white">B<sub>{t('calculator:ushape_arm_right_subscript')}</sub></td>
                       <td className="py-1 px-2 text-gray-300">{sr.topArmB_slabsNeeded_single}</td>
                       <td className="py-1 px-2 text-xs">
@@ -828,8 +819,8 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
                     </tr>
                     {/* Front A */}
                     <tr className="border-b border-gray-700">
-                      <td className="py-1 px-2 text-orange-300">Front</td>
-                      <td className="py-1 px-2 text-white">A</td>
+                      <td className="py-1 px-2 text-orange-300">{t('calculator:lshape_front_surface')}</td>
+                      <td className="py-1 px-2 text-white">{t('calculator:lshape_arm_a')}</td>
                       <td className="py-1 px-2 text-gray-300">{sr.frontArmA_slabsNeeded}</td>
                       <td className="py-1 px-2 text-xs">
                         {(sr.frontArmA_dimensionsParts ?? [{ text: sr.frontArmA_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
@@ -858,7 +849,7 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
                     </tr>
                     {/* Front Bp */}
                     <tr className="border-b border-gray-700">
-                      <td className="py-1 px-2 text-orange-300">Front</td>
+                      <td className="py-1 px-2 text-orange-300">{t('calculator:lshape_front_surface')}</td>
                       <td className="py-1 px-2 text-white">B<sub>{t('calculator:ushape_arm_right_subscript')}</sub></td>
                       <td className="py-1 px-2 text-gray-300">{sr.frontArmB_slabsNeeded_single}</td>
                       <td className="py-1 px-2 text-xs">
@@ -911,7 +902,7 @@ const UShapeStairsSlabs: React.FC<UShapeStairsSlabsProps> = ({
           {/* Waste list */}
           {slabCalculationResult.wasteList && slabCalculationResult.wasteList.length > 0 && (
             <div className="mt-3">
-              <p className="text-sm text-gray-400 font-medium mb-1">Remaining waste:</p>
+              <p className="text-sm text-gray-400 font-medium mb-1">{t('calculator:ushape_remaining_waste')}</p>
               <div className="flex flex-wrap gap-1">
                 {slabCalculationResult.wasteList.map((w: WasteMaterial, i: number) => (
                   <span key={i} className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded">

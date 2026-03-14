@@ -65,8 +65,12 @@ const CalculatorPage: React.FC = () => {
       return desc;
     }
     if (activeCalculator === 'slab' && activeSubType === 'default') return t('calculator:slab_info_description');
+    if (activeCalculator === 'slab' && activeSubType === 'concreteSlabs') return t('calculator:concrete_slabs_info_description');
     if (activeCalculator === 'kerbs') return t('calculator:kerbs_info_description');
     if (activeCalculator === 'foundation') return t('calculator:foundation_calculator_description');
+    if (activeCalculator === 'fence') return t('calculator:fence_info_description');
+    if (activeCalculator === 'grass') return t('calculator:grass_info_description');
+    if (activeCalculator === 'deck') return t('calculator:deck_info_description');
     return t('calculator:info_description');
   }, [activeCalculator, activeSubType, t]);
 
@@ -179,11 +183,11 @@ const CalculatorPage: React.FC = () => {
   };
 
   return (
-    <div style={{ height: '100vh', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontFamily: fonts.body, background: colors.bgMain }}>
+    <div className="calculator-page" style={{ height: '100vh', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontFamily: fonts.body, background: colors.bgMain }}>
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', padding: `0 ${spacing["6xl"]}px` }}>
         <div style={{ flex: 1, overflowY: 'auto' }} id="calculator-container">
           {activeCalculator && activeSubType ? (
-            <div style={{ background: colors.bgCard, borderRadius: radii["3xl"], boxShadow: '0 4px 20px rgba(0,0,0,0.3)', padding: spacing["6xl"], minHeight: '100%', width: '100%' }}>
+            <div className="calculator-card" style={{ background: colors.bgCard, borderRadius: radii["3xl"], boxShadow: '0 4px 20px rgba(0,0,0,0.3)', padding: spacing["6xl"], minHeight: '100%', width: '100%' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: spacing.lg, marginBottom: spacing["6xl"] }}>
                 <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>
                   {activeCalculatorLabel || activeSubType.replace(/_/g, ' ')}
@@ -197,7 +201,7 @@ const CalculatorPage: React.FC = () => {
               {renderCalculator()}
             </div>
           ) : (
-            <div style={{ background: colors.bgCard, borderRadius: radii["3xl"], boxShadow: shadows.lg, padding: spacing["6xl"], textAlign: 'center', color: colors.textDim, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: spacing["9xl"] * 10, width: '100%' }}>
+            <div className="calculator-card" style={{ background: colors.bgCard, borderRadius: radii["3xl"], boxShadow: shadows.lg, padding: spacing["6xl"], textAlign: 'center', color: colors.textDim, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: spacing["9xl"] * 10, width: '100%' }}>
               <div>
                 <CalculatorIcon style={{ width: spacing["8xl"], height: spacing["8xl"], color: colors.textDim, marginBottom: spacing.lg }} />
                 <p style={{ fontSize: fontSizes["2xl"], marginBottom: spacing.md, color: colors.textMuted }}>{t('calculator:select_calculator_message')}</p>

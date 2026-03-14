@@ -9,7 +9,7 @@ interface SlabDimension {
 
 interface SlabCuttingOption {
   type: string;
-  description: string;
+  descriptionKey: string;
 }
 
 interface SlabGapOption {
@@ -98,14 +98,14 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
 
   // Slab placement options
   const slabPlacementOptions = [
-    { id: 'longWay', label: 'Slabs long way' },
-    { id: 'sideWays', label: 'Slabs side ways' },
+    { id: 'longWay', labelKey: 'calculator:lshape_slabs_long_way' },
+    { id: 'sideWays', labelKey: 'calculator:lshape_slabs_side_ways' },
   ];
 
   // Cutting options
   const cuttingOptions: SlabCuttingOption[] = [
-    { type: 'oneCut', description: '1 cut' },
-    { type: 'twoCuts', description: '2 cuts (same on both sizes)' },
+    { type: 'oneCut', descriptionKey: 'calculator:lshape_cut_1' },
+    { type: 'twoCuts', descriptionKey: 'calculator:lshape_cut_2' },
   ];
 
   // State variables
@@ -1144,18 +1144,15 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
             <h4 className="text-lg font-medium text-white mb-2">{t('calculator:slab_dimensions_label')}</h4>
             <div className="space-y-2">
               {slabDimensions.map((slab) => (
-                <div key={slab.size} className="flex items-center">
+                <label key={slab.size} className="flex items-center cursor-pointer min-h-[44px] py-2">
                   <input
                     type="radio"
-                    id={`slab-${slab.size}`}
                     checked={selectedSlabDimension === slab.size}
                     onChange={() => setSelectedSlabDimension(slab.size)}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
-                  <label htmlFor={`slab-${slab.size}`} className="ml-2 text-sm text-gray-300">
-                    {slab.size} cm
-                  </label>
-                </div>
+                  <span className="ml-2 text-sm text-gray-300">{slab.size} cm</span>
+                </label>
               ))}
             </div>
           </div>
@@ -1164,18 +1161,15 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
             <h4 className="text-lg font-medium text-white mb-2">{t('calculator:fronts_and_front_steps_label')}</h4>
             <div className="space-y-2">
               {slabPlacementOptions.map((option) => (
-                <div key={option.id} className="flex items-center">
+                <label key={option.id} className="flex items-center cursor-pointer min-h-[44px] py-2">
                   <input
                     type="radio"
-                    id={`placement-${option.id}`}
                     checked={selectedPlacement === option.id}
                     onChange={() => setSelectedPlacement(option.id)}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
-                  <label htmlFor={`placement-${option.id}`} className="ml-2 text-sm text-gray-300">
-                    {option.label}
-                  </label>
-                </div>
+                  <span className="ml-2 text-sm text-gray-300">{t(option.labelKey)}</span>
+                </label>
               ))}
             </div>
           </div>
@@ -1194,7 +1188,7 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
               step="0.1"
             />
             <p className="text-xs text-gray-400 mt-1">
-              Consumption: {((parseFloat(adhesiveThickness) || 0.5) * 12).toFixed(1)} kg/mÂ²
+              {t('calculator:consumption_label')}: {((parseFloat(adhesiveThickness) || 0.5) * 12).toFixed(1)} kg/m²
             </p>
           </div>
           
@@ -1202,18 +1196,15 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
             <h4 className="text-lg font-medium text-white mb-2">{t('calculator:slab_cutting_long_ways_label')}</h4>
             <div className="space-y-2">
               {cuttingOptions.map((option) => (
-                <div key={option.type} className="flex items-center">
+                <label key={option.type} className="flex items-center cursor-pointer min-h-[44px] py-2">
                   <input
                     type="radio"
-                    id={`cutting-${option.type}`}
                     checked={selectedCutting === option.type}
                     onChange={() => setSelectedCutting(option.type)}
                     className="h-4 w-4 text-blue-600 rounded"
                   />
-                  <label htmlFor={`cutting-${option.type}`} className="ml-2 text-sm text-gray-300">
-                    {option.description}
-                  </label>
-                </div>
+                  <span className="ml-2 text-sm text-gray-300">{t(option.descriptionKey)}</span>
+                </label>
               ))}
             </div>
           </div>
@@ -1227,11 +1218,11 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
             <table className="w-full bg-gray-700 rounded-lg text-sm">
               <thead>
                 <tr className="border-b border-gray-600">
-                  <th className="py-2 px-3 text-left text-gray-300">Step</th>
-                  <th className="py-2 px-3 text-left text-gray-300">Surface</th>
+                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:step_label')}</th>
+                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_surface')}</th>
                   <th className="py-2 px-3 text-left text-gray-300">{t('calculator:slabs_needed')}</th>
-                  <th className="py-2 px-3 text-left text-gray-300">Dimensions</th>
-                  <th className="py-2 px-3 text-left text-gray-300">Surface Size (cm)</th>
+                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_dimensions')}</th>
+                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_surface_size_cm')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1239,7 +1230,7 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
                   <React.Fragment key={`step-${result.step}`}>
                     <tr className="border-b border-gray-600">
                       <td className="py-2 px-3 text-gray-300" rowSpan={2}>{result.step}</td>
-                      <td className="py-2 px-3 text-gray-300">Top</td>
+                      <td className="py-2 px-3 text-gray-300">{t('calculator:lshape_top_surface')}</td>
                       <td className="py-2 px-3 text-gray-300">{result.stepSlabsNeeded}</td>
                       <td className="py-2 px-3">
                         {[{ text: result.stepSlabDimensions, fromWaste: result.stepWasteUsed }].map((part, pi) => (
@@ -1251,7 +1242,7 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
                       </td>
                     </tr>
                     <tr className="border-b border-gray-600">
-                      <td className="py-2 px-3 text-gray-300">Front</td>
+                      <td className="py-2 px-3 text-gray-300">{t('calculator:lshape_front_surface')}</td>
                       <td className="py-2 px-3 text-gray-300">{result.frontSlabsNeeded}</td>
                       <td className="py-2 px-3">
                         {[{ text: result.frontSlabDimensions, fromWaste: result.frontWasteUsed }].map((part, pi) => (

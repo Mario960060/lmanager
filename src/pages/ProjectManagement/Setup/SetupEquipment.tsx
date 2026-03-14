@@ -858,7 +858,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('form:label_description', { context: 'equipment' })}</label>
+              <label className="block text-sm font-medium text-gray-700">{t('form:equipment_description_label')}</label>
               <textarea
                 value={editingEquipment.description || ''}
                 onChange={(e) => setEditingEquipment(prev => ({ ...prev!, description: e.target.value }))}

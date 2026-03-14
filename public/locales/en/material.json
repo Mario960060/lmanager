@@ -64,5 +64,13 @@
   "desc_soil_excavation": "taking by grab",
   "desc_tape1": "tape1 from grab cheaper",
   "desc_underground_cable": "electrical underground cable",
-  "desc_water_pipe": "MDPE water supply pipe"
+  "desc_water_pipe": "MDPE water supply pipe",
+  "fill_soil": "Fill (Soil)",
+  "fill_tape1": "Fill (Type 1)",
+  "decking_board": "Decking board",
+  "decking_boards": "Decking boards",
+  "joist": "Joist",
+  "joists": "Joists",
+  "bearers": "Bearers",
+  "frame_slabs": "Frame slabs"
 }

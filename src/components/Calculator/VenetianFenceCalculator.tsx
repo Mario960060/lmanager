@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 
 interface VenetianFenceCalculatorProps {
   onResultsChange?: (results: any) => void;
@@ -627,7 +627,7 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
               <ul className="space-y-1 pl-5 list-disc">
               {taskBreakdown.map((task, index) => (
                   <li key={index} className="text-sm">
-                    <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours
+                    <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}
                   </li>
                 ))}
               </ul>
@@ -661,7 +661,7 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
                     {materials.map((material, index) => (
                     <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {material.name}
+                        {translateMaterialName(material.name, t)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                         {material.amount.toFixed(2)}

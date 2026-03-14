@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
 import { computeSlabCuts, computePathSlabCuts, groupCutsByLength } from '../../projectmanagement/canvacreator/visualization/slabPattern';
@@ -821,7 +821,7 @@ const ConcreteSlabsCalculator: React.FC<ConcreteSlabsCalculatorProps> = ({
               <ul className="space-y-1 pl-5 list-disc">
                 {taskBreakdown.map((task, index) => (
                   <li key={index} className="text-sm">
-                    <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} hours
+                    <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}
                   </li>
                 ))}
               </ul>
@@ -843,7 +843,7 @@ const ConcreteSlabsCalculator: React.FC<ConcreteSlabsCalculatorProps> = ({
                 <tbody className="divide-y divide-gray-200">
                   {materials.map((material, index) => (
                     <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{material.name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{translateMaterialName(material.name, t)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{material.amount.toFixed(2)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{translateUnit(material.unit, t)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}</td>

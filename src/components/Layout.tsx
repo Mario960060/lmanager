@@ -15,11 +15,10 @@ import {
   Settings,
   Menu,
   X,
-  Sun,
-  Moon,
   Wrench,
   Building2,
   ArrowLeft,
+  ChevronRight,
   Layers, 
   BrickWall, 
   Clock, 
@@ -35,12 +34,12 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useTheme, getAllThemes } from '../themes';
-import { colors, spacing, radii, fontSizes, fontWeights, transitions, layout, shadows, gradients } from '../themes/designTokens';
+import { colors, spacing, radii, fontSizes, fontWeights, transitions, layout, shadows, gradients, accentAlpha } from '../themes/designTokens';
 
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, theme, toggleTheme, setUser, setProfile } = useAuthStore();
+  const { profile, setUser, setProfile } = useAuthStore();
   const { currentTheme, setTheme } = useTheme();
   const { t } = useTranslation(['common', 'nav']);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -219,19 +218,11 @@ const Layout = () => {
           <Menu className="w-6 h-6" />
         </button>
         <h1 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.bold, color: colors.textPrimary }}>{t('common:app_name')}</h1>
-        <button
-          onClick={toggleTheme}
-          style={{ padding: spacing.md, borderRadius: radii.lg, transition: transitions.fast, background: 'transparent' }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-          aria-label={t('common:theme')}
-        >
-          {theme === 'dark' ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
-        </button>
+        <div style={{ width: 40, flexShrink: 0 }} aria-hidden="true" />
       </div>
 
       {/* Main Layout */}
-      <div className="flex min-h-screen lg:min-h-full">
+      <div className="flex h-screen">
         {/* Sidebar Backdrop */}
         {isSidebarOpen && (
           <div
@@ -285,102 +276,103 @@ const Layout = () => {
                         setExpandedCategory(null);
                       }}
                       style={{
-                        width: '100%', display: 'flex', alignItems: 'center', padding: `${spacing.sm}px ${spacing.lg}px`, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, borderRadius: radii.lg, transition: transitions.fast, background: colors.bgOverlay, color: colors.textMuted, marginBottom: spacing.lg, flexShrink: 0,
+                        width: '100%', display: 'flex', alignItems: 'center', gap: spacing.md, padding: '10px 12px', borderRadius: radii.xl, border: 'none', cursor: 'pointer', fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.textSubtle, background: 'transparent', textAlign: 'left', marginBottom: spacing.sm, flexShrink: 0, fontFamily: 'inherit',
                       }}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textSecondary; }}
-                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgOverlay; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                     >
-                      <ArrowLeft style={{ width: 20, height: 20, marginRight: spacing.sm, flexShrink: 0 }} />
+                      <ArrowLeft style={{ width: 16, height: 16, flexShrink: 0 }} />
                       {t('common:back')}
                     </button>
 
                     {/* Calculators Section Title */}
-                    <div style={{ padding: `${spacing.md}px ${spacing.lg}px`, fontSize: fontSizes.xs, fontWeight: fontWeights.semibold, color: colors.textDim, textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
+                    <div style={{ padding: '4px 12px 8px', fontSize: fontSizes.xs, fontWeight: fontWeights.semibold, color: colors.textDim, textTransform: 'uppercase', letterSpacing: 1.2, flexShrink: 0 }}>
                       {t('nav:calculator')}
                     </div>
 
                     {/* Calculators List with Sub-types - Scrollable */}
                     <div className="flex-1 overflow-y-auto min-h-0 pr-2">
-                      <div className="space-y-1">
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         {calculatorButtons.map((calc: any) => {
                           const Icon = calc.icon as any;
                           const isExpanded = expandedCategory === calc.type;
+                          const hasMultipleSubTypes = calc.subTypes.length > 1;
+                          const hasSubTypes = calc.subTypes.length >= 1;
+                          const hasChildren = hasSubTypes; // alias for compatibility
+                          const isActive = selectedCalculatorType === calc.type && !selectedSubType;
+                          const isActiveOrExpanded = isActive || isExpanded;
                           
                           return (
                             <div key={calc.type}>
                               <button
                                 onClick={() => {
-                                  if (calc.subTypes.length > 1) {
-                                    // Toggle expansion for categories with multiple sub-types
+                                  if (hasMultipleSubTypes) {
                                     setExpandedCategory(isExpanded ? null : calc.type);
                                   } else {
-                                    // Direct selection for single sub-type
                                     setSelectedCalculatorType(calc.type);
                                     setExpandedCategory(calc.type);
                                   }
-                                  // Don't close menu on mobile - keep it open for calculator
                                 }}
                                 style={{
-                                  width: '100%', display: 'flex', alignItems: 'center', padding: '10px 12px', gap: 10, marginBottom: 2, fontSize: fontSizes.base, fontWeight: selectedCalculatorType === calc.type ? fontWeights.semibold : fontWeights.normal, borderRadius: radii.lg, transition: transitions.fast,
-                                  background: selectedCalculatorType === calc.type ? colors.accentBlueBg : 'transparent',
-                                  borderLeft: `3px solid ${selectedCalculatorType === calc.type ? colors.accentBlue : 'transparent'}`,
-                                  color: selectedCalculatorType === calc.type ? colors.textSecondary : colors.textSubtle,
+                                  width: '100%', display: 'flex', alignItems: 'center', gap: spacing.xl, padding: '10px 12px', borderRadius: radii.xl, border: 'none', cursor: 'pointer', fontSize: fontSizes.base, fontWeight: isActiveOrExpanded ? fontWeights.semibold : fontWeights.normal, color: isActiveOrExpanded ? colors.textPrimary : colors.textSubtle, background: isActive && !isExpanded ? `linear-gradient(135deg, ${accentAlpha(0.18)}, ${accentAlpha(0.08)})` : 'transparent', boxShadow: isActive && !isExpanded ? `0 0 0 1px ${accentAlpha(0.3)} inset` : 'none', transition: transitions.fast, textAlign: 'left', fontFamily: 'inherit',
                                 }}
-                                onMouseEnter={(e) => { if (selectedCalculatorType !== calc.type) { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textSecondary; } }}
-                                onMouseLeave={(e) => { if (selectedCalculatorType !== calc.type) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.textSubtle; } }}
+                                onMouseEnter={(e) => {
+                                  if (!isActive || isExpanded) (e.currentTarget as HTMLElement).style.background = colors.bgHover;
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isActive || isExpanded) (e.currentTarget as HTMLElement).style.background = 'transparent';
+                                }}
                               >
-                                <Icon size={20} style={{ flexShrink: 0, color: selectedCalculatorType === calc.type ? colors.accentBlue : colors.textFaint }} />
-                                {calc.label}
-                                {calc.subTypes.length > 1 && (
-                                  <span style={{ marginLeft: 'auto', color: colors.textDim }}>
-                                  </span>
+                                <span style={{ opacity: isActiveOrExpanded ? 1 : 0.6, display: 'flex', flexShrink: 0 }}>
+                                  <Icon size={18} style={{ color: 'inherit' }} />
+                                </span>
+                                <span style={{ flex: 1, lineHeight: 1.35 }}>{calc.label}</span>
+                                {hasMultipleSubTypes && (
+                                  <ChevronRight
+                                    size={14}
+                                    style={{ opacity: 0.4, transition: 'transform 0.2s ease', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}
+                                  />
                                 )}
                               </button>
                               
                               {/* Sub-types list */}
-                              {isExpanded && calc.subTypes.map((subType: any) => {
-                                const isSubTypeActive = selectedCalculatorType === calc.type && selectedSubType === subType.type;
-                                return (
-                                <button
-                                  key={`${calc.type}-${subType.type}`}
-                                  onClick={() => {
-                                    setSelectedCalculatorType(calc.type);
-                                    setSelectedSubType(subType.type);
-                                    
-                                    // Navigate first if not on calculator page
-                                    if (location.pathname !== '/calculator') {
-                                      navigate('/calculator');
-                                      // Dispatch event after a short delay to ensure component is mounted
-                                      setTimeout(() => {
-                                        const event = new CustomEvent('selectSubCalculator', { 
-                                          detail: { calculatorType: calc.type, subType: subType.type, subTypeLabel: subType.label }
-                                        });
-                                        window.dispatchEvent(event);
-                                      }, 50);
-                                    } else {
-                                      // Already on calculator page, dispatch immediately
-                                      const event = new CustomEvent('selectSubCalculator', { 
-                                        detail: { calculatorType: calc.type, subType: subType.type, subTypeLabel: subType.label }
-                                      });
-                                      window.dispatchEvent(event);
-                                    }
-                                    
-                                    // Close sidebar on mobile after selecting sub-calculator
-                                    setIsSidebarOpen(false);
-                                  }}
-                                  style={{
-                                    width: '100%', display: 'flex', alignItems: 'center', padding: `${spacing.md}px ${spacing["6xl"]}px`, fontSize: fontSizes.sm, borderRadius: radii.lg, transition: transitions.fast,
-                                    background: isSubTypeActive ? colors.accentBlueBg : 'transparent',
-                                    borderLeft: `3px solid ${isSubTypeActive ? colors.accentBlue : 'transparent'}`,
-                                    color: isSubTypeActive ? colors.textSecondary : colors.navTextInactive,
-                                  }}
-                                  onMouseEnter={(e) => { if (!isSubTypeActive) { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textSecondary; } }}
-                                  onMouseLeave={(e) => { if (!isSubTypeActive) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.navTextInactive; } }}
-                                >
-                                  {subType.label}
-                                </button>
-                              );
-                              })}
+                              {hasSubTypes && isExpanded && (
+                                <div style={{ marginLeft: spacing["5xl"], borderLeft: `1px solid ${accentAlpha(0.4)}`, paddingLeft: 0, marginTop: 2, marginBottom: spacing.sm }}>
+                                  {calc.subTypes.map((subType: any) => {
+                                    const isSubTypeActive = selectedCalculatorType === calc.type && selectedSubType === subType.type;
+                                    return (
+                                      <button
+                                        key={`${calc.type}-${subType.type}`}
+                                        onClick={() => {
+                                          setSelectedCalculatorType(calc.type);
+                                          setSelectedSubType(subType.type);
+                                          if (location.pathname !== '/calculator') {
+                                            navigate('/calculator');
+                                            setTimeout(() => {
+                                              window.dispatchEvent(new CustomEvent('selectSubCalculator', { detail: { calculatorType: calc.type, subType: subType.type, subTypeLabel: subType.label } }));
+                                            }, 50);
+                                          } else {
+                                            window.dispatchEvent(new CustomEvent('selectSubCalculator', { detail: { calculatorType: calc.type, subType: subType.type, subTypeLabel: subType.label } }));
+                                          }
+                                          setIsSidebarOpen(false);
+                                        }}
+                                        style={{
+                                          width: '100%', display: 'flex', alignItems: 'center', gap: spacing.lg, padding: '8px 12px', borderRadius: radii.lg, border: 'none', cursor: 'pointer', fontSize: fontSizes.sm, fontWeight: isSubTypeActive ? fontWeights.semibold : fontWeights.normal, color: isSubTypeActive ? colors.accentBlue : colors.textSubtle, background: isSubTypeActive ? colors.accentBlueBg : 'transparent', transition: transitions.fast, textAlign: 'left', fontFamily: 'inherit', lineHeight: 1.35,
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          if (!isSubTypeActive) (e.currentTarget as HTMLElement).style.background = colors.bgHover;
+                                        }}
+                                        onMouseLeave={(e) => {
+                                          if (!isSubTypeActive) (e.currentTarget as HTMLElement).style.background = 'transparent';
+                                        }}
+                                      >
+                                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: isSubTypeActive ? colors.accentBlue : colors.textDim, opacity: isSubTypeActive ? 1 : 0.7, flexShrink: 0 }} />
+                                        {subType.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -455,7 +447,7 @@ const Layout = () => {
                   onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
                   <span>{currentTheme.icon}</span>
-                  <span className="ml-2">{currentTheme.displayName}</span>
+                  <span className="ml-2">{t(`common:theme_${currentTheme.id}`)}</span>
                 </button>
                 
                 {showThemeDropdown && (
@@ -497,7 +489,7 @@ const Layout = () => {
                         }}
                       >
                         <span>{themeOption.icon}</span>
-                        <span>{themeOption.displayName}</span>
+                        <span>{t(`common:theme_${themeOption.id}`)}</span>
                         {currentTheme.id === themeOption.id && (
                           <span style={{ marginLeft: 'auto', color: colors.accentBlue }}>✓</span>
                         )}
@@ -540,16 +532,34 @@ const Layout = () => {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 min-w-0 min-h-screen overflow-auto" style={{ background: colors.bgMain, position: 'relative' }}>
-          <div style={{
-            position: 'fixed', top: 0, right: 0, bottom: 0,
-            backgroundImage: layout.gridPattern, backgroundSize: layout.gridPatternSize,
-            pointerEvents: 'none', zIndex: 0,
-          }} className="left-0 lg:left-[240px]" />
-          <div className="px-4 py-6 mt-16 lg:mt-0" style={{ padding: layout.contentPadding, position: 'relative', zIndex: 1 }}>
-            <Outlet />
-          </div>
-        </main>
+        {(() => {
+          const isCanvasRoute = location.pathname.includes('create-canvas');
+          const isCalculatorRoute = location.pathname === '/calculator';
+          return (
+            <main
+              className={`flex-1 min-w-0 min-h-0 pt-16 lg:pt-0 ${isCanvasRoute ? 'overflow-hidden flex flex-col' : 'overflow-auto'}`}
+              style={{ background: colors.bgMain, position: 'relative' }}
+            >
+              <div style={{
+                position: 'fixed', top: 0, right: 0, bottom: 0,
+                backgroundImage: layout.gridPattern, backgroundSize: layout.gridPatternSize,
+                pointerEvents: 'none', zIndex: 0,
+              }} className="left-0 lg:left-[240px]" />
+              <div
+                className={isCanvasRoute ? 'flex-1 min-h-0 min-w-0 flex flex-col' : 'layout-content-wrapper px-4 py-6'}
+                style={{
+                  padding: isCanvasRoute ? 0 : layout.contentPadding,
+                  position: 'relative',
+                  zIndex: 1,
+                  ...(isCanvasRoute ? { overflow: 'hidden' } : {}),
+                }}
+                data-route={isCalculatorRoute ? 'calculator' : undefined}
+              >
+                <Outlet />
+              </div>
+            </main>
+          );
+        })()}
       </div>
     </div>
   );

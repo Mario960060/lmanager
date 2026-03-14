@@ -8,7 +8,7 @@ import { X, Clock, Package, Wrench, ChevronRight, Pencil } from "lucide-react";
 import { C } from "../geometry";
 import { Shape } from "../geometry";
 import { isGroundworkLinear, isPathElement } from "../linearElements";
-import { translateTaskName, translateUnit } from "../../../lib/translationMap";
+import { translateTaskName, translateUnit, translateMaterialName } from "../../../lib/translationMap";
 
 interface ResultsModalProps {
   shape: Shape;
@@ -144,31 +144,7 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
             )}
           </div>
 
-          {/* Materials */}
-          {materials.length > 0 && (
-            <Section title={t("project:results_materials")} icon={<Package size={13} />}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                <thead>
-                  <tr>
-                    {[t("project:results_material"), t("project:results_qty"), t("project:results_unit")].map(h => (
-                      <th key={h} style={{ textAlign: "left", padding: "4px 8px", color: C.textDim, fontWeight: 500, fontSize: 11, borderBottom: `1px solid ${C.panelBorder}` }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {materials.map((m, i) => (
-                    <tr key={i} style={{ borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
-                      <td style={{ padding: "6px 8px", color: C.text }}>{m.name}</td>
-                      <td style={{ padding: "6px 8px", color: C.accent, fontWeight: 600 }}>{fmtQ(m.quantity)}</td>
-                      <td style={{ padding: "6px 8px", color: C.textDim }}>{translateUnit(m.unit, t)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Section>
-          )}
-
-          {/* Task breakdown */}
+          {/* Task breakdown (hrs first), then materials */}
           {tasks.length > 0 && (
             <Section title={t("project:results_task_breakdown")} icon={<Wrench size={13} />}>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -189,6 +165,30 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
                   );
                 })}
               </div>
+            </Section>
+          )}
+
+          {/* Materials */}
+          {materials.length > 0 && (
+            <Section title={t("project:results_materials")} icon={<Package size={13} />}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    {[t("project:results_material"), t("project:results_qty"), t("project:results_unit")].map(h => (
+                      <th key={h} style={{ textAlign: "left", padding: "4px 8px", color: C.textDim, fontWeight: 500, fontSize: 11, borderBottom: `1px solid ${C.panelBorder}` }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {materials.map((m, i) => (
+                    <tr key={i} style={{ borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+                      <td style={{ padding: "6px 8px", color: C.text }}>{translateMaterialName(m.name, t)}</td>
+                      <td style={{ padding: "6px 8px", color: C.accent, fontWeight: 600 }}>{fmtQ(m.quantity)}</td>
+                      <td style={{ padding: "6px 8px", color: C.textDim }}>{translateUnit(m.unit, t)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </Section>
           )}
         </div>

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateTaskName, translateUnit } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
 import { computeCobblestoneCuts, computeMonoblockFrameBlocks } from '../../projectmanagement/canvacreator/visualization/cobblestonePattern';
@@ -24,6 +24,7 @@ import {
 } from '../../themes/designTokens';
 import {
   TextInput,
+  CalculatorInputGrid,
   SelectDropdown,
   Checkbox,
   Button,
@@ -907,7 +908,7 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
   return (
     <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
       <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+        <CalculatorInputGrid columns={2}>
           {!compactForPath && (
             <TextInput
               label={t('calculator:input_area_m2')}
@@ -938,7 +939,7 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
             placeholder={t('calculator:placeholder_enter_thickness')}
             unit="cm"
           />
-        </div>
+        </CalculatorInputGrid>
 
         {!compactForPath && !isInProjectCreating && (
           <TextInput
@@ -1288,7 +1289,7 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
                       <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>
                         {task.hours.toFixed(2)}
                       </span>
-                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>hrs</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
                     </div>
                   </div>
                 ))}
@@ -1296,14 +1297,14 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
             </Card>
             <DataTable
               columns={[
-                { key: 'name', label: 'MATERIAL', width: '2fr' },
-                { key: 'quantity', label: 'QUANTITY', width: '1fr' },
-                { key: 'unit', label: 'UNIT', width: '1fr' },
-                { key: 'price', label: 'PRICE/UNIT', width: '1fr' },
-                { key: 'total', label: 'TOTAL', width: '1fr' },
+                { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+                { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+                { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+                { key: 'price', label: t('calculator:table_price_per_unit_header'), width: '1fr' },
+                { key: 'total', label: t('calculator:table_total_header'), width: '1fr' },
               ]}
               rows={materials.map((m) => ({
-                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{m.name}</span>,
+                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName(m.name, t)}</span>,
                 quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.amount.toFixed(2)}</span>,
                 unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
                 price: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : 'N/A'}</span>,

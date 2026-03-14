@@ -14,7 +14,7 @@ import { ProjectSettings } from "../types";
 import { mapProjectCompactorToOption } from "../../../components/Calculator/CompactorSelector";
 import { getFoundationDiggingMethodFromExcavator } from "../GroundworkLinearCalculator";
 
-import { translateUnit } from "../../../lib/translationMap";
+import { translateUnit, translateMaterialName } from "../../../lib/translationMap";
 import StairCalculator from "../../../components/Calculator/StairCalculator";
 import LShapeStairCalculator from "../../../components/Calculator/LShapeStairCalculator";
 import UShapeStairCalculator from "../../../components/Calculator/Ushapestaircalculator";
@@ -194,7 +194,7 @@ const StairsCreationModal: React.FC<StairsCreationModalProps> = ({
                   <div style={{ color: C.textDim, marginBottom: 4 }}>{t("project:stairs_materials")}</div>
                   {calculatorResults.materials.map((m: any, i: number) => (
                     <div key={i} style={{ color: C.text, paddingLeft: 8 }}>
-                      {m.name}: {m.quantity ?? m.amount} {translateUnit(m.unit, t)}
+                      {translateMaterialName(m.name, t)}: {m.quantity ?? m.amount} {translateUnit(m.unit, t)}
                     </div>
                   ))}
                 </div>

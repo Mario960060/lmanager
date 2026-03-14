@@ -6,7 +6,7 @@ import { useAuthStore } from '../lib/store';
 import { format, addDays, parseISO, isWithinInterval } from 'date-fns';
 import { enUS, pl } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ChevronDown, ChevronUp, Wrench, Package, Truck } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Wrench, Package, ClipboardList } from 'lucide-react';
 import PageInfoModal from '../components/PageInfoModal';
 import DatePicker from '../components/DatePicker';
 import {
@@ -425,7 +425,7 @@ const Dashboard = () => {
       }}>
         {eventTasks.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', color: colors.textDim }}>
-            <Wrench style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.sm }} />
+            <ClipboardList style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.sm }} />
             <span>{eventTasks.length} {t('dashboard:tasks')}</span>
           </div>
         )}
@@ -437,7 +437,7 @@ const Dashboard = () => {
         )}
         {eventEquipment.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', color: colors.textDim }}>
-            <Truck style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.sm }} />
+            <Wrench style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.sm }} />
             <span>{eventEquipment.length} {t('dashboard:equipment')}</span>
           </div>
         )}

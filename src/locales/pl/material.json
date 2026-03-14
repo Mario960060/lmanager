@@ -64,5 +64,13 @@
   "desc_soil_excavation": "odbiór grabem",
   "desc_tape1": "kruszywo typu 1 od grabów tańsze",
   "desc_underground_cable": "kabel elektryczny podziemny",
-  "desc_water_pipe": "rura wodociągowa MDPE"
+  "desc_water_pipe": "rura wodociągowa MDPE",
+  "fill_soil": "Wypełnienie (Gleba)",
+  "fill_tape1": "Wypełnienie (Typ 1)",
+  "decking_board": "Deska tarasowa",
+  "decking_boards": "Deski tarasowe",
+  "joist": "Łata",
+  "joists": "Łaty",
+  "bearers": "Belki nośne",
+  "frame_slabs": "Płyty ramowe"
 }

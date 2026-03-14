@@ -35,6 +35,7 @@ export {
   Modal,
   Accordion,
   TextInput,
+  CalculatorInputGrid,
   SelectDropdown,
   Checkbox,
   ChipToggle,

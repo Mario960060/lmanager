@@ -28,12 +28,12 @@ export const ThemeSelector: React.FC = () => {
             style={{
               backgroundColor: theme.colors.bgPrimary,
             }}
-            title={theme.displayName}
+            title={t(`common:theme_${theme.id}`)}
           >
             <div className="text-center">
               <div className="text-2xl mb-1">{theme.icon}</div>
               <div className="text-xs font-medium text-gray-600 truncate">
-                {theme.displayName}
+                {t(`common:theme_${theme.id}`)}
               </div>
               {/* Color preview circles */}
               <div className="flex gap-1 justify-center mt-2">

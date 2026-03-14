@@ -150,7 +150,7 @@ const TimeEstimator = () => {
         <>
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Quantity ({translateUnit(selectedTask.unit, t)})
+              {t('calculator:quantity_label')} ({translateUnit(selectedTask.unit, t)})
             </label>
             <input
               type="number"
@@ -162,7 +162,7 @@ const TimeEstimator = () => {
               min="0.1"
               step="0.1"
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-              placeholder={`Enter amount in ${translateUnit(selectedTask.unit, t)}`}
+              placeholder={t('calculator:enter_amount_in_unit', { unit: translateUnit(selectedTask.unit, t) })}
             />
           </div>
 
@@ -189,7 +189,7 @@ const TimeEstimator = () => {
           </div>
 
           <Button variant="accent" color={colors.accentBlue} onClick={calculateTime} disabled={!quantity || !workers}>
-            Calculate
+            {t('calculator:calculate_button')}
           </Button>
 
           {result && (
@@ -209,12 +209,9 @@ const TimeEstimator = () => {
                 </div>
               </div>
               <div className="pt-3 border-t border-gray-700">
-                <div className="text-sm text-gray-300">{t('calculator:estimated_working_days')}</div>
+                <div className="text-sm text-gray-300">{t('calculator:estimated_work_time')}</div>
                 <div className="text-2xl font-bold text-white">
-                  {result.days} {t('calculator:days')}
-                </div>
-                <div className="text-xs text-gray-400 mt-1">
-                  {t('calculator:days_based_on_8hrs')}
+                  {t('calculator:estimated_work_time_days_format', { days: result.days })}
                 </div>
               </div>
             </div>
