@@ -10,6 +10,7 @@ import { useAuthStore } from "../../lib/store";
 import { ProjectSettings } from "./types";
 import { C } from "./geometry";
 import { COMPACTORS } from "../../components/Calculator/CompactorSelector";
+import { colors, radii, shadows } from "../../themes/designTokens";
 
 interface EquipmentPanelProps {
   isOpen: boolean;
@@ -64,7 +65,7 @@ export default function EquipmentPanel({
   if (!isOpen) return null;
 
   return (
-    <div style={{
+    <div className="canvas-modal-backdrop" style={{
       position: "fixed",
       inset: 0,
       background: "rgba(0,0,0,0.6)",
@@ -73,7 +74,7 @@ export default function EquipmentPanel({
       justifyContent: "center",
       zIndex: 1000,
     }} onClick={onClose}>
-      <div style={{
+      <div className="canvas-modal-content" style={{
         background: C.panel,
         border: `1px solid ${C.panelBorder}`,
         borderRadius: 12,
@@ -82,7 +83,7 @@ export default function EquipmentPanel({
         width: "90%",
         maxHeight: "85vh",
         overflow: "auto",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+        boxShadow: shadows.xl,
       }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 18, color: C.text }}>{t("project:equipment_transport_title")}</h3>

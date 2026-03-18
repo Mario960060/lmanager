@@ -8,6 +8,7 @@ import { C } from "./geometry";
 import { COMPACTORS, type CompactorOption } from "../../components/Calculator/CompactorSelector";
 import { getFoundationDiggingMethodFromExcavator } from "./GroundworkLinearCalculator";
 import DatePicker from "../../components/DatePicker";
+import { colors, radii, shadows } from "../../themes/designTokens";
 
 interface ProjectCardModalProps {
   isOpen: boolean;
@@ -96,6 +97,7 @@ export default function ProjectCardModal({
 
   return (
     <div
+      className="canvas-modal-backdrop"
       style={{
         position: "fixed",
         inset: 0,
@@ -109,6 +111,8 @@ export default function ProjectCardModal({
       onClick={onClose}
     >
       <div
+        data-testid="project-card-modal"
+        className="canvas-modal-content"
         style={{
           background: C.panel,
           border: `1px solid ${C.panelBorder}`,
@@ -118,7 +122,7 @@ export default function ProjectCardModal({
           maxHeight: "90vh",
           display: "flex",
           flexDirection: "column",
-          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+          boxShadow: shadows.modal,
           overflow: "hidden",
         }}
         onClick={e => e.stopPropagation()}
@@ -251,7 +255,7 @@ export default function ProjectCardModal({
               {/* Status */}
               <div>
                 <label style={labelStyle}>{t("project:status_label")}</label>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div data-testid="status-buttons" style={{ display: "flex", gap: 8, flexWrap: "nowrap", overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                   {(["planned", "scheduled", "in_progress"] as const).map(status => {
                     const active = projectSettings.status === status;
                     const labels: Record<string, string> = {
@@ -259,22 +263,24 @@ export default function ProjectCardModal({
                       scheduled: t("project:status_scheduled"),
                       in_progress: t("project:status_in_progress"),
                     };
-                    const colors: Record<string, string> = {
+                    const statusColors: Record<string, string> = {
                       planned: C.textDim,
-                      scheduled: "#3498db",
+                      scheduled: colors.accentBlue,
                       in_progress: C.accent,
                     };
                     return (
                       <button
                         key={status}
+                        data-testid={`status-${status}`}
                         onClick={() => onSave({ status })}
                         style={{
-                          flex: 1,
+                          flex: "1 1 0",
+                          minWidth: 0,
                           padding: "8px 12px",
-                          borderRadius: 8,
-                          border: `1px solid ${active ? colors[status] : C.panelBorder}`,
-                          background: active ? colors[status] + "22" : C.button,
-                          color: active ? colors[status] : C.textDim,
+                          borderRadius: radii.lg,
+                          border: `1px solid ${active ? statusColors[status] : C.panelBorder}`,
+                          background: active ? statusColors[status] + "22" : C.button,
+                          color: active ? statusColors[status] : C.textDim,
                           cursor: "pointer",
                           fontSize: 13,
                           fontWeight: active ? 600 : 400,

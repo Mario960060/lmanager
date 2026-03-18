@@ -15,6 +15,7 @@ import { mapProjectCompactorToOption } from "../../../components/Calculator/Comp
 import { getFoundationDiggingMethodFromExcavator } from "../GroundworkLinearCalculator";
 
 import { translateUnit, translateMaterialName } from "../../../lib/translationMap";
+import { colors, spacing, radii, shadows } from "../../../themes/designTokens";
 import StairCalculator from "../../../components/Calculator/StairCalculator";
 import LShapeStairCalculator from "../../../components/Calculator/LShapeStairCalculator";
 import UShapeStairCalculator from "../../../components/Calculator/Ushapestaircalculator";
@@ -137,8 +138,8 @@ const StairsCreationModal: React.FC<StairsCreationModalProps> = ({
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, width: "100%", maxWidth: 900, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+    <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div className="canvas-modal-content" style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, width: "100%", maxWidth: 900, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottom: `1px solid ${C.panelBorder}` }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, color: C.text }}>{t("project:stairs_title", { label })}</h2>
           <button onClick={onClose} style={{ padding: 8, background: "transparent", border: "none", cursor: "pointer", color: C.text }}>
@@ -182,11 +183,11 @@ const StairsCreationModal: React.FC<StairsCreationModalProps> = ({
           )}
 
           {calculatorResults && (
-            <div style={{ marginBottom: 16, padding: 12, background: "rgba(46,204,113,0.08)", border: `1px solid rgba(46,204,113,0.3)`, borderRadius: 6, fontSize: 13 }}>
-              <div style={{ fontWeight: 600, marginBottom: 8, color: C.text }}>{t("project:stairs_result_title")}</div>
+            <div style={{ marginBottom: spacing["3xl"], padding: spacing.xl, background: colors.greenBg, border: `1px solid ${colors.greenBorder}`, borderRadius: radii.md, fontSize: 13 }}>
+              <div style={{ fontWeight: 600, marginBottom: spacing.md, color: C.text }}>{t("project:stairs_result_title")}</div>
               {calculatorResults.hours_worked != null && (
                 <div style={{ color: C.text }}>
-                  {t("project:stairs_hours")} <span style={{ color: "#2ecc71", fontWeight: 600 }}>{Number(calculatorResults.hours_worked).toFixed(2)} h</span>
+                  {t("project:stairs_hours")} <span style={{ color: colors.greenLight, fontWeight: 600 }}>{Number(calculatorResults.hours_worked).toFixed(2)} h</span>
                 </div>
               )}
               {calculatorResults.materials && calculatorResults.materials.length > 0 && (

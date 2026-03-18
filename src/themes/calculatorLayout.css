@@ -103,8 +103,22 @@ label:has(input[type="radio"]),
 
 .calculator-page .flex.items-center:has(input[type="radio"]),
 .calculator-page .flex.items-center:has(input[type="checkbox"]),
-#calculator-container .flex.items-center:has(input[type="radio"]),
-#calculator-container .flex.items-center:has(input[type="checkbox"]) {
+  #calculator-container .flex.items-center:has(input[type="radio"]),
+  #calculator-container .flex.items-center:has(input[type="checkbox"]) {
   min-height: 44px;
   cursor: pointer;
+}
+
+/* Canvas modals (ObjectCard, PathCreation, etc.) – full width on mobile */
+@media (max-width: 768px) {
+  .canvas-modal-backdrop {
+    padding: 12px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    align-items: flex-start !important;
+  }
+  .canvas-modal-content {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
 }

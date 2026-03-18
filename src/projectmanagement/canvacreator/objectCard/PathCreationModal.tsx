@@ -16,6 +16,9 @@ import type { Shape } from "../geometry";
 import SlabCalculator from "../../../components/Calculator/SlabCalculator";
 import ConcreteSlabsCalculator from "../../../components/Calculator/ConcreteSlabsCalculator";
 import PavingCalculator from "../../../components/Calculator/PavingCalculator";
+import { getPathPolygon } from "../linearElements";
+import { FrameSidesSelector } from "./FrameSidesSelector";
+import { colors, spacing, radii, shadows } from "../../../themes/designTokens";
 
 export type PathSubType = "slabs" | "concreteSlabs" | "monoblock";
 
@@ -64,7 +67,10 @@ interface PathCreationModalProps {
   shapes?: Shape[];
   onSave?: (shapeIdx: number, updates: Partial<Shape>) => void;
   onCalculatorInputsChange?: (shapeIdx: number, inputs: Record<string, any>) => void;
+  onCalculatorResultsChange?: (shapeIdx: number, results: any) => void;
   onViewResults?: (shapeIdx: number) => void;
+  /** When > 0, triggers auto-calculate on mount (e.g. after path just drawn) */
+  autoCalculateTrigger?: number;
 }
 
 const PathCreationModal: React.FC<PathCreationModalProps> = ({
@@ -79,7 +85,9 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
   shapes,
   onSave,
   onCalculatorInputsChange,
+  onCalculatorResultsChange,
   onViewResults,
+  autoCalculateTrigger = 0,
 }) => {
   const { t } = useTranslation(["project", "common"]);
   const companyId = useAuthStore((s) => s.getCompanyId());
@@ -117,6 +125,7 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
       if (c.jointGapMm != null) d.jointGapMm = String(c.jointGapMm);
       if (c.vizGroutWidthMm != null) d.vizGroutWidthMm = String(c.vizGroutWidthMm);
       if (c.vizPattern != null) d.vizPattern = String(c.vizPattern);
+      if (c.pathCornerType === "butt" || c.pathCornerType === "miter45") d.pathCornerType = c.pathCornerType;
       if (c.frameJointType === "butt" || c.frameJointType === "miter45") d.frameJointType = c.frameJointType;
       if (c.addFrameBoard || c.addFrameToMonoblock) {
         d.addFrameBoard = !!c.addFrameBoard;
@@ -154,7 +163,9 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
   const [addFrame, setAddFrame] = useState<boolean>(!!(storedDefaults.addFrameBoard ?? storedDefaults.addFrameToMonoblock));
   const [framePieceWidthCm, setFramePieceWidthCm] = useState<string>(storedDefaults.framePieceWidthCm ?? "10");
   const [framePieceLengthCm, setFramePieceLengthCm] = useState<string>(storedDefaults.framePieceLengthCm ?? "60");
-  const [frameJointType, setFrameJointType] = useState<"butt" | "miter45">(storedDefaults.frameJointType ?? "butt");
+  const [pathCornerType, setPathCornerType] = useState<"butt" | "miter45">(storedDefaults.pathCornerType ?? storedDefaults.frameJointType ?? "butt");
+  const [frameCornerType, setFrameCornerType] = useState<"butt" | "miter45">(storedDefaults.frameJointType ?? "butt");
+  const [frameSidesEnabled, setFrameSidesEnabled] = useState<boolean[]>(Array.isArray(storedDefaults.frameSidesEnabled) ? storedDefaults.frameSidesEnabled : []);
   const [frameIncludedInfo, setFrameIncludedInfo] = useState<string>("");
 
   const [calculatorResults, setCalculatorResults] = useState<any>(null);
@@ -183,11 +194,14 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
     if (c.vizPattern != null) setVizPattern(String(c.vizPattern));
     if (c.vizDirection != null) setVizDirection(Number(c.vizDirection));
     if (c.vizStartCorner != null) setVizStartCorner(Number(c.vizStartCorner));
-    if (c.frameJointType === "butt" || c.frameJointType === "miter45") setFrameJointType(c.frameJointType);
+    if (c.pathCornerType === "butt" || c.pathCornerType === "miter45") setPathCornerType(c.pathCornerType);
+    else if (c.frameJointType === "butt" || c.frameJointType === "miter45") setPathCornerType(c.frameJointType);
+    if (c.frameJointType === "butt" || c.frameJointType === "miter45") setFrameCornerType(c.frameJointType);
     if (c.addFrameBoard || c.addFrameToMonoblock) {
       setAddFrame(true);
       if (c.framePieceWidthCm != null) setFramePieceWidthCm(String(c.framePieceWidthCm));
       if (c.framePieceLengthCm != null) setFramePieceLengthCm(String(c.framePieceLengthCm));
+      if (Array.isArray(c.frameSidesEnabled)) setFrameSidesEnabled(c.frameSidesEnabled);
     }
     if (c.slabSizeKey && ["40x40", "60x60", "90x60"].includes(c.slabSizeKey)) setConcreteSlabSizeKey(c.slabSizeKey as "40x40" | "60x60" | "90x60");
     setCalculatorResults(shape.calculatorResults ?? null);
@@ -291,7 +305,8 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
       vizPattern,
       vizDirection,
       vizStartCorner,
-      frameJointType,
+      pathCornerType,
+      frameJointType: frameCornerType,
     };
     if (subType === "slabs") {
       calculatorInputs.vizGroutWidthMm = groutWidthMm;
@@ -319,6 +334,8 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
     if (addFrame && subType !== "concreteSlabs") {
       calculatorInputs.framePieceWidthCm = framePieceWidthCm;
       calculatorInputs.framePieceLengthCm = framePieceLengthCm;
+      calculatorInputs.frameJointType = frameCornerType;
+      if (frameSidesEnabled.length > 0) calculatorInputs.frameSidesEnabled = frameSidesEnabled;
       if (subType === "slabs") {
         calculatorInputs.addFrameBoard = true;
       } else {
@@ -327,10 +344,10 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
     }
     return { ...lastInputsRef.current, ...calculatorInputs };
   }, [
-    computedWidthM, subType, vizPattern, vizDirection, vizStartCorner, frameJointType,
+    computedWidthM, subType, vizPattern, vizDirection, vizStartCorner, pathCornerType, frameCornerType,
     groutWidthMm, selectedSlabId, slabDims, slabOrientation,
     blockWidthCm, blockLengthCm, jointGapMm,
-    addFrame, framePieceWidthCm, framePieceLengthCm, concreteSlabSizeKey,
+    addFrame, framePieceWidthCm, framePieceLengthCm, frameSidesEnabled, concreteSlabSizeKey,
   ]);
 
   const handleConfirm = () => {
@@ -356,7 +373,8 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
       addFrameToMonoblock: subType === "monoblock" ? addFrame : undefined,
       framePieceWidthCm,
       framePieceLengthCm,
-      frameJointType,
+      pathCornerType,
+      frameJointType: frameCornerType,
     };
     savePathDefaultsToStorage(subType, companyId, defaultsToStore);
     if (isEdit && onSave != null && shapeIdx != null && shape?.calculatorInputs) {
@@ -384,7 +402,8 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
 
   const stableOnResultsChange = useCallback((results: any) => {
     setCalculatorResults(results);
-  }, []);
+    onCalculatorResultsChange?.(shapeIdx ?? 0, results);
+  }, [shapeIdx, onCalculatorResultsChange]);
 
   const materialDefaults = useMemo(
     () => getCalculatorInputDefaults(subType === "slabs" ? "slab" : subType === "concreteSlabs" ? "concreteSlabs" : "paving", companyId),
@@ -438,9 +457,10 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
       addFrameToMonoblock: subType === "monoblock" ? addFrame : undefined,
       framePieceWidthCm,
       framePieceLengthCm,
-      frameJointType,
+      pathCornerType,
+      frameJointType: frameCornerType,
     };
-  }, [computedWidthM, widthMode, widthCentimeters, slabOrientation, selectedSlabId, concreteSlabSizeKey, blockWidthCm, blockLengthCm, blockCount, jointGapMm, groutWidthMm, vizPattern, vizDirection, vizStartCorner, addFrame, framePieceWidthCm, framePieceLengthCm, frameJointType, subType]);
+  }, [computedWidthM, widthMode, widthCentimeters, slabOrientation, selectedSlabId, concreteSlabSizeKey, blockWidthCm, blockLengthCm, blockCount, jointGapMm, groutWidthMm, vizPattern, vizDirection, vizStartCorner, addFrame, framePieceWidthCm, framePieceLengthCm, frameCornerType, pathCornerType, subType]);
 
   const handleClose = useCallback(() => {
     savePathDefaultsToStorage(subType, companyId, getDefaultsToStore());
@@ -460,8 +480,8 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
   }, [handleClose, handleConfirm, isValid]);
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, width: "100%", maxWidth: isEdit ? 700 : 480, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+    <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: spacing["3xl"] }}>
+      <div className="canvas-modal-content" style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: radii.lg, width: "100%", maxWidth: isEdit ? 700 : 480, maxHeight: "90vh", overflowY: "auto", boxShadow: shadows.modal }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottom: `1px solid ${C.panelBorder}` }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, color: C.text }}>{isEdit ? t("project:path_title_edit", { label }) : t("project:path_title", { label })}</h2>
           <button onClick={handleClose} style={{ padding: 8, background: "transparent", border: "none", cursor: "pointer", color: C.text }}>
@@ -721,11 +741,11 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 type="button"
-                onClick={() => setFrameJointType("butt")}
+                onClick={() => setPathCornerType("butt")}
                 style={{
                   padding: "6px 12px",
-                  background: frameJointType === "butt" ? C.accent + "44" : C.button,
-                  border: `1px solid ${frameJointType === "butt" ? C.accent : C.panelBorder}`,
+                  background: pathCornerType === "butt" ? C.accent + "44" : C.button,
+                  border: `1px solid ${pathCornerType === "butt" ? C.accent : C.panelBorder}`,
                   borderRadius: 6,
                   color: C.text,
                   cursor: "pointer",
@@ -736,11 +756,11 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={() => setFrameJointType("miter45")}
+                onClick={() => setPathCornerType("miter45")}
                 style={{
                   padding: "6px 12px",
-                  background: frameJointType === "miter45" ? C.accent + "44" : C.button,
-                  border: `1px solid ${frameJointType === "miter45" ? C.accent : C.panelBorder}`,
+                  background: pathCornerType === "miter45" ? C.accent + "44" : C.button,
+                  border: `1px solid ${pathCornerType === "miter45" ? C.accent : C.panelBorder}`,
                   borderRadius: 6,
                   color: C.text,
                   cursor: "pointer",
@@ -771,6 +791,56 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
                     <input type="number" value={framePieceWidthCm} onChange={(e) => setFramePieceWidthCm(e.target.value)} style={{ width: 60, padding: 4, marginLeft: 4, background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 4, color: C.text }} />
                   </div>
                 </div>
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 6, color: C.text, fontSize: 12 }}>{t("project:path_frame_corners")}</div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => setFrameCornerType("butt")}
+                      style={{
+                        padding: "6px 12px",
+                        background: frameCornerType === "butt" ? C.accent + "44" : C.button,
+                        border: `1px solid ${frameCornerType === "butt" ? C.accent : C.panelBorder}`,
+                        borderRadius: 6,
+                        color: C.text,
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      {t("project:path_corner_butt")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFrameCornerType("miter45")}
+                      style={{
+                        padding: "6px 12px",
+                        background: frameCornerType === "miter45" ? C.accent + "44" : C.button,
+                        border: `1px solid ${frameCornerType === "miter45" ? C.accent : C.panelBorder}`,
+                        borderRadius: 6,
+                        color: C.text,
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      {t("project:path_corner_mitre")}
+                    </button>
+                  </div>
+                </div>
+                {isEdit && shape?.closed && (() => {
+                  const pts = getPathPolygon(shape);
+                  if (!pts || pts.length < 3) return null;
+                  return (
+                    <div style={{ marginTop: 12 }}>
+                      <FrameSidesSelector
+                        points={pts}
+                        frameSidesEnabled={frameSidesEnabled}
+                        onChange={setFrameSidesEnabled}
+                        width={280}
+                        height={180}
+                      />
+                    </div>
+                  );
+                })()}
                 {frameIncludedInfo && (
                   <div style={{ fontSize: 11, color: C.geo, marginTop: 4 }}>{frameIncludedInfo}</div>
                 )}
@@ -791,6 +861,7 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
                   onResultsChange={stableOnResultsChange}
                   onInputsChange={stableOnInputsChange}
                   compactForPath
+                  recalculateTrigger={autoCalculateTrigger}
                 />
               ) : subType === "concreteSlabs" ? (
                 <ConcreteSlabsCalculator
@@ -802,6 +873,7 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
                   onResultsChange={stableOnResultsChange}
                   onInputsChange={stableOnInputsChange}
                   compactForPath
+                  recalculateTrigger={autoCalculateTrigger}
                 />
               ) : (
                 <PavingCalculator
@@ -813,6 +885,7 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
                   onResultsChange={stableOnResultsChange}
                   onInputsChange={stableOnInputsChange}
                   compactForPath
+                  recalculateTrigger={autoCalculateTrigger}
                 />
               )}
             </div>
@@ -823,7 +896,7 @@ const PathCreationModal: React.FC<PathCreationModalProps> = ({
           {isEdit && calculatorResults && onViewResults && shapeIdx != null && (
             <button
               onClick={() => { onViewResults(shapeIdx); handleClose(); }}
-              style={{ padding: "8px 16px", background: "#a29bfe44", border: `1px solid #a29bfe`, borderRadius: 6, color: "#a29bfe", cursor: "pointer", fontSize: 13 }}
+              style={{ padding: `${spacing.md}px ${spacing["3xl"]}px`, background: "rgba(139,92,246,0.15)", border: `1px solid ${colors.purpleLight}`, borderRadius: radii.md, color: colors.purpleLight, cursor: "pointer", fontSize: 13 }}
             >
               {`📊 ${t("project:path_view_results")}`}
             </button>

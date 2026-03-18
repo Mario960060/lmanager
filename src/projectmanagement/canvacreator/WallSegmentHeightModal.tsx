@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Shape, Point, distance, PIXELS_PER_METER, C } from "./geometry";
+import { colors, spacing, radii, shadows } from "../../themes/designTokens";
 
 export interface SegmentHeight {
   startH: number;
@@ -65,10 +66,12 @@ export default function WallSegmentHeightModal({ shape, onSave, onClose }: WallS
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}
+      className="canvas-modal-backdrop"
+      style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }}
       onClick={onClose}
     >
       <div
+        className="canvas-modal-content"
         style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 480, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}
         onClick={e => e.stopPropagation()}
       >
@@ -79,7 +82,7 @@ export default function WallSegmentHeightModal({ shape, onSave, onClose }: WallS
             const lenM = segmentLengths[i] ?? 0;
             const slope = slopeCmPerM(seg.startH, seg.endH, lenM);
             return (
-              <div key={i} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, padding: 8, background: "rgba(0,0,0,0.15)", borderRadius: 6 }}>
+              <div key={i} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: spacing.md, padding: spacing.md, background: "rgba(0,0,0,0.15)", borderRadius: radii.md }}>
                 <span style={{ fontSize: 12, color: C.textDim, minWidth: 90 }}>
                   {t("project:wall_segment_label", { n: i + 1, len: lenM.toFixed(2) })}
                 </span>

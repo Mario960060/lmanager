@@ -9,6 +9,7 @@ import { C } from "../geometry";
 import { Shape } from "../geometry";
 import { isGroundworkLinear, isPathElement } from "../linearElements";
 import { translateTaskName, translateUnit, translateMaterialName } from "../../../lib/translationMap";
+import { colors, spacing, radii, shadows } from "../../../themes/designTokens";
 
 interface ResultsModalProps {
   shape: Shape;
@@ -97,10 +98,12 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+      className="canvas-modal-backdrop"
+      style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: spacing["3xl"] }}
       onMouseDown={onClose}
     >
       <div
+        className="canvas-modal-content"
         style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 10, width: "100%", maxWidth: "min(96vw, 900px)", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,0.6)", overflow: "hidden" }}
         onMouseDown={e => e.stopPropagation()}
       >
@@ -140,25 +143,25 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <StatCard icon={<Clock size={15} />} label={t("project:results_total_labour")} value={fmtH(totalHours)} color={C.accent} />
             {r.amount != null && (
-              <StatCard icon={<Package size={15} />} label={r.unit ? translateUnit(r.unit, t) : "units"} value={fmtQ(r.amount)} color="#6c5ce7" />
+              <StatCard icon={<Package size={15} />} label={r.unit ? translateUnit(r.unit, t) : "units"} value={fmtQ(r.amount)} color={colors.purple} />
             )}
           </div>
 
           {/* Task breakdown (hrs first), then materials */}
           {tasks.length > 0 && (
             <Section title={t("project:results_task_breakdown")} icon={<Wrench size={13} />}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0, margin: `-${spacing.lg}px -${spacing.xs}px -${spacing.xs}px`, borderRadius: radii.lg, overflow: "hidden" }}>
                 {tasks.map((task, i) => {
                   const rawName = task.task ?? task.name ?? t("project:results_task_fallback", { n: i + 1 });
                   const name = translateTaskName(rawName, t);
                   const pct = totalHours > 0 ? (task.hours / totalHours) * 100 : 0;
                   return (
-                    <div key={i}>
+                    <div key={i} style={{ padding: `${spacing.sm}px ${spacing.xs}px`, background: i % 2 === 1 ? colors.bgTableRowAlt : undefined, borderBottom: i < tasks.length - 1 ? `1px solid ${colors.borderLight}` : "none" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
                         <span style={{ fontSize: 12, color: C.text, flex: 1, paddingRight: 8 }}>{name}</span>
                         <span style={{ fontSize: 12, color: C.accent, fontWeight: 600, whiteSpace: "nowrap" }}>{fmtH(task.hours)}</span>
                       </div>
-                      <div style={{ height: 3, background: "rgba(255,255,255,0.07)", borderRadius: 2 }}>
+                      <div style={{ height: 3, background: colors.borderLight, borderRadius: 2 }}>
                         <div style={{ height: "100%", width: `${Math.min(100, pct)}%`, background: C.accent, borderRadius: 2 }} />
                       </div>
                     </div>
@@ -181,7 +184,7 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
                 </thead>
                 <tbody>
                   {materials.map((m, i) => (
-                    <tr key={i} style={{ borderBottom: `1px solid rgba(255,255,255,0.04)` }}>
+                    <tr key={i} style={{ borderBottom: `1px solid ${colors.borderLight}`, background: i % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
                       <td style={{ padding: "6px 8px", color: C.text }}>{translateMaterialName(m.name, t)}</td>
                       <td style={{ padding: "6px 8px", color: C.accent, fontWeight: 600 }}>{fmtQ(m.quantity)}</td>
                       <td style={{ padding: "6px 8px", color: C.textDim }}>{translateUnit(m.unit, t)}</td>
@@ -231,7 +234,7 @@ const Section: React.FC<{ title: string; icon: React.ReactNode; children: React.
     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, color: C.textDim, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
       {icon} {title}
     </div>
-    <div style={{ background: "rgba(0,0,0,0.2)", border: `1px solid ${C.panelBorder}`, borderRadius: 8, padding: "10px 4px 4px" }}>
+    <div style={{ background: "rgba(0,0,0,0.2)", border: `1px solid ${C.panelBorder}`, borderRadius: radii.lg, padding: `${spacing.lg}px ${spacing.xs}px ${spacing.xs}px` }}>
       {children}
     </div>
   </div>

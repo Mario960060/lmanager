@@ -19,6 +19,7 @@ import { autoLayoutGrassPieces, autoJoinAdjacentPieces, validateCoverage, getEff
 import { computePreparation } from "../preparationLogic";
 import { getCalculatorInputDefaults } from "../../../lib/materialUsageDefaults";
 import { translateUnit, translateMaterialName, translateTaskName } from "../../../lib/translationMap";
+import { colors, spacing, radii, shadows } from "../../../themes/designTokens";
 
 import WallCalculator from "../../../components/Calculator/WallCalculator";
 import SleeperWallCalculator from "../../../components/Calculator/SleeperWallCalculator";
@@ -191,6 +192,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
         merged.vizGroutWidthMm = vizGroutWidthMm;
         merged.vizSlabWidth = slabDims.widthCm;
         merged.vizSlabLength = slabDims.lengthCm;
+        merged.pathCornerType = lastInputsRef.current?.pathCornerType;
         merged.frameJointType = lastInputsRef.current?.frameJointType;
         merged.frameSidesEnabled = lastInputsRef.current?.frameSidesEnabled;
       }
@@ -216,6 +218,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
         merged.framePieceLengthCm = lastInputsRef.current?.framePieceLengthCm;
         merged.framePieceWidthCm = lastInputsRef.current?.framePieceWidthCm;
         merged.frameSidesEnabled = lastInputsRef.current?.frameSidesEnabled;
+        merged.pathCornerType = lastInputsRef.current?.pathCornerType;
         merged.frameJointType = lastInputsRef.current?.frameJointType;
       }
       const updates: Partial<Shape> & { _createLinkedFoundation?: boolean } = {
@@ -247,13 +250,15 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
         const shapeWithInputs = { ...shape, calculatorInputs: { ...shape.calculatorInputs, ...merged } };
         const laidOut = autoJoinAdjacentPieces(autoLayoutGrassPieces(shapeWithInputs, grassPieces));
         const cov = validateCoverage(shapeWithInputs, laidOut);
-        const effectiveAreaM2 = getEffectiveTotalArea(laidOut);
+        const effectiveAreaM2 = (computeAutoFill(shape, shapes).areaM2 ?? 0);
+        const artificialGrassAreaM2 = getEffectiveTotalArea(laidOut);
         merged.vizPieces = laidOut.map((p, i) => {
           const { effectiveWidthM, effectiveLengthM } = getEffectivePieceDimensionsForInput(p, laidOut, i);
           const nominal = grassPieces[i];
           return { ...p, effectiveWidthM, effectiveLengthM, lengthM: nominal?.lengthM ?? p.lengthM, widthM: nominal?.widthM ?? p.widthM };
         });
         merged.effectiveAreaM2 = effectiveAreaM2;
+        merged.artificialGrassAreaM2 = artificialGrassAreaM2;
         merged.jointsLength = String(cov.joinLengthM.toFixed(2));
         merged.trimLength = String(cov.trimLengthM.toFixed(2));
       }
@@ -308,7 +313,8 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
     const shapeWithInputs = { ...shape, calculatorInputs: { ...shape.calculatorInputs, rollsOrientation: "along", grassVizDirection } };
     const laidOut = autoJoinAdjacentPieces(autoLayoutGrassPieces(shapeWithInputs, grassPieces));
     const cov = validateCoverage(shapeWithInputs, laidOut);
-    const effectiveAreaM2 = getEffectiveTotalArea(laidOut);
+    const effectiveAreaM2 = (computeAutoFill(shape, shapes).areaM2 ?? 0);
+    const artificialGrassAreaM2 = getEffectiveTotalArea(laidOut);
     const vizPieces = laidOut.map((p, i) => {
       const { effectiveWidthM, effectiveLengthM } = getEffectivePieceDimensionsForInput(p, laidOut, i);
       return { ...p, effectiveWidthM, effectiveLengthM };
@@ -318,6 +324,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
       grassVizDirection,
       vizPieces,
       effectiveAreaM2,
+      artificialGrassAreaM2,
       jointsLength: String(cov.joinLengthM.toFixed(2)),
       trimLength: String(cov.trimLengthM.toFixed(2)),
     });
@@ -440,18 +447,18 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, paddingLeft: "max(16px, 240px)" }}>
-      <div style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, width: "100%", maxWidth: 900, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottom: `1px solid ${C.panelBorder}` }}>
+    <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: spacing["3xl"], paddingLeft: `max(${spacing["3xl"]}px, 240px)` }}>
+      <div className="canvas-modal-content" style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: radii.lg, width: "100%", maxWidth: 900, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: shadows.modal }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: spacing["3xl"], borderBottom: `1px solid ${C.panelBorder}` }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, color: C.text }}>{t("project:object_card_title", { label: shape.label || "" })}</h2>
           <button onClick={onClose} style={{ padding: 8, background: "transparent", border: "none", cursor: "pointer", color: C.text }}>
             <X size={20} />
           </button>
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: spacing["3xl"] }}>
           {/* Auto-fill from canvas */}
-          <div style={{ marginBottom: 16, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 6, fontSize: 13, color: C.textDim }}>
+          <div style={{ marginBottom: spacing["3xl"], padding: spacing.xl, background: "rgba(0,0,0,0.2)", borderRadius: radii.md, fontSize: 13, color: C.textDim }}>
             <div style={{ fontWeight: 600, marginBottom: 8, color: C.text }}>{t("project:from_canvas")}</div>
             {autoFill.areaM2 !== undefined && <div>{t("project:object_card_area")} {autoFill.areaM2.toFixed(3)} m²</div>}
             {autoFill.totalLengthM !== undefined && <div>{t("project:object_card_length")} {autoFill.totalLengthM.toFixed(3)} m</div>}
@@ -494,7 +501,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
           {/* Type selector */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 600, marginBottom: 8, color: C.text }}>{t("project:object_card_element_type")}</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <div data-testid="calculator-type-buttons" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {groups.map((group: CalcGroup) =>
                 group.subTypes.map((st: CalcSubType) => {
                   const active = calculatorType === group.type && calculatorSubType === st.type;
@@ -522,10 +529,10 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
 
           {/* Saved results summary (shown immediately on re-open) */}
           {calculatorType && calculatorType !== "turf" && calculatorResults && (
-            <div style={{ marginBottom: 16, padding: 12, background: "rgba(46,204,113,0.08)", border: `1px solid rgba(46,204,113,0.3)`, borderRadius: 6, fontSize: 13 }}>
-              <div style={{ fontWeight: 600, marginBottom: 8, color: C.text }}>{t("project:object_card_last_result")}</div>
+            <div style={{ marginBottom: spacing["3xl"], padding: spacing.xl, background: colors.greenBg, border: `1px solid ${colors.greenBorder}`, borderRadius: radii.md, fontSize: 13 }}>
+              <div style={{ fontWeight: 600, marginBottom: spacing.md, color: C.text }}>{t("project:object_card_last_result")}</div>
               {calculatorResults.hours_worked != null && (
-                <div style={{ color: C.text }}>{t("project:object_card_total_hours")} <span style={{ color: "#2ecc71", fontWeight: 600 }}>{Number(calculatorResults.hours_worked).toFixed(2)} h</span></div>
+                <div style={{ color: C.text }}>{t("project:object_card_total_hours")} <span style={{ color: colors.greenLight, fontWeight: 600 }}>{Number(calculatorResults.hours_worked).toFixed(2)} h</span></div>
               )}
               {calculatorResults.taskBreakdown && calculatorResults.taskBreakdown.length > 0 && (
                 <div style={{ marginTop: 6 }}>
@@ -574,7 +581,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                         textTransform: "capitalize",
                       }}
                     >
-                      {p === "onethird" ? "1/3" : p}
+                      {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
                     </button>
                   ))}
                 </div>
@@ -690,7 +697,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                         textTransform: "capitalize",
                       }}
                     >
-                      {p === "onethird" ? "1/3" : p}
+                      {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
                     </button>
                   ))}
                 </div>
@@ -781,7 +788,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                         textTransform: "capitalize",
                       }}
                     >
-                      {p === "onethird" ? "1/3" : p}
+                      {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
                     </button>
                   ))}
                 </div>
@@ -923,7 +930,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       else { const n = parseFloat(v); if (!isNaN(n)) setGrassPieces(prev => prev.map((p, j) => j === i ? { ...p, widthM: n } : p)); }
                     }}
                     readOnly={!!(piece.trimEdges?.length)}
-                    style={{ width: 80, padding: "6px 8px", background: piece.trimEdges?.length ? "rgba(0,0,0,0.2)" : C.bg, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 12 }}
+                    style={{ width: 80, padding: `${spacing.sm}px ${spacing.md}px`, background: piece.trimEdges?.length ? "rgba(0,0,0,0.2)" : C.bg, border: `1px solid ${C.panelBorder}`, borderRadius: radii.md, color: C.text, fontSize: 12 }}
                   />
                   <span style={{ fontSize: 12, color: C.textDim }}>{piece.trimEdges?.length ? t("project:object_card_unit_effective") : t("project:object_card_unit_m")}</span>
                   {grassPieces.length > 1 && (
@@ -951,7 +958,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
           )}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, padding: 16, borderTop: `1px solid ${C.panelBorder}`, background: "rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.xl, padding: spacing["3xl"], borderTop: `1px solid ${C.panelBorder}`, background: "rgba(0,0,0,0.2)" }}>
           <button onClick={onClose} style={{ padding: "8px 16px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, cursor: "pointer", fontSize: 13 }}>
             {t("project:object_card_cancel")}
           </button>

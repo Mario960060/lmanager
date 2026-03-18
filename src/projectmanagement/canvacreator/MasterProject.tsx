@@ -16,11 +16,12 @@ import { calcEdgeSlopes, calcShapeGradient, formatSlope, slopeColor, interpolate
 import { isLinearElement, isGroundworkLinear, isPathElement, isPolygonLinearElement, groundworkLabel, drawLinearElement, drawLinearElementInactive, hitTestLinearElement, hitTestPathElement, computeThickPolyline, getPathPolygon, getLinearElementPath, getPolygonThicknessM, polygonToSegmentLengths, polygonToCenterline, polygonEdgeToSegmentIndex, removeSegmentFromPolygonOutline, computePathPolygonOneSide, computePathOutlineFromSegmentSides, pointSideOfLine } from "./linearElements";
 import { drawShapeObjectLabel, drawExcavationLayers, getPathLabel } from "./canvasRenderers";
 import { drawDeckPattern } from "./visualization/deckBoards";
-import { drawSlabPattern, drawPathSlabPattern, drawSlabFrame, computePatternSnap, computeSlabCuts, computePathSlabCuts } from "./visualization/slabPattern";
+import { drawSlabPattern, drawPathSlabPattern, drawPathSlabLabel, drawSlabFrame, computePatternSnap, computeSlabCuts, computePathSlabCuts } from "./visualization/slabPattern";
 import { drawCobblestonePattern, drawMonoblockFrame, computeCobblestoneCuts } from "./visualization/cobblestonePattern";
 import { drawFencePostMarkers, drawWallSlopeIndicators } from "./visualization/linearMarkers";
 import { drawGeodesyLabels, getGeodesyCardsInfo, hitTestGeodesyCard, findCardForPoint, type GeodesyCardInfo, GEODESY_CARD_PAD, GEODESY_CARD_ROW_H } from "./visualization/geodesyLabels";
 import { drawGrassPieces, hitTestGrassPiece, hitTestGrassPieceEdge, hitTestGrassJoinEdge, snapGrassPieceEdge, snapGrassPieceToPolygon, getJoinedGroup, rotateGrassGroup90, validateCoverage, getEffectiveTotalArea, getEffectivePieceDimensionsForInput, type GrassPiece } from "./visualization/grassRolls";
+import { computeAutoFill } from "./objectCard/autoFill";
 import { ProjectSettings, DEFAULT_PROJECT_SETTINGS } from "./types";
 import ObjectCardModal from "./objectCard/ObjectCardModal";
 import StairsCreationModal from "./objectCard/StairsCreationModal";
@@ -210,8 +211,9 @@ export default function MasterProject() {
   const [adjustmentSpreadModal, setAdjustmentSpreadModal] = useState<{ shapeIdxA: number; shapeIdxB: number; overlapIdx: number } | null>(null);
   const [grassScaleInfo, setGrassScaleInfo] = useState<{ shapeIdx: number; pieceIdx: number; edge: "length_start" | "length_end"; startMouse: Point; startLength: number; startX: number; startY: number } | null>(null);
   const [grassAlignedPolyEdges, setGrassAlignedPolyEdges] = useState<number[]>([]);
-  const [patternDragInfo, setPatternDragInfo] = useState<{ shapeIdx: number; type: "slab" | "cobblestone"; startMouse: Point; startOffset: Point } | null>(null);
+  const [patternDragInfo, setPatternDragInfo] = useState<{ shapeIdx: number; type: "slab" | "cobblestone"; startMouse: Point; startOffset: Point; isPath?: boolean; startPathSegmentIdx?: number; startPathPatternLongOffsetMBySegment?: number[] } | null>(null);
   const [patternDragPreview, setPatternDragPreview] = useState<Point | null>(null);
+  const [pathPatternLongOffsetPreview, setPathPatternLongOffsetPreview] = useState<{ segmentIdx: number; value: number } | null>(null);
   const [patternAlignedEdges, setPatternAlignedEdges] = useState<number[]>([]);
   const [patternRotateInfo, setPatternRotateInfo] = useState<{ shapeIdx: number; type: "slab" | "cobblestone" | "grass"; center: Point; startAngle: number; startDirectionDeg: number } | null>(null);
   const [patternRotatePreview, setPatternRotatePreview] = useState<number | null>(null);
@@ -236,6 +238,8 @@ export default function MasterProject() {
   const [pathConfig, setPathConfig] = useState<PathConfig | null>(null);
   /** Path segment side selection: after centerline drawn, user picks side for each segment (all visible at once) */
   const [pathSegmentSideSelection, setPathSegmentSideSelection] = useState<{ shapeIdx: number; segmentSides: ("left" | "right" | null)[] } | null>(null);
+  /** Path shapeIdx that was just drawn – triggers auto-calculate when PathCreationModal opens */
+  const [pathJustFinishedForAutoCalc, setPathJustFinishedForAutoCalc] = useState<number | null>(null);
   const [shapeCreationModal, setShapeCreationModal] = useState<{ type: "square" | "rectangle" | "triangle" | "trapezoid" } | null>(null);
   const [segmentHeightModal, setSegmentHeightModal] = useState<{ shapeIdx: number } | null>(null);
   const [setAngleModal, setSetAngleModal] = useState<{ shapeIdx: number; pointIdx: number } | null>(null);
@@ -272,7 +276,8 @@ export default function MasterProject() {
   const arcDragPendingRef = useRef<{ mouseX: number; mouseY: number } | null>(null);
 
   const isOnActiveLayer = useCallback((si: number): boolean => {
-    if (activeLayer === 3 || activeLayer === 4) return false; // Pattern and Preparation are read-only
+    if (activeLayer === 3) return shapes[si]?.layer === 2; // Layer 3: treat Layer 2 shapes as active (same menu, points visibility)
+    if (activeLayer === 4) return false; // Preparation is read-only
     if (activeLayer === 5) return shapes[si]?.layer === 1 || shapes[si]?.layer === 2; // Adjustment: L1 + L2
     return shapes[si]?.layer === activeLayer;
   }, [shapes, activeLayer]);
@@ -320,7 +325,17 @@ export default function MasterProject() {
       const n = [...p];
       const s = n[idx];
       if (!s) return p;
-      n[idx] = { ...s, calculatorInputs: { ...(s.calculatorInputs ?? {}), ...inputs } };
+      let merged = { ...(s.calculatorInputs ?? {}), ...inputs };
+      if (isPathElement(s)) {
+        const pathKeys = ["pathWidthM", "pathCenterline", "pathSegmentSides", "pathIsOutline", "pathCenterlineOriginal", "vizSlabWidth", "vizSlabLength", "pathWidthMode"];
+        for (const k of pathKeys) {
+          if (s.calculatorInputs?.[k] !== undefined) merged[k] = s.calculatorInputs[k];
+        }
+        if (merged.pathWidthM == null && s.calculatorInputs?.pathWidthCm != null) {
+          merged.pathWidthM = Number(s.calculatorInputs.pathWidthCm) / 100;
+        }
+      }
+      n[idx] = { ...s, calculatorInputs: merged };
       return n;
     });
   }, []);
@@ -481,7 +496,9 @@ export default function MasterProject() {
   }, [shapes, projectSettings, pan, zoom, activeLayer, linkedGroups, projectSettings.title, doSavePlan]);
 
   // beforeunload: warn user if leaving with unsaved plan (debounce may not have fired yet)
+  // Disabled in development to avoid HMR triggering the dialog repeatedly
   useEffect(() => {
+    if (import.meta.env.DEV) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (projectSettings.title?.trim() && (shapes.length > 0 || planSavePendingRef.current)) {
         e.preventDefault();
@@ -581,15 +598,16 @@ export default function MasterProject() {
               return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [], vizFullSlabCount: fullSlabCount, vizWasteAreaCm2: wasteAreaCm2, vizReusedAreaCm2: reusedAreaCm2, cutSlabs: String(cutSlabCount) } };
             }
           } else if (shape.calculatorType === "paving" && (inputs?.blockWidthCm || inputs?.blockLengthCm)) {
-            const { wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(pathShape, inputs);
+            const { fullBlockCount, cutBlockCount, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(pathShape, inputs);
             const cur = shape.calculatorInputs;
             if (
               !arrEqual(cur?.vizWasteSatisfied as string[] | undefined, wasteSatisfiedPositions ?? []) ||
+              cur?.vizFullBlockCount !== fullBlockCount ||
               cur?.vizWasteAreaCm2 !== wasteAreaCm2 ||
               cur?.vizReusedAreaCm2 !== reusedAreaCm2
             ) {
               changed = true;
-              return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [], vizWasteAreaCm2: wasteAreaCm2, vizReusedAreaCm2: reusedAreaCm2 } };
+              return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [], vizFullBlockCount: fullBlockCount, cutBlocks: String(cutBlockCount), vizWasteAreaCm2: wasteAreaCm2, vizReusedAreaCm2: reusedAreaCm2 } };
             }
           }
         }
@@ -610,15 +628,16 @@ export default function MasterProject() {
       }
       if (!isPathElement(shape) && shape.calculatorType === "paving" && shape.closed && shape.points.length >= 3 && (shape.calculatorInputs?.blockWidthCm || shape.calculatorInputs?.blockLengthCm)) {
         const inputs = { ...shape.calculatorInputs };
-        const { wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(shape, inputs);
+        const { fullBlockCount, cutBlockCount, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(shape, inputs);
         const cur = shape.calculatorInputs;
         if (
           !arrEqual(cur?.vizWasteSatisfied as string[] | undefined, wasteSatisfiedPositions ?? []) ||
+          cur?.vizFullBlockCount !== fullBlockCount ||
           cur?.vizWasteAreaCm2 !== wasteAreaCm2 ||
           cur?.vizReusedAreaCm2 !== reusedAreaCm2
         ) {
           changed = true;
-          return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [], vizWasteAreaCm2: wasteAreaCm2, vizReusedAreaCm2: reusedAreaCm2 } };
+          return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [], vizFullBlockCount: fullBlockCount, cutBlocks: String(cutBlockCount), vizWasteAreaCm2: wasteAreaCm2, vizReusedAreaCm2: reusedAreaCm2 } };
         }
       }
       return shape;
@@ -699,6 +718,32 @@ export default function MasterProject() {
         }
         if (snapXVal !== null) { eMouse.x = snapXVal; smartGuides.push({ axis: "x", worldValue: snapXVal, ptIdx: snapXIdx }); }
         if (snapYVal !== null) { eMouse.y = snapYVal; smartGuides.push({ axis: "y", worldValue: snapYVal, ptIdx: snapYIdx }); }
+      }
+    }
+
+    // Alignment guides for point drag: snap to aligned X/Y of any point on canvas
+    const DRAG_GUIDE_SNAP_PX = 10;
+    const dragAlignGuides: { axis: "x" | "y"; worldValue: number; shapeIdx: number; ptIdx: number }[] = [];
+    if (dragInfo) {
+      const draggedPt = shapes[dragInfo.shapeIdx]?.points[dragInfo.pointIdx];
+      if (draggedPt) {
+        const threshold = DRAG_GUIDE_SNAP_PX / zoom;
+        let bestDx = threshold, bestDy = threshold;
+        let snapXVal: number | null = null, snapYVal: number | null = null;
+        let snapXSi = -1, snapYSi = -1, snapXPi = -1, snapYPi = -1;
+        for (let si = 0; si < shapes.length; si++) {
+          const pts = shapes[si].points;
+          for (let pi = 0; pi < pts.length; pi++) {
+            if (si === dragInfo.shapeIdx && pi === dragInfo.pointIdx) continue;
+            const pt = pts[pi];
+            const dx = Math.abs(draggedPt.x - pt.x);
+            const dy = Math.abs(draggedPt.y - pt.y);
+            if (dx < bestDx) { bestDx = dx; snapXVal = pt.x; snapXSi = si; snapXPi = pi; }
+            if (dy < bestDy) { bestDy = dy; snapYVal = pt.y; snapYSi = si; snapYPi = pi; }
+          }
+        }
+        if (snapXVal !== null) dragAlignGuides.push({ axis: "x", worldValue: snapXVal, shapeIdx: snapXSi, ptIdx: snapXPi });
+        if (snapYVal !== null) dragAlignGuides.push({ axis: "y", worldValue: snapYVal, shapeIdx: snapYSi, ptIdx: snapYPi });
       }
     }
 
@@ -829,6 +874,7 @@ export default function MasterProject() {
           if (outline.length < 3) return;
           const pathShape = { ...shape, points: outline, closed: true } as Shape;
           const isSel = si === selectedShapeIdx;
+          let pathSlabDrawn = false;
           ctx.beginPath();
           const s0 = worldToScreen(outline[0].x, outline[0].y);
           ctx.moveTo(s0.x, s0.y);
@@ -840,7 +886,11 @@ export default function MasterProject() {
           ctx.fillStyle = isSel ? "rgba(108,92,231,0.15)" : CC.layer2Dim;
           ctx.fill();
           if ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth) {
-            if (!drawPathSlabPattern(ctx, pathShape, worldToScreen, zoom, true, !isSel)) {
+            const pathOffsetBySegOverride = (patternDragInfo?.shapeIdx === si && patternDragInfo?.isPath && pathPatternLongOffsetPreview != null)
+              ? { [pathPatternLongOffsetPreview.segmentIdx]: pathPatternLongOffsetPreview.value }
+              : undefined;
+            pathSlabDrawn = drawPathSlabPattern(ctx, pathShape, worldToScreen, zoom, true, !isSel, pathOffsetBySegOverride);
+            if (!pathSlabDrawn) {
               drawSlabPattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel);
             }
             if (shape.calculatorInputs?.framePieceWidthCm) {
@@ -850,7 +900,10 @@ export default function MasterProject() {
             if (shape.calculatorInputs?.addFrameToMonoblock && shape.calculatorInputs?.framePieceWidthCm) {
               drawMonoblockFrame(ctx, pathShape, worldToScreen, zoom);
             }
-            drawCobblestonePattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel);
+            const pathOffsetOverride = (patternDragInfo?.shapeIdx === si && patternDragInfo?.isPath && pathPatternLongOffsetPreview != null && pathPatternLongOffsetPreview.segmentIdx === 0)
+              ? pathPatternLongOffsetPreview.value
+              : undefined;
+            drawCobblestonePattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel, pathOffsetOverride);
           }
           ctx.strokeStyle = isSel ? "rgba(108,92,231,0.8)" : CC.layer2Edge;
           ctx.lineWidth = isSel ? 2.5 : 1.8;
@@ -863,6 +916,9 @@ export default function MasterProject() {
           }
           ctx.closePath();
           ctx.stroke();
+          if ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth && pathSlabDrawn) {
+            drawPathSlabLabel(ctx, pathShape, worldToScreen, zoom);
+          }
           return;
         }
         if (!shape.closed || shape.points.length < 3) return;
@@ -900,7 +956,6 @@ export default function MasterProject() {
         const si = patternDragInfo.shapeIdx;
         const shape = shapes[si];
         if (shape?.closed && shape.points.length >= 3) {
-          // Use same polygon as computePatternSnap (effective polygon for paths, getEffectivePolygon for polygons)
           const pts = isPathElement(shape) ? getPathPolygon(shape) : getEffectivePolygon(shape);
           if (pts.length >= 3) {
           const alignedSet = new Set(patternAlignedEdges);
@@ -1053,6 +1108,7 @@ export default function MasterProject() {
     shapes.forEach((shape, si) => {
       if (!passesViewFilter(shape, viewFilter, activeLayer)) return;
       if (activeLayer === 5) { if (shape.layer !== 1 && shape.layer !== 2) return; }
+      else if (activeLayer === 3) { if (shape.layer !== 2) return; }
       else if (shape.layer !== activeLayer) return;
       // Foundation visible only in Layer 4, hidden in Layer 2
       if (activeLayer === 2 && shape.elementType === "foundation") return;
@@ -1072,40 +1128,88 @@ export default function MasterProject() {
         const inSegmentSideSelection = pathSegmentSideSelection && pathSegmentSideSelection.shapeIdx === si;
         if (inSegmentSideSelection) {
           const pathWidthM = Number(shape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
-          const halfPx = toPixels(pathWidthM) / 2;
+          const fullPx = toPixels(pathWidthM);
           const animT = (Date.now() % 1200) / 1200;
           const dashOffset = animT * 12;
-          ctx.setLineDash([8, 6]);
-          ctx.lineWidth = 2;
+          const selSides = pathSegmentSideSelection!.segmentSides;
           for (let i = 0; i < pts.length - 1; i++) {
             const A = pts[i];
             const B = pts[i + 1];
             const dx = B.x - A.x, dy = B.y - A.y;
             const len = Math.sqrt(dx * dx + dy * dy);
             const nx = len > 0.001 ? -dy / len : 0, ny = len > 0.001 ? dx / len : 0;
-            const left0 = { x: A.x + nx * halfPx, y: A.y + ny * halfPx }, left1 = { x: B.x + nx * halfPx, y: B.y + ny * halfPx };
-            const right0 = { x: A.x - nx * halfPx, y: A.y - ny * halfPx }, right1 = { x: B.x - nx * halfPx, y: B.y - ny * halfPx };
+            const left0 = { x: A.x + nx * fullPx, y: A.y + ny * fullPx }, left1 = { x: B.x + nx * fullPx, y: B.y + ny * fullPx };
+            const right0 = { x: A.x - nx * fullPx, y: A.y - ny * fullPx }, right1 = { x: B.x - nx * fullPx, y: B.y - ny * fullPx };
             const sA = worldToScreen(A.x, A.y), sB = worldToScreen(B.x, B.y);
             const sL0 = worldToScreen(left0.x, left0.y), sL1 = worldToScreen(left1.x, left1.y);
             const sR0 = worldToScreen(right0.x, right0.y), sR1 = worldToScreen(right1.x, right1.y);
-            const midLeft = midpoint(sL0, sL1), midRight = midpoint(sR0, sR1);
-            ctx.strokeStyle = "#27ae60";
-            ctx.beginPath(); ctx.moveTo(sL0.x, sL0.y); ctx.lineTo(sL1.x, sL1.y);
-            ctx.lineDashOffset = -dashOffset; ctx.stroke();
-            ctx.strokeStyle = "#e67e22";
-            ctx.beginPath(); ctx.moveTo(sR0.x, sR0.y); ctx.lineTo(sR1.x, sR1.y);
-            ctx.lineDashOffset = dashOffset; ctx.stroke();
-            ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
-            ctx.font = "10px 'JetBrains Mono',monospace";
-            ctx.fillStyle = "#27ae60"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.fillText(t("project:path_click_side"), midLeft.x, midLeft.y - 12);
-            ctx.fillStyle = "#e67e22";
-            ctx.fillText(t("project:path_click_side"), midRight.x, midRight.y + 12);
+            const chosen = selSides[i];
+            if (chosen !== null) {
+              // Segment already chosen: draw filled preview on chosen side
+              const isLeft = chosen === "left";
+              const fillColor = isLeft ? "rgba(39,174,96,0.35)" : "rgba(230,126,34,0.35)";
+              const strokeColor = isLeft ? "#27ae60" : "#e67e22";
+              const o0 = isLeft ? sL0 : sR0;
+              const o1 = isLeft ? sL1 : sR1;
+              ctx.beginPath();
+              ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y);
+              ctx.lineTo(o1.x, o1.y); ctx.lineTo(o0.x, o0.y);
+              ctx.closePath();
+              ctx.fillStyle = fillColor;
+              ctx.fill();
+              ctx.setLineDash([]);
+              ctx.strokeStyle = strokeColor; ctx.lineWidth = 2;
+              ctx.beginPath(); ctx.moveTo(o0.x, o0.y); ctx.lineTo(o1.x, o1.y); ctx.stroke();
+              // Centerline
+              ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5;
+              ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
+            } else {
+              // Not yet chosen: show animated green/orange indicator lines
+              ctx.setLineDash([8, 6]);
+              ctx.lineWidth = 2;
+              ctx.strokeStyle = "#27ae60";
+              ctx.beginPath(); ctx.moveTo(sL0.x, sL0.y); ctx.lineTo(sL1.x, sL1.y);
+              ctx.lineDashOffset = -dashOffset; ctx.stroke();
+              ctx.strokeStyle = "#e67e22";
+              ctx.beginPath(); ctx.moveTo(sR0.x, sR0.y); ctx.lineTo(sR1.x, sR1.y);
+              ctx.lineDashOffset = dashOffset; ctx.stroke();
+              ctx.setLineDash([]);
+              ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5;
+              ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
+              const midLeft = midpoint(sL0, sL1), midRight = midpoint(sR0, sR1);
+              ctx.font = "10px 'JetBrains Mono',monospace";
+              const edgeAngle = Math.atan2(B.y - A.y, B.x - A.x);
+              const textAngle = readableTextAngle(edgeAngle);
+              const drawRotatedLabel = (text: string, cx: number, cy: number, offset: number, color: string) => {
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(textAngle);
+                ctx.fillStyle = color;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(text, 0, offset);
+                ctx.restore();
+              };
+              drawRotatedLabel(t("project:path_click_side"), midLeft.x, midLeft.y, -12, "#27ae60");
+              drawRotatedLabel(t("project:path_click_side"), midRight.x, midRight.y, 12, "#e67e22");
+            }
           }
           ctx.setLineDash([]); ctx.lineDashOffset = 0;
         } else {
-          if (outline.length >= 3) {
+          // During drawing: show thin centerline only (not full width). Full outline only when closed.
+          if (!shape.closed && pts.length >= 2) {
+            ctx.strokeStyle = CC.open;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([]);
+            for (let i = 0; i < pts.length - 1; i++) {
+              const sA = worldToScreen(pts[i].x, pts[i].y);
+              const sB = worldToScreen(pts[i + 1].x, pts[i + 1].y);
+              ctx.beginPath();
+              ctx.moveTo(sA.x, sA.y);
+              ctx.lineTo(sB.x, sB.y);
+              ctx.stroke();
+            }
+          } else if (shape.closed && outline.length >= 3) {
             ctx.beginPath();
             const s0 = worldToScreen(outline[0].x, outline[0].y);
             ctx.moveTo(s0.x, s0.y);
@@ -1114,20 +1218,23 @@ export default function MasterProject() {
               ctx.lineTo(s.x, s.y);
             }
             ctx.closePath();
-            ctx.fillStyle = isSel ? "rgba(108,92,231,0.15)" : CC.layer2Dim;
-            ctx.fill();
-            // Pattern and frame drawn in Layer 3 block below
-            ctx.strokeStyle = isSel ? edgeHovColor : edgeColor;
-            ctx.lineWidth = isSel ? 2.5 : 1.8;
-            ctx.beginPath();
-            const s0path = worldToScreen(outline[0].x, outline[0].y);
-            ctx.moveTo(s0path.x, s0path.y);
-            for (let i = 1; i < outline.length; i++) {
-              const s = worldToScreen(outline[i].x, outline[i].y);
-              ctx.lineTo(s.x, s.y);
+            if (activeLayer !== 3) {
+              ctx.fillStyle = isSel ? "rgba(108,92,231,0.15)" : CC.layer2Dim;
+              ctx.fill();
             }
-            ctx.closePath();
-            ctx.stroke();
+            if (activeLayer !== 3) {
+              ctx.strokeStyle = isSel ? edgeHovColor : edgeColor;
+              ctx.lineWidth = isSel ? 2.5 : 1.8;
+              ctx.beginPath();
+              const s0path = worldToScreen(outline[0].x, outline[0].y);
+              ctx.moveTo(s0path.x, s0path.y);
+              for (let i = 1; i < outline.length; i++) {
+                const s = worldToScreen(outline[i].x, outline[i].y);
+                ctx.lineTo(s.x, s.y);
+              }
+              ctx.closePath();
+              ctx.stroke();
+            }
           }
         }
         pointsToShow.forEach((p, pi) => {
@@ -1139,7 +1246,7 @@ export default function MasterProject() {
           ctx.fillStyle = isH || isD ? CC.layer2 : CC.layer2Edge; ctx.fill();
           ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
         });
-        if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 5) && shape.edgeArcs && pts.length >= 2) {
+        if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5) && shape.edgeArcs && pts.length >= 2) {
           const linkedArcIdsForShape = new Set<string>();
           for (const g of linkedGroups) for (const p of g) { if (isArcEntry(p) && p.si === si && g.length >= 2) linkedArcIdsForShape.add(p.arcId); }
           for (let i = 0; i < pts.length - 1; i++) {
@@ -1184,7 +1291,7 @@ export default function MasterProject() {
           ctx.fillStyle = isH || isD ? hc : fc; ctx.fill();
           ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
         });
-        if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 5) && shape.edgeArcs) {
+        if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5) && shape.edgeArcs) {
           const linkedArcIdsForShape = new Set<string>();
           for (const g of linkedGroups) for (const p of g) { if (isArcEntry(p) && p.si === si && g.length >= 2) linkedArcIdsForShape.add(p.arcId); }
           const leEdgeCount = pts.length - 1;
@@ -1220,6 +1327,11 @@ export default function MasterProject() {
             const sp = worldToScreen(gPt.x, gPt.y);
             ctx.fillStyle = "#27ae60";
             ctx.beginPath(); ctx.moveTo(sp.x, sp.y - 5); ctx.lineTo(sp.x + 5, sp.y); ctx.lineTo(sp.x, sp.y + 5); ctx.lineTo(sp.x - 5, sp.y); ctx.closePath(); ctx.fill();
+            const distM = distance(gPt, eMouse);
+            const lm = midpoint(worldToScreen(gPt.x, gPt.y), worldToScreen(eMouse.x, eMouse.y));
+            ctx.font = "11px 'JetBrains Mono',monospace";
+            ctx.fillStyle = "#27ae60"; ctx.textAlign = "center";
+            ctx.fillText(formatLength(distM), lm.x, lm.y - 6);
           }
           const liveLen = distance(last, eMouse);
           const lm = midpoint(sl, sm);
@@ -1246,19 +1358,21 @@ export default function MasterProject() {
           }
         }
         ctx.closePath();
-        if (showGeodesy && geodesyLayerFilter(shape)) {
-          fillShapeHeightHeatmap(ctx, shape, worldToScreen, geodesyGlobalRange);
-        } else {
-          ctx.fillStyle = isSel ? (isL2 ? "rgba(108,92,231,0.15)" : CC.selectedFill) : (isL2 ? CC.layer2Dim : CC.shapeFill);
-          ctx.fill();
+        if (activeLayer !== 3) {
+          if (showGeodesy && geodesyLayerFilter(shape)) {
+            fillShapeHeightHeatmap(ctx, shape, worldToScreen, geodesyGlobalRange);
+          } else {
+            ctx.fillStyle = isSel ? (isL2 ? "rgba(108,92,231,0.15)" : CC.selectedFill) : (isL2 ? CC.layer2Dim : CC.shapeFill);
+            ctx.fill();
+          }
         }
-
         // Patterns drawn only in Pattern layer (block at L697); Elements shows shapes without patterns
       }
 
       const vizAlignedEdges = (shape.calculatorInputs?.vizAlignedEdges as number[] | undefined) ?? [];
       const edgeCount = shape.closed ? pts.length : pts.length - 1;
       const hasArcsForStroke = !!(shape.edgeArcs?.some(a => a && a.length > 0));
+      if (activeLayer !== 3) {
       if (hasArcsForStroke) {
         const { points: effPts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
         drawSmoothPolygonStroke(ctx, effPts, edgeIndices, (wx, wy) => worldToScreen(wx, wy), (edgeIdx) => {
@@ -1392,9 +1506,10 @@ export default function MasterProject() {
           }
         }
       }
+      }
 
       // Arc point handles (when selected, showAllArcPoints, or in L1/L2/L5 — same visibility as square points)
-      if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 5) && shape.edgeArcs && !showGeodesy) {
+      if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5) && shape.edgeArcs && !showGeodesy) {
         const linkedArcIdsForShape = new Set<string>();
         for (const g of linkedGroups) for (const p of g) { if (isArcEntry(p) && p.si === si && g.length >= 2) linkedArcIdsForShape.add(p.arcId); }
         for (let i = 0; i < edgeCount; i++) {
@@ -1414,19 +1529,18 @@ export default function MasterProject() {
           const sc = worldToScreen(curr.x, curr.y);
           const d1 = Math.atan2(prev.y - curr.y, prev.x - curr.x);
           const d2 = Math.atan2(next.y - curr.y, next.x - curr.x);
-          const isLockedAngle = shape.lockedAngles.includes(i);
 
           const cross = (prev.x - curr.x) * (next.y - curr.y) - (prev.y - curr.y) * (next.x - curr.x);
           const ccw = cross > 0;
 
           ctx.beginPath(); ctx.moveTo(sc.x, sc.y); ctx.arc(sc.x, sc.y, 25, d1, d2, !ccw); ctx.closePath();
-          ctx.fillStyle = isLockedAngle ? "rgba(255,68,68,0.15)" : CC.angleFill; ctx.fill();
-          ctx.strokeStyle = isLockedAngle ? CC.lockedAngle : CC.angleStroke; ctx.lineWidth = isLockedAngle ? 2 : 1; ctx.stroke();
+          ctx.fillStyle = CC.angleFill; ctx.fill();
+          ctx.strokeStyle = CC.angleStroke; ctx.lineWidth = 1; ctx.stroke();
 
           const intDir = interiorAngleDir(pts, i);
           ctx.font = "11px 'JetBrains Mono',monospace";
-          ctx.fillStyle = isLockedAngle ? CC.lockedAngle : CC.angleText; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillText((isLockedAngle ? "🔒 " : "") + angle.toFixed(1) + "°", sc.x + Math.cos(intDir) * 39, sc.y + Math.sin(intDir) * 39);
+          ctx.fillStyle = CC.angleText; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(angle.toFixed(1) + "°", sc.x + Math.cos(intDir) * 39, sc.y + Math.sin(intDir) * 39);
         }
       }
 
@@ -1610,6 +1724,11 @@ export default function MasterProject() {
           ctx.moveTo(snapPt.x, snapPt.y - 4); ctx.lineTo(snapPt.x + 4, snapPt.y);
           ctx.lineTo(snapPt.x, snapPt.y + 4); ctx.lineTo(snapPt.x - 4, snapPt.y);
           ctx.closePath(); ctx.fill();
+          const distM = distance(gPt, eMouse);
+          const lm = midpoint(sp, snapPt);
+          ctx.font = "11px 'JetBrains Mono',monospace";
+          ctx.fillStyle = "#27ae60"; ctx.textAlign = "center";
+          ctx.fillText(formatLength(distM), lm.x, lm.y - 6);
         }
 
         if (shiftHeld) {
@@ -1652,6 +1771,38 @@ export default function MasterProject() {
         }
       }
     });
+
+    // Alignment guide lines when dragging a point (dashed line when aligned with another point)
+    if (dragInfo && dragAlignGuides.length > 0) {
+      const draggedPt = shapes[dragInfo.shapeIdx]?.points[dragInfo.pointIdx];
+      if (draggedPt) {
+        const ext = 5000;
+        for (const guide of dragAlignGuides) {
+          const gPt = shapes[guide.shapeIdx]?.points[guide.ptIdx];
+          if (!gPt) continue;
+          if (guide.axis === "x") {
+            const sA = worldToScreen(guide.worldValue, Math.min(gPt.y, draggedPt.y) - ext);
+            const sB = worldToScreen(guide.worldValue, Math.max(gPt.y, draggedPt.y) + ext);
+            ctx.strokeStyle = "#27ae60"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+            ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
+            ctx.setLineDash([]);
+          } else {
+            const sA = worldToScreen(Math.min(gPt.x, draggedPt.x) - ext, guide.worldValue);
+            const sB = worldToScreen(Math.max(gPt.x, draggedPt.x) + ext, guide.worldValue);
+            ctx.strokeStyle = "#27ae60"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+            ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
+            ctx.setLineDash([]);
+          }
+          const distM = distance(gPt, draggedPt);
+          const sg = worldToScreen(gPt.x, gPt.y);
+          const sd = worldToScreen(draggedPt.x, draggedPt.y);
+          const lm = midpoint(sg, sd);
+          ctx.font = "11px 'JetBrains Mono',monospace";
+          ctx.fillStyle = "#27ae60"; ctx.textAlign = "center";
+          ctx.fillText(formatLength(distM), lm.x, lm.y - 6);
+        }
+      }
+    }
 
     // Geodesy labels with leader lines — avoids overlap when multiple points share position
     if (showGeodesy) {
@@ -1707,44 +1858,6 @@ export default function MasterProject() {
         ctx.strokeStyle = CC.adjustmentOverlapStroke;
         ctx.lineWidth = 1.5;
         ctx.stroke();
-      });
-    }
-
-    // Pulsing indicator on open endpoints (never show for linear elements — fence, wall, kerb, foundation)
-    if (mode === "select" && drawingShapeIdx === null) {
-      shapes.forEach((shape) => {
-        if (!passesViewFilter(shape, viewFilter, activeLayer)) return;
-        if (shape.layer !== activeLayer) return;
-        if (isLinearElement(shape)) return;
-        if (!shape.closed && shape.points.length >= 1) {
-          const ends = shape.points.length === 1 ? [shape.points[0]] : [shape.points[0], shape.points[shape.points.length - 1]];
-          ends.forEach(lp => {
-            const sp = worldToScreen(lp.x, lp.y);
-            const pulseT = (Date.now() % 2000) / 2000;
-            const pulse = 10 + Math.sin(pulseT * Math.PI * 2) * 3;
-            ctx.beginPath(); ctx.arc(sp.x, sp.y, pulse, 0, Math.PI * 2);
-            ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
-            ctx.font = "10px 'JetBrains Mono',monospace";
-            ctx.fillStyle = CC.open; ctx.textAlign = "center";
-            ctx.fillText(t("project:canvas_continue"), sp.x, sp.y - 18);
-          });
-        }
-        if (isPathElement(shape) && shape.closed && shape.calculatorInputs?.pathCenterline) {
-          const pathCenterline = shape.calculatorInputs.pathCenterline as Point[];
-          if (pathCenterline.length >= 2) {
-            const ends = [pathCenterline[0], pathCenterline[pathCenterline.length - 1]];
-            ends.forEach(lp => {
-              const sp = worldToScreen(lp.x, lp.y);
-              const pulseT = (Date.now() % 2000) / 2000;
-              const pulse = 10 + Math.sin(pulseT * Math.PI * 2) * 3;
-              ctx.beginPath(); ctx.arc(sp.x, sp.y, pulse, 0, Math.PI * 2);
-              ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
-              ctx.font = "10px 'JetBrains Mono',monospace";
-              ctx.fillStyle = CC.open; ctx.textAlign = "center";
-              ctx.fillText(t("project:canvas_continue"), sp.x, sp.y - 18);
-            });
-          }
-        }
       });
     }
 
@@ -1925,7 +2038,7 @@ export default function MasterProject() {
         ctx.fillText(t("project:dim_edit_point_b"), offBx, offBy);
       }
     }
-  }, [shapes, selectedShapeIdx, selectedPattern, patternDragInfo, patternDragPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id, measureStart, measureEnd, pathSegmentSideSelection, shapeDragInfo, edgeDragInfo]);
+  }, [shapes, selectedShapeIdx, selectedPattern, patternDragInfo, patternDragPreview, pathPatternLongOffsetPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id, measureStart, measureEnd, pathSegmentSideSelection, shapeDragInfo, edgeDragInfo]);
 
   // Clear height tooltip when disabling geodesy or switching away from layer 1
   useEffect(() => {
@@ -2151,20 +2264,6 @@ export default function MasterProject() {
     return null;
   }, [shapes, zoom, isOnActiveLayer, viewFilter]);
 
-  const hitTestPathContinuation = useCallback((wp: Point): { shapeIdx: number; end: "first" | "last" } | null => {
-    const th = SNAP_TO_LAST_RADIUS / zoom * (PIXELS_PER_METER / 80);
-    for (let si = shapes.length - 1; si >= 0; si--) {
-      if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
-      const s = shapes[si];
-      if (!isPathElement(s) || !s.closed || !s.calculatorInputs?.pathCenterline) continue;
-      const pathCenterline = s.calculatorInputs.pathCenterline as Point[];
-      if (pathCenterline.length < 2) continue;
-      if (distance(wp, pathCenterline[pathCenterline.length - 1]) < th) return { shapeIdx: si, end: "last" };
-      if (distance(wp, pathCenterline[0]) < th) return { shapeIdx: si, end: "first" };
-    }
-    return null;
-  }, [shapes, zoom, isOnActiveLayer, viewFilter]);
-
   const arcHitThreshold = (pointRadiusEffective / zoom + 4) * (PIXELS_PER_METER / 80);
   const hitTestArcPointGlobal = useCallback((wp: Point): { shapeIdx: number; edgeIdx: number; arcPoint: ArcPoint } | null => {
     const testShape = (si: number) => {
@@ -2186,7 +2285,7 @@ export default function MasterProject() {
       if (hit) return hit;
     }
     // In L1/L2/L5 arcpoints are visible on all shapes — allow hit test on non-selected shapes too
-    if (showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 5) {
+    if (showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5) {
       for (let si = shapes.length - 1; si >= 0; si--) {
         if (si === selectedShapeIdx) continue;
         const hit = testShape(si);
@@ -2353,20 +2452,23 @@ export default function MasterProject() {
       if (!shape || !isPathElement(shape)) { setPathSegmentSideSelection(null); return; }
       const pts = shape.points;
       const pathWidthM = Number(shape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
-      const half = toPixels(pathWidthM) / 2;
-      const th = (20 / zoom) * (PIXELS_PER_METER / 80);
+      const fullPx = toPixels(pathWidthM);
+      // Threshold must be >= fullPx so clicks on green/orange sides (at full width from centerline) register
+      const th = Math.max(fullPx + 16, (30 / zoom) * (PIXELS_PER_METER / 80));
       let bestSeg = -1;
       let bestD = th;
       for (let i = 0; i < pts.length - 1; i++) {
-        const d = projectOntoSegment(world, pts[i], pts[i + 1]).dist;
-        if (d < bestD) { bestD = d; bestSeg = i; }
+        const pr = projectOntoSegment(world, pts[i], pts[i + 1]);
+        if (pr.dist < bestD) { bestD = pr.dist; bestSeg = i; }
       }
       if (bestSeg >= 0) {
         const side = pointSideOfLine(world, pts[bestSeg], pts[bestSeg + 1]);
-        const chosenSide = side === "on" ? "left" : side;
+        const chosenSide = side === "on" ? "left" : side === "left" ? "right" : "left";
         saveHistory();
-        const newSides = [...segmentSides];
-        newSides[bestSeg] = chosenSide;
+        // UNIFORM_SIDE: Apply chosen side to ALL segments at once.
+        // To revert to per-segment selection, replace the line below with:
+        //   const newSides = [...segmentSides]; newSides[bestSeg] = chosenSide;
+        const newSides: ("left" | "right" | null)[] = segmentSides.map(() => chosenSide);
         const allChosen = newSides.every(s => s !== null);
         if (allChosen) {
           const outline = computePathOutlineFromSegmentSides(pts, newSides as ("left" | "right")[], pathWidthM);
@@ -2384,6 +2486,8 @@ export default function MasterProject() {
                   pathIsOutline: true,
                   pathCenterline: pts.map(p => ({ ...p })),
                   pathCenterlineOriginal: pts.map(p => ({ ...p })),
+                  pathSegmentSides: [...(newSides as ("left" | "right")[])],
+                  pathWidthM: pathWidthM,
                 },
               };
               return n;
@@ -2391,7 +2495,9 @@ export default function MasterProject() {
             setPathConfig(null);
             setPathSegmentSideSelection(null);
             if (!shape.namePromptShown) setNamePromptShapeIdx(si);
-            setSelectedShapeIdx(si);
+            setSelectedShapeIdx(null);
+            setPathJustFinishedForAutoCalc(si);
+            setObjectCardShapeIdx(si);
             setMode("select");
           }
         } else {
@@ -2576,7 +2682,8 @@ export default function MasterProject() {
           const shape = shapes[si];
           if (!passesViewFilter(shape, viewFilter, activeLayer)) continue;
           if (shape.layer !== 1 || !shape.closed || shape.points.length < 3) continue;
-          if (!pointInPolygon(world, shape.points)) continue;
+          const polyForHit = shape.edgeArcs?.some(a => a && a.length > 0) ? getEffectivePolygon(shape) : shape.points;
+          if (!pointInPolygon(world, polyForHit)) continue;
           const h = interpolateHeightAtPoint(shape, world);
           if (h !== null) {
             setClickedHeightTooltip({ world, shapeIdx: si, height: h });
@@ -2677,7 +2784,34 @@ export default function MasterProject() {
               }
             }
             saveHistory();
-            const inp = shapes[patternHit.shapeIdx].calculatorInputs ?? {};
+            const inp = shape.calculatorInputs ?? {};
+            if (isPathElement(shape)) {
+              const pathCenterline = inp.pathCenterline as Point[] | undefined;
+              if (pathCenterline && pathCenterline.length >= 2) {
+                const rawBySeg = inp.pathPatternLongOffsetMBySegment as number[] | undefined;
+                const nSeg = pathCenterline.length - 1;
+                const fallbackM = Number(inp.pathPatternLongOffsetM ?? 0) || 0;
+                const startPathPatternLongOffsetMBySegment = Array.isArray(rawBySeg) && rawBySeg.length === nSeg
+                  ? rawBySeg.map(v => Number(v ?? 0) || 0)
+                  : Array.from({ length: nSeg }, () => fallbackM);
+                let bestSegIdx = 0;
+                let bestDist = Infinity;
+                for (let i = 0; i < nSeg; i++) {
+                  const A = pathCenterline[i]!;
+                  const B = pathCenterline[i + 1]!;
+                  const pr = projectOntoSegment(world, A, B);
+                  const d = distance(world, pr.proj);
+                  if (d < bestDist) {
+                    bestDist = d;
+                    bestSegIdx = i;
+                  }
+                }
+                setPatternDragInfo({ shapeIdx: patternHit.shapeIdx, type: patternHit.type, startMouse: { ...world }, startOffset: { x: 0, y: 0 }, isPath: true, startPathSegmentIdx: bestSegIdx, startPathPatternLongOffsetMBySegment });
+                setPathPatternLongOffsetPreview(null);
+                setPatternAlignedEdges([]);
+                return;
+              }
+            }
             const startOffset = {
               x: Number(inp.vizOriginOffsetX ?? 0),
               y: Number(inp.vizOriginOffsetY ?? 0),
@@ -2690,7 +2824,13 @@ export default function MasterProject() {
         }
         setSelectedPattern(null);
         setSelectedShapeIdx(null);
-        setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+        if (ctrlHeld) {
+          const r = canvasRef.current!.getBoundingClientRect();
+          const sx = e.clientX - r.left, sy = e.clientY - r.top;
+          setSelectionRect({ startX: sx, startY: sy, endX: sx, endY: sy });
+        } else {
+          setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+        }
         return;
       }
 
@@ -2752,6 +2892,11 @@ export default function MasterProject() {
       const edgeHit = hitTestEdge(world);
       if (edgeHit) {
         const hitShape = shapes[edgeHit.shapeIdx];
+        // Paths: don't add point to outline (would corrupt pathIsOutline/pathCenterline). Use path continuation instead.
+        if (isPathElement(hitShape)) {
+          setSelectedShapeIdx(edgeHit.shapeIdx);
+          return;
+        }
         if (isLinearElement(hitShape)) {
           const r = canvasRef.current!.getBoundingClientRect();
           const startScreen = { x: e.clientX - r.left, y: e.clientY - r.top };
@@ -2766,32 +2911,31 @@ export default function MasterProject() {
           setSelectedShapeIdx(edgeHit.shapeIdx);
           return;
         }
+        // Left click on edge: select element (like shape hit), don't add point — SquarePoints only via right-click "Dodaj SquarePoint"
+        setSelectedShapeIdx(edgeHit.shapeIdx);
         saveHistory();
-        const ns = [...shapes]; const s = { ...ns[edgeHit.shapeIdx] }; const np = [...s.points];
-        const ei = edgeHit.edgeIdx;
-        np.splice(ei + 1, 0, { ...edgeHit.pos }); s.points = np;
-        // Update heights: insert 0 at new point position
-        const nh = [...(s.heights || Array(s.points.length).fill(0))]; nh.splice(ei + 1, 0, 0); s.heights = nh;
-        if (s.elementType === "wall" && s.calculatorInputs) {
-          const inputs = { ...s.calculatorInputs };
-          const segHeights = [...(inputs.segmentHeights as Array<{ startH: number; endH: number }> ?? [])];
-          const defH = parseFloat(String(inputs.height ?? "1")) || 1;
-          const newSeg = { startH: defH, endH: defH };
-          if (segHeights.length === np.length - 2) {
-            segHeights.splice(ei + 1, 0, newSeg);
-            inputs.segmentHeights = segHeights;
-          } else {
-            inputs.segmentHeights = Array.from({ length: np.length - 1 }, () => ({ startH: defH, endH: defH }));
+        setShapeDragInfo({ shapeIdx: edgeHit.shapeIdx, startMouse: { ...world }, startPoints: shapes[edgeHit.shapeIdx].points.map(p => ({ ...p })) });
+        const hitShapeForDrag = shapes[edgeHit.shapeIdx];
+        transformStartVizPiecesRef.current = hitShapeForDrag.calculatorInputs?.vizPieces
+          ? (hitShapeForDrag.calculatorInputs.vizPieces as GrassPiece[]).map(p => ({ ...p })) : null;
+        if (hitShapeForDrag.layer === 1 && hitShapeForDrag.closed && hitShapeForDrag.points.length >= 3) {
+          const children: typeof gardenDragChildrenRef.current = [];
+          for (let ci = 0; ci < shapes.length; ci++) {
+            if (ci === edgeHit.shapeIdx || shapes[ci].layer !== 2) continue;
+            const c = centroid(shapes[ci].points);
+            if (pointInPolygon(c, hitShapeForDrag.points)) {
+              children.push({
+                idx: ci,
+                startPoints: shapes[ci].points.map(p => ({ ...p })),
+                startVizPieces: shapes[ci].calculatorInputs?.vizPieces
+                  ? (shapes[ci].calculatorInputs!.vizPieces as GrassPiece[]).map(p => ({ ...p })) : null,
+              });
+            }
           }
-          s.calculatorInputs = inputs;
+          gardenDragChildrenRef.current = children;
+        } else {
+          gardenDragChildrenRef.current = [];
         }
-        // Update lockedEdges: shift indices after insertion, split the locked edge
-        s.lockedEdges = s.lockedEdges.filter(e => e.idx !== ei).map(e => e.idx > ei ? { ...e, idx: e.idx + 1 } : e);
-        // Update lockedAngles: shift indices after insertion
-        s.lockedAngles = s.lockedAngles.map(a => a > ei ? a + 1 : a);
-        ns[edgeHit.shapeIdx] = s;
-        setShapes(ns); setSelectedShapeIdx(edgeHit.shapeIdx);
-        setDragInfo({ shapeIdx: edgeHit.shapeIdx, pointIdx: ei + 1, startMouse: { ...world }, startPoint: { ...edgeHit.pos } });
         return;
       }
 
@@ -2864,41 +3008,6 @@ export default function MasterProject() {
     // Path drawing modes (Slabs, Monoblock) — requires pathConfig from PathCreationModal
     if ((mode === "drawPathSlabs" || mode === "drawPathConcreteSlabs" || mode === "drawPathMonoblock") && pathConfig && drawingShapeIdx === null) {
       const elementType = mode === "drawPathSlabs" ? "pathSlabs" : mode === "drawPathConcreteSlabs" ? "pathConcreteSlabs" : "pathMonoblock";
-      const pathContinuation = hitTestPathContinuation(world);
-      if (pathContinuation && shapes[pathContinuation.shapeIdx].elementType === elementType) {
-        const si = pathContinuation.shapeIdx;
-        const s = shapes[si];
-        const pathCenterline = (s.calculatorInputs?.pathCenterline as Point[]) ?? s.points;
-        if (pathContinuation.end === "first") {
-          setShapes(p => {
-            const n = [...p];
-            const sh = n[si];
-            const reversed = [...pathCenterline].reverse();
-            n[si] = {
-              ...sh,
-              points: reversed,
-              closed: false,
-              calculatorInputs: { ...sh.calculatorInputs, pathIsOutline: undefined, pathCenterline: undefined, pathCenterlineOriginal: undefined },
-            };
-            return n;
-          });
-        } else {
-          setShapes(p => {
-            const n = [...p];
-            const sh = n[si];
-            n[si] = {
-              ...sh,
-              points: pathCenterline.map(p => ({ ...p })),
-              closed: false,
-              calculatorInputs: { ...sh.calculatorInputs, pathIsOutline: undefined, pathCenterline: undefined, pathCenterlineOriginal: undefined },
-            };
-            return n;
-          });
-        }
-        setDrawingShapeIdx(si);
-        setSelectedShapeIdx(si);
-        return;
-      }
       const newIdx = shapes.length;
       setShapes(p => [...p, {
         points: [{ ...world }], closed: false,
@@ -3026,7 +3135,7 @@ export default function MasterProject() {
       setSelectedShapeIdx(null);
       setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
-  }, [mode, shapes, drawingShapeIdx, pathSegmentSideSelection, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPathContinuation, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, worldToScreen, saveHistory, selectedShapeIdx, isOnActiveLayer, activeLayer, editingGeodesyCard, measureStart, measureEnd, hoveredPoint, hoveredEdge, selectedPoints, selectionRect, editingDim, rotateInfo, patternDragInfo, patternRotateInfo, shapeDragInfo, edgeDragInfo]);
+  }, [mode, shapes, drawingShapeIdx, pathSegmentSideSelection, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, worldToScreen, saveHistory, selectedShapeIdx, isOnActiveLayer, activeLayer, editingGeodesyCard, measureStart, measureEnd, hoveredPoint, hoveredEdge, selectedPoints, selectionRect, editingDim, rotateInfo, patternDragInfo, patternRotateInfo, shapeDragInfo, edgeDragInfo]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const world = getWorldPos(e);
@@ -3232,17 +3341,37 @@ export default function MasterProject() {
     }
 
     if (patternDragInfo) {
-      const dx = world.x - patternDragInfo.startMouse.x;
-      const dy = world.y - patternDragInfo.startMouse.y;
-      const rawOffset = { x: patternDragInfo.startOffset.x + dx, y: patternDragInfo.startOffset.y + dy };
       const shape = shapes[patternDragInfo.shapeIdx];
-      if (shape) {
-        const { snappedOffset, alignedEdges } = computePatternSnap(shape, rawOffset, PATTERN_SNAP_PX / zoom);
-        setPatternDragPreview(snappedOffset);
-        setPatternAlignedEdges(alignedEdges);
+      if (patternDragInfo.isPath && shape && isPathElement(shape)) {
+        const pathCenterline = (shape.calculatorInputs?.pathCenterline as Point[] | undefined);
+        const segIdx = patternDragInfo.startPathSegmentIdx ?? 0;
+        const bySeg = patternDragInfo.startPathPatternLongOffsetMBySegment ?? [];
+        if (pathCenterline && pathCenterline.length >= 2 && segIdx < pathCenterline.length - 1) {
+          const A = pathCenterline[segIdx]!;
+          const B = pathCenterline[segIdx + 1]!;
+          const segDx = B.x - A.x;
+          const segDy = B.y - A.y;
+          const len = Math.sqrt(segDx * segDx + segDy * segDy) || 1;
+          const dir = { x: segDx / len, y: segDy / len };
+          const dx = world.x - patternDragInfo.startMouse.x;
+          const dy = world.y - patternDragInfo.startMouse.y;
+          const deltaAlongPathPx = dx * dir.x + dy * dir.y;
+          const deltaAlongPathM = toMeters(deltaAlongPathPx);
+          const newOffsetM = (bySeg[segIdx] ?? 0) + deltaAlongPathM;
+          setPathPatternLongOffsetPreview({ segmentIdx: segIdx, value: newOffsetM });
+        }
       } else {
-        setPatternDragPreview(rawOffset);
-        setPatternAlignedEdges([]);
+        const dx = world.x - patternDragInfo.startMouse.x;
+        const dy = world.y - patternDragInfo.startMouse.y;
+        const rawOffset = { x: patternDragInfo.startOffset.x + dx, y: patternDragInfo.startOffset.y + dy };
+        if (shape) {
+          const { snappedOffset, alignedEdges } = computePatternSnap(shape, rawOffset, PATTERN_SNAP_PX / zoom);
+          setPatternDragPreview(snappedOffset);
+          setPatternAlignedEdges(alignedEdges);
+        } else {
+          setPatternDragPreview(rawOffset);
+          setPatternAlignedEdges([]);
+        }
       }
       return;
     }
@@ -3428,11 +3557,9 @@ export default function MasterProject() {
           t = snapped.t;
           offset = snapped.offset;
           if (snapped.lockedTarget) arcSnapLockedTargetRef.current = snapped.lockedTarget;
-          if (snapped.bestTarget) {
-            const snapWorldPos = arcPointToWorldOnCurve(A, B, arcs, { id: arcDragInfo.arcPoint.id, t, offset });
-            const err = distance(snapWorldPos, snapped.bestTarget);
-            if (err > 2) console.warn("Arc snap error (px):", err, { bestTarget: snapped.bestTarget, snapWorldPos });
-          }
+          // Note: When snapping across different edges, snapWorldPos may not exactly match bestTarget
+          // because the current edge's curve shape may not pass through the target position.
+          // The snap still places the arc point as close as possible.
         }
         setShapes(p => {
           const n = [...p];
@@ -3490,11 +3617,6 @@ export default function MasterProject() {
       const shape = shapes[dragInfo.shapeIdx]; const pts = shape.points; const pi = dragInfo.pointIdx;
       const prevI = (pi - 1 + pts.length) % pts.length, nextI = (pi + 1) % pts.length;
 
-      // Locked angle: this point cannot move at all
-      if (shape.closed && shape.lockedAngles.includes(pi)) {
-        return; // don't move this point
-      }
-
       if (shiftHeld) {
         if (shape.closed || (pi > 0 && pi < pts.length - 1)) {
           target = snapShiftSmart(pts[prevI], pts[pi], pts[nextI], world);
@@ -3523,6 +3645,25 @@ export default function MasterProject() {
           );
         }
       }
+
+      // Alignment snap: snap X/Y to closest aligned point when within threshold (horizontal/vertical guides)
+      const ALIGNMENT_SNAP_PX = 10;
+      const alignThreshold = ALIGNMENT_SNAP_PX / zoom;
+      let bestDx = alignThreshold, bestDy = alignThreshold;
+      let snapXVal: number | null = null, snapYVal: number | null = null;
+      for (let si = 0; si < shapes.length; si++) {
+        const pts = shapes[si].points;
+        for (let pi = 0; pi < pts.length; pi++) {
+          if (si === dragInfo.shapeIdx && pi === dragInfo.pointIdx) continue;
+          const pt = pts[pi];
+          const dx = Math.abs(target.x - pt.x);
+          const dy = Math.abs(target.y - pt.y);
+          if (dx < bestDx) { bestDx = dx; snapXVal = pt.x; }
+          if (dy < bestDy) { bestDy = dy; snapYVal = pt.y; }
+        }
+      }
+      if (snapXVal !== null) target.x = snapXVal;
+      if (snapYVal !== null) target.y = snapYVal;
 
       const magThreshold = SNAP_MAGNET_PX / zoom;
       const snap = snapMagnet(target, shapes, dragInfo.shapeIdx, magThreshold);
@@ -3576,41 +3717,11 @@ export default function MasterProject() {
   const handleMouseUp = useCallback(() => {
     pendingRightClickScaleRef.current = null; // Clear pending if user released without dragging
 
-    // Pending edge add (linear elements): add point only if user released without dragging
+    // Pending edge add (linear elements): click without drag = just select (no point added); drag = move edge
     const pendingEdge = pendingEdgeAddRef.current;
     if (pendingEdge) {
       pendingEdgeAddRef.current = null;
-      saveHistory();
-      const ei = pendingEdge.edgeIdx;
-      const pos = pendingEdge.pos;
-      setShapes(p => {
-        const ns = [...p];
-        const s = { ...ns[pendingEdge.shapeIdx] };
-        const np = [...s.points];
-        np.splice(ei + 1, 0, { ...pos });
-        s.points = np;
-        const nh = [...(s.heights || Array(s.points.length).fill(0))];
-        nh.splice(ei + 1, 0, 0);
-        s.heights = nh;
-        if (s.elementType === "wall" && s.calculatorInputs) {
-          const inputs = { ...s.calculatorInputs };
-          const segHeights = [...(inputs.segmentHeights as Array<{ startH: number; endH: number }> ?? [])];
-          const defH = parseFloat(String(inputs.height ?? "1")) || 1;
-          const newSeg = { startH: defH, endH: defH };
-          if (segHeights.length === np.length - 2) {
-            segHeights.splice(ei + 1, 0, newSeg);
-            inputs.segmentHeights = segHeights;
-          } else {
-            inputs.segmentHeights = Array.from({ length: np.length - 1 }, () => ({ startH: defH, endH: defH }));
-          }
-          s.calculatorInputs = inputs;
-        }
-        s.lockedEdges = s.lockedEdges.filter(e => e.idx !== ei).map(e => e.idx > ei ? { ...e, idx: e.idx + 1 } : e);
-        s.lockedAngles = s.lockedAngles.map(a => a > ei ? a + 1 : a);
-        ns[pendingEdge.shapeIdx] = s;
-        return ns;
-      });
-      setSelectedShapeIdx(pendingEdge.shapeIdx);
+      // Shape already selected; no point added — use right-click "Dodaj SquarePoint" to add
       return;
     }
 
@@ -3622,12 +3733,13 @@ export default function MasterProject() {
         if (s?.calculatorType === "grass" && s.calculatorInputs?.vizPieces) {
           const pieces = s.calculatorInputs.vizPieces as GrassPiece[];
           const cov = validateCoverage(s, pieces);
-          const effectiveAreaM2 = getEffectiveTotalArea(pieces);
+          const effectiveAreaM2 = (computeAutoFill(s, n).areaM2 ?? 0);
+          const artificialGrassAreaM2 = getEffectiveTotalArea(pieces);
           const vizPiecesWithEffective = pieces.map((p, i) => {
             const { effectiveWidthM, effectiveLengthM } = getEffectivePieceDimensionsForInput(p, pieces, i);
             return { ...p, effectiveWidthM, effectiveLengthM };
           });
-          const inputs = { ...s.calculatorInputs, vizPieces: vizPiecesWithEffective, effectiveAreaM2, jointsLength: String(cov.joinLengthM.toFixed(2)), trimLength: String(cov.trimLengthM.toFixed(2)) };
+          const inputs = { ...s.calculatorInputs, vizPieces: vizPiecesWithEffective, effectiveAreaM2, artificialGrassAreaM2, jointsLength: String(cov.joinLengthM.toFixed(2)), trimLength: String(cov.trimLengthM.toFixed(2)) };
           n[si] = { ...s, calculatorInputs: inputs };
         }
         return n;
@@ -3643,12 +3755,13 @@ export default function MasterProject() {
         if (s?.calculatorType === "grass" && s.calculatorInputs?.vizPieces) {
           const pieces = s.calculatorInputs.vizPieces as GrassPiece[];
           const cov = validateCoverage(s, pieces);
-          const effectiveAreaM2 = getEffectiveTotalArea(pieces);
+          const effectiveAreaM2 = (computeAutoFill(s, n).areaM2 ?? 0);
+          const artificialGrassAreaM2 = getEffectiveTotalArea(pieces);
           const vizPiecesWithEffective = pieces.map((p, i) => {
             const { effectiveWidthM, effectiveLengthM } = getEffectivePieceDimensionsForInput(p, pieces, i);
             return { ...p, effectiveWidthM, effectiveLengthM };
           });
-          const inputs = { ...s.calculatorInputs, vizPieces: vizPiecesWithEffective, effectiveAreaM2, jointsLength: String(cov.joinLengthM.toFixed(2)), trimLength: String(cov.trimLengthM.toFixed(2)) };
+          const inputs = { ...s.calculatorInputs, vizPieces: vizPiecesWithEffective, effectiveAreaM2, artificialGrassAreaM2, jointsLength: String(cov.joinLengthM.toFixed(2)), trimLength: String(cov.trimLengthM.toFixed(2)) };
           n[si] = { ...s, calculatorInputs: inputs };
         }
         return n;
@@ -3659,16 +3772,36 @@ export default function MasterProject() {
     setGrassAlignedPolyEdges([]);
     if (patternDragInfo) {
       const si = patternDragInfo.shapeIdx;
-      const finalOffset = patternDragPreview ?? patternDragInfo.startOffset;
-      setShapes(p => {
-        const n = [...p];
-        const s = { ...n[si] };
-        const inputs = { ...s.calculatorInputs, vizOriginOffsetX: finalOffset.x, vizOriginOffsetY: finalOffset.y, vizAlignedEdges: patternAlignedEdges ?? [] };
-        n[si] = { ...s, calculatorInputs: inputs };
-        return n;
-      });
+      const shape = shapes[si];
+      if (patternDragInfo.isPath && shape && isPathElement(shape)) {
+        const pathCenterline = shape.calculatorInputs?.pathCenterline as Point[] | undefined;
+        const nSeg = pathCenterline ? pathCenterline.length - 1 : 0;
+        const baseBySeg = patternDragInfo.startPathPatternLongOffsetMBySegment ?? Array.from({ length: nSeg }, () => 0);
+        let finalBySeg = [...baseBySeg];
+        if (pathPatternLongOffsetPreview != null && pathPatternLongOffsetPreview.segmentIdx < finalBySeg.length) {
+          finalBySeg = [...finalBySeg];
+          finalBySeg[pathPatternLongOffsetPreview.segmentIdx] = pathPatternLongOffsetPreview.value;
+        }
+        setShapes(p => {
+          const n = [...p];
+          const s = { ...n[si] };
+          const inputs = { ...s.calculatorInputs, pathPatternLongOffsetMBySegment: finalBySeg };
+          n[si] = { ...s, calculatorInputs: inputs };
+          return n;
+        });
+      } else {
+        const finalOffset = patternDragPreview ?? patternDragInfo.startOffset;
+        setShapes(p => {
+          const n = [...p];
+          const s = { ...n[si] };
+          const inputs = { ...s.calculatorInputs, vizOriginOffsetX: finalOffset.x, vizOriginOffsetY: finalOffset.y, vizAlignedEdges: patternAlignedEdges ?? [] };
+          n[si] = { ...s, calculatorInputs: inputs };
+          return n;
+        });
+      }
       setPatternDragInfo(null);
       setPatternDragPreview(null);
+      setPathPatternLongOffsetPreview(null);
       setPatternAlignedEdges([]);
       return;
     }
@@ -3704,8 +3837,9 @@ export default function MasterProject() {
       const minY = Math.min(selectionRect.startY, selectionRect.endY);
       const maxY = Math.max(selectionRect.startY, selectionRect.endY);
       const selected: HitResult[] = [];
+      const layerFilter = activeLayer === 3 ? isOnActiveLayerForScale : isOnActiveLayer;
       shapes.forEach((shape, si) => {
-        if (!isOnActiveLayer(si) || !passesViewFilter(shape, viewFilter, activeLayer)) return;
+        if (!layerFilter(si) || !passesViewFilter(shape, viewFilter, activeLayer)) return;
         shape.points.forEach((p, pi) => {
           const sp = worldToScreen(p.x, p.y);
           if (sp.x >= minX && sp.x <= maxX && sp.y >= minY && sp.y <= maxY) selected.push({ shapeIdx: si, pointIdx: pi });
@@ -3747,7 +3881,7 @@ export default function MasterProject() {
     setDragInfo(null); setIsPanning(false); setPanStart(null); setShapeDragInfo(null); setEdgeDragInfo(null); setRotateInfo(null); setScaleCorner(null); setScaleEdge(null);
     transformStartVizPiecesRef.current = null;
     gardenDragChildrenRef.current = [];
-  }, [selectionRect, shapes, worldToScreen, dragInfo, mouseWorld, patternDragInfo, patternDragPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, shapeDragInfo, rotateInfo, scaleCorner, scaleEdge, isOnActiveLayer, zoom, draggingGrassPiece, grassNearEdge, grassScaleInfo, viewFilter, arcDragInfo]);
+  }, [selectionRect, shapes, worldToScreen, dragInfo, mouseWorld, patternDragInfo, patternDragPreview, pathPatternLongOffsetPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, shapeDragInfo, rotateInfo, scaleCorner, scaleEdge, isOnActiveLayer, isOnActiveLayerForScale, activeLayer, zoom, draggingGrassPiece, grassNearEdge, grassScaleInfo, viewFilter, arcDragInfo]);
 
   /** Touch support for mobile: map touch events to mouse handlers + pinch zoom */
   const touchToMouseEvent = useCallback((touch: { clientX: number; clientY: number }, button: number, buttons: number): React.MouseEvent<HTMLCanvasElement> => {
@@ -4020,9 +4154,67 @@ export default function MasterProject() {
       return;
     }
     if (activeLayer === 3) {
-      // Check edge hit first — so PPM on linear segment gives edge menu (Usuń segment), not shape menu
-      // When on layer 3, hitTestEdge uses isOnActiveLayer which is false; so we manually check layer 2 linear shapes
-      // Groundwork is hidden on layer 3, so exclude it from edge hit
+      // Same hit order as Layer 2: arc point, point, edge, shape — then linear/pattern
+      const arcHit = hitTestArcPointGlobal(w);
+      if (arcHit) {
+        setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: arcHit.shapeIdx, pointIdx: -1, edgeIdx: arcHit.edgeIdx, arcPoint: arcHit.arcPoint });
+        return;
+      }
+      const pt = hitTestPoint(w);
+      if (pt) {
+        setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: pt.shapeIdx, pointIdx: pt.pointIdx, edgeIdx: -1 });
+        return;
+      }
+      const edgeForPoly = hitTestEdge(w);
+      if (edgeForPoly) {
+        const s = shapes[edgeForPoly.shapeIdx];
+        let pathCenterlineEdgeIdx: number | undefined;
+        let pathContinuationEnd: "first" | "last" | undefined;
+        if (isPathElement(s) && s.calculatorInputs?.pathIsOutline && s.calculatorInputs?.pathCenterline) {
+          const outline = s.points;
+          const pathCenterline = s.calculatorInputs.pathCenterline as Point[];
+          const tol = Math.max(4, 8 / zoom) * (PIXELS_PER_METER / 80);
+          const n = outline.length;
+          const A = outline[edgeForPoly.edgeIdx];
+          const B = outline[(edgeForPoly.edgeIdx + 1) % n];
+          const c0 = pathCenterline[0];
+          const cLast = pathCenterline[pathCenterline.length - 1];
+          if (distance(A, c0) < tol || distance(B, c0) < tol) pathContinuationEnd = "first";
+          else if (distance(A, cLast) < tol || distance(B, cLast) < tol) pathContinuationEnd = "last";
+          if (s.calculatorInputs?.pathCenterlineOriginal) {
+            const n2 = outline.length / 2;
+            if (edgeForPoly.edgeIdx < n2 - 1) pathCenterlineEdgeIdx = edgeForPoly.edgeIdx;
+            else if (edgeForPoly.edgeIdx === n2 - 1) pathCenterlineEdgeIdx = n2 - 2;
+            else if (edgeForPoly.edgeIdx >= n2 && edgeForPoly.edgeIdx <= 2 * n2 - 2) pathCenterlineEdgeIdx = 2 * n2 - 2 - edgeForPoly.edgeIdx;
+          }
+        }
+        setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: edgeForPoly.shapeIdx, pointIdx: -1, edgeIdx: edgeForPoly.edgeIdx, edgePos: edgeForPoly.pos, edgeT: edgeForPoly.t, pathCenterlineEdgeIdx, pathContinuationEnd });
+        return;
+      }
+      const patternHitForGrass = hitTestPattern(w);
+      if (patternHitForGrass?.type === "grass" && (patternHitForGrass.grassJoinHit || patternHitForGrass.grassPieceIdx != null)) {
+        const joinHit = patternHitForGrass.grassJoinHit;
+        if (joinHit) {
+          setContextMenu({
+            x: e.clientX, y: e.clientY, shapeIdx: patternHitForGrass.shapeIdx, pointIdx: -1, edgeIdx: -1,
+            ...(joinHit.isJoined
+              ? { grassUnjoin: { pieceAIdx: joinHit.pieceAIdx, pieceBIdx: joinHit.pieceBIdx, edgeAIdx: joinHit.edgeAIdx } }
+              : { grassJoin: { pieceAIdx: joinHit.pieceAIdx, pieceBIdx: joinHit.pieceBIdx, edgeAIdx: joinHit.edgeAIdx } }),
+          });
+        } else {
+          setContextMenu({
+            x: e.clientX, y: e.clientY, shapeIdx: patternHitForGrass.shapeIdx, pointIdx: -1, edgeIdx: -1,
+            grassPieceIdx: patternHitForGrass.grassPieceIdx!,
+          });
+        }
+        return;
+      }
+      const shapeHit = hitTestShape(w);
+      if (shapeHit !== null && shapes[shapeHit].layer === 2) {
+        setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: shapeHit, pointIdx: -1, edgeIdx: -1 });
+        return;
+      }
+      // Check edge hit — so PPM on linear segment gives edge menu (Usuń segment), not shape menu
       const th = edgeHitThresholdEffective / zoom + 2;
       const r = th * (PIXELS_PER_METER / 80);
       for (let si = shapes.length - 1; si >= 0; si--) {
@@ -4043,8 +4235,6 @@ export default function MasterProject() {
         setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: edge.shapeIdx, pointIdx: -1, edgeIdx: edge.edgeIdx, edgePos: edge.pos, edgeT: edge.t });
         return;
       }
-      // Prefer linear elements (fence, wall) on layer 2 when right-clicking — e.g. fence on grass
-      // Groundwork hidden on layer 3, so exclude from hit
       for (let si = shapes.length - 1; si >= 0; si--) {
         const s = shapes[si];
         if (s.layer !== 2 || !isLinearElement(s) || isGroundworkLinear(s)) continue;
@@ -4097,14 +4287,26 @@ export default function MasterProject() {
     if (edge) {
       const s = shapes[edge.shapeIdx];
       let pathCenterlineEdgeIdx: number | undefined;
-      if (isPathElement(s) && s.calculatorInputs?.pathIsOutline && s.calculatorInputs?.pathCenterlineOriginal) {
+      let pathContinuationEnd: "first" | "last" | undefined;
+      if (isPathElement(s) && s.calculatorInputs?.pathIsOutline && s.calculatorInputs?.pathCenterline) {
         const outline = s.points;
-        const n = outline.length / 2;
-        if (edge.edgeIdx < n - 1) pathCenterlineEdgeIdx = edge.edgeIdx;
-        else if (edge.edgeIdx === n - 1) pathCenterlineEdgeIdx = n - 2;
-        else if (edge.edgeIdx >= n && edge.edgeIdx <= 2 * n - 2) pathCenterlineEdgeIdx = 2 * n - 2 - edge.edgeIdx;
+        const pathCenterline = s.calculatorInputs.pathCenterline as Point[];
+        const tol = Math.max(4, 8 / zoom) * (PIXELS_PER_METER / 80);
+        const n = outline.length;
+        const A = outline[edge.edgeIdx];
+        const B = outline[(edge.edgeIdx + 1) % n];
+        const c0 = pathCenterline[0];
+        const cLast = pathCenterline[pathCenterline.length - 1];
+        if (distance(A, c0) < tol || distance(B, c0) < tol) pathContinuationEnd = "first";
+        else if (distance(A, cLast) < tol || distance(B, cLast) < tol) pathContinuationEnd = "last";
+        if (s.calculatorInputs?.pathCenterlineOriginal) {
+          const n2 = outline.length / 2;
+          if (edge.edgeIdx < n2 - 1) pathCenterlineEdgeIdx = edge.edgeIdx;
+          else if (edge.edgeIdx === n2 - 1) pathCenterlineEdgeIdx = n2 - 2;
+          else if (edge.edgeIdx >= n2 && edge.edgeIdx <= 2 * n2 - 2) pathCenterlineEdgeIdx = 2 * n2 - 2 - edge.edgeIdx;
+        }
       }
-      setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: edge.shapeIdx, pointIdx: -1, edgeIdx: edge.edgeIdx, edgePos: edge.pos, edgeT: edge.t, pathCenterlineEdgeIdx });
+      setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: edge.shapeIdx, pointIdx: -1, edgeIdx: edge.edgeIdx, edgePos: edge.pos, edgeT: edge.t, pathCenterlineEdgeIdx, pathContinuationEnd });
       return;
     }
     // Prefer linear elements (fence, wall) over polygon interior when cursor is on them — e.g. fence on ogrodek
@@ -4661,16 +4863,6 @@ export default function MasterProject() {
       return n;
     });
     setContextMenu(null);
-  };
-
-  const toggleLockAngle = (si: number, pi: number) => {
-    setShapes(p => {
-      const n = [...p]; const s = { ...n[si] };
-      const locked = [...s.lockedAngles];
-      const idx = locked.indexOf(pi);
-      if (idx >= 0) locked.splice(idx, 1); else locked.push(pi);
-      n[si] = { ...s, lockedAngles: locked }; return n;
-    });
   };
 
   // Find ALL nearby points from other shapes to link with
@@ -5456,7 +5648,7 @@ export default function MasterProject() {
 
           {/* Drawing tools */}
           <div className="tool-group">
-            {activeLayer !== 3 && (
+            {(activeLayer === 1 || activeLayer === 2) && (
               <div ref={shapesDropdownRef} style={{ position: "relative" }}>
                 <button type="button" className={`dropdown-trigger ${shapesDropdownOpen ? "active" : ""}`} onClick={() => setShapesDropdownOpen(v => !v)}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -5921,7 +6113,18 @@ export default function MasterProject() {
                   if (pa && pb) {
                     pieces[grassJoin.pieceAIdx] = { ...pa, joinedTo: [...(pa.joinedTo ?? []), pb.id] };
                     pieces[grassJoin.pieceBIdx] = { ...pb, joinedTo: [...(pb.joinedTo ?? []), pa.id] };
-                    inputs.vizPieces = pieces;
+                    const effectiveAreaM2 = (computeAutoFill(s, n).areaM2 ?? 0);
+                    const artificialGrassAreaM2 = getEffectiveTotalArea(pieces);
+                    const vizPiecesWithEffective = pieces.map((p, i) => {
+                      const { effectiveWidthM, effectiveLengthM } = getEffectivePieceDimensionsForInput(p, pieces, i);
+                      return { ...p, effectiveWidthM, effectiveLengthM };
+                    });
+                    inputs.vizPieces = vizPiecesWithEffective;
+                    inputs.effectiveAreaM2 = effectiveAreaM2;
+                    inputs.artificialGrassAreaM2 = artificialGrassAreaM2;
+                    const cov = validateCoverage(s, vizPiecesWithEffective);
+                    inputs.jointsLength = String(cov.joinLengthM.toFixed(2));
+                    inputs.trimLength = String(cov.trimLengthM.toFixed(2));
                     n[shapeIdx] = { ...s, calculatorInputs: inputs };
                   }
                   return n;
@@ -6035,8 +6238,16 @@ export default function MasterProject() {
                         np[pieceIdx] = { ...piece, rotation: (piece.rotation === 90 ? 0 : 90) as 0 | 90 };
                         return np;
                       })();
-                  inputs.vizPieces = rotated;
-                  const cov = validateCoverage(s, rotated);
+                  const effectiveAreaM2 = (computeAutoFill(s, n).areaM2 ?? 0);
+                  const artificialGrassAreaM2 = getEffectiveTotalArea(rotated);
+                  const vizPiecesWithEffective = rotated.map((pc, i) => {
+                    const { effectiveWidthM, effectiveLengthM } = getEffectivePieceDimensionsForInput(pc, rotated, i);
+                    return { ...pc, effectiveWidthM, effectiveLengthM };
+                  });
+                  inputs.vizPieces = vizPiecesWithEffective;
+                  inputs.effectiveAreaM2 = effectiveAreaM2;
+                  inputs.artificialGrassAreaM2 = artificialGrassAreaM2;
+                  const cov = validateCoverage(s, vizPiecesWithEffective);
                   inputs.jointsLength = String(cov.joinLengthM.toFixed(2));
                   inputs.trimLength = String(cov.trimLengthM.toFixed(2));
                   n[shapeIdx] = { ...s, calculatorInputs: inputs };
@@ -6060,8 +6271,16 @@ export default function MasterProject() {
                   if (pa && pb) {
                     pieces[grassUnjoin.pieceAIdx] = { ...pa, joinedTo: (pa.joinedTo ?? []).filter(id => id !== pb.id) };
                     pieces[grassUnjoin.pieceBIdx] = { ...pb, joinedTo: (pb.joinedTo ?? []).filter(id => id !== pa.id) };
-                    inputs.vizPieces = pieces;
-                    const cov = validateCoverage(s, pieces);
+                    const effectiveAreaM2 = (computeAutoFill(s, n).areaM2 ?? 0);
+                    const artificialGrassAreaM2 = getEffectiveTotalArea(pieces);
+                    const vizPiecesWithEffective = pieces.map((pc, i) => {
+                      const { effectiveWidthM, effectiveLengthM } = getEffectivePieceDimensionsForInput(pc, pieces, i);
+                      return { ...pc, effectiveWidthM, effectiveLengthM };
+                    });
+                    inputs.vizPieces = vizPiecesWithEffective;
+                    inputs.effectiveAreaM2 = effectiveAreaM2;
+                    inputs.artificialGrassAreaM2 = artificialGrassAreaM2;
+                    const cov = validateCoverage(s, vizPiecesWithEffective);
                     inputs.jointsLength = String(cov.joinLengthM.toFixed(2));
                     inputs.trimLength = String(cov.trimLengthM.toFixed(2));
                     n[shapeIdx] = { ...s, calculatorInputs: inputs };
@@ -6139,11 +6358,6 @@ export default function MasterProject() {
               {shapes[contextMenu.shapeIdx]?.closed && (
                 <>
                   <CtxItem
-                    label={shapes[contextMenu.shapeIdx]?.lockedAngles.includes(contextMenu.pointIdx) ? "🔓 Unlock angle" : "🔒 Lock angle"}
-                    color={shapes[contextMenu.shapeIdx]?.lockedAngles.includes(contextMenu.pointIdx) ? CC.locked : CC.text}
-                    onClick={() => { toggleLockAngle(contextMenu.shapeIdx, contextMenu.pointIdx); setContextMenu(null); }}
-                  />
-                  <CtxItem
                     label={t("project:set_angle_manually")}
                     color={CC.accent}
                     onClick={() => {
@@ -6187,6 +6401,47 @@ export default function MasterProject() {
             </>)}
             {/* Edge menu */}
             {contextMenu.edgeIdx >= 0 && (<>
+              {contextMenu.pathContinuationEnd && (() => {
+                const si = contextMenu.shapeIdx;
+                const s = shapes[si];
+                const inp = s.calculatorInputs ?? {};
+                const pathCenterline = (inp.pathCenterline as Point[]) ?? s.points;
+                const end = contextMenu.pathContinuationEnd;
+                return (
+                  <CtxItem
+                    label={t("project:path_continue_drawing")}
+                    color={CC.accent}
+                    onClick={() => {
+                      const drawMode: Mode = s.elementType === "pathSlabs" ? "drawPathSlabs" : s.elementType === "pathConcreteSlabs" ? "drawPathConcreteSlabs" : "drawPathMonoblock";
+                      const pathType: "slabs" | "concreteSlabs" | "monoblock" = s.elementType === "pathSlabs" ? "slabs" : s.elementType === "pathConcreteSlabs" ? "concreteSlabs" : "monoblock";
+                      const builtConfig: PathConfig = {
+                        pathType,
+                        pathWidthM: Number(inp.pathWidthM ?? 0.6),
+                        calculatorType: s.calculatorType as "slab" | "concreteSlabs" | "paving",
+                        calculatorInputs: { ...(inp as Record<string, unknown>) },
+                      };
+                      const orderedPts = end === "first" ? [...pathCenterline].reverse() : pathCenterline.map((p: Point) => ({ ...p }));
+                      saveHistory();
+                      setShapes(prev => {
+                        const n = [...prev];
+                        const sh = n[si];
+                        n[si] = {
+                          ...sh,
+                          points: orderedPts,
+                          closed: false,
+                          calculatorInputs: { ...sh.calculatorInputs, pathIsOutline: undefined, pathCenterline: undefined, pathCenterlineOriginal: undefined },
+                        };
+                        return n;
+                      });
+                      setPathConfig(builtConfig);
+                      setMode(drawMode);
+                      setDrawingShapeIdx(si);
+                      setSelectedShapeIdx(si);
+                      setContextMenu(null);
+                    }}
+                  />
+                );
+              })()}
               {isLinearElement(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx].points.length >= 3 && (
                 <CtxItem label="✕ Usuń segment" color={CC.danger} onClick={() => { saveHistory(); removeLinearSegment(contextMenu.shapeIdx, contextMenu.edgeIdx); setContextMenu(null); setSelectedShapeIdx(null); }} />
               )}
@@ -6228,8 +6483,8 @@ export default function MasterProject() {
                   setContextMenu(null);
                 }} />
               )}
-              {shapes[contextMenu.shapeIdx]?.layer === 1 && contextMenu.edgePos !== undefined && contextMenu.edgeT !== undefined && (
-                <CtxItem label="➕ Dodaj punkt" color={CC.geo} onClick={() => {
+              {contextMenu.edgePos !== undefined && contextMenu.edgeT !== undefined && (
+                <CtxItem label="➕ Dodaj SquarePoint" color={CC.geo} onClick={() => {
                   insertPointOnEdge(contextMenu.shapeIdx, contextMenu.edgeIdx, contextMenu.edgePos!, contextMenu.edgeT!);
                 }} />
               )}
@@ -6322,6 +6577,43 @@ export default function MasterProject() {
                 {shapes[contextMenu.shapeIdx]?.calculatorResults && (
                   <CtxItem label={`📊 ${t("project:path_view_results")}`} color="#a29bfe" onClick={() => { setResultsModalShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
                 )}
+                {isPathElement(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx]?.closed && shapes[contextMenu.shapeIdx]?.calculatorInputs?.pathCenterline && (() => {
+                  const si = contextMenu.shapeIdx;
+                  const shape = shapes[si];
+                  const pathCenterline = (shape.calculatorInputs?.pathCenterlineOriginal as Point[] | undefined) ?? (shape.calculatorInputs?.pathCenterline as Point[]);
+                  if (pathCenterline.length < 2) return null;
+                  const segCount = pathCenterline.length - 1;
+                  return (
+                    <CtxItem
+                      label={t("project:path_edit_sides")}
+                      color={CC.accent}
+                      onClick={() => {
+                        saveHistory();
+                        setShapes(p => {
+                          const n = [...p];
+                          const sh = n[si];
+                          n[si] = {
+                            ...sh,
+                            points: pathCenterline.map(p => ({ ...p })),
+                            closed: false,
+                            calculatorInputs: { ...sh.calculatorInputs, pathIsOutline: undefined, pathCenterline: undefined, pathCenterlineOriginal: undefined },
+                          };
+                          return n;
+                        });
+                        setPathSegmentSideSelection({ shapeIdx: si, segmentSides: Array(segCount).fill(null) });
+                        setPathConfig({
+                          pathType: shape.elementType === "pathSlabs" ? "slabs" : shape.elementType === "pathConcreteSlabs" ? "concreteSlabs" : "monoblock",
+                          pathWidthM: Number(shape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6,
+                          calculatorType: (shape.calculatorType as "slab" | "concreteSlabs" | "paving") ?? "slab",
+                          calculatorInputs: { ...(shape.calculatorInputs ?? {}) } as Record<string, unknown>,
+                        });
+                        setMode(shape.elementType === "pathSlabs" ? "drawPathSlabs" : shape.elementType === "pathConcreteSlabs" ? "drawPathConcreteSlabs" : "drawPathMonoblock");
+                        setContextMenu(null);
+                        setSelectedShapeIdx(si);
+                      }}
+                    />
+                  );
+                })()}
                 <CtxItem
                   label={shapes[contextMenu.shapeIdx]?.calculatorType ? `✏️ Edit Object Card (${shapes[contextMenu.shapeIdx].calculatorType})` : "✏️ Edit Object Card"}
                   color={CC.accent}
@@ -6469,8 +6761,8 @@ export default function MasterProject() {
         })() : null}
 
         {shapeCreationModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setShapeCreationModal(null)}>
-            <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 320, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+          <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setShapeCreationModal(null)}>
+            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 320, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 16, color: CC.text }}>
                 {shapeCreationModal.type === "square" && t("project:toolbar_shape_square")}
                 {shapeCreationModal.type === "rectangle" && t("project:toolbar_shape_rectangle")}
@@ -6828,8 +7120,8 @@ export default function MasterProject() {
         })()}
 
         {grassTrimModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setGrassTrimModal(null)}>
-            <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+          <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setGrassTrimModal(null)}>
+            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>Łączenie rolek trawy</div>
               <p style={{ fontSize: 13, color: CC.textDim, marginBottom: 16, lineHeight: 1.5 }}>
                 Przy łączeniu rolek, aby uzyskać najlepszy efekt, ucinamy boki które się łączą o 3 cm (3 rzędy trawy).
@@ -6854,13 +7146,15 @@ export default function MasterProject() {
                         if (!trimB.includes(joinEdgeB)) trimB.push(joinEdgeB);
                         pieces[pieceAIdx] = { ...pa, trimmed: true, trimEdges: trimA };
                         pieces[pieceBIdx] = { ...pb, trimmed: true, trimEdges: trimB };
-                        const effectiveAreaM2 = getEffectiveTotalArea(pieces);
+                        const effectiveAreaM2 = (computeAutoFill(s, n).areaM2 ?? 0);
+                        const artificialGrassAreaM2 = getEffectiveTotalArea(pieces);
                         const vizPiecesWithEffective = pieces.map((p, i) => {
                           const { effectiveWidthM, effectiveLengthM } = getEffectivePieceDimensionsForInput(p, pieces, i);
                           return { ...p, effectiveWidthM, effectiveLengthM };
                         });
                         inputs.vizPieces = vizPiecesWithEffective;
                         inputs.effectiveAreaM2 = effectiveAreaM2;
+                        inputs.artificialGrassAreaM2 = artificialGrassAreaM2;
                         const cov = validateCoverage(s, vizPiecesWithEffective);
                         inputs.jointsLength = String(cov.joinLengthM.toFixed(2));
                         inputs.trimLength = String(cov.trimLengthM.toFixed(2));
@@ -6882,7 +7176,16 @@ export default function MasterProject() {
                       const s = { ...n[shapeIdx] };
                       const inputs = { ...s.calculatorInputs };
                       const pieces = (inputs.vizPieces as GrassPiece[]) ?? [];
-                      const cov = validateCoverage(s, pieces);
+                      const effectiveAreaM2 = (computeAutoFill(s, n).areaM2 ?? 0);
+                      const artificialGrassAreaM2 = getEffectiveTotalArea(pieces);
+                      const vizPiecesWithEffective = pieces.map((pc, i) => {
+                        const { effectiveWidthM, effectiveLengthM } = getEffectivePieceDimensionsForInput(pc, pieces, i);
+                        return { ...pc, effectiveWidthM, effectiveLengthM };
+                      });
+                      inputs.vizPieces = vizPiecesWithEffective;
+                      inputs.effectiveAreaM2 = effectiveAreaM2;
+                      inputs.artificialGrassAreaM2 = artificialGrassAreaM2;
+                      const cov = validateCoverage(s, vizPiecesWithEffective);
                       inputs.jointsLength = String(cov.joinLengthM.toFixed(2));
                       inputs.trimLength = String(cov.trimLengthM.toFixed(2));
                       n[shapeIdx] = { ...s, calculatorInputs: inputs };
@@ -6900,8 +7203,8 @@ export default function MasterProject() {
         )}
 
         {adjustmentFillModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentFillModal(null)}>
-            <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+          <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentFillModal(null)}>
+            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:adjustment_fill_pick")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
                 {findTouchingElementsForEmptyArea(shapes, adjustmentData.emptyAreas[adjustmentFillModal.emptyAreaIdx] ?? []).map(si => {
@@ -6936,8 +7239,8 @@ export default function MasterProject() {
         )}
 
         {adjustmentExtendModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentExtendModal(null)}>
-            <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+          <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentExtendModal(null)}>
+            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:adjustment_extend_pick", { defaultValue: "Wybierz element do dosunięcia" })}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
                 {findTouchingElementsForEmptyArea(shapes, adjustmentData.emptyAreas[adjustmentExtendModal.emptyAreaIdx] ?? []).map(si => {
@@ -6972,8 +7275,8 @@ export default function MasterProject() {
         )}
 
         {adjustmentSpreadModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentSpreadModal(null)}>
-            <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+          <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentSpreadModal(null)}>
+            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:adjustment_spread_pick")}</div>
               <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
                 {[adjustmentSpreadModal.shapeIdxA, adjustmentSpreadModal.shapeIdxB].map(si => {
@@ -7022,7 +7325,8 @@ export default function MasterProject() {
             shape={shapes[objectCardShapeIdx]}
             shapeIdx={objectCardShapeIdx}
             shapes={shapes}
-            onClose={() => setObjectCardShapeIdx(null)}
+            autoCalculateTrigger={objectCardShapeIdx === pathJustFinishedForAutoCalc ? 1 : 0}
+            onClose={() => { setObjectCardShapeIdx(null); setPathJustFinishedForAutoCalc(null); }}
             onSave={(idx, updates) => {
               saveHistory();
               setShapes(p => {
@@ -7032,16 +7336,29 @@ export default function MasterProject() {
                 const inputs = { ...(s.calculatorInputs ?? {}), ...(u.calculatorInputs ?? {}) };
                 if (isPathElement(s) && inputs.pathIsOutline && Array.isArray(inputs.pathCenterline) && inputs.pathCenterline.length >= 2) {
                   const pathWidthM = Number(inputs.pathWidthM ?? 0.6) || 0.6;
-                  const outline = computeThickPolyline(inputs.pathCenterline, toPixels(pathWidthM));
+                  const segmentSides = inputs.pathSegmentSides as ("left" | "right")[] | undefined;
+                  const outline = (Array.isArray(segmentSides) && segmentSides.length === (inputs.pathCenterline as Point[]).length - 1)
+                    ? computePathOutlineFromSegmentSides(inputs.pathCenterline as Point[], segmentSides, pathWidthM)
+                    : computeThickPolyline(inputs.pathCenterline as Point[], toPixels(pathWidthM));
                   if (outline.length >= 3) u.points = outline;
                 }
                 n[idx] = { ...s, ...u };
                 return n;
               });
               setObjectCardShapeIdx(null);
+              setPathJustFinishedForAutoCalc(null);
             }}
             onCalculatorInputsChange={onCalculatorInputsChange}
-            onViewResults={(idx) => { setResultsModalShapeIdx(idx); setObjectCardShapeIdx(null); }}
+            onCalculatorResultsChange={(idx, results) => {
+              saveHistory();
+              setShapes(p => {
+                const n = [...p];
+                n[idx] = { ...n[idx], calculatorResults: results };
+                return n;
+              });
+              setPathJustFinishedForAutoCalc(null);
+            }}
+            onViewResults={(idx) => { setResultsModalShapeIdx(idx); setObjectCardShapeIdx(null); setPathJustFinishedForAutoCalc(null); }}
           />
         )}
 
@@ -7300,8 +7617,8 @@ function NamePromptModal({ initialLabel, onConfirm, onCancel }: { initialLabel: 
   const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={onCancel}>
-      <div style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 360, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+    <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={onCancel}>
+      <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 360, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
         <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:name_prompt_title")}</div>
         <input
           ref={inputRef}
