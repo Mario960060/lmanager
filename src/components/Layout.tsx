@@ -204,25 +204,32 @@ const Layout = () => {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
-  return (
-    <div style={{ minHeight: '100vh', background: colors.bgApp }}>
-      {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 h-16 shadow-md flex items-center justify-between px-4" style={{ background: colors.bgSidebar }}>
-        <button
-          onClick={toggleSidebar}
-          style={{ padding: spacing.md, borderRadius: radii.lg, transition: transitions.fast, background: 'transparent' }}
-          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-          aria-label={t('common:menu')}
-        >
-          <Menu className="w-6 h-6" />
-        </button>
-        <h1 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.bold, color: colors.textPrimary }}>{t('common:app_name')}</h1>
-        <div style={{ width: 40, flexShrink: 0 }} aria-hidden="true" />
-      </div>
+  /** Canvas editor: special mobile layout (no fixed top bar stealing height). */
+  const isCanvasRoute = location.pathname.includes('create-canvas');
+  /* Match MasterProject C / C_LIGHT canvas background so no light “frame” around the editor */
+  const canvasChromeBg = !currentTheme.isDark ? '#f8fafc' : '#1a1a2e';
 
-      {/* Main Layout */}
-      <div className="flex h-screen">
+  return (
+    <div className="layout-app-root min-h-[100dvh] lg:min-h-screen" style={{ background: colors.bgApp }}>
+      {/* Mobile Header — hidden on canvas route (slim in-flow bar inside main instead) */}
+      {!isCanvasRoute && (
+        <div className="lg:hidden fixed top-0 left-0 right-0 z-50 h-16 shadow-md flex items-center justify-between px-4" style={{ background: colors.bgSidebar, paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+          <button
+            onClick={toggleSidebar}
+            style={{ padding: spacing.md, borderRadius: radii.lg, transition: transitions.fast, background: 'transparent' }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+            aria-label={t('common:menu')}
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+          <h1 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.bold, color: colors.textPrimary }}>{t('common:app_name')}</h1>
+          <div style={{ width: 40, flexShrink: 0 }} aria-hidden="true" />
+        </div>
+      )}
+
+      {/* Main Layout — dynamic viewport height on mobile (avoids white gaps when rotating / browser chrome) */}
+      <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 lg:h-screen lg:max-h-none">
         {/* Sidebar Backdrop */}
         {isSidebarOpen && (
           <div
@@ -533,20 +540,65 @@ const Layout = () => {
 
         {/* Main Content */}
         {(() => {
-          const isCanvasRoute = location.pathname.includes('create-canvas');
           const isCalculatorRoute = location.pathname === '/calculator';
           return (
             <main
-              className={`flex-1 min-w-0 min-h-0 pt-16 lg:pt-0 ${isCanvasRoute ? 'overflow-hidden flex flex-col' : 'overflow-auto'}`}
-              style={{ background: colors.bgMain, position: 'relative' }}
+              className={
+                isCanvasRoute
+                  ? 'flex-1 min-w-0 min-h-0 flex flex-col max-lg:overflow-y-auto max-lg:overscroll-y-contain lg:overflow-hidden lg:pt-0 max-lg:pt-0'
+                  : 'flex-1 min-w-0 min-h-0 pt-16 lg:pt-0 overflow-auto'
+              }
+              style={{
+                background: isCanvasRoute ? canvasChromeBg : colors.bgMain,
+                position: 'relative',
+              }}
             >
-              <div style={{
-                position: 'fixed', top: 0, right: 0, bottom: 0,
-                backgroundImage: layout.gridPattern, backgroundSize: layout.gridPatternSize,
-                pointerEvents: 'none', zIndex: 0,
-              }} className="left-0 lg:left-[240px]" />
               <div
-                className={isCanvasRoute ? 'flex-1 min-h-0 min-w-0 flex flex-col' : 'layout-content-wrapper px-4 py-6'}
+                style={{
+                  position: 'fixed', top: 0, right: 0, bottom: 0,
+                  backgroundImage: layout.gridPattern, backgroundSize: layout.gridPatternSize,
+                  pointerEvents: 'none', zIndex: 0,
+                }}
+                className={`left-0 lg:left-[240px] ${isCanvasRoute ? 'hidden lg:block' : ''}`}
+              />
+              {/* Canvas mobile: slim top bar scrolls with page (not fixed) — more room for canvas */}
+              {isCanvasRoute && (
+                <div
+                  className="canvas-mobile-topbar lg:hidden flex items-center justify-between shrink-0 z-10 px-2 border-b"
+                  style={{
+                    background: colors.bgSidebar,
+                    borderColor: colors.borderDefault,
+                    minHeight: 40,
+                    paddingTop: 'max(4px, env(safe-area-inset-top, 0px))',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={toggleSidebar}
+                    aria-label={t('common:menu')}
+                    className="rounded-lg flex items-center justify-center"
+                    style={{
+                      padding: 6,
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: colors.textPrimary,
+                    }}
+                  >
+                    <Menu className="w-5 h-5" />
+                  </button>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }} className="truncate px-2 text-center">
+                    {t('common:app_name')}
+                  </span>
+                  <div style={{ width: 36, flexShrink: 0 }} aria-hidden />
+                </div>
+              )}
+              <div
+                className={
+                  isCanvasRoute
+                    ? 'flex-1 min-h-0 min-w-0 flex flex-col max-lg:min-h-[calc(100dvh-2.75rem-env(safe-area-inset-top,0px))]'
+                    : 'layout-content-wrapper px-4 py-6'
+                }
                 style={{
                   padding: isCanvasRoute ? 0 : layout.contentPadding,
                   position: 'relative',

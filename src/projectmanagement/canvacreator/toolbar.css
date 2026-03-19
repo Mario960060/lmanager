@@ -437,3 +437,83 @@
   width: 16px;
   height: 16px;
 }
+
+/* ── Mobile / tablet: shorter toolbar, tighter controls (more canvas area) ── */
+@media (max-width: 1023px) {
+  .toolbar-cad {
+    padding: 3px 6px;
+    gap: 3px;
+  }
+
+  .toolbar-cad .toolbar-row {
+    min-height: 28px;
+    gap: 4px;
+  }
+
+  .toolbar-cad .dropdown-trigger {
+    padding: 3px 6px;
+    font-size: 0.68rem;
+    gap: 3px;
+  }
+
+  .toolbar-cad .dropdown-trigger svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .toolbar-cad .tool-btn {
+    padding: 3px 7px;
+    font-size: 0.68rem;
+    gap: 3px;
+  }
+
+  .toolbar-cad .tool-btn svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  .toolbar-cad .tool-btn.icon-only {
+    padding: 3px 5px;
+  }
+
+  .toolbar-cad .tool-btn.icon-only svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .toolbar-cad .geodesy-toggle {
+    padding: 3px 8px;
+    font-size: 0.68rem;
+    gap: 5px;
+  }
+
+  .toolbar-cad .tb-sep {
+    height: 16px;
+    margin: 0 2px;
+  }
+
+  .toolbar-cad .layer-tab {
+    padding: 3px 8px;
+    font-size: 0.7rem;
+  }
+
+  .toolbar-cad .view-btn {
+    padding: 3px 5px;
+  }
+
+  .toolbar-cad .delete-btn,
+  .toolbar-cad .undo-btn {
+    padding: 3px 5px;
+  }
+
+  .toolbar-cad .action-btn {
+    padding: 3px 7px;
+    font-size: 0.68rem;
+    gap: 3px;
+  }
+
+  .toolbar-cad .shape-counter {
+    font-size: 0.62rem;
+    padding: 0 4px;
+  }
+}

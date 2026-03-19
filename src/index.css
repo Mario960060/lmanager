@@ -72,6 +72,51 @@
     @apply min-h-[44px] min-w-[44px];
   }
 
+  /* Canvas CAD toolbar: global 44×44px min would make the bar enormous on phones */
+  .toolbar-cad button,
+  .toolbar-cad .dropdown-trigger,
+  .toolbar-cad .tool-btn,
+  .toolbar-cad .geodesy-toggle,
+  .toolbar-cad .layer-tab,
+  .toolbar-cad .view-btn,
+  .toolbar-cad .delete-btn,
+  .toolbar-cad .undo-btn {
+    min-height: unset !important;
+    min-width: unset !important;
+  }
+
+  .canvas-mobile-topbar button {
+    min-height: 36px !important;
+    min-width: 36px !important;
+  }
+
+  html {
+    margin: 0;
+    /* Avoid white letterboxing when mobile browser chrome resizes (use with 100dvh in layout) */
+    background-color: #0f172a;
+  }
+  html.light {
+    background-color: #f8fafc;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    min-height: 100vh;
+    background-color: inherit;
+  }
+  #root {
+    min-height: 100dvh;
+    min-height: 100vh;
+    background-color: inherit;
+  }
+
+  /* Reduce rubber-band flash at edges on mobile canvas */
+  @media (max-width: 1023px) {
+    .project-canvas-root {
+      overscroll-behavior: none;
+    }
+  }
+
   /* Fix mobile zoom on input focus */
   @media (max-width: 640px) {
     input, select, textarea {

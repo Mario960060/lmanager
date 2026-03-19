@@ -6501,7 +6501,7 @@ export default function MasterProject() {
   const l2Count = shapes.filter(s => s.layer === 2).length;
 
   return (
-    <div style={{ width: "100%", height: "100%", minHeight: 0, minWidth: 0, flex: 1, display: "flex", flexDirection: "column", background: CC.bg, fontFamily: "'JetBrains Mono','Fira Code','Courier New',monospace", color: CC.text, overflow: "hidden", userSelect: "none" }}>
+    <div className="project-canvas-root" style={{ width: "100%", height: "100%", minHeight: 0, minWidth: 0, flex: 1, display: "flex", flexDirection: "column", background: CC.bg, fontFamily: "'JetBrains Mono','Fira Code','Courier New',monospace", color: CC.text, overflow: "hidden", userSelect: "none" }}>
       {showRestoredToast && (
         <div style={{ position: "fixed", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: CC.accent, color: CC.bg, padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600, boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
           ✓ {t("project:restored_unsaved_sketch")}
