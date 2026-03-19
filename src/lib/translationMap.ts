@@ -175,6 +175,7 @@ export const taskNameTranslationMap: Record<string, string> = {
   'laying slabs 90x60 (sandstones)': 'calculator:task_laying_slabs_90x60_sandstones',
   'laying slabs mix size (porcelain)': 'calculator:task_laying_slabs_mix_porcelain',
   'laying slabs mix size (sandstones)': 'calculator:task_laying_slabs_mix_sandstones',
+  'Loading Sand with Digger 0.5T': 'calculator:task_loading_sand_digger_0_5t',
   'Loading Sand with Digger 1T': 'calculator:task_loading_sand_digger_1t',
   'Loading Sand with Digger 2T': 'calculator:task_loading_sand_digger_2t',
   'Loading Sand with Shovel (1 Person)': 'calculator:task_loading_sand_shovel',
@@ -346,6 +347,16 @@ const DYNAMIC_TASK_PATTERNS: Array<{
     regex: /^Transporting tape1 with (.+?) \((\d+(?:\.\d+)?)t\) - (\d+(?:\.\d+)?)m$/,
     key: 'calculator:task_transporting_tape1_with_carrier',
     extractParams: (m) => ({ carrierName: m[1], size: m[2], distance: m[3] }),
+  },
+  {
+    regex: /^Transporting soil \((\d+(?:\.\d+)?)m\)$/,
+    key: 'calculator:transporting_soil_task',
+    extractParams: (m) => ({ distance: m[1] }),
+  },
+  {
+    regex: /^Transporting tape1 \((\d+(?:\.\d+)?)m\)$/,
+    key: 'calculator:transporting_tape1_task',
+    extractParams: (m) => ({ distance: m[1] }),
   },
   {
     regex: /^Excavation soil with (.+?) and (.+?) (\d+(?:\.\d+)?)t$/,
@@ -637,6 +648,7 @@ export const materialNameTranslationMap: Record<string, string> = {
   'Sharp sand': 'material:sharp_sand',
   'Soil excavation': 'material:soil_excavation',
   'tape1': 'material:tape1',
+  'Artificial Grass': 'material:artificial_grass',
   'Type 1 Aggregate': 'calculator:aggregate_material_type1',
   'Grid Sand': 'calculator:aggregate_material_grid_sand',
   'Crushed Stone': 'calculator:aggregate_material_crushed_stone',
@@ -655,6 +667,23 @@ export const materialNameTranslationMap: Record<string, string> = {
   '4-inch Blocks': 'calculator:lshape_material_4inch',
   '7-inch Blocks': 'calculator:lshape_material_7inch',
   'Standard Bricks (9x6x21)': 'calculator:lshape_material_bricks',
+  // Foundation / Wall calculator materials
+  'Excavated Clay Soil (loose volume)': 'calculator:excavated_clay_soil_loose',
+  'Excavated Sand Soil (loose volume)': 'calculator:excavated_sand_soil_loose',
+  'Excavated Rock Soil (loose volume)': 'calculator:excavated_rock_soil_loose',
+  'Aggregate (for concrete)': 'calculator:aggregate_for_concrete',
+  // Fence calculators
+  'Composite Posts': 'material:composite_posts',
+  'Composite Slats': 'material:composite_slats',
+  'Venetian Slats': 'material:venetian_slats',
+  'Fence Slats': 'material:fence_slats',
+  // Deck calculator
+  'Sleepers': 'material:sleepers',
+  'Posts': 'material:posts',
+  'Frame Boards': 'material:frame_boards',
+  // Other calculators
+  'Tile Adhesive': 'material:tile_adhesive',
+  'Natural turf rolls': 'material:natural_turf_rolls',
 };
 
 /**
@@ -689,6 +718,30 @@ export const materialDescriptionTranslationMap: Record<string, string> = {
 };
 
 /**
+ * Patterns for dynamic material names that include dimensions or other variable parts.
+ * Each entry has a regex, a translation key for the prefix, and a group index for the suffix to preserve.
+ */
+const dynamicMaterialPatterns: { regex: RegExp; translationKey: string; format?: (translated: string, match: RegExpMatchArray) => string }[] = [
+  { regex: /^Concrete slabs (.+)$/i, translationKey: 'calculator:material_concrete_slabs' },
+  { regex: /^Copings \((.+)\)$/i, translationKey: 'calculator:material_copings', format: (tr, m) => `${tr} (${m[1]})` },
+  { regex: /^porcelain slabs (.+)$/i, translationKey: 'calculator:material_porcelain_slabs' },
+  { regex: /^granite slabs (.+)$/i, translationKey: 'calculator:material_granite_slabs' },
+  { regex: /^sandstone slabs (.+)$/i, translationKey: 'calculator:material_sandstone_slabs' },
+  { regex: /^Porcelana (.+)$/i, translationKey: 'calculator:material_porcelana' },
+  { regex: /^Piaskowce (.+)$/i, translationKey: 'calculator:material_piaskowce' },
+  { regex: /^Granit (.+)$/i, translationKey: 'calculator:material_granit' },
+  { regex: /^Płyty (.+)$/i, translationKey: 'calculator:material_slabs_generic' },
+  { regex: /^Porcelain (.+)$/i, translationKey: 'calculator:material_porcelana' },
+  { regex: /^Sandstone (.+)$/i, translationKey: 'calculator:material_piaskowce' },
+  { regex: /^Granite (.+)$/i, translationKey: 'calculator:material_granit' },
+  { regex: /^Slabs (.+)$/i, translationKey: 'calculator:material_slabs_generic' },
+  { regex: /^Monoblocks (.+)$/i, translationKey: 'calculator:material_monoblocks' },
+  { regex: /^Frame pieces (.+)$/i, translationKey: 'calculator:material_frame_pieces' },
+  { regex: /^Frame slabs (.+)$/i, translationKey: 'calculator:material_frame_slabs' },
+  { regex: /^Płyty ramkowe (.+)$/i, translationKey: 'calculator:material_frame_slabs' },
+];
+
+/**
  * Translates a material name using the translation map
  * Falls back to the original material name if no translation key is found
  * @param materialName - The hardcoded material name
@@ -710,7 +763,16 @@ export const translateMaterialName = (
   }
 
   if (!translationKey) {
-    // If no mapping found, return the original material name
+    // Try dynamic patterns (material names with dimensions like "Concrete slabs 40×40")
+    for (const { regex, translationKey: patternKey, format } of dynamicMaterialPatterns) {
+      const match = materialName.match(regex);
+      if (match) {
+        const translated = t(patternKey);
+        if (translated !== patternKey) {
+          return format ? format(translated, match) : `${translated} ${match[1]}`;
+        }
+      }
+    }
     console.warn(`No translation key found for material: "${materialName}"`);
     return materialName;
   }

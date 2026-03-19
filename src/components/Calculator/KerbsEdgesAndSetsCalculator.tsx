@@ -926,23 +926,23 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
           <>
             <div>
               <Label>{t('calculator:transport_carrier')}</Label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, marginTop: spacing.sm }}>
                 <div
                   style={{
-                    display: 'flex', alignItems: 'center', padding: spacing.md, cursor: 'pointer', borderRadius: radii.lg,
-                    border: `2px dashed ${colors.borderInput}`, background: effectiveSelectedTransportCarrier === null ? colors.bgHover : 'transparent',
+                    display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg,
+                    border: `1px solid ${effectiveSelectedTransportCarrier === null ? colors.accentBlueBorder : colors.borderLight}`, background: effectiveSelectedTransportCarrier === null ? colors.bgHover : 'transparent',
                   }}
                   onClick={() => setSelectedTransportCarrier(null)}
                 >
-                  <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {effectiveSelectedTransportCarrier === null && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.textSubtle }} />}
+                  <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${effectiveSelectedTransportCarrier === null ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {effectiveSelectedTransportCarrier === null && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
                   </div>
                   <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{t('calculator:default_wheelbarrow')}</span>
                 </div>
                 {carriers.length > 0 && carriers.map((carrier) => (
-                  <div key={carrier.id} style={{ display: 'flex', alignItems: 'center', padding: spacing.md, cursor: 'pointer', borderRadius: radii.lg, background: effectiveSelectedTransportCarrier?.id === carrier.id ? colors.bgHover : 'transparent' }} onClick={() => setSelectedTransportCarrier(carrier)}>
-                    <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {effectiveSelectedTransportCarrier?.id === carrier.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.textSubtle }} />}
+                  <div key={carrier.id} style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, border: `1px solid ${effectiveSelectedTransportCarrier?.id === carrier.id ? colors.accentBlueBorder : colors.borderLight}`, background: effectiveSelectedTransportCarrier?.id === carrier.id ? colors.bgHover : 'transparent' }} onClick={() => setSelectedTransportCarrier(carrier)}>
+                    <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${effectiveSelectedTransportCarrier?.id === carrier.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {effectiveSelectedTransportCarrier?.id === carrier.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
                     </div>
                     <div>
                       <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{carrier.name}</span>
@@ -957,6 +957,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
               value={transportDistance}
               onChange={setTransportDistance}
               placeholder={t('calculator:placeholder_enter_transport_distance')}
+              unit="m"
               helperText={t('calculator:set_to_zero_no_transport')}
             />
           </>
@@ -1011,9 +1012,19 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
               <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
                 {t('calculator:task_breakdown_label')}
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+              <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
                 {result.taskBreakdown.map((task, index) => (
-                  <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${spacing.lg}px ${spacing["2xl"]}px`, background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderLight}` }}>
+                  <div
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                      background: index % 2 === 1 ? colors.bgTableRowAlt : undefined,
+                      borderBottom: index < result.taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
+                    }}
+                  >
                     <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName(task.task || task.name || '', t)}</span>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
                       <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{task.hours.toFixed(2)}</span>

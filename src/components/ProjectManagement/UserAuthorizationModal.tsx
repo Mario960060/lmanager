@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { X, Search, CheckCircle, AlertCircle, Plus } from 'lucide-react';
 import { Spinner, Button } from '../../themes/uiComponents';
+import { colors } from '../../themes/designTokens';
 
 interface CompanyMember {
   id: string;
@@ -196,13 +197,16 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
-        <div className="flex justify-between items-center p-6 border-b dark:border-slate-700 flex-none">
-          <h2 className="text-xl font-semibold dark:text-white">{t('event:user_authorization_title')}</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
+        <div className="flex justify-between items-center p-6 border-b flex-none" style={{ borderColor: colors.borderDefault }}>
+          <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{t('event:user_authorization_title')}</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-full transition-colors"
+            className="p-2 rounded-full transition-colors"
+            style={{ backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             <X className="w-5 h-5" />
           </button>
@@ -213,7 +217,10 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
           <div className="mb-4">
             <button
               onClick={() => setShowAddUserModal(true)}
-              className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-colors"
+              style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.accentBlueDark; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.accentBlue; }}
             >
               <Plus className="w-5 h-5" />
               {t('event:add_user_button')}
@@ -221,10 +228,10 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
           </div>
 
           {/* Search - Sticky at top */}
-          <div className="sticky top-0 bg-white dark:bg-slate-800 z-10 pb-4 mb-4 border-b dark:border-slate-700">
+          <div className="sticky top-0 z-10 pb-4 mb-4 border-b" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}>
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('event:search_user_authorization')}</label>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('event:search_user_authorization')}</label>
+              <p className="text-sm" style={{ color: colors.textSubtle }}>
                 {t('event:total_users_label')} {members.length}
               </p>
             </div>
@@ -233,19 +240,20 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
                 type="text"
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
-                className="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated, color: colors.textPrimary }}
                 placeholder={t('event:enter_user_name_auth')}
               />
-              <Search className="absolute right-3 top-2.5 h-5 w-5 text-gray-400" />
+              <Search className="absolute right-3 top-2.5 h-5 w-5" style={{ color: colors.textMuted }} />
             </div>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-2 text-sm" style={{ color: colors.textSubtle }}>
               {t('event:admin_note')}
             </p>
           </div>
 
           {/* Success message */}
           {updateSuccess && (
-            <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-md flex items-center">
+            <div className="mb-4 p-3 rounded-md flex items-center" style={{ backgroundColor: colors.greenBg, color: colors.green }}>
               <CheckCircle className="w-5 h-5 mr-2" />
               {updateSuccess}
             </div>
@@ -253,7 +261,7 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
 
           {/* Error message */}
           {updateError && (
-            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-md flex items-center">
+            <div className="mb-4 p-3 rounded-md flex items-center" style={{ backgroundColor: colors.redLight, color: colors.red }}>
               <AlertCircle className="w-5 h-5 mr-2" />
               {updateError}
             </div>
@@ -262,17 +270,17 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
           {/* User List - Scrollable */}
           <div className="space-y-4">
             {isLoading ? (
-              <p className="text-center py-4 dark:text-gray-400">{t('event:loading_users_auth')}</p>
+              <p className="text-center py-4" style={{ color: colors.textSubtle }}>{t('event:loading_users_auth')}</p>
             ) : members.length === 0 ? (
-              <p className="text-center py-4 dark:text-gray-400">{t('event:no_users_found_auth')}</p>
+              <p className="text-center py-4" style={{ color: colors.textSubtle }}>{t('event:no_users_found_auth')}</p>
             ) : (
               members.map((member: any) => (
-                <div key={member.id} className="bg-gray-50 dark:bg-slate-700 p-4 rounded-lg">
+                <div key={member.id} className="p-4 rounded-lg" style={{ backgroundColor: colors.bgElevated }}>
                   <div className="flex justify-between items-center">
                     <div>
-                      <h3 className="font-medium dark:text-white">{member.full_name}</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{member.email}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{t('event:current_role_label')} <span className="font-medium text-gray-700 dark:text-gray-300">{member.role}</span></p>
+                      <h3 className="font-medium" style={{ color: colors.textPrimary }}>{member.full_name}</h3>
+                      <p className="text-sm" style={{ color: colors.textSubtle }}>{member.email}</p>
+                      <p className="text-sm" style={{ color: colors.textSubtle }}>{t('event:current_role_label')} <span className="font-medium" style={{ color: colors.textMuted }}>{member.role}</span></p>
                     </div>
                     <div>
                       <select
@@ -284,7 +292,8 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
                             userName: member.full_name
                           });
                         }}
-                        className="rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-600 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
+                        className="rounded-md shadow-sm p-2"
+                        style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgInputDark, color: colors.textPrimary }}
                       >
                         <option value="user">{t('event:role_user_option')}</option>
                         <option value="Team_Leader">{t('event:role_team_leader_option')}</option>
@@ -301,13 +310,16 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
 
       {/* Add User Modal */}
       {showAddUserModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-[51] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-lg max-w-md w-full">
-            <div className="flex justify-between items-center p-6 border-b dark:border-slate-700">
-              <h3 className="text-lg font-semibold dark:text-white">{t('event:add_user_to_company')}</h3>
+        <div className="fixed inset-0 z-[51] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="rounded-lg max-w-md w-full" style={{ backgroundColor: colors.bgCard }}>
+            <div className="flex justify-between items-center p-6 border-b" style={{ borderColor: colors.borderDefault }}>
+              <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('event:add_user_to_company')}</h3>
               <button
                 onClick={() => setShowAddUserModal(false)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-full transition-colors"
+                className="p-2 rounded-full transition-colors"
+                style={{ backgroundColor: 'transparent' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -315,7 +327,7 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>
                   {t('event:user_email_label')}
                 </label>
                 <input
@@ -323,19 +335,21 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   placeholder={t('event:user_email_placeholder')}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2"
+                  style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated, color: colors.textPrimary }}
                   disabled={inviteUserMutation.isPending}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>
                   {t('event:role_label_auth')}
                 </label>
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2"
+                  style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated, color: colors.textPrimary }}
                   disabled={inviteUserMutation.isPending}
                 >
                   <option value="user">{t('event:role_user_option')}</option>
@@ -344,7 +358,7 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
                 </select>
               </div>
 
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs" style={{ color: colors.textSubtle }}>
                 {t('event:user_account_note')}
               </p>
 

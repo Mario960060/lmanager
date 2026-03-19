@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../../themes/designTokens';
 import { translateTaskName, translateTaskDescription, translateUnit } from '../../lib/translationMap';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -257,8 +258,9 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
       onClick={handleClose}
     >
       <div
-        className="bg-white p-4 md:p-8 rounded-lg w-full relative flex flex-col overflow-y-auto"
+        className="p-4 md:p-8 rounded-lg w-full relative flex flex-col overflow-y-auto"
         style={{ 
+          backgroundColor: colors.bgCard,
           maxHeight: '95vh',
           minHeight: '80vh',
           width: '100%',
@@ -267,8 +269,8 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
         onClick={(e) => e.stopPropagation()}
       >
         <button
-          className="absolute top-2 right-2 bg-white text-white text-3xl font-bold rounded-full w-10 h-10 md:w-12 md:h-12 flex items-center justify-center shadow-lg hover:bg-gray-300 transition"
-          style={{ zIndex: 10 }}
+          className="absolute top-2 right-2 text-3xl font-bold rounded-full w-10 h-10 md:w-12 md:h-12 flex items-center justify-center shadow-lg transition"
+          style={{ backgroundColor: colors.bgCard, color: colors.textOnAccent, zIndex: 10 }}
           onClick={handleClose}
           aria-label={t('common:close')}
         >
@@ -330,7 +332,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                       <div className="font-semibold">{translateTaskName(task.name, t)}</div>
                       {/* Main Task Description */}
                       {task.description && (
-                        <div className="ml-2 mb-2 text-gray-600 text-sm italic">{translateTaskDescription(task.description, t)}</div>
+                        <div className="ml-2 mb-2 text-sm italic" style={{ color: colors.textMuted }}>{translateTaskDescription(task.description, t)}</div>
                       )}
                       {/* Task Breakdown */}
                       {task.results?.taskBreakdown && task.results.taskBreakdown.length > 0 && (
@@ -407,7 +409,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                       )}
                       {/* Thicker line between main tasks */}
                       {idx < (invoice.main_tasks.length - 1) && (
-                        <hr className="my-6 border-t-4 border-gray-500" />
+                        <hr className="my-6 border-t-4" style={{ borderColor: colors.textSubtle }} />
                       )}
                     </div>
                   );
@@ -417,7 +419,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
               {/* Minor Tasks Summary */}
               {invoice.minor_tasks && invoice.minor_tasks.length > 0 && (
                 <>
-                  <hr className="my-6 border-t-4 border-gray-500" />
+                  <hr className="my-6 border-t-4" style={{ borderColor: colors.borderDefault }} />
                   <div className="font-bold text-lg mb-2">{t('common:minor_tasks_summary')}</div>
                   <ul className="ml-6 mb-4">
                     {invoice.minor_tasks.map((task: any, idx: number) => (
@@ -439,7 +441,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                           </span>
                           {/* Minor Task Description */}
                           {task.description && (
-                            <div className="ml-2 text-gray-500 text-xs italic">{translateTaskDescription(task.description, t)}</div>
+                            <div className="ml-2 text-xs italic" style={{ color: colors.textSubtle }}>{translateTaskDescription(task.description, t)}</div>
                           )}
                         </div>
                       </li>
@@ -466,7 +468,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
               {/* Extra Materials */}
               {invoice.extra_materials && invoice.extra_materials.length > 0 && (
                 <>
-                  <hr className="my-6 border-t-4 border-gray-500" />
+                  <hr className="my-6 border-t-4" style={{ borderColor: colors.borderDefault }} />
                   <div className="font-bold text-lg mb-2">{t('common:extra_materials_label')}</div>
                   <ul className="ml-6 mb-4">
                     {invoice.extra_materials.map((mat: any, idx: number) => {
@@ -508,10 +510,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                     {additionalCosts.map((cost, idx) => (
                       <li key={idx} className="mb-1">
                         <span>
-                          {cost.name || <span className="italic text-gray-400">{t('common:unnamed')}</span>}
+                          {cost.name || <span className="italic" style={{ color: colors.textSubtle }}>{t('common:unnamed')}</span>}
                           {' — '}
                           {cost.quantity} × £{Number(cost.pricePerUnit).toFixed(2)} ={' '}
-                          <span className="font-semibold text-green-500">
+                          <span className="font-semibold" style={{ color: colors.green }}>
                             £{(cost.pricePerUnit * cost.quantity).toFixed(2)}
                           </span>
                         </span>
@@ -522,42 +524,46 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
 
                 {/* Inline editing form - toggle with the Add additional cost button */}
                 {isAddingCost && (
-                  <div className="flex flex-wrap items-end gap-2 mb-4 p-3 border border-gray-600 rounded-lg bg-gray-800/30">
+                  <div className="flex flex-wrap items-end gap-2 mb-4 p-3 border rounded-lg" style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard }}>
                     <div className="flex flex-col">
                       <input
-                        className="border p-1 w-48 bg-gray-800 text-white rounded"
+                        className="border p-1 w-48 rounded"
+                        style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard, color: colors.textPrimary }}
                         value={newCostDraft.name}
                         onChange={e => setNewCostDraft({ ...newCostDraft, name: e.target.value })}
                         placeholder={t('common:cost_name_placeholder')}
                       />
-                      <span className="text-xs text-gray-400 ml-1">{t('common:cost_name_field')}</span>
+                      <span className="text-xs ml-1" style={{ color: colors.textSubtle }}>{t('common:cost_name_field')}</span>
                     </div>
                     <div className="flex flex-col">
                       <input
                         type="number"
-                        className="border p-1 w-20 bg-gray-800 text-white rounded"
+                        className="border p-1 w-20 rounded"
+                        style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard, color: colors.textPrimary }}
                         value={newCostDraft.quantity}
                         onChange={e => setNewCostDraft({ ...newCostDraft, quantity: Number(e.target.value) })}
                         placeholder={t('calculator:quantity_placeholder')}
                       />
-                      <span className="text-xs text-gray-400 ml-1">{t('common:quantity_field')}</span>
+                      <span className="text-xs ml-1" style={{ color: colors.textSubtle }}>{t('common:quantity_field')}</span>
                     </div>
                     <div className="flex flex-col">
                       <input
                         type="number"
                         step="0.01"
-                        className="border p-1 w-24 bg-gray-800 text-white rounded"
+                        className="border p-1 w-24 rounded"
+                        style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard, color: colors.textPrimary }}
                         value={newCostDraft.pricePerUnit || ''}
                         onChange={e => setNewCostDraft({ ...newCostDraft, pricePerUnit: Number(e.target.value) })}
                         placeholder={t('common:price_per_unit_placeholder')}
                       />
-                      <span className="text-xs text-gray-400 ml-1">{t('common:price_per_unit_field')}</span>
+                      <span className="text-xs ml-1" style={{ color: colors.textSubtle }}>{t('common:price_per_unit_field')}</span>
                     </div>
                     <span className="font-semibold text-green-500 mb-1">
                       £{(newCostDraft.pricePerUnit * newCostDraft.quantity).toFixed(2)}
                     </span>
                     <button
-                      className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 font-medium mb-1"
+                      className="px-3 py-1 rounded font-medium mb-1"
+                      style={{ backgroundColor: colors.green, color: colors.textOnAccent }}
                       onClick={() => {
                         setAdditionalCosts([...additionalCosts, { ...newCostDraft }]);
                         setNewCostDraft({ name: '', pricePerUnit: 0, quantity: 1 });
@@ -567,7 +573,8 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                       {t('form:add')}
                     </button>
                     <button
-                      className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 mb-1"
+                      className="px-3 py-1 rounded mb-1"
+                      style={{ backgroundColor: colors.bgElevated, color: colors.textOnAccent }}
                       onClick={() => {
                         setNewCostDraft({ name: '', pricePerUnit: 0, quantity: 1 });
                         setIsAddingCost(false);
@@ -579,7 +586,8 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                 )}
 
                 <button
-                  className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-700"
+                  className="px-3 py-1 rounded"
+                  style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
                   onClick={() => {
                     if (isAddingCost) {
                       setNewCostDraft({ name: '', pricePerUnit: 0, quantity: 1 });
@@ -678,7 +686,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                       <ul className="ml-6 mb-2">
                         {mainTasksWithTotal.map((task, idx) => (
                           <li key={idx}>
-                            {translateTaskName(task.name, t)} — <span className="font-semibold text-green-400">£{task.totalPrice.toFixed(2)}</span>
+                            {translateTaskName(task.name, t)} — <span className="font-semibold" style={{ color: colors.green }}>£{task.totalPrice.toFixed(2)}</span>
                           </li>
                         ))}
                       </ul>
@@ -689,7 +697,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                           <ul className="ml-6 mb-2">
                             {minorTasksWithTotal.map((task, idx) => (
                               <li key={idx}>
-                                {translateTaskName(task.name, t)} — <span className="font-semibold text-green-400">£{task.totalPrice.toFixed(2)}</span>
+                                {translateTaskName(task.name, t)} — <span className="font-semibold" style={{ color: colors.green }}>£{task.totalPrice.toFixed(2)}</span>
                               </li>
                             ))}
                           </ul>
@@ -709,7 +717,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                   {showPrices !== 'none' && (
                                     <>
                                       {' — '}
-                                      <span className="font-semibold text-green-400">
+                                      <span className="font-semibold" style={{ color: colors.green }}>
                                         £{(mat.totalPrice || 0).toFixed(2)}
                                       </span>
                                     </>
@@ -727,18 +735,18 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                           <ul className="ml-6 mb-2">
                             {additionalCosts.map((cost, idx) => (
                               <li key={idx}>
-                                {cost.name || <span className="italic text-gray-400">{t('common:unnamed')}</span>} — {cost.quantity} × £{cost.pricePerUnit.toFixed(2)} = <span className="font-semibold text-green-400">£{(cost.pricePerUnit * cost.quantity).toFixed(2)}</span>
+                                {cost.name || <span className="italic" style={{ color: colors.textSubtle }}>{t('common:unnamed')}</span>} — {cost.quantity} × £{cost.pricePerUnit.toFixed(2)} = <span className="font-semibold" style={{ color: colors.green }}>£{(cost.pricePerUnit * cost.quantity).toFixed(2)}</span>
                               </li>
                             ))}
                           </ul>
-                          <div className="ml-6 font-semibold text-green-400">
+                          <div className="ml-6 font-semibold" style={{ color: colors.green }}>
                             {t('common:total_additional_costs')}: £{additionalCosts.reduce((sum, c) => sum + c.pricePerUnit * c.quantity, 0).toFixed(2)}
                           </div>
                         </>
                       )}
                       {/* Grand total */}
                       <div className="font-bold mt-6 text-lg">
-                        {t('common:total_costs_label')}: <span className="text-green-500">£{grandTotal.toFixed(2)}</span>
+                        {t('common:total_costs_label')}: <span style={{ color: colors.green }}>£{grandTotal.toFixed(2)}</span>
                       </div>
                     </div>
                   );
@@ -746,21 +754,23 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
               </div>
             </div>
           ) : selectedProjectId ? (
-            <div className="text-gray-500">{t('common:no_work_pricing_found')}</div>
+            <div style={{ color: colors.textSubtle }}>{t('common:no_work_pricing_found')}</div>
           ) : (
-            <div className="text-gray-500">{t('common:select_project_to_preview')}</div>
+            <div style={{ color: colors.textSubtle }}>{t('common:select_project_to_preview')}</div>
           )}
         </div>
         <div className="flex gap-2 mt-6">
           <button
-            className="bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
+            className="px-3 py-2 rounded text-sm"
+            style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
             onClick={handleDownloadPDF}
             disabled={!invoice}
           >
             {t('common:download_pdf')}
           </button>
           <button
-            className="bg-gray-600 text-white px-3 py-2 rounded hover:bg-gray-700 text-sm"
+            className="px-3 py-2 rounded text-sm"
+            style={{ backgroundColor: colors.bgElevated, color: colors.textOnAccent }}
             onClick={() => {
               setEditInvoice(JSON.parse(JSON.stringify(invoice)));
               setEditMode(true);
@@ -777,8 +787,9 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
           onClick={() => setEditMode(false)}
         >
           <div
-            className="bg-gray-800 rounded-xl w-full relative flex flex-col"
+            className="rounded-xl w-full relative flex flex-col"
             style={{
+              backgroundColor: colors.bgCard,
               maxHeight: '95vh',
               minHeight: '80vh',
               width: '100%',
@@ -787,23 +798,26 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
             onClick={(e) => e.stopPropagation()}
           >
             {/* Sticky header with title + actions */}
-            <div className="flex items-center justify-between px-5 md:px-8 py-4 border-b border-gray-700 flex-shrink-0">
-              <h2 className="text-lg md:text-xl font-bold text-white">{t('common:edit_work_pricing_title')}</h2>
+            <div className="flex items-center justify-between px-5 md:px-8 py-4 border-b flex-shrink-0" style={{ borderColor: colors.borderDefault }}>
+              <h2 className="text-lg md:text-xl font-bold" style={{ color: colors.textPrimary }}>{t('common:edit_work_pricing_title')}</h2>
               <div className="flex items-center gap-2">
                 <button
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold transition-colors"
+                  className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                  style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
                   onClick={handleSaveInvoice}
                 >
                   {t('form:save')}
                 </button>
                 <button
-                  className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-500 text-sm font-semibold transition-colors"
+                  className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                  style={{ backgroundColor: colors.bgElevated, color: colors.textOnAccent }}
                   onClick={() => setEditMode(false)}
                 >
                   {t('form:cancel')}
                 </button>
                 <button
-                  className="bg-gray-700 text-gray-300 hover:text-white hover:bg-gray-600 text-xl font-bold rounded-lg w-9 h-9 flex items-center justify-center transition-colors ml-1 min-h-0 min-w-0"
+                  className="text-xl font-bold rounded-lg w-9 h-9 flex items-center justify-center transition-colors ml-1 min-h-0 min-w-0"
+                  style={{ backgroundColor: colors.bgElevated, color: colors.textMuted }}
                   onClick={() => setEditMode(false)}
                   aria-label={t('common:close')}
                 >
@@ -818,8 +832,8 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
               {/* ===== MAIN TASKS ===== */}
               <div>
                 <div className="flex items-center gap-3 mb-4">
-                  <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">{t('common:main_tasks_label')}</span>
-                  <div className="flex-1 h-px bg-gray-600" />
+                  <span className="text-sm font-bold uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('common:main_tasks_label')}</span>
+                  <div className="flex-1 h-px" style={{ backgroundColor: colors.borderDefault }} />
                 </div>
 
                 <div className="space-y-4">
@@ -829,9 +843,9 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                       0
                     );
                     return (
-                      <div key={idx} className="border border-gray-600 rounded-xl bg-gray-750 overflow-hidden" style={{ backgroundColor: 'rgba(55, 65, 81, 0.5)' }}>
+                      <div key={idx} className="border border-[var(--border-default)] rounded-xl bg-gray-750 overflow-hidden" style={{ backgroundColor: 'rgba(55, 65, 81, 0.5)' }}>
                         {/* Task header */}
-                        <div className="px-4 pt-4 pb-3 border-b border-gray-600/50">
+                        <div className="px-4 pt-4 pb-3 border-b border-[var(--border-default)]/50">
                           <input
                             className="!w-full !bg-transparent !border-none !text-white !text-lg !font-bold !p-0 !shadow-none !ring-0 focus:!ring-0 placeholder-gray-500"
                             value={task.name}
@@ -843,7 +857,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                             placeholder={t('common:task_name_placeholder')}
                           />
                           <textarea
-                            className="!w-full !bg-transparent !border-none !text-gray-400 !text-sm !p-0 !mt-1 !shadow-none !ring-0 focus:!ring-0 !resize-none placeholder-gray-600"
+                            className="!w-full !bg-transparent !border-none !text-[var(--text-subtle)] !text-sm !p-0 !mt-1 !shadow-none !ring-0 focus:!ring-0 !resize-none placeholder-[var(--text-muted)]"
                             value={task.description || ''}
                             onChange={e => {
                               const updated = [...editInvoice.main_tasks];
@@ -859,15 +873,15 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                           {/* Breakdown sub-section */}
                           {(task.results?.taskBreakdown || []).length > 0 && (
                             <div>
-                              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('common:breakdown_label')}</div>
+                              <div className="text-xs font-semibold text-[var(--text-subtle)] uppercase tracking-wider mb-2">{t('common:breakdown_label')}</div>
                               {/* Column headers */}
                               <div className="hidden md:grid md:grid-cols-[2fr_1fr_80px_1fr_1fr_90px] gap-2 mb-1 px-1">
-                                <span className="text-[10px] text-gray-500 uppercase">{t('common:name_label')}</span>
-                                <span className="text-[10px] text-gray-500 uppercase">{t('common:amount_label')}</span>
-                                <span className="text-[10px] text-gray-500 uppercase">{t('common:unit_label')}</span>
-                                <span className="text-[10px] text-gray-500 uppercase">{t('common:hours_label')}</span>
-                                <span className="text-[10px] text-gray-500 uppercase">{t('common:price_hr_label')}</span>
-                                <span className="text-[10px] text-gray-500 uppercase text-right">{t('common:total_label')}</span>
+                                <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:name_label')}</span>
+                                <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:amount_label')}</span>
+                                <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:unit_label')}</span>
+                                <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:hours_label')}</span>
+                                <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:price_hr_label')}</span>
+                                <span className="text-[10px] text-[var(--text-subtle)] uppercase text-right">{t('common:total_label')}</span>
                               </div>
                               {(task.results.taskBreakdown || []).map((breakdown: any, bIdx: number) => {
                                 let amountValue = '';
@@ -888,9 +902,9 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                 return (
                                   <div key={bIdx} className="grid grid-cols-2 md:grid-cols-[2fr_1fr_80px_1fr_1fr_90px] gap-2 mb-2 items-center">
                                     <div className="col-span-2 md:col-span-1">
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
+                                      <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
                                       <input
-                                        className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                        className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                         value={breakdown.name || breakdown.task || breakdown.title || ''}
                                         onChange={e => {
                                           const updated = [...editInvoice.main_tasks];
@@ -901,10 +915,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:amount_label')}</label>
+                                      <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:amount_label')}</label>
                                       <input
                                         type="number"
-                                        className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                        className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                         value={amountValue}
                                         onChange={e => {
                                           const updated = [...editInvoice.main_tasks];
@@ -915,9 +929,9 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
+                                      <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
                                       <input
-                                        className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                        className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                         value={unitValue}
                                         onChange={e => {
                                           const updated = [...editInvoice.main_tasks];
@@ -928,11 +942,11 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:hours_label')}</label>
+                                      <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:hours_label')}</label>
                                       <input
                                         type="number"
                                         step="0.01"
-                                        className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                        className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                         value={
                                           breakdown.hours !== undefined && breakdown.hours !== null
                                             ? Number(breakdown.hours).toFixed(2)
@@ -947,11 +961,11 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:price_hr_label')}</label>
+                                      <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:price_hr_label')}</label>
                                       <input
                                         type="number"
                                         step="0.01"
-                                        className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                        className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                         value={
                                           breakdown.pricePerHour !== undefined && breakdown.pricePerHour !== null
                                             ? breakdown.pricePerHour
@@ -969,16 +983,16 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       <span className="text-green-400 font-semibold text-sm">£{breakdownPrice}</span>
                                       {deleteConfirm?.section === 'breakdown' && deleteConfirm.taskIdx === idx && deleteConfirm.subIdx === bIdx ? (
                                         <>
-                                          <button className="text-xs bg-red-600 px-1.5 py-0.5 rounded text-white hover:bg-red-700" onClick={() => {
+                                          <button className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: colors.red, color: colors.textOnAccent }} onClick={() => {
                                             const updated = [...editInvoice.main_tasks];
                                             updated[idx].results.taskBreakdown = updated[idx].results.taskBreakdown.filter((_: any, i: number) => i !== bIdx);
                                             setEditInvoice({ ...editInvoice, main_tasks: updated });
                                             setDeleteConfirm(null);
                                           }}>Yes</button>
-                                          <button className="text-xs bg-gray-600 px-1.5 py-0.5 rounded text-white hover:bg-gray-500" onClick={() => setDeleteConfirm(null)}>No</button>
+                                          <button className="text-xs bg-[var(--bg-elevated)] px-1.5 py-0.5 rounded text-white hover:bg-[var(--bg-elevated)]" onClick={() => setDeleteConfirm(null)}>No</button>
                                         </>
                                       ) : (
-                                        <button className="!min-w-0 !min-h-0 w-5 h-5 flex items-center justify-center bg-red-600 text-white rounded text-sm font-bold hover:bg-red-700 leading-none shrink-0" onClick={() => setDeleteConfirm({ section: 'breakdown', taskIdx: idx, subIdx: bIdx })}>−</button>
+                                        <button className="!min-w-0 !min-h-0 w-5 h-5 flex items-center justify-center rounded text-sm font-bold leading-none shrink-0" style={{ backgroundColor: colors.red, color: colors.textOnAccent }} onClick={() => setDeleteConfirm({ section: 'breakdown', taskIdx: idx, subIdx: bIdx })}>−</button>
                                       )}
                                     </div>
                                   </div>
@@ -989,29 +1003,29 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
 
                           {/* Separator between breakdown and materials */}
                           {(task.results?.taskBreakdown || []).length > 0 && (task.results?.materials || []).length > 0 && (
-                            <div className="h-px bg-gray-600/50" />
+                            <div className="h-px bg-[var(--bg-elevated)]/50" />
                           )}
 
                           {/* Materials sub-section */}
                           {(task.results?.materials || []).length > 0 && (
                             <div>
-                              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{t('common:materials_label')}</div>
+                              <div className="text-xs font-semibold text-[var(--text-subtle)] uppercase tracking-wider mb-2">{t('common:materials_label')}</div>
                               {/* Column headers */}
                               <div className="hidden md:grid md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 mb-1 px-1">
-                                <span className="text-[10px] text-gray-500 uppercase">{t('common:name_label')}</span>
-                                <span className="text-[10px] text-gray-500 uppercase">{t('common:quantity_label')}</span>
-                                <span className="text-[10px] text-gray-500 uppercase">Unit</span>
-                                <span className="text-[10px] text-gray-500 uppercase">{t('common:price_per_unit_label')}</span>
-                                <span className="text-[10px] text-gray-500 uppercase text-right">Total</span>
+                                <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:name_label')}</span>
+                                <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:quantity_label')}</span>
+                                <span className="text-[10px] text-[var(--text-subtle)] uppercase">Unit</span>
+                                <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:price_per_unit_label')}</span>
+                                <span className="text-[10px] text-[var(--text-subtle)] uppercase text-right">Total</span>
                               </div>
                               {(task.results.materials || []).map((mat: any, mIdx: number) => {
                                 const total = (Number(mat.quantity) * Number(mat.pricePerUnit) || 0).toFixed(2);
                                 return (
                                   <div key={mIdx} className="grid grid-cols-2 md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 mb-2 items-center">
                                     <div className="col-span-2 md:col-span-1">
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
+                                      <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
                                       <input
-                                        className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                        className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                         value={mat.name}
                                         onChange={e => {
                                           const updated = [...editInvoice.main_tasks];
@@ -1022,10 +1036,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Qty</label>
+                                      <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">Qty</label>
                                       <input
                                         type="number"
-                                        className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                        className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                         value={mat.quantity ?? ''}
                                         onChange={e => {
                                           const updated = [...editInvoice.main_tasks];
@@ -1036,9 +1050,9 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
+                                      <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
                                       <input
-                                        className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                        className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                         value={mat.unit}
                                         onChange={e => {
                                           const updated = [...editInvoice.main_tasks];
@@ -1049,11 +1063,11 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
+                                      <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
                                       <input
                                         type="number"
                                         step="0.01"
-                                        className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                        className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                         value={mat.pricePerUnit !== undefined && mat.pricePerUnit !== null ? mat.pricePerUnit : ''}
                                         onChange={e => {
                                           const updated = [...editInvoice.main_tasks];
@@ -1065,20 +1079,20 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                     </div>
                                     <div className="flex items-center justify-end gap-1 min-w-[100px]">
                                       <span className="text-green-400 text-sm">
-                                        £{total} <span className="text-gray-500 text-xs">(£{Number(mat.pricePerUnit).toFixed(2)}/u)</span>
+                                        £{total} <span className="text-[var(--text-subtle)] text-xs">(£{Number(mat.pricePerUnit).toFixed(2)}/u)</span>
                                       </span>
                                       {deleteConfirm?.section === 'material' && deleteConfirm.taskIdx === idx && deleteConfirm.subIdx === mIdx ? (
                                         <>
-                                          <button className="text-xs bg-red-600 px-1.5 py-0.5 rounded text-white hover:bg-red-700" onClick={() => {
+                                          <button className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: colors.red, color: colors.textOnAccent }} onClick={() => {
                                             const updated = [...editInvoice.main_tasks];
                                             updated[idx].results.materials = updated[idx].results.materials.filter((_: any, i: number) => i !== mIdx);
                                             setEditInvoice({ ...editInvoice, main_tasks: updated });
                                             setDeleteConfirm(null);
                                           }}>Yes</button>
-                                          <button className="text-xs bg-gray-600 px-1.5 py-0.5 rounded text-white hover:bg-gray-500" onClick={() => setDeleteConfirm(null)}>No</button>
+                                          <button className="text-xs bg-[var(--bg-elevated)] px-1.5 py-0.5 rounded text-white hover:bg-[var(--bg-elevated)]" onClick={() => setDeleteConfirm(null)}>No</button>
                                         </>
                                       ) : (
-                                        <button className="!min-w-0 !min-h-0 w-5 h-5 flex items-center justify-center bg-red-600 text-white rounded text-sm font-bold hover:bg-red-700 leading-none shrink-0" onClick={() => setDeleteConfirm({ section: 'material', taskIdx: idx, subIdx: mIdx })}>−</button>
+                                        <button className="!min-w-0 !min-h-0 w-5 h-5 flex items-center justify-center rounded text-sm font-bold leading-none shrink-0" style={{ backgroundColor: colors.red, color: colors.textOnAccent }} onClick={() => setDeleteConfirm({ section: 'material', taskIdx: idx, subIdx: mIdx })}>−</button>
                                       )}
                                     </div>
                                   </div>
@@ -1089,7 +1103,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                         </div>
 
                         {/* Task total footer */}
-                        <div className="px-4 py-3 border-t border-gray-600/50 flex justify-end">
+                        <div className="px-4 py-3 border-t border-[var(--border-default)]/50 flex justify-end">
                           <span className="bg-green-900/40 text-green-400 font-bold text-sm px-3 py-1 rounded-lg">
                             Total: £{materialsTotal.toFixed(2)}
                           </span>
@@ -1104,29 +1118,29 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
               {(editInvoice.minor_tasks || []).length > 0 && (
                 <div>
                   <div className="flex items-center gap-3 mb-4">
-                    <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">{t('common:minor_tasks_label')}</span>
-                    <div className="flex-1 h-px bg-gray-600" />
+                    <span className="text-sm font-bold text-[var(--text-subtle)] uppercase tracking-wider">{t('common:minor_tasks_label')}</span>
+                    <div className="flex-1 h-px bg-[var(--bg-elevated)]" />
                   </div>
 
                   {/* Column headers */}
                   <div className="hidden md:grid md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 mb-1 px-1">
-                    <span className="text-[10px] text-gray-500 uppercase">{t('common:name_label')}</span>
-                    <span className="text-[10px] text-gray-500 uppercase">{t('common:quantity_label')}</span>
-                    <span className="text-[10px] text-gray-500 uppercase">Unit</span>
-                    <span className="text-[10px] text-gray-500 uppercase">{t('common:price_per_unit_label')}</span>
-                    <span className="text-[10px] text-gray-500 uppercase text-right">Total</span>
+                    <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:name_label')}</span>
+                    <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:quantity_label')}</span>
+                    <span className="text-[10px] text-[var(--text-subtle)] uppercase">Unit</span>
+                    <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:price_per_unit_label')}</span>
+                    <span className="text-[10px] text-[var(--text-subtle)] uppercase text-right">Total</span>
                   </div>
 
                   <div className="space-y-2">
                     {(editInvoice.minor_tasks || []).map((task: any, idx: number) => {
                       const total = (Number(task.quantity) * Number(task.pricePerUnit) || 0).toFixed(2);
                       return (
-                        <div key={idx} className="border border-gray-600/50 rounded-lg p-3" style={{ backgroundColor: 'rgba(55, 65, 81, 0.3)' }}>
+                        <div key={idx} className="border border-[var(--border-default)]/50 rounded-lg p-3" style={{ backgroundColor: 'rgba(55, 65, 81, 0.3)' }}>
                           <div className="grid grid-cols-2 md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 items-center">
                             <div className="col-span-2 md:col-span-1">
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
+                              <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
                               <input
-                                className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                 value={task.name}
                                 onChange={e => {
                                   const updated = [...editInvoice.minor_tasks];
@@ -1137,10 +1151,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Qty</label>
+                              <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">Qty</label>
                               <input
                                 type="number"
-                                className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                 value={task.quantity}
                                 onChange={e => {
                                   const updated = [...editInvoice.minor_tasks];
@@ -1151,9 +1165,9 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
+                              <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
                               <input
-                                className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                 value={task.unit}
                                 onChange={e => {
                                   const updated = [...editInvoice.minor_tasks];
@@ -1164,11 +1178,11 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
+                              <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
                               <input
                                 type="number"
                                 step="0.01"
-                                className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                 value={task.pricePerUnit !== undefined && task.pricePerUnit !== null ? task.pricePerUnit : ''}
                                 onChange={e => {
                                   const updated = [...editInvoice.minor_tasks];
@@ -1179,7 +1193,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               />
                             </div>
                             <div className="flex items-center justify-end gap-1 min-w-[100px]">
-                              <span className="text-green-400 font-semibold text-sm">£{total}</span>
+                              <span className="font-semibold text-sm" style={{ color: colors.green }}>£{total}</span>
                               {deleteConfirm?.section === 'minor_task' && deleteConfirm.taskIdx === idx ? (
                                 <>
                                   <button className="text-xs bg-red-600 px-1.5 py-0.5 rounded text-white hover:bg-red-700" onClick={() => {
@@ -1187,16 +1201,16 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                     setEditInvoice({ ...editInvoice, minor_tasks: updated });
                                     setDeleteConfirm(null);
                                   }}>Yes</button>
-                                  <button className="text-xs bg-gray-600 px-1.5 py-0.5 rounded text-white hover:bg-gray-500" onClick={() => setDeleteConfirm(null)}>No</button>
+                                  <button className="text-xs bg-[var(--bg-elevated)] px-1.5 py-0.5 rounded text-white hover:bg-[var(--bg-elevated)]" onClick={() => setDeleteConfirm(null)}>No</button>
                                 </>
                               ) : (
-                                <button className="!min-w-0 !min-h-0 w-5 h-5 flex items-center justify-center bg-red-600 text-white rounded text-sm font-bold hover:bg-red-700 leading-none shrink-0" onClick={() => setDeleteConfirm({ section: 'minor_task', taskIdx: idx })}>−</button>
+                                <button className="!min-w-0 !min-h-0 w-5 h-5 flex items-center justify-center rounded text-sm font-bold leading-none shrink-0" style={{ backgroundColor: colors.red, color: colors.textOnAccent }} onClick={() => setDeleteConfirm({ section: 'minor_task', taskIdx: idx })}>−</button>
                               )}
                             </div>
                           </div>
                           {/* Description */}
                           <textarea
-                            className="!w-full !bg-transparent !border-none !text-gray-400 !text-xs !p-0 !mt-2 !shadow-none !ring-0 focus:!ring-0 !resize-none placeholder-gray-600"
+                            className="!w-full !bg-transparent !border-none !text-[var(--text-subtle)] !text-xs !p-0 !mt-2 !shadow-none !ring-0 focus:!ring-0 !resize-none placeholder-[var(--text-muted)]"
                             value={task.description || ''}
                             onChange={e => {
                               const updated = [...editInvoice.minor_tasks];
@@ -1217,17 +1231,17 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
               {(editInvoice.extra_materials || []).length > 0 && (
                 <div>
                   <div className="flex items-center gap-3 mb-4">
-                    <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">{t('common:extra_materials_label')}</span>
-                    <div className="flex-1 h-px bg-gray-600" />
+                    <span className="text-sm font-bold text-[var(--text-subtle)] uppercase tracking-wider">{t('common:extra_materials_label')}</span>
+                    <div className="flex-1 h-px bg-[var(--bg-elevated)]" />
                   </div>
 
                   {/* Column headers */}
                   <div className="hidden md:grid md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 mb-1 px-1">
-                    <span className="text-[10px] text-gray-500 uppercase">{t('common:name_label')}</span>
-                    <span className="text-[10px] text-gray-500 uppercase">{t('common:quantity_label')}</span>
-                    <span className="text-[10px] text-gray-500 uppercase">Unit</span>
-                    <span className="text-[10px] text-gray-500 uppercase">{t('common:price_per_unit_label')}</span>
-                    <span className="text-[10px] text-gray-500 uppercase text-right">Total</span>
+                    <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:name_label')}</span>
+                    <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:quantity_label')}</span>
+                    <span className="text-[10px] text-[var(--text-subtle)] uppercase">Unit</span>
+                    <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:price_per_unit_label')}</span>
+                    <span className="text-[10px] text-[var(--text-subtle)] uppercase text-right">Total</span>
                   </div>
 
                   <div className="space-y-2">
@@ -1236,9 +1250,9 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                       return (
                         <div key={idx} className="grid grid-cols-2 md:grid-cols-[2fr_1fr_80px_1fr_auto] gap-2 items-center p-2 rounded-lg" style={{ backgroundColor: 'rgba(55, 65, 81, 0.3)' }}>
                           <div className="col-span-2 md:col-span-1">
-                            <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
+                            <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
                             <input
-                              className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                              className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                               value={mat.name}
                               onChange={e => {
                                 const updated = [...editInvoice.extra_materials];
@@ -1249,10 +1263,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Qty</label>
+                            <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">Qty</label>
                             <input
                               type="number"
-                              className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                              className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                               value={mat.quantity}
                               onChange={e => {
                                 const updated = [...editInvoice.extra_materials];
@@ -1263,9 +1277,9 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
+                            <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:unit_label')}</label>
                             <input
-                              className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                              className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                               value={mat.unit}
                               onChange={e => {
                                 const updated = [...editInvoice.extra_materials];
@@ -1276,11 +1290,11 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
+                            <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
                             <input
                               type="number"
                               step="0.01"
-                              className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                              className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                               value={mat.pricePerUnit !== undefined && mat.pricePerUnit !== null ? mat.pricePerUnit : ''}
                               onChange={e => {
                                 const updated = [...editInvoice.extra_materials];
@@ -1299,7 +1313,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                                   setEditInvoice({ ...editInvoice, extra_materials: updated });
                                   setDeleteConfirm(null);
                                 }}>Yes</button>
-                                <button className="text-xs bg-gray-600 px-1.5 py-0.5 rounded text-white hover:bg-gray-500" onClick={() => setDeleteConfirm(null)}>No</button>
+                                <button className="text-xs bg-[var(--bg-elevated)] px-1.5 py-0.5 rounded text-white hover:bg-[var(--bg-elevated)]" onClick={() => setDeleteConfirm(null)}>No</button>
                               </>
                             ) : (
                               <button className="!min-w-0 !min-h-0 w-5 h-5 flex items-center justify-center bg-red-600 text-white rounded text-sm font-bold hover:bg-red-700 leading-none shrink-0" onClick={() => setDeleteConfirm({ section: 'extra_material', taskIdx: idx })}>−</button>
@@ -1315,17 +1329,17 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
               {/* ===== ADDITIONAL COSTS in edit mode ===== */}
               <div>
                 <div className="flex items-center gap-3 mb-4">
-                  <span className="text-sm font-bold text-gray-400 uppercase tracking-wider">{t('common:additional_costs_label')}</span>
-                  <div className="flex-1 h-px bg-gray-600" />
+                  <span className="text-sm font-bold text-[var(--text-subtle)] uppercase tracking-wider">{t('common:additional_costs_label')}</span>
+                  <div className="flex-1 h-px bg-[var(--bg-elevated)]" />
                 </div>
 
                 {additionalCosts.length > 0 && (
                   <>
                     <div className="hidden md:grid md:grid-cols-[2fr_1fr_1fr_auto] gap-2 mb-1 px-1">
-                      <span className="text-[10px] text-gray-500 uppercase">{t('common:name_label')}</span>
-                      <span className="text-[10px] text-gray-500 uppercase">{t('common:quantity_label')}</span>
-                      <span className="text-[10px] text-gray-500 uppercase">{t('common:price_per_unit_label')}</span>
-                      <span className="text-[10px] text-gray-500 uppercase text-right">Total</span>
+                      <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:name_label')}</span>
+                      <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:quantity_label')}</span>
+                      <span className="text-[10px] text-[var(--text-subtle)] uppercase">{t('common:price_per_unit_label')}</span>
+                      <span className="text-[10px] text-[var(--text-subtle)] uppercase text-right">Total</span>
                     </div>
                     <div className="space-y-2">
                       {additionalCosts.map((cost, idx) => {
@@ -1333,9 +1347,9 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                         return (
                           <div key={idx} className="grid grid-cols-2 md:grid-cols-[2fr_1fr_1fr_auto] gap-2 items-center p-2 rounded-lg" style={{ backgroundColor: 'rgba(55, 65, 81, 0.3)' }}>
                             <div className="col-span-2 md:col-span-1">
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
+                              <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:name_label')}</label>
                               <input
-                                className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                 value={cost.name}
                                 onChange={e => {
                                   const updated = [...additionalCosts];
@@ -1346,10 +1360,10 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">Quantity</label>
+                              <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">Quantity</label>
                               <input
                                 type="number"
-                                className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                 value={cost.quantity}
                                 onChange={e => {
                                   const updated = [...additionalCosts];
@@ -1360,11 +1374,11 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] text-gray-500 uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
+                              <label className="text-[10px] text-[var(--text-subtle)] uppercase md:hidden mb-0.5 block">{t('common:price_per_unit_label')}</label>
                               <input
                                 type="number"
                                 step="0.01"
-                                className="!rounded-lg !px-3 !py-2 !bg-gray-800 !border-gray-600 !text-white !text-sm w-full"
+                                className="!rounded-lg !px-3 !py-2 !border-[var(--border-default)] !bg-[var(--bg-card)] !text-[var(--text-primary)] !text-sm w-full"
                                 value={cost.pricePerUnit !== undefined ? cost.pricePerUnit : ''}
                                 onChange={e => {
                                   const updated = [...additionalCosts];
@@ -1375,17 +1389,17 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                               />
                             </div>
                             <div className="flex items-center justify-end gap-1 min-w-[100px]">
-                              <span className="text-green-400 font-semibold text-sm">£{total}</span>
+                              <span className="font-semibold text-sm" style={{ color: colors.green }}>£{total}</span>
                               {deleteConfirm?.section === 'additional_cost' && deleteConfirm.taskIdx === idx ? (
                                 <>
                                   <button className="text-xs bg-red-600 px-1.5 py-0.5 rounded text-white hover:bg-red-700" onClick={() => {
                                     setAdditionalCosts(additionalCosts.filter((_, i) => i !== idx));
                                     setDeleteConfirm(null);
                                   }}>Yes</button>
-                                  <button className="text-xs bg-gray-600 px-1.5 py-0.5 rounded text-white hover:bg-gray-500" onClick={() => setDeleteConfirm(null)}>No</button>
+                                  <button className="text-xs bg-[var(--bg-elevated)] px-1.5 py-0.5 rounded text-white hover:bg-[var(--bg-elevated)]" onClick={() => setDeleteConfirm(null)}>No</button>
                                 </>
                               ) : (
-                                <button className="!min-w-0 !min-h-0 w-5 h-5 flex items-center justify-center bg-red-600 text-white rounded text-sm font-bold hover:bg-red-700 leading-none shrink-0" onClick={() => setDeleteConfirm({ section: 'additional_cost', taskIdx: idx })}>−</button>
+                                <button className="!min-w-0 !min-h-0 w-5 h-5 flex items-center justify-center rounded text-sm font-bold leading-none shrink-0" style={{ backgroundColor: colors.red, color: colors.textOnAccent }} onClick={() => setDeleteConfirm({ section: 'additional_cost', taskIdx: idx })}>−</button>
                               )}
                             </div>
                           </div>
@@ -1395,7 +1409,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
                   </>
                 )}
                 {additionalCosts.length === 0 && (
-                  <p className="text-gray-500 text-sm italic">{t('common:no_additional_costs_added')}</p>
+                  <p className="text-[var(--text-subtle)] text-sm italic">{t('common:no_additional_costs_added')}</p>
                 )}
               </div>
 

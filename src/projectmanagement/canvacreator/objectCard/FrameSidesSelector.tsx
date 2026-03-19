@@ -7,6 +7,7 @@
 import React, { useMemo, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { Point } from "../geometry";
+import { colors, radii } from "../../../themes/designTokens";
 
 interface FrameSidesSelectorProps {
   /** Punkty wielokąta (obrys) — mogą być zsamplowane (łuki → wiele punktów) */
@@ -129,7 +130,7 @@ export const FrameSidesSelector: React.FC<FrameSidesSelectorProps> = ({
 
   if (points.length < 3) {
     return (
-      <div style={{ padding: 12, background: "#1a2536", border: "1px solid #1e2d44", borderRadius: 8, fontSize: "0.75rem", color: "#556680" }}>
+      <div style={{ padding: 12, background: colors.bgDeep, border: `1px solid ${colors.bgDeepBorder}`, borderRadius: radii.lg, fontSize: "0.75rem", color: colors.textLabel }}>
         Element ma za mało punktów.
       </div>
     );
@@ -139,14 +140,14 @@ export const FrameSidesSelector: React.FC<FrameSidesSelectorProps> = ({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "#556680", textTransform: "uppercase" }}>
+      <div style={{ fontSize: "0.72rem", fontWeight: 600, color: colors.textLabel, textTransform: "uppercase" }}>
         {t("calculator:frame_sides_count", { count: enabledCount })} — {t("calculator:frame_sides_hint")}
       </div>
       <svg
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
-        style={{ background: "#131b28", border: "1px solid #1e2d44", borderRadius: 8, cursor: "pointer" }}
+        style={{ background: colors.bgInputDark, border: `1px solid ${colors.bgDeepBorder}`, borderRadius: radii.lg, cursor: "pointer" }}
         onClick={handleClick}
       >
         <path
@@ -155,7 +156,7 @@ export const FrameSidesSelector: React.FC<FrameSidesSelectorProps> = ({
             return `${i === 0 ? "M" : "L"} ${v.x} ${v.y}`;
           }).join(" ") + " Z"}
           fill="rgba(45,55,72,0.5)"
-          stroke="#253350"
+          stroke={colors.bgDeepBorderLight}
           strokeWidth={1}
           strokeLinejoin="miter"
         />
@@ -166,7 +167,7 @@ export const FrameSidesSelector: React.FC<FrameSidesSelectorProps> = ({
               key={segmentIdx}
               d={path}
               fill="none"
-              stroke={selected ? "#22c55e" : "#4a5568"}
+              stroke={selected ? colors.green : colors.textDim}
               strokeWidth={selected ? 5 : 2}
               strokeLinecap="round"
               strokeLinejoin="miter"

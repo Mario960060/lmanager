@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { ArrowLeft, Check } from 'lucide-react';
 import { Spinner, Button } from '../themes/uiComponents';
+import { colors } from '../themes/designTokens';
 
 interface SubscriptionPlan {
   id: string;
@@ -243,12 +244,15 @@ const CreateTeamPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: `linear-gradient(to bottom right, ${colors.accentBlueBg}, ${colors.bgMain})` }}>
       <div className="max-w-4xl w-full">
         {/* Back Button */}
         <button
           onClick={() => navigate('/no-team')}
-          className="flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-8 transition-colors"
+          className="flex items-center gap-2 mb-8 transition-colors"
+          style={{ color: colors.textSubtle }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = colors.textPrimary; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = colors.textSubtle; }}
         >
           <ArrowLeft className="w-5 h-5" />
           {t('common:back')}
@@ -256,24 +260,24 @@ const CreateTeamPage = () => {
 
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">{t('common:create_team_title')}</h1>
-          <p className="text-xl text-gray-600 dark:text-gray-400">
+          <h1 className="text-4xl font-bold mb-4" style={{ color: colors.textPrimary }}>{t('common:create_team_title')}</h1>
+          <p className="text-xl" style={{ color: colors.textSubtle }}>
             {t('common:create_team_subtitle')}
           </p>
         </div>
 
         {/* Main Card */}
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg p-8">
+        <div className="rounded-lg shadow-lg p-8" style={{ backgroundColor: colors.bgCard }}>
           {/* Error Message */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg">
-              <p className="text-red-800 dark:text-red-300">{error}</p>
+            <div className="mb-6 p-4 border rounded-lg" style={{ backgroundColor: colors.redLight, borderColor: colors.red }}>
+              <p style={{ color: colors.red }}>{error}</p>
             </div>
           )}
 
           {/* Team Name Input */}
           <div className="mb-8">
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+            <label className="block text-sm font-semibold mb-3" style={{ color: colors.textMuted }}>
               {t('common:team_name')} *
             </label>
             <input
@@ -281,14 +285,15 @@ const CreateTeamPage = () => {
               value={teamName}
               onChange={(e) => setTeamName(e.target.value)}
               placeholder={t('common:team_name_placeholder')}
-              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 dark:focus:ring-blue-500 transition-all"
+              className="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 transition-all"
+              style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated, color: colors.textPrimary }}
               disabled={isLoading}
             />
           </div>
 
           {/* Subscription Plans */}
           <div className="mb-8">
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-4">
+            <label className="block text-sm font-semibold mb-4" style={{ color: colors.textMuted }}>
               {t('common:select_subscription')} *
             </label>
             <div className="grid md:grid-cols-3 gap-4">
@@ -296,39 +301,40 @@ const CreateTeamPage = () => {
                 <div
                   key={plan.id}
                   onClick={() => setSelectedPlan(plan.id)}
-                  className={`p-6 rounded-lg border-2 cursor-pointer transition-all transform ${
-                    selectedPlan === plan.id
-                      ? 'border-blue-600 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20 scale-105'
-                      : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-slate-700 hover:border-blue-300 dark:hover:border-blue-400'
-                  }`}
+                  className="p-6 rounded-lg border-2 cursor-pointer transition-all transform"
+                  style={{
+                    borderColor: selectedPlan === plan.id ? colors.accentBlue : colors.borderDefault,
+                    backgroundColor: selectedPlan === plan.id ? colors.accentBlueBg : colors.bgElevated,
+                    transform: selectedPlan === plan.id ? 'scale(1.05)' : 'none'
+                  }}
                 >
                   <div className="flex items-start justify-between mb-4">
                     <div>
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white">{plan.name}</h3>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{plan.description}</p>
+                      <h3 className="text-lg font-bold" style={{ color: colors.textPrimary }}>{plan.name}</h3>
+                      <p className="text-sm" style={{ color: colors.textSubtle }}>{plan.description}</p>
                     </div>
                     {selectedPlan === plan.id && (
-                      <Check className="w-6 h-6 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                      <Check className="w-6 h-6 flex-shrink-0" style={{ color: colors.accentBlue }} />
                     )}
                   </div>
 
                   <div className="space-y-3">
                     <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-gray-900 dark:text-white">
+                      <span className="text-3xl font-bold" style={{ color: colors.textPrimary }}>
                         {plan.maxUsers}
                       </span>
-                      <span className="text-gray-600 dark:text-gray-400">
+                      <span style={{ color: colors.textSubtle }}>
                         {plan.maxUsers === 1 ? t('common:member') : t('common:members')}
                       </span>
                     </div>
-                    <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                    <p className="text-sm font-semibold" style={{ color: colors.accentBlue }}>
                       {plan.price}
                     </p>
                   </div>
                 </div>
               ))}
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+            <p className="text-xs mt-3" style={{ color: colors.textSubtle }}>
               {t('common:currently_beta')}
             </p>
           </div>
@@ -346,9 +352,9 @@ const CreateTeamPage = () => {
         </div>
 
         {/* Info Box */}
-        <div className="mt-8 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-6">
-          <h3 className="font-semibold text-blue-900 dark:text-blue-300 mb-2">{t('common:beta_notice')}</h3>
-          <p className="text-sm text-blue-800 dark:text-blue-400">
+        <div className="mt-8 border rounded-lg p-6" style={{ backgroundColor: colors.accentBlueBg, borderColor: colors.accentBlueBorder }}>
+          <h3 className="font-semibold mb-2" style={{ color: colors.accentBlue }}>{t('common:beta_notice')}</h3>
+          <p className="text-sm" style={{ color: colors.textSecondary }}>
             {t('common:beta_notice_text')}
           </p>
         </div>

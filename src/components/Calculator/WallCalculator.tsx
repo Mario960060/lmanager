@@ -111,7 +111,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
   const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
   const [layingMethod, setLayingMethod] = useState<'flat' | 'standing'>('standing');
-  const [postMethod, setPostMethod] = useState<'concrete' | 'direct'>('concrete');
+  const [postMethod, setPostMethod] = useState<'concrete' | 'direct'>(savedInputs?.postMethod ?? 'concrete');
   const [length, setLength] = useState<string>(initialLength != null ? initialLength.toFixed(3) : '');
   const [height, setHeight] = useState<string>('');
   useEffect(() => {
@@ -214,6 +214,12 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     const ff = savedInputs?.frontFacesTiled as [boolean, boolean] | undefined;
     if (ff) setFrontFacesTiled([...ff]);
   }, [savedInputs?.segmentLengths, savedInputs?.segmentTileSides, savedInputs?.frontFacesTiled, segmentLengths]);
+
+  useEffect(() => {
+    if (savedInputs?.postMethod === 'concrete' || savedInputs?.postMethod === 'direct') {
+      setPostMethod(savedInputs.postMethod);
+    }
+  }, [savedInputs?.postMethod]);
 
   useEffect(() => {
     if (savedInputs?.copingSlabLength != null) setCopingSlabLength(String(savedInputs.copingSlabLength));
@@ -755,6 +761,11 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       const useLocalHeights = segmentHeights.length === segLengths.length;
       segHeightsRaw = useLocalHeights ? segmentHeights : (savedInputs?.segmentHeights as Array<{ startH: number; endH: number }> | undefined);
     }
+    if (segLengths.length === 0 && canvasMode && totalLengthCanvas > 0) {
+      segLengths = [totalLengthCanvas];
+    } else if (segLengths.length === 0 && !isNaN(l) && l > 0) {
+      segLengths = [l];
+    }
     const hasValidSegmentHeights = segHeightsRaw && segHeightsRaw.length === segLengths.length;
 
     const hasValidLength = !isNaN(l) || (canvasMode && totalLengthCanvas > 0);
@@ -839,63 +850,73 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     }
 
     if (type === 'sleeper') {
-        // Calculate sleepers needed
         const sleeperLength = 2.4; // 2400mm = 2.4m
         const sleeperHeight = 0.2; // 200mm = 0.2m
-        
-        // Calculate sleepers per row and number of rows
-        const sleepersPerRow = Math.ceil(l / sleeperLength);
-        const numberOfRows = Math.ceil(h / sleeperHeight);
-        units = sleepersPerRow * numberOfRows;
-        
-        // Calculate posts needed (1 at start + 2 for each sleeper in first row)
-        const postsNeeded = 1 + (sleepersPerRow * 2);
-        
-        // Calculate actual height after rounding up rows
-        const roundedUpHeight = numberOfRows * sleeperHeight;
-        
-        // Prepare task breakdown
-        const taskBreakdown = [];
-        
-        // Add first layer task
-        const firstLayerTask = taskTemplates.find(t => 
-          t.name.toLowerCase().includes('sleeper wall') && 
+
+        if (segLengths.length === 0) return;
+
+        let totalSleepers = 0;
+        let postsNeeded = 0;
+        let totalFirstRowSleepers = 0;
+        let totalAdditionalSleepers = 0;
+        let maxRows = 0;
+        let sumAvgHeights = 0;
+
+        for (let i = 0; i < segLengths.length; i++) {
+          const segLen = segLengths[i] ?? 0;
+          const avgH = (segHeights[i].startH + segHeights[i].endH) / 2;
+          sumAvgHeights += avgH;
+          const sleepersPerRowSeg = Math.ceil(segLen / sleeperLength);
+          const numberOfRowsSeg = Math.ceil(avgH / sleeperHeight);
+          const unitsSeg = sleepersPerRowSeg * numberOfRowsSeg;
+          const postsSeg = 1 + sleepersPerRowSeg * 2;
+
+          totalSleepers += unitsSeg;
+          postsNeeded += postsSeg;
+          totalFirstRowSleepers += sleepersPerRowSeg;
+          totalAdditionalSleepers += Math.max(0, unitsSeg - sleepersPerRowSeg);
+          maxRows = Math.max(maxRows, numberOfRowsSeg);
+        }
+
+        units = totalSleepers;
+        const roundedUpHeight = maxRows * sleeperHeight;
+        const roundedDownHeightAvg = segLengths.length > 0 ? sumAvgHeights / segLengths.length : parseFloat(height) || 0;
+
+        const taskBreakdown: { task: string; hours: number; amount?: number; unit?: string }[] = [];
+
+        const firstLayerTask = taskTemplates.find(t =>
+          t.name.toLowerCase().includes('sleeper wall') &&
           t.name.toLowerCase().includes('1st layer')
         );
-        if (firstLayerTask) {
+        if (firstLayerTask && totalFirstRowSleepers > 0) {
           taskBreakdown.push({
             task: firstLayerTask.name,
-            hours: firstLayerTask.estimated_hours * sleepersPerRow,
-            amount: sleepersPerRow,
+            hours: firstLayerTask.estimated_hours * totalFirstRowSleepers,
+            amount: totalFirstRowSleepers,
             unit: 'sleepers'
           });
         }
-        
-        // Add additional layers task
-        if (numberOfRows > 1) {
+
+        if (totalAdditionalSleepers > 0) {
           const regularLayerTask = taskTemplates.find(t => {
             const name = t.name.toLowerCase();
-            // Look for "building a sleeper wall (on top of 1st layer)" or similar
-            // Match by looking for "(on top" in the name
             return name.includes('sleeper wall') && name.includes('on top');
           });
           if (regularLayerTask) {
-            const additionalSleepers = units - sleepersPerRow;
             taskBreakdown.push({
               task: regularLayerTask.name,
-              hours: regularLayerTask.estimated_hours * additionalSleepers,
-              amount: additionalSleepers,
+              hours: regularLayerTask.estimated_hours * totalAdditionalSleepers,
+              amount: totalAdditionalSleepers,
               unit: 'sleepers'
             });
           }
         }
-        
-        // Add post-related tasks
+
         if (postMethod === 'concrete') {
-          const diggingTask = taskTemplates.find(t => 
+          const diggingTask = taskTemplates.find(t =>
             t.name.toLowerCase().includes('digging holes')
           );
-          if (diggingTask) {
+          if (diggingTask && postsNeeded > 0) {
             taskBreakdown.push({
               task: diggingTask.name,
               hours: diggingTask.estimated_hours * postsNeeded,
@@ -904,11 +925,11 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             });
           }
         }
-        
-        const settingPostsTask = taskTemplates.find(t => 
+
+        const settingPostsTask = taskTemplates.find(t =>
           t.name.toLowerCase().includes('setting up posts')
         );
-        if (settingPostsTask) {
+        if (settingPostsTask && postsNeeded > 0) {
           taskBreakdown.push({
             task: settingPostsTask.name,
             hours: settingPostsTask.estimated_hours * postsNeeded,
@@ -916,26 +937,21 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             unit: 'posts'
           });
         }
-        
-        // Calculate total hours
-        const totalHours = taskBreakdown.reduce((sum, task) => sum + task.hours, 0);
 
-        // Add transport tasks if enabled
         if (effectiveCalculateTransport) {
           let carrierSizeForTransport = 0.125;
-          
+
           if (effectiveSelectedTransportCarrier) {
             carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
           }
 
-          // Calculate sleepers transport - on foot, 1 per trip
           if (units > 0) {
             const sleepersPerTrip = 1;
             const sleeperTrips = Math.ceil(units / sleepersPerTrip);
-            const sleeperCarrySpeed = 1500; // m/h for foot carrying
+            const sleeperCarrySpeed = 1500;
             const sleeperTimePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / sleeperCarrySpeed;
             const sleeperTransportTime = sleeperTrips * sleeperTimePerTrip;
-            
+
             if (sleeperTransportTime > 0) {
               taskBreakdown.push({
                 task: 'transport sleepers',
@@ -946,14 +962,13 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             }
           }
 
-          // Calculate posts transport - on foot, 1 per trip
           if (postsNeeded > 0) {
             const postsPerTrip = 1;
             const postTrips = Math.ceil(postsNeeded / postsPerTrip);
-            const postCarrySpeed = 1500; // m/h for foot carrying
+            const postCarrySpeed = 1500;
             const postTimePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / postCarrySpeed;
             const postTransportTime = postTrips * postTimePerTrip;
-            
+
             if (postTransportTime > 0) {
               taskBreakdown.push({
                 task: 'transport posts',
@@ -964,13 +979,12 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             }
           }
 
-          // Calculate postmix transport - bags via carrier
           if (postMethod === 'concrete') {
             const postmixBags = postsNeeded * 2;
             if (postmixBags > 0) {
               const postmixResult = calculateMaterialTransportTime(postmixBags, carrierSizeForTransport, 'cement', parseFloat(effectiveTransportDistance) || 30);
               const postmixTransportTime = postmixResult.totalTransportTime;
-              
+
               if (postmixTransportTime > 0) {
                 taskBreakdown.push({
                   task: 'transport postmix',
@@ -983,54 +997,38 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           }
         }
 
-        // Recalculate total hours with transport
         const finalTotalHours = taskBreakdown.reduce((sum, task) => sum + task.hours, 0);
-        
-        // Prepare materials list with hardcoded names
+
         const materials: Material[] = [
           { name: 'Sleepers', amount: units, unit: 'sleepers', price_per_unit: null, total_price: null },
           { name: 'Post', amount: postsNeeded, unit: 'posts', price_per_unit: null, total_price: null }
         ];
 
-        // Add concrete if needed
         if (postMethod === 'concrete') {
-          materials.push({ 
-            name: 'Postmix', 
-            amount: postsNeeded * 2, 
-            unit: 'bags', 
-            price_per_unit: null, 
-            total_price: null 
+          materials.push({
+            name: 'Postmix',
+            amount: postsNeeded * 2,
+            unit: 'bags',
+            price_per_unit: null,
+            total_price: null
           });
         }
 
-        // Fetch material prices
         const materialsWithPrices = await fetchMaterialPrices(materials);
-        
-        // Set the result
+
         setResult({
           units,
           cementBags: 0,
           sandVolume: 0,
           sandTonnes: 0,
-          rows: numberOfRows,
-          roundedDownHeight: h,
+          rows: maxRows,
+          roundedDownHeight: Number(roundedDownHeightAvg.toFixed(2)),
           roundedUpHeight,
           totalHours: finalTotalHours,
           taskBreakdown,
           materials: materialsWithPrices
         });
-        
-        // Notify parent component of results
-        if (onResultsChange) {
-          onResultsChange({
-            name: 'Sleeper Wall',
-            totalHours: finalTotalHours,
-            taskBreakdown,
-            materials,
-            labor: finalTotalHours
-          });
-        }
-        
+
         return;
     }
 
@@ -1266,6 +1264,42 @@ const WallCalculator: React.FC<CalculatorProps> = ({
 
   // Add effect to expose results
   useEffect(() => {
+    if (result && onResultsChange && type === 'sleeper') {
+      const totalHours = result.totalHours;
+      const materials = result.materials.map((m: Material) => ({ name: m.name, quantity: m.amount, unit: m.unit }));
+      const taskBreakdown = result.taskBreakdown.map((item: any) => ({
+        task: item.task,
+        hours: item.hours,
+        amount: item.amount ?? result.units,
+        unit: item.unit ?? 'sleepers',
+      }));
+      const formattedResults = {
+        name: 'Sleeper Wall',
+        amount: result.units,
+        unit: 'sleepers',
+        hours_worked: totalHours,
+        postMethod,
+        includeFoundation: false,
+        materials,
+        taskBreakdown,
+        wallTaskBreakdown: taskBreakdown,
+        wallMaterials: result.materials.map((m: Material) => ({ name: m.name, quantity: m.amount, unit: m.unit })),
+        tileTaskBreakdown: [] as any[],
+        tileMaterials: [] as any[],
+        copingMaterials: [] as any[],
+        ...(canvasMode && segmentLengths.length > 0 && {
+          segmentLengths,
+          segmentHeights,
+        }),
+      };
+      const calculatorElement = document.querySelector('[data-calculator-results]');
+      if (calculatorElement) {
+        calculatorElement.setAttribute('data-calculator-results', JSON.stringify(formattedResults));
+      }
+      onResultsChange(formattedResults);
+      return;
+    }
+
     if (result && onResultsChange) {
       let tileInstallationAreaM2 = 0;
       if (canvasMode && (type === 'block4' || type === 'block7') && includeTileInstallation && segmentLengths.length > 0) {
@@ -1353,7 +1387,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       // Notify parent component of results
       onResultsChange(formattedResults);
     }
-  }, [result, type, layingMethod, onResultsChange, includeFoundation, effectiveFoundationDiggingMethod, canvasMode, includeCopings, includeTileInstallation, segmentTileSides, frontFacesTiled, segmentLengths, segmentHeights, defH, tileInstallationResults, copingInstallationResults, wallTileSlabThicknessCm, wallTileAdhesiveThicknessCm]);
+  }, [result, type, layingMethod, onResultsChange, includeFoundation, effectiveFoundationDiggingMethod, canvasMode, includeCopings, includeTileInstallation, segmentTileSides, frontFacesTiled, segmentLengths, segmentHeights, defH, tileInstallationResults, copingInstallationResults, wallTileSlabThicknessCm, wallTileAdhesiveThicknessCm, postMethod]);
 
   // Scroll to results when they appear
   useEffect(() => {
@@ -1373,7 +1407,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
   }, [result]);
 
   // ─── Canvas mode UI (Object Card — Wall) ─────────────────────────────────
-  if (canvasMode && isInProjectCreating && type !== 'sleeper') {
+  if (canvasMode && isInProjectCreating) {
     const totalLen = totalLengthCanvas;
     const segs = wallConfigMode === 'segments' ? segmentLengths : [totalLen];
     const heights = wallConfigMode === 'segments' ? segmentHeights : [{ startH: parseFloat(height) || 1, endH: parseFloat(height) || 1 }];
@@ -1420,6 +1454,36 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 }}
               >
                 Flat
+              </button>
+            </div>
+          </div>
+        )}
+
+        {type === 'sleeper' && (
+          <div>
+            <div style={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.textLabel, marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('calculator:input_post_installation_method')}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => setPostMethod('concrete')}
+                style={{
+                  padding: '6px 14px', borderRadius: radii.sm, border: postMethod === 'concrete' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`,
+                  background: postMethod === 'concrete' ? colors.greenBg : colors.bgSubtle, color: postMethod === 'concrete' ? colors.green : colors.textCool,
+                  fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
+                }}
+              >
+                {t('calculator:input_concrete_in_posts')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPostMethod('direct')}
+                style={{
+                  padding: '6px 14px', borderRadius: 6, border: postMethod === 'direct' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`,
+                  background: postMethod === 'direct' ? colors.greenBg : colors.bgSubtle, color: postMethod === 'direct' ? colors.green : colors.textCool,
+                  fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer',
+                }}
+              >
+                {t('calculator:input_drive_posts_directly')}
               </button>
             </div>
           </div>
@@ -1533,7 +1597,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel, padding: '0 12px', textTransform: 'uppercase', textAlign: 'center' }}>{t('calculator:segment_end_h')}</span>
               </div>
               {segmentLengths.map((segLen, idx) => (
-                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '46px 1fr 100px 100px', alignItems: 'center', padding: 0, borderBottom: idx < segmentLengths.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', background: idx % 2 === 1 ? 'rgba(255,255,255,0.022)' : undefined }}>
+                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '46px 1fr 100px 100px', alignItems: 'center', padding: 0, borderBottom: idx < segmentLengths.length - 1 ? `1px solid ${colors.borderSubtle}` : 'none', background: idx % 2 === 1 ? colors.bgSubtle : undefined }}>
                   <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem', fontWeight: 600, color: colors.textLabel, textAlign: 'center', padding: '10px 0' }}>{idx + 1}</div>
                   <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.82rem', fontWeight: 600, color: colors.textPrimaryLight, padding: '10px 12px' }}>{segLen.toFixed(2)} <span style={{ fontSize: '0.72rem', color: colors.textLabel }}>m</span></div>
                   <div style={{ padding: '5px 6px', display: 'flex', justifyContent: 'center' }}>
@@ -1548,7 +1612,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           </div>
         )}
 
-        {/* Add foundation - brick, block4, block7 only (not sleeper) */}
+        {type !== 'sleeper' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem', color: colors.textPrimaryLight }}>
             <input
@@ -1773,6 +1837,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             </>
           )}
         </div>
+        )}
 
         <button onClick={calculate} style={{ width: '100%', padding: '9px 20px', borderRadius: 8, background: colors.green, color: colors.textOnAccent, fontWeight: 600, fontSize: '0.85rem', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
           <Check size={15} />
@@ -1787,12 +1852,15 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             </div>
             <h3 style={{ fontSize: '1rem', fontWeight: 600, color: colors.textPrimaryLight, marginTop: 12 }}>{t('calculator:total_labor_hours_label')} <span style={{ color: colors.green }}>{(result.totalHours + (tileInstallationResults?.labor ?? 0) + (copingInstallationResults?.labor ?? 0)).toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
             <div style={{ marginTop: 8 }}>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{type === 'block4' ? t('calculator:block4_wall_label') : type === 'block7' ? t('calculator:block7_wall_label') : t('calculator:wall_label')} — {t('calculator:task_breakdown_label')}</h4>
-              <ul style={{ listStyle: 'disc', paddingLeft: 20, color: colors.textPrimaryLight, fontSize: '0.85rem' }}>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{type === 'sleeper' ? t('calculator:sleeper_wall_calculator_title_alt') : type === 'block4' ? t('calculator:block4_wall_label') : type === 'block7' ? t('calculator:block7_wall_label') : t('calculator:wall_label')} — {t('calculator:task_breakdown_label')}</h4>
+              <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
                 {result.taskBreakdown.map((task, i) => (
-                  <li key={i}><span style={{ fontWeight: 500 }}>{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}</li>
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: i % 2 === 1 ? colors.bgTableRowAlt : undefined, borderBottom: i < result.taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none', color: colors.textPrimaryLight, fontSize: '0.85rem' }}>
+                    <span style={{ fontWeight: 500 }}>{translateTaskName(task.task, t)}</span>
+                    <span>{task.hours.toFixed(2)} {t('calculator:hours_label')}</span>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
             {includeCopings && copingInstallationResults?.taskBreakdown?.length > 0 && (
               <div style={{ marginTop: 12 }}>
@@ -1807,15 +1875,18 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             {includeTileInstallation && tileInstallationResults?.taskBreakdown?.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{t('calculator:tile_installation_label')} — {t('calculator:task_breakdown_label')}</h4>
-                <ul style={{ listStyle: 'disc', paddingLeft: 20, color: colors.textPrimaryLight, fontSize: '0.85rem' }}>
+                <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
                   {tileInstallationResults.taskBreakdown.map((task: any, i: number) => (
-                    <li key={i}><span style={{ fontWeight: 500 }}>{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}</li>
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', background: i % 2 === 1 ? colors.bgTableRowAlt : undefined, borderBottom: i < tileInstallationResults.taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none', color: colors.textPrimaryLight, fontSize: '0.85rem' }}>
+                      <span style={{ fontWeight: 500 }}>{translateTaskName(task.task, t)}</span>
+                      <span>{task.hours.toFixed(2)} {t('calculator:hours_label')}</span>
+                    </div>
                   ))}
-                </ul>
+                </div>
               </div>
             )}
             <div style={{ marginTop: 12 }}>
-              <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{type === 'block4' ? t('calculator:block4_wall_label') : type === 'block7' ? t('calculator:block7_wall_label') : t('calculator:wall_label')} — {t('calculator:materials_required_label')}</h4>
+              <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: colors.textCool, marginBottom: 6 }}>{type === 'sleeper' ? t('calculator:sleeper_wall_calculator_title_alt') : type === 'block4' ? t('calculator:block4_wall_label') : type === 'block7' ? t('calculator:block7_wall_label') : t('calculator:wall_label')} — {t('calculator:materials_required_label')}</h4>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                   <thead>
@@ -1829,9 +1900,9 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                   </thead>
                   <tbody>
                     {result.materials.map((m, i) => (
-                      <tr key={i} style={{ borderBottom: `1px solid ${colors.bgDeepBorder}` }}>
+                      <tr key={i} style={{ borderBottom: `1px solid ${colors.bgDeepBorder}`, background: i % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
                         <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateMaterialName(m.name, t)}</td>
-                        <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.amount.toFixed(2)}</td>
+                        <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{Number.isInteger(m.amount) ? String(m.amount) : m.amount.toFixed(2)}</td>
                         <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateUnit(m.unit, t)}</td>
                         <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : t('calculator:na')}</td>
                         <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.total_price ? `£${m.total_price.toFixed(2)}` : t('calculator:na')}</td>
@@ -1859,7 +1930,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                     </thead>
                     <tbody>
                       {copingInstallationResults.materials.map((m: any, i: number) => (
-                        <tr key={i} style={{ borderBottom: `1px solid ${colors.bgDeepBorder}` }}>
+                        <tr key={i} style={{ borderBottom: `1px solid ${colors.bgDeepBorder}`, background: i % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
                           <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateMaterialName(m.name, t)}</td>
                           <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.amount?.toFixed?.(2) ?? m.quantity}</td>
                           <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateUnit(m.unit, t)}</td>
@@ -1884,7 +1955,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                     </thead>
                     <tbody>
                       {tileInstallationResults.materials.map((m: any, i: number) => (
-                        <tr key={i} style={{ borderBottom: `1px solid ${colors.bgDeepBorder}` }}>
+                        <tr key={i} style={{ borderBottom: `1px solid ${colors.bgDeepBorder}`, background: i % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
                           <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateMaterialName(m.name, t)}</td>
                           <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{m.amount?.toFixed?.(2) ?? m.quantity}</td>
                           <td style={{ padding: '8px 12px', color: colors.textPrimaryLight }}>{translateUnit(m.unit, t)}</td>
@@ -1939,7 +2010,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       <TextInput label={t('calculator:wall_height_label')} value={height} onChange={setHeight} placeholder="0" unit="m" />
 
       {/* Wall segments (przełamania) - when segmentLengths from canvas */}
-      {segmentLengths.length > 0 && type !== 'sleeper' && (
+      {segmentLengths.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontWeight: 600, fontSize: 13, color: colors.textSegment }}>{t('calculator:wall_segments_label')}</div>
           {segmentLengths.map((segLen, idx) => (
@@ -1984,49 +2055,52 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             type="checkbox"
             checked={includeFoundation}
             onChange={(e) => setIncludeFoundation(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            style={{ accentColor: colors.accentBlue }}
           />
-          <span className="text-sm font-medium text-gray-700">{t('calculator:include_foundation')}</span>
+          <span className="text-sm font-medium" style={{ color: colors.textSecondary }}>{t('calculator:include_foundation')}</span>
         </label>
       )}
 
       {/* Foundation Calculator Inputs - Only show if tickbox is checked */}
       {includeFoundation && type !== 'sleeper' && (
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-gray-700">{t('calculator:foundation_details_label')}</h3>
+          <h3 style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.semibold, color: colors.textMuted }}>{t('calculator:foundation_details_label')}</h3>
           
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('calculator:input_length_m')}</label>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_length_m')}</label>
               <input
                 type="number"
                 value={foundationLength}
                 onChange={(e) => setFoundationLength(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderInput }}
                 placeholder={t('calculator:placeholder_enter_length_m')}
                 min="0"
                 step="0.1"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('calculator:input_width_m')}</label>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_width_m')}</label>
               <input
                 type="number"
                 value={foundationWidth}
                 onChange={(e) => setFoundationWidth(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderInput }}
                 placeholder={t('calculator:placeholder_enter_width')}
                 min="0"
                 step="0.1"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('calculator:input_depth_in_cm')}</label>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_depth_in_cm')}</label>
               <input
                 type="number"
                 value={foundationDepthCm}
                 onChange={(e) => setFoundationDepthCm(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderInput }}
                 placeholder={t('calculator:placeholder_enter_depth_cm')}
                 min="0"
                 step="1"
@@ -2038,11 +2112,12 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           {!isInProjectCreating && (
           <>
           <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:digging_method')}</label>
+            <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:digging_method')}</label>
             <select
               value={foundationDiggingMethod}
               onChange={(e) => setFoundationDiggingMethod(e.target.value as any)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md shadow-sm"
+              style={{ borderColor: colors.borderInput }}
             >
               <option value="shovel">{t('calculator:excavator_shovel')}</option>
               <option value="small">{t('calculator:excavator_small')}</option>
@@ -2052,11 +2127,12 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:soil_type')}</label>
+            <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:soil_type')}</label>
             <select
               value={foundationSoilType}
               onChange={(e) => setFoundationSoilType(e.target.value as any)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md shadow-sm"
+              style={{ borderColor: colors.borderInput }}
             >
               <option value="clay">{t('calculator:soil_type_clay')}</option>
               <option value="sand">{t('calculator:soil_type_sand')}</option>
@@ -2074,34 +2150,26 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             type="checkbox"
             checked={calculateTransport}
             onChange={(e) => setCalculateTransport(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            style={{ accentColor: colors.accentBlue }}
           />
-          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
+          <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:calculate_transport_time_label')}</span>
         </label>
       )}
 
       {/* Transport Carrier Selection */}
       {!isInProjectCreating && calculateTransport && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier_label')}</label>
+          <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:transport_carrier_label')}</label>
           <div className="space-y-2">
             <div 
-              className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded"
+              style={{ display: 'flex', alignItems: 'center', padding: spacing['2xl'], cursor: 'pointer', border: `2px dashed ${colors.borderDefault}`, borderRadius: radii.md }}
               onClick={() => setSelectedTransportCarrier(null)}
             >
-              <div className={`w-4 h-4 rounded-full border mr-2 ${
-                selectedTransportCarrier === null 
-                  ? 'border-gray-400' 
-                  : 'border-gray-400'
-              }`}>
-                <div className={`w-2 h-2 rounded-full m-0.5 ${
-                  selectedTransportCarrier === null 
-                    ? 'bg-gray-400' 
-                    : 'bg-transparent'
-                }`}></div>
+              <div className="w-4 h-4 rounded-full border mr-2" style={{ borderColor: colors.borderDefault }}>
+                <div className="w-2 h-2 rounded-full m-0.5" style={{ background: selectedTransportCarrier === null ? colors.borderDefault : 'transparent' }}></div>
               </div>
               <div>
-                <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
+                <span style={{ color: colors.textPrimary }}>{t('calculator:default_wheelbarrow')}</span>
               </div>
             </div>
             {carriers.length > 0 && carriers.map((carrier) => (
@@ -2110,27 +2178,19 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 className="flex items-center p-2 cursor-pointer"
                 onClick={() => setSelectedTransportCarrier(carrier)}
               >
-                <div className={`w-4 h-4 rounded-full border mr-2 ${
-                  selectedTransportCarrier?.id === carrier.id 
-                    ? 'border-gray-400' 
-                    : 'border-gray-400'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full m-0.5 ${
-                    selectedTransportCarrier?.id === carrier.id 
-                      ? 'bg-gray-400' 
-                      : 'bg-transparent'
-                  }`}></div>
+                <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${colors.textSubtle}`, marginRight: spacing['2xl'] }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', margin: 2, background: selectedTransportCarrier?.id === carrier.id ? colors.textSubtle : 'transparent' }}></div>
                 </div>
                 <div>
-                  <span className="text-gray-800">{carrier.name}</span>
-                  <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
+                  <span style={{ color: colors.textPrimary }}>{carrier.name}</span>
+                  <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing['2xl'] }}>({carrier["size (in tones)"]} tons)</span>
                 </div>
               </div>
             ))}
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing['2xl'] }}>{t('calculator:transport_distance_label')}</label>
               <input
                 type="number"
                 value={transportDistance}
@@ -2148,88 +2208,90 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         {t('calculator:calculate_button')}
       </Button>
       {result && (
-        <div className="mt-6 space-y-4" ref={resultsRef}>
-          <div>
-            <div className="mt-2 space-y-2">
-              <p>
-                Total Rows: <span className="font-bold">{Math.ceil(result.rows)}</span> <span className="text-sm text-blue-600 font-semibold">(Rounded Up from {result.rows.toFixed(2)})</span>
-              </p>
-              <p>
-                Rounded Up Height: <span className="font-bold">{result.roundedUpHeight} m</span>
-              </p>
-            </div>
-
-            <h3 className="text-lg font-medium mt-4">{t('calculator:total_labor_hours_label')} <span className="text-blue-600">{result.totalHours.toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
-            
-            <div className="mt-2">
-              <h4 className="font-medium text-gray-700 mb-2">{t('calculator:task_breakdown_label')}</h4>
-              <ul className="space-y-1 pl-5 list-disc">
-                {result.taskBreakdown.map((task, index) => (
-                  <li key={index} className="text-sm">
-                    <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}
-                  </li>
-                ))}
-              </ul>
-            </div>
+        <div style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }} ref={resultsRef}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
+            <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>
+              {t('calculator:total_rows')}: <span style={{ fontWeight: fontWeights.bold, color: colors.textPrimary }}>{Math.ceil(result.rows)}</span>{' '}
+              <span style={{ fontSize: fontSizes.xs, color: colors.accentBlue, fontWeight: fontWeights.semibold }}>({t('calculator:rounded_up_from', { val: result.rows.toFixed(2) })})</span>
+            </p>
+            <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>
+              {t('calculator:rounded_up_height')} <span style={{ fontWeight: fontWeights.bold, color: colors.textPrimary }}>{result.roundedUpHeight} m</span>
+            </p>
           </div>
 
-          <div>
-            <h3 className="font-medium mb-2">{t('calculator:materials_required_label')}</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      {t('calculator:table_material_header')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      {t('calculator:table_quantity_header')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      {t('calculator:table_unit_header')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      {t('calculator:table_price_per_unit_header')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                      {t('calculator:table_total_header')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {result.materials.map((material, index) => (
-                    <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {translateMaterialName(material.name, t)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {material.amount.toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {translateUnit(material.unit, t)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {material.total_price ? `£${material.total_price.toFixed(2)}` : 'N/A'}
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="bg-gray-700">
-                    <td colSpan={4} className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white text-right">
-                      {t('calculator:total_cost_colon')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-white">
-                      {result.materials.reduce((sum, material) => sum + (material.total_price || 0), 0).toFixed(2) !== '0.00' 
-                        ? `£${result.materials.reduce((sum, material) => sum + (material.total_price || 0), 0).toFixed(2)}`
-                        : 'N/A'}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+          <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg }}>
+              <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                {t('calculator:total_labor_hours_label')}
+              </span>
+              <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                {result.totalHours.toFixed(2)}
+              </span>
+              <span style={{ fontSize: fontSizes.md, color: colors.accentBlue, fontFamily: fonts.body, fontWeight: fontWeights.medium }}>
+                {t('calculator:hours_abbreviation')}
+              </span>
             </div>
-          </div>
+          </Card>
+
+          <Card>
+            <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+              {t('calculator:task_breakdown_label')}
+            </h3>
+            <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
+              {result.taskBreakdown.map((task, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                    background: index % 2 === 1 ? colors.bgTableRowAlt : undefined,
+                    borderBottom: index < result.taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
+                  }}
+                >
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>
+                    {translateTaskName(task.task, t)}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                    <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>
+                      {task.hours.toFixed(2)}
+                    </span>
+                    <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <DataTable
+            columns={[
+              { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+              { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+              { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+              { key: 'price', label: t('calculator:table_price_per_unit_header'), width: '1fr' },
+              { key: 'total', label: t('calculator:table_total_header'), width: '1fr' },
+            ]}
+            rows={result.materials.map((m) => ({
+              name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName(m.name, t)}</span>,
+              quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.amount.toFixed(2)}</span>,
+              unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
+              price: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : 'N/A'}</span>,
+              total: <span style={{ fontSize: fontSizes.md, fontWeight: fontWeights.bold, color: colors.textSecondary }}>{m.total_price ? `£${m.total_price.toFixed(2)}` : 'N/A'}</span>,
+            }))}
+            footer={
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: spacing.md }}>
+                <span style={{ fontSize: fontSizes.base, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                  {t('calculator:total_cost_colon')}
+                </span>
+                <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display }}>
+                  {result.materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2) !== '0.00'
+                    ? `£${result.materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}`
+                    : t('calculator:not_available')}
+                </span>
+              </div>
+            }
+          />
         </div>
       )}
     </div>

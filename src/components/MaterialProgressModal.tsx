@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { translateMaterialName, translateUnit } from '../lib/translationMap';
+import { colors } from '../themes/designTokens';
+import { translateMaterialName, translateMaterialDescription, translateUnit } from '../lib/translationMap';
 import Modal from './Modal';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -84,28 +85,28 @@ const MaterialProgressModal: React.FC<MaterialProgressModalProps> = ({ material,
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-lg max-w-2xl w-full">
-        <div className="flex justify-between items-center p-6 border-b border-gray-700">
-          <h2 className="text-xl font-semibold text-white">{t('event:update_material_progress')}</h2>
+      <div className="rounded-lg max-w-2xl w-full" style={{ backgroundColor: colors.bgCard }}>
+        <div className="flex justify-between items-center p-6 border-b" style={{ borderColor: colors.borderDefault }}>
+          <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{t('event:update_material_progress')}</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-700 rounded-full transition-colors"
+            className="p-2 rounded-full transition-colors"
           >
-            <X className="w-5 h-5 text-gray-400" />
+            <X className="w-5 h-5" style={{ color: colors.textSubtle }} />
           </button>
         </div>
 
         <div className="p-6 space-y-4">
-          <div className="bg-gray-700 p-4 rounded-lg">
-            <h3 className="text-lg font-semibold text-white">{translateMaterialName(material.name, t) || t('event:unknown_material')}</h3>
+          <div className="p-4 rounded-lg" style={{ backgroundColor: colors.bgElevated }}>
+            <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{translateMaterialName(material.name, t) || t('event:unknown_material')}</h3>
             {translateMaterialDescription(material.name, (material as { description?: string | null }).description, t) && (
-              <p className="text-sm text-gray-400 mt-1">{translateMaterialDescription(material.name, (material as { description?: string | null }).description, t)}</p>
+              <p className="text-sm mt-1" style={{ color: colors.textSubtle }}>{translateMaterialDescription(material.name, (material as { description?: string | null }).description, t)}</p>
             )}
-            <p className="text-sm text-gray-400">{t('event:unit_label')}: {material.unit}</p>
+            <p className="text-sm" style={{ color: colors.textSubtle }}>{t('event:unit_label')}: {material.unit}</p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300">{t('event:delivered_amount')}</label>
+            <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('event:delivered_amount')}</label>
             <div className="mt-1 relative rounded-md shadow-sm">
               <input
                 type="number"
@@ -123,41 +124,43 @@ const MaterialProgressModal: React.FC<MaterialProgressModalProps> = ({ material,
                 }}
                 min="0"
                 step="0.01"
-                className="block w-full rounded-md bg-gray-700 border border-gray-600 text-white placeholder-gray-500 focus:border-blue-500 focus:ring-blue-500 pr-12"
+                className="block w-full rounded-md pr-12"
+                style={{ backgroundColor: colors.bgElevated, borderColor: colors.borderDefault, color: colors.textPrimary }}
                 placeholder={t('event:enter_amount_delivered')}
               />
               <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                <span className="text-gray-400 sm:text-sm">{translateUnit(material.unit, t)}</span>
+                <span className="sm:text-sm" style={{ color: colors.textSubtle }}>{translateUnit(material.unit, t)}</span>
               </div>
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300">{t('event:notes_optional')}</label>
+            <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('event:notes_optional')}</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="mt-1 block w-full rounded-md bg-gray-700 border border-gray-600 text-white placeholder-gray-500 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md shadow-sm"
+              style={{ backgroundColor: colors.bgElevated, borderColor: colors.borderDefault, color: colors.textPrimary }}
               placeholder={t('event:add_notes_delivery')}
             />
           </div>
 
-          <div className="bg-gray-700 p-4 rounded-lg space-y-2">
+          <div className="p-4 rounded-lg space-y-2" style={{ backgroundColor: colors.bgElevated }}>
             <div className="flex justify-between">
-              <span className="text-sm text-gray-300">{t('event:total_required')}:</span>
-              <span className="text-sm font-medium text-white">{parseFloat(material.total_amount.toFixed(2))} {material.unit}</span>
+              <span className="text-sm" style={{ color: colors.textMuted }}>{t('event:total_required')}:</span>
+              <span className="text-sm font-medium" style={{ color: colors.textPrimary }}>{parseFloat(material.total_amount.toFixed(2))} {material.unit}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-gray-300">{t('event:currently_delivered')}:</span>
-              <span className="text-sm font-medium text-white">{parseFloat(totalDelivered.toFixed(2))} {translateUnit(material.unit, t)}</span>
+              <span className="text-sm" style={{ color: colors.textMuted }}>{t('event:currently_delivered')}:</span>
+              <span className="text-sm font-medium" style={{ color: colors.textPrimary }}>{parseFloat(totalDelivered.toFixed(2))} {translateUnit(material.unit, t)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-sm text-gray-300">{t('event:remaining')}:</span>
-              <span className="text-sm font-medium text-white">{parseFloat(remaining.toFixed(2))} {material.unit}</span>
+              <span className="text-sm" style={{ color: colors.textMuted }}>{t('event:remaining')}:</span>
+              <span className="text-sm font-medium" style={{ color: colors.textPrimary }}>{parseFloat(remaining.toFixed(2))} {material.unit}</span>
             </div>
             <div className="mt-2">
-              <div className="w-full bg-gray-600 rounded-full h-2">
+              <div className="w-full rounded-full h-2" style={{ backgroundColor: colors.bgElevated }}>
                 <div
                   className="bg-blue-500 h-2 rounded-full transition-all"
                   style={{ width: `${Math.min((totalDelivered / material.total_amount) * 100, 100).toFixed(2)}%` }}
@@ -168,16 +171,16 @@ const MaterialProgressModal: React.FC<MaterialProgressModalProps> = ({ material,
 
           {deliveries.length > 0 && (
             <div className="mt-4">
-              <h4 className="text-sm font-medium text-white mb-2">{t('event:previous_deliveries')}</h4>
+              <h4 className="text-sm font-medium mb-2" style={{ color: colors.textPrimary }}>{t('event:previous_deliveries')}</h4>
               <div className="space-y-2">
                 {deliveries.map((delivery, index) => (
-                  <div key={index} className="text-sm text-gray-300 bg-gray-700 p-2 rounded">
+                  <div key={index} className="text-sm p-2 rounded" style={{ color: colors.textMuted, backgroundColor: colors.bgElevated }}>
                     <div className="flex justify-between">
                       <span>{delivery.amount} {translateUnit(material.unit, t)}</span>
                       <span>{new Date(delivery.delivery_date).toLocaleDateString()}</span>
                     </div>
                     {delivery.notes && (
-                      <p className="text-xs text-gray-500 mt-1">{delivery.notes}</p>
+                      <p className="text-xs mt-1" style={{ color: colors.textSubtle }}>{delivery.notes}</p>
                     )}
                   </div>
                 ))}
@@ -186,10 +189,11 @@ const MaterialProgressModal: React.FC<MaterialProgressModalProps> = ({ material,
           )}
         </div>
 
-        <div className="p-6 border-t border-gray-700 bg-gray-800 flex justify-end space-x-4">
+        <div className="p-6 border-t flex justify-end space-x-4" style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard }}>
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-300 hover:bg-gray-700 transition-colors"
+            className="px-4 py-2 rounded-lg transition-colors"
+            style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault, color: colors.textMuted }}
           >
             {t('common:cancel')}
           </button>
@@ -200,7 +204,8 @@ const MaterialProgressModal: React.FC<MaterialProgressModalProps> = ({ material,
               !deliveredAmount || 
               parseFloat(deliveredAmount) <= 0
             }
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            className="px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+            style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
           >
             {addDeliveryMutation.isPending ? t('event:updating') : t('event:record_delivery')}
           </button>

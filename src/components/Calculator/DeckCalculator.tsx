@@ -727,7 +727,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
               <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
                 {t('calculator:task_breakdown_label')}
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+              <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
                 {taskBreakdown.map((task, index) => (
                   <div
                     key={index}
@@ -736,9 +736,8 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: `${spacing.lg}px ${spacing["2xl"]}px`,
-                      background: colors.bgSubtle,
-                      borderRadius: radii.lg,
-                      border: `1px solid ${colors.borderLight}`,
+                      background: index % 2 === 1 ? colors.bgTableRowAlt : undefined,
+                      borderBottom: index < taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
                     }}
                   >
                     <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>

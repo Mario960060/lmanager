@@ -235,17 +235,20 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
         {/* Header */}
-        <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
+        <div className="p-4 border-b flex justify-between items-center sticky top-0 z-10" style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard }}>
           <h2 className="text-xl font-semibold flex items-center">
-            <Trash2 className="w-5 h-5 mr-2 text-red-500" />
+            <Trash2 className="w-5 h-5 mr-2" style={{ color: colors.red }} />
             {t('form:removing_records_title')}
           </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="p-1 rounded-full transition-colors"
+            style={{ backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             <X className="w-6 h-6" />
           </button>
@@ -278,11 +281,12 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
               {/* Search */}
               <div className="mb-6">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: colors.textMuted }} />
                   <input
                     type="text"
                     placeholder={t('form:search_deletion_requests')}
-                    className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg dark:bg-gray-700"
+                    className="w-full pl-10 pr-4 py-2 border rounded-lg"
+                    style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated }}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -306,15 +310,15 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
               ) : filteredRequests.length > 0 ? (
                 <div className="space-y-6">
                   {filteredRequests.map((request) => (
-                    <div key={request.id} className="border dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-750">
+                    <div key={request.id} className="border rounded-lg overflow-hidden" style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard }}>
                       {/* Request header */}
-                      <div className="bg-gray-50 dark:bg-gray-700 p-4 border-b dark:border-gray-600">
+                      <div className="p-4 border-b" style={{ backgroundColor: colors.bgElevated, borderColor: colors.borderDefault }}>
                         <div className="flex justify-between items-start">
                           <div>
-                            <h3 className="font-medium text-lg text-blue-600 dark:text-blue-400">
+                            <h3 className="font-medium text-lg" style={{ color: colors.accentBlue }}>
                               {formatRecordType(request.record_type)}
                             </h3>
-                            <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+                            <div className="mt-1 text-sm" style={{ color: colors.textMuted }}>
                               {getRecordSummary(request.record_details)}
                             </div>
                           </div>
@@ -345,12 +349,12 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
                       <div className="p-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                           <div className="flex items-center text-sm">
-                            <User className="w-4 h-4 mr-2 text-gray-500" />
+                            <User className="w-4 h-4 mr-2" style={{ color: colors.textSubtle }} />
                             <span className="font-medium mr-2">{t('form:requested_by')}</span>
                             <span>{t('form:user_id_label')}: {request.user_id}</span>
                           </div>
                           <div className="flex items-center text-sm">
-                            <Calendar className="w-4 h-4 mr-2 text-gray-500" />
+                            <Calendar className="w-4 h-4 mr-2" style={{ color: colors.textSubtle }} />
                             <span className="font-medium mr-2">{t('form:requested_on')}</span>
                             <span>{formatDate(request.created_at)}</span>
                           </div>
@@ -358,16 +362,16 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
                         
                         <div className="mt-4">
                           <h4 className="font-medium mb-2 flex items-center">
-                            <Info className="w-4 h-4 mr-2 text-gray-500" />
+                            <Info className="w-4 h-4 mr-2" style={{ color: colors.textSubtle }} />
                             {t('form:record_details_label')}
                           </h4>
-                          <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-md">
+                          <div className="p-4 rounded-md" style={{ backgroundColor: colors.bgElevated }}>
                             {Object.entries(request.record_details || {}).map(([key, value]) => (
                               <div key={key} className="mb-2">
-                                <span className="font-medium text-gray-700 dark:text-gray-300">
+                                <span className="font-medium" style={{ color: colors.textMuted }}>
                                   {key.replace(/\b\w/g, l => l.toUpperCase())}:
                                 </span>{' '}
-                                <span className="text-gray-800 dark:text-gray-200">
+                                <span style={{ color: colors.textSecondary }}>
                                   {typeof value === 'string' ? value : JSON.stringify(value)}
                                 </span>
                               </div>
@@ -380,8 +384,8 @@ const RemovingRecords: React.FC<RemovingRecordsProps> = ({ onClose }) => {
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-10">
-                  <AlertCircle className="w-12 h-12 text-gray-400 mb-4" />
-                  <p className="text-gray-500 dark:text-gray-400 text-center">
+                  <AlertCircle className="w-12 h-12 mb-4" style={{ color: colors.textMuted }} />
+                  <p className="text-center" style={{ color: colors.textSubtle }}>
                     {searchTerm ? t('form:no_requests_match_search') : t('form:no_deletion_requests')}
                   </p>
                 </div>

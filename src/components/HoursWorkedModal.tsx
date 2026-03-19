@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../themes/designTokens';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
@@ -75,7 +76,7 @@ const HoursWorkedModal: React.FC<HoursWorkedModalProps> = ({ eventId, onClose })
   if (isLoading) {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
-        <div className="bg-white rounded-lg p-6">
+        <div className="rounded-lg p-6" style={{ backgroundColor: colors.bgCard }}>
           <p>{t('common:loading')}</p>
         </div>
       </div>
@@ -90,15 +91,15 @@ const HoursWorkedModal: React.FC<HoursWorkedModalProps> = ({ eventId, onClose })
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full">
-        <div className="flex justify-between items-center p-6 border-b">
+      <div className="rounded-lg max-w-2xl w-full" style={{ backgroundColor: colors.bgCard }}>
+        <div className="flex justify-between items-center p-6 border-b" style={{ borderColor: colors.borderDefault }}>
           <div>
             <h2 className="text-xl font-semibold">{t('event:hours_worked')}</h2>
-            <p className="text-sm text-gray-600 mt-1">{t('event:total_hours')}: {totalHours}</p>
+            <p className="text-sm mt-1" style={{ color: colors.textMuted }}>{t('event:total_hours')}: {totalHours}</p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -108,20 +109,20 @@ const HoursWorkedModal: React.FC<HoursWorkedModalProps> = ({ eventId, onClose })
           {Object.keys(taskProgress).length > 0 ? (
             <div className="space-y-6">
               {Object.entries(taskProgress).map(([userId, userData]: [string, any]) => (
-                <div key={userId} className="bg-gray-50 rounded-lg p-4">
-                  <h3 className="font-medium text-lg text-gray-900">{userData.userName}</h3>
+                <div key={userId} className="rounded-lg p-4" style={{ backgroundColor: colors.bgSubtle }}>
+                  <h3 className="font-medium text-lg" style={{ color: colors.textPrimary }}>{userData.userName}</h3>
                   
                   <div className="mt-4 space-y-3">
                     {Object.entries(userData.tasks).map(([taskName, taskData]: [string, any]) => (
-                      <div key={taskName} className="bg-white p-3 rounded-md shadow-sm">
+                      <div key={taskName} className="p-3 rounded-md shadow-sm" style={{ backgroundColor: colors.bgCard }}>
                         <div className="flex justify-between items-start">
                           <div>
-                            <p className="font-medium text-gray-800">{taskName}</p>
-                            <p className="text-sm text-gray-600">
+                            <p className="font-medium" style={{ color: colors.textSecondary }}>{taskName}</p>
+                            <p className="text-sm" style={{ color: colors.textMuted }}>
                               {t('event:completed')}: {taskData.totalCompleted} {taskData.unit}
                             </p>
                           </div>
-                          <span className="text-blue-600 font-medium">
+                          <span className="font-medium" style={{ color: colors.accentBlue }}>
                             {taskData.totalHours} {t('event:hours_label')}
                           </span>
                         </div>
@@ -132,14 +133,15 @@ const HoursWorkedModal: React.FC<HoursWorkedModalProps> = ({ eventId, onClose })
               ))}
             </div>
           ) : (
-            <p className="text-center text-gray-600">{t('event:no_hours_recorded')}</p>
+            <p className="text-center" style={{ color: colors.textMuted }}>{t('event:no_hours_recorded')}</p>
           )}
         </div>
 
-        <div className="p-6 border-t bg-gray-50">
+        <div className="p-6 border-t" style={{ backgroundColor: colors.bgSubtle }}>
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+            className="w-full px-4 py-2 rounded-lg transition-colors"
+            style={{ backgroundColor: colors.borderLight, color: colors.textSecondary }}
           >
             {t('common:close')}
           </button>

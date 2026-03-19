@@ -89,11 +89,20 @@ export default function ProjectCardModal({
 
   const hasTitle = projectSettings.title.trim().length > 0;
   const hasDates = projectSettings.startDate && projectSettings.endDate;
+  const hasExcavator = !!projectSettings.selectedExcavator;
+  const hasCarrier = !!projectSettings.selectedCarrier;
+  const hasMaterialCarrier = !!projectSettings.selectedMaterialCarrier;
+  const hasCompactor = !!projectSettings.selectedCompactor;
   const completionItems = [
     { done: hasTitle, label: t("project:canvas_completion_title") },
     { done: hasDates, label: t("project:canvas_completion_dates") },
+    { done: hasExcavator, label: t("project:excavator_label_short") },
+    { done: hasCarrier, label: t("project:carrier_soil_tape1") },
+    { done: hasMaterialCarrier, label: t("project:carrier_slabs_pavers") },
+    { done: hasCompactor, label: t("project:wacker_compactor") },
   ];
   const completionPct = completionItems.filter(i => i.done).length / completionItems.length;
+  const canClose = completionPct === 1;
 
   return (
     <div
@@ -108,7 +117,6 @@ export default function ProjectCardModal({
         zIndex: 1000,
         backdropFilter: "blur(4px)",
       }}
-      onClick={onClose}
     >
       <div
         data-testid="project-card-modal"
@@ -146,12 +154,12 @@ export default function ProjectCardModal({
               </div>
             </div>
             <button
-              onClick={onClose}
+              onClick={canClose ? onClose : undefined}
               style={{
                 background: "none",
                 border: "none",
-                cursor: "pointer",
-                color: C.textDim,
+                cursor: canClose ? "pointer" : "not-allowed",
+                color: canClose ? C.textDim : C.textDim + "80",
                 padding: 4,
                 borderRadius: 6,
               }}
@@ -315,7 +323,7 @@ export default function ProjectCardModal({
                       }}
                       style={inputStyle}
                     >
-                      <option value="">{t("project:none")}</option>
+                      <option value=""></option>
                       {excavators.map(x => (
                         <option key={x.id} value={x.id}>
                           {x.name} ({x["size (in tones)"] ?? "?"}t)
@@ -346,7 +354,7 @@ export default function ProjectCardModal({
                       }}
                       style={inputStyle}
                     >
-                      <option value="">None</option>
+                      <option value=""></option>
                       {carriers.map(x => (
                         <option key={x.id} value={x.id}>
                           {x.name} ({x["size (in tones)"] ?? "?"}t)
@@ -366,7 +374,7 @@ export default function ProjectCardModal({
                       }}
                       style={inputStyle}
                     >
-                      <option value="">{t("project:none")}</option>
+                      <option value=""></option>
                       {carriers.map(x => (
                         <option key={x.id} value={x.id}>
                           {x.name} ({x["size (in tones)"] ?? "?"}t)
@@ -396,7 +404,7 @@ export default function ProjectCardModal({
                       }}
                       style={inputStyle}
                     >
-                      <option value="">{t("project:none")}</option>
+                      <option value=""></option>
                       {compactors.length > 0 ? (
                         compactors.map(x => (
                           <option key={x.id} value={x.id}>{x.name}</option>
@@ -492,15 +500,16 @@ export default function ProjectCardModal({
           }}
         >
           <button
-            onClick={onClose}
+            onClick={canClose ? onClose : undefined}
+            disabled={!canClose}
             style={{
               padding: "10px 28px",
-              background: C.accent,
+              background: canClose ? C.accent : C.accent + "66",
               border: "none",
               borderRadius: 8,
               color: "#fff",
               fontSize: 14,
-              cursor: "pointer",
+              cursor: canClose ? "pointer" : "not-allowed",
               fontWeight: 600,
               fontFamily: "inherit",
               transition: "opacity 0.15s",

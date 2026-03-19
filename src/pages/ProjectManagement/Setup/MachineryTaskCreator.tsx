@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../../../themes/designTokens';
+import { Spinner } from '../../../themes/uiComponents';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
 import { X, Check, AlertTriangle } from 'lucide-react';
@@ -32,6 +34,7 @@ interface EventTask {
 // Define time estimates for different digger sizes (from SoilExcavationCalculator)
 const soilDiggerTimeEstimates = [
   { size: 'Shovel (1 Person)', sizeInTons: 0.02, timePerTon: 0.5 },
+  { size: 'Digger 0.5T', sizeInTons: 0.5, timePerTon: 0.28 },
   { size: 'Digger 1T', sizeInTons: 1, timePerTon: 0.14 },
   { size: 'Digger 2T', sizeInTons: 2, timePerTon: 0.06 },
   { size: 'Digger 3-5T', sizeInTons: 3, timePerTon: 0.02 },
@@ -58,6 +61,7 @@ const carrierTimeEstimates = [
 // Define loading time estimates for different digger sizes (from Type1AggregateCalculator)
 const preparationDiggerTimeEstimates = [
   { equipment: 'Shovel (1 Person)', sizeInTons: 0.02, timePerTon: 0.5 },
+  { equipment: 'Digger 0.5T', sizeInTons: 0.5, timePerTon: 0.36 },
   { equipment: 'Digger 1T', sizeInTons: 1, timePerTon: 0.18 },
   { equipment: 'Digger 2T', sizeInTons: 2, timePerTon: 0.12 },
   { equipment: 'Digger 3-5T', sizeInTons: 3, timePerTon: 0.08 },
@@ -472,32 +476,33 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+      <div className="rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
         {/* Header */}
-        <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
-          <h2 className="text-lg font-semibold dark:text-white">{t('form:machinery_task_creator_title')}</h2>
+        <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: colors.borderDefault }}>
+          <h2 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('form:machinery_task_creator_title')}</h2>
           <button 
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="p-1 rounded-full transition-colors"
           >
-            <X className="w-6 h-6 dark:text-gray-200" />
+            <X className="w-6 h-6" style={{ color: colors.textMuted }} />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto flex-grow dark:bg-gray-800">
+        <div className="p-6 overflow-y-auto flex-grow" style={{ backgroundColor: colors.bgCard }}>
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-64">
               <Spinner size={32} style={{ marginBottom: 16 }} />
-              <p className="text-gray-500 dark:text-gray-400">{t('form:loading_equipment_data')}</p>
+              <p style={{ color: colors.textSubtle }}>{t('form:loading_equipment_data')}</p>
             </div>
           ) : error ? (
-            <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-md text-red-700 dark:text-red-400 mb-4">
+            <div className="p-4 rounded-md mb-4" style={{ backgroundColor: colors.redLight, color: colors.red }}>
               <p className="font-medium">{t('form:error_label')}</p>
               <p>{error}</p>
               <button 
                 onClick={fetchEquipment}
-                className="mt-2 px-3 py-1 bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60 rounded text-sm"
+                className="mt-2 px-3 py-1 rounded text-sm"
+                style={{ backgroundColor: colors.redLight }}
               >
                 {t('form:try_again_button')}
               </button>
@@ -505,18 +510,18 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
           ) : (
             <>
               <div className="mb-6">
-                <p className="text-gray-700 dark:text-gray-300 mb-2">
+                <p className="mb-2" style={{ color: colors.textMuted }}>
                   {t('form:machinery_task_creator_description')}
                 </p>
-                <p className="text-gray-700 dark:text-gray-300 mb-4">
+                <p className="mb-4" style={{ color: colors.textMuted }}>
                   For each combination, three tasks will be created:
                 </p>
-                <ul className="list-disc pl-5 space-y-1 text-gray-700 dark:text-gray-300 mb-4">
+                <ul className="list-disc pl-5 space-y-1 mb-4" style={{ color: colors.textMuted }}>
                   <li>{t('form:soil_excavation_task')}</li>
                   <li>{t('form:preparation_task')}</li>
                   <li>{t('form:load_sand_task')}</li>
                 </ul>
-                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-md text-yellow-800 dark:text-yellow-300 text-sm border border-yellow-200 dark:border-yellow-800">
+                <div className="p-3 rounded-md text-sm" style={{ backgroundColor: colors.amberBg, color: colors.amber, borderColor: colors.amber }}>
                   <p className="font-medium flex items-center">
                     <AlertTriangle className="w-4 h-4 mr-2" />
                     {t('form:important_label')}
@@ -528,11 +533,11 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
               </div>
 
               {showResults ? (
-                <div className={`p-4 rounded-md mb-4 border ${
-                  creationStatus.failed > 0 
-                    ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800' 
-                    : 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800'
-                }`}>
+                <div className="p-4 rounded-md mb-4 border" style={{
+                  ...(creationStatus.failed > 0 
+                    ? { backgroundColor: colors.amberBg, color: colors.amber, borderColor: colors.amber } 
+                    : { backgroundColor: colors.greenBg, color: colors.green, borderColor: colors.greenBorder })
+                }}>
                   <p className="font-medium flex items-center">
                     {creationStatus.failed > 0 ? (
                       <AlertTriangle className="w-4 h-4 mr-2" />
@@ -552,11 +557,12 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
               <button
                 onClick={createTasks}
                 disabled={isCreating || newExcavators.length === 0 || newCarriers.length === 0}
-                className={`w-full py-2 px-4 rounded font-medium flex items-center justify-center ${
-                  isCreating || newExcavators.length === 0 || newCarriers.length === 0
-                    ? 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 dark:bg-blue-700 text-white hover:bg-blue-700 dark:hover:bg-blue-800'
-                }`}
+                className="w-full py-2 px-4 rounded font-medium flex items-center justify-center"
+                style={{
+                  ...(isCreating || newExcavators.length === 0 || newCarriers.length === 0
+                    ? { backgroundColor: colors.bgElevated, color: colors.textSubtle, cursor: 'not-allowed' }
+                    : { backgroundColor: colors.accentBlue, color: colors.textOnAccent })
+                }}
               >
                 {isCreating ? (
                   <>

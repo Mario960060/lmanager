@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { translateMaterialName, translateMaterialDescription } from '../../../lib/translationMap';
+import { colors } from '../../../themes/designTokens';
+import { translateMaterialName, translateMaterialDescription, translateUnit } from '../../../lib/translationMap';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
 import { Package, Plus, Pencil, X, Search, Trash2 } from 'lucide-react';
@@ -162,13 +163,14 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
   if (wizardMode) {
     return (
       <div className="p-4 space-y-4 overflow-y-auto">
-        <div className="text-sm text-white bg-red-600 p-3 rounded-lg border border-red-700">
+        <div className="text-sm p-3 rounded-lg border" style={{ backgroundColor: colors.red, color: colors.textOnAccent, borderColor: colors.redLight }}>
           <p>{t('form:materials_management_description')}</p>
         </div>
         
         <button
           onClick={() => setShowAddModal(true)}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+            className="w-full py-2 px-4 rounded-lg flex items-center justify-center gap-2"
+            style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
         >
           <Plus className="w-4 h-4" />
           {t('form:add_material_button')}
@@ -182,21 +184,22 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
             value={searchInput}
             onChange={handleSearchChange}
             placeholder={t('form:search_materials_placeholder')}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2 rounded-lg border"
+            style={{ borderColor: colors.borderDefault }}
           />
-          <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none" />
+          <Search className="absolute left-3 top-2.5 h-5 w-5 pointer-events-none" style={{ color: colors.textSubtle }} />
         </div>
 
         {/* Materials List */}
         <div className="space-y-2">
           {materials.length === 0 ? (
-            <p className="text-center text-gray-500 text-sm py-4">{t('form:no_materials_found')}</p>
+            <p className="text-center text-sm py-4" style={{ color: colors.textSubtle }}>{t('form:no_materials_found')}</p>
           ) : (
             materials.map((material) => (
-              <div key={material.id} className="p-3 bg-gray-50 rounded border border-gray-200">
-                <div className="font-medium text-gray-900">{material.name}</div>
-                {material.description && <div className="text-sm text-gray-600">{material.description}</div>}
-                <div className="text-xs text-gray-500 mt-1">{t('form:material_unit_price_format', { unit: material.unit, price: formatPrice(material.price) })}</div>
+              <div key={material.id} className="p-3 rounded border" style={{ backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }}>
+                <div className="font-medium" style={{ color: colors.textPrimary }}>{material.name}</div>
+                {material.description && <div className="text-sm" style={{ color: colors.textMuted }}>{material.description}</div>}
+                <div className="text-xs mt-1" style={{ color: colors.textSubtle }}>{t('form:material_unit_price_format', { unit: material.unit, price: formatPrice(material.price) })}</div>
               </div>
             ))
           )}
@@ -205,58 +208,62 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
         {/* Add Material Modal */}
         {showAddModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+            <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">{t('form:add_material_button')}</h3>
                 <button
                   onClick={() => setShowAddModal(false)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 rounded-full transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:name_label')} *</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:name_label')} *</label>
                 <input
                   type="text"
                   value={newMaterial.name}
                   onChange={(e) => setNewMaterial(prev => ({ ...prev, name: e.target.value }))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm"
+                  style={{ borderColor: colors.borderDefault }}
                   placeholder={t('form:enter_material_name')}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:unit_label')} *</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:unit_label')} *</label>
                 <input
                   type="text"
                   value={newMaterial.unit}
                   onChange={(e) => setNewMaterial(prev => ({ ...prev, unit: e.target.value }))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm"
+                  style={{ borderColor: colors.borderDefault }}
                   placeholder={t('form:unit_examples')}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:description_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:description_label')}</label>
                 <textarea
                   value={newMaterial.description}
                   onChange={(e) => setNewMaterial(prev => ({ ...prev, description: e.target.value }))}
                   rows={2}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm"
+                  style={{ borderColor: colors.borderDefault }}
                   placeholder={t('form:enter_material_description')}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:price_optional_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:price_optional_label')}</label>
                 <input
                   type="number"
                   value={newMaterial.price}
                   onChange={(e) => setNewMaterial(prev => ({ ...prev, price: e.target.value }))}
                   step="0.01"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm"
+                  style={{ borderColor: colors.borderDefault }}
                   placeholder={t('form:price_per_unit_placeholder')}
                 />
               </div>
@@ -264,7 +271,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
               <button
                 onClick={handleSubmit}
                 disabled={!newMaterial.name || !newMaterial.unit || addMaterialMutation.isPending}
-                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="w-full py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+                style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
               >
                 {addMaterialMutation.isPending ? t('form:adding_in_progress') : t('form:add_material_button')}
               </button>
@@ -279,10 +287,13 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white border-b p-6 flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900">{t('form:materials_heading')}</h1>
+          <h1 className="text-3xl font-bold" style={{ color: colors.textPrimary }}>{t('form:materials_heading')}</h1>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 rounded-full transition-colors"
+            style={{ backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             <X className="w-6 h-6" />
           </button>
@@ -291,7 +302,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
         <div className="p-6 space-y-6">
         <button
           onClick={() => setShowAddModal(true)}
-          className="md:inline-flex hidden items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="md:inline-flex hidden items-center px-4 py-2 rounded-lg transition-colors"
+          style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
         >
           <Plus className="w-5 h-5 mr-2" />
           {t('form:add_material_button')}
@@ -300,7 +312,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
         {/* Add Material Button - Mobile */}
         <button
           onClick={() => setShowAddModal(true)}
-          className="md:hidden w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="md:hidden w-full flex items-center justify-center px-4 py-2 rounded-lg transition-colors"
+          style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
         >
           <Plus className="w-5 h-5 mr-2" />
           {t('form:add_material_button')}
@@ -314,35 +327,36 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
           value={searchInput}
           onChange={handleSearchChange}
           placeholder={t('form:search_materials_placeholder')}
-          className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-blue-500 focus:ring-opacity-50"
+          className="w-full pl-10 pr-4 py-2 rounded-lg border"
+          style={{ borderColor: colors.borderDefault }}
         />
-        <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400 pointer-events-none" />
+        <Search className="absolute left-3 top-2.5 h-5 w-5 pointer-events-none" style={{ color: colors.textSubtle }} />
       </div>
 
       {/* Materials List - Desktop */}
-      <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="hidden md:block rounded-lg shadow overflow-hidden" style={{ backgroundColor: colors.bgCard }}>
+        <table className="min-w-full divide-y" style={{ borderColor: colors.borderDefault }}>
+          <thead style={{ backgroundColor: colors.bgSubtle }}>
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:table_header_name')}</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:table_header_unit')}</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:price_label')}</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:table_header_actions')}</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:table_header_name')}</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:table_header_unit')}</th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:price_label')}</th>
+              <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:table_header_actions')}</th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {materials.map((material) => (
-              <tr key={material.id} className="hover:bg-gray-50">
+          <tbody className="divide-y" style={{ borderColor: colors.borderDefault }}>
+            {materials.map((material, index) => (
+              <tr key={material.id} style={{ background: index % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <button
                     onClick={() => {
                       setSelectedMaterial(material);
                       setShowDetailsModal(true);
                     }}
-                    className="text-blue-600 hover:text-blue-800"
+                    style={{ color: colors.accentBlue }}
                   >
                     {material.name}
-                    {material.is_deletable === false && <span className="ml-1 text-xs text-amber-600" title={t('form:system_material_price_only_hint')}>🔒</span>}
+                    {material.is_deletable === false && <span className="ml-1 text-xs" style={{ color: colors.amber }} title={t('form:system_material_price_only_hint')}>🔒</span>}
                   </button>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">{translateUnit(material.unit, t)}</td>
@@ -353,7 +367,10 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
                       setSelectedMaterial(material);
                       setShowEditModal(true);
                     }}
-                    className="p-2 text-green-600 hover:text-green-700 transition-colors"
+                    className="p-2 transition-colors"
+                    style={{ color: colors.green }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = colors.greenLight; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = colors.green; }}
                   >
                     <Pencil className="w-5 h-5" />
                   </button>
@@ -367,12 +384,12 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
       {/* Materials List - Mobile: tabelka name / unit / price / edit */}
       <div className="md:hidden overflow-x-auto -mx-2 px-2">
         {materials.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8" style={{ color: colors.textSubtle }}>
             {t('form:no_materials_found')}
           </div>
         ) : (
-          <div className="min-w-[280px] border border-gray-200 rounded-lg overflow-hidden">
-            <div className="grid grid-cols-[minmax(100px,1fr)_38px_48px_44px] gap-2 py-2 px-3 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
+          <div className="min-w-[280px] border rounded-lg overflow-hidden" style={{ borderColor: colors.borderDefault }}>
+            <div className="grid grid-cols-[minmax(100px,1fr)_38px_48px_44px] gap-2 py-2 px-3 border-b text-xs font-medium uppercase tracking-wider" style={{ backgroundColor: colors.bgSubtle, borderColor: colors.borderLight, color: colors.textSubtle }}>
               <div className="truncate">{t('form:table_header_name')}</div>
               <div className="text-center text-xs">{t('form:table_header_unit')}</div>
               <div className="text-right text-xs">{t('form:price_label')}</div>
@@ -381,21 +398,25 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
             {materials.map((material) => (
               <div
                 key={material.id}
-                className="grid grid-cols-[minmax(100px,1fr)_38px_48px_44px] gap-2 py-2.5 px-3 items-center border-b border-gray-100 last:border-0 text-sm"
+                className="grid grid-cols-[minmax(100px,1fr)_38px_48px_44px] gap-2 py-2.5 px-3 items-center border-b last:border-0 text-sm"
+                style={{ borderColor: colors.borderLight }}
               >
-                <div className="min-w-0 font-medium text-gray-900 text-xs break-words" title={material.name}>
+                <div className="min-w-0 font-medium text-xs break-words" style={{ color: colors.textPrimary }} title={material.name}>
                   {material.name}
                   {material.is_deletable === false && <span className="ml-0.5 text-amber-600">🔒</span>}
                 </div>
-                <div className="text-gray-600 text-xs text-center truncate">{material.unit}</div>
-                <div className="text-gray-900 text-xs text-right">{formatPrice(material.price)}</div>
+                <div className="text-xs text-center truncate" style={{ color: colors.textMuted }}>{material.unit}</div>
+                <div className="text-xs text-right" style={{ color: colors.textPrimary }}>{formatPrice(material.price)}</div>
                 <div className="flex justify-end">
                   <button
                     onClick={() => {
                       setSelectedMaterial(material);
                       setShowEditModal(true);
                     }}
-                    className="p-2 text-green-600 hover:text-green-700 transition-colors touch-manipulation"
+                    className="p-2 transition-colors touch-manipulation"
+                    style={{ color: colors.green }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = colors.greenLight; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = colors.green; }}
                     aria-label="Edit"
                   >
                     <Pencil className="w-4 h-4" />
@@ -410,7 +431,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
       {/* Add Material Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-sm w-full p-4 space-y-3">
+          <div className="rounded-lg max-w-sm w-full p-4 space-y-3" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">{t('form:add_material_button')}</h3>
               <button
@@ -434,7 +455,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:description_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:description_label')}</label>
                 <textarea
                   value={newMaterial.description}
                   onChange={(e) => setNewMaterial(prev => ({ ...prev, description: e.target.value }))}
@@ -445,7 +466,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:unit_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:unit_label')}</label>
                 <input
                   type="text"
                   value={newMaterial.unit}
@@ -456,7 +477,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:price_optional_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:price_optional_label')}</label>
                 <input
                   type="number"
                   value={newMaterial.price}
@@ -483,7 +504,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
       {/* Edit Material Modal (system materials: only price editable) */}
       {showEditModal && selectedMaterial && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-sm w-full p-4 space-y-3">
+          <div className="rounded-lg max-w-sm w-full p-4 space-y-3" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">
                 {selectedMaterial.is_deletable === false ? t('form:edit_material_price_heading') : t('form:edit_material_heading')}
@@ -506,7 +527,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:name_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:name_label')}</label>
                 <input
                   type="text"
                   value={selectedMaterial.name}
@@ -519,7 +540,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:description_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:description_label')}</label>
                 <textarea
                   value={selectedMaterial.description || ''}
                   onChange={(e) => setSelectedMaterial(prev => ({ ...prev!, description: e.target.value }))}
@@ -532,7 +553,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:unit_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:unit_label')}</label>
                 <input
                   type="text"
                   value={selectedMaterial.unit}
@@ -545,7 +566,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:price_optional_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:price_optional_label')}</label>
                 <input
                   type="number"
                   value={selectedMaterial.price ?? ''}
@@ -565,7 +586,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
                   (selectedMaterial.is_deletable !== false && (!selectedMaterial.name || !selectedMaterial.unit)) ||
                   editMaterialMutation.isPending
                 }
-                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="flex-1 py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+                style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
               >
                 {editMaterialMutation.isPending ? t('form:saving_changes_text') : t('form:save_changes_button_text')}
               </button>
@@ -586,22 +608,23 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
       {/* Delete Material Confirmation Modal */}
       {showDeleteConfirm && selectedMaterial && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-sm w-full p-4 shadow-xl">
+          <div className="rounded-lg max-w-sm w-full p-4 shadow-xl" style={{ backgroundColor: colors.bgCard }}>
             {deleteError && (
-              <p className="text-red-600 text-sm mb-3">{deleteError}</p>
+              <p className="text-sm mb-3" style={{ color: colors.red }}>{deleteError}</p>
             )}
-            <p className="text-gray-900 font-medium mb-3">
+            <p className="font-medium mb-3" style={{ color: colors.textPrimary }}>
               {t('form:delete_confirmation_message')}
             </p>
             {selectedMaterial.name && (
-              <p className="text-sm text-gray-600 mb-4 truncate" title={selectedMaterial.name}>
+              <p className="text-sm mb-4 truncate" style={{ color: colors.textMuted }} title={selectedMaterial.name}>
                 „{selectedMaterial.name}"
               </p>
             )}
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => { setShowDeleteConfirm(false); setDeleteError(null); }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                className="px-4 py-2 border rounded-lg"
+                style={{ borderColor: colors.borderDefault, color: colors.textSecondary }}
               >
                 {t('form:no_button')}
               </button>
@@ -624,11 +647,11 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
       {/* Material Details Modal */}
       {showDetailsModal && selectedMaterial && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-sm w-full p-4">
+          <div className="rounded-lg max-w-sm w-full p-4" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-xl font-semibold text-gray-900">{translateMaterialName(selectedMaterial.name, t)}</h3>
-                <p className="text-sm text-gray-500 mt-1">{t('form:added_on_date', { date: new Date(selectedMaterial.created_at).toLocaleDateString() })}</p>
+                <h3 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{translateMaterialName(selectedMaterial.name, t)}</h3>
+                <p className="text-sm mt-1" style={{ color: colors.textSubtle }}>{t('form:added_on_date', { date: new Date(selectedMaterial.created_at).toLocaleDateString() })}</p>
               </div>
               <button
                 onClick={() => {
@@ -644,19 +667,19 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
             <div className="space-y-4">
               {translateMaterialDescription(selectedMaterial.name, selectedMaterial.description, t) && (
                 <div>
-                  <h4 className="text-sm font-medium text-gray-700">{t('form:description_label')}</h4>
-                  <p className="mt-1 text-gray-600">{translateMaterialDescription(selectedMaterial.name, selectedMaterial.description, t)}</p>
+                  <h4 className="text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:description_label')}</h4>
+                  <p className="mt-1" style={{ color: colors.textMuted }}>{translateMaterialDescription(selectedMaterial.name, selectedMaterial.description, t)}</p>
                 </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <h4 className="text-sm font-medium text-gray-700">{t('form:unit_label')}</h4>
-                  <p className="mt-1 text-gray-900">{translateUnit(selectedMaterial.unit, t)}</p>
+                  <h4 className="text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:unit_label')}</h4>
+                  <p className="mt-1" style={{ color: colors.textPrimary }}>{translateUnit(selectedMaterial.unit, t)}</p>
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium text-gray-700">{t('form:price_label')}</h4>
-                  <p className="mt-1 text-gray-900">{formatPrice(selectedMaterial.price)}</p>
+                  <h4 className="text-sm font-medium" style={{ color: colors.textSecondary }}>{t('form:price_label')}</h4>
+                  <p className="mt-1" style={{ color: colors.textPrimary }}>{formatPrice(selectedMaterial.price)}</p>
                 </div>
               </div>
             </div>

@@ -7,6 +7,7 @@ import { X, Plus, Pencil, Info, Wrench, Truck, Search, AlertCircle } from 'lucid
 import { releaseEquipment } from '../../../lib/equipmentService';
 import DatePicker from '../../../components/DatePicker';
 import { Spinner, Button } from '../../../themes/uiComponents';
+import { colors } from '../../../themes/designTokens';
 
 interface Equipment {
   id: string;
@@ -295,21 +296,21 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
     }
   });
 
-  const getStatusColor = (status: Equipment['status'], item?: Equipment) => {
+  const getStatusColor = (status: Equipment['status'], item?: Equipment): React.CSSProperties => {
     // If item is provided and it has available quantities, show as free_to_use
     if (item && item.quantity > item.in_use_quantity) {
-      return 'bg-green-600 text-white';
+      return { backgroundColor: colors.green, color: colors.textOnAccent };
     }
     
     switch (status) {
       case 'free_to_use':
-        return 'bg-green-600 text-white';
+        return { backgroundColor: colors.green, color: colors.textOnAccent };
       case 'in_use':
-        return 'bg-amber-600 text-white';
+        return { backgroundColor: colors.amber, color: colors.textOnAccent };
       case 'broken':
-        return 'bg-red-600 text-white';
+        return { backgroundColor: colors.red, color: colors.textOnAccent };
       default:
-        return 'bg-gray-600 text-white';
+        return { backgroundColor: colors.textMuted, color: colors.textOnAccent };
     }
   };
 
@@ -461,7 +462,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
   if (error) {
     return (
       <div className="container mx-auto p-6">
-        <div className="text-red-600 bg-red-50 p-4 rounded-lg mt-6">
+        <div className="p-4 rounded-lg mt-6" style={{ color: colors.red, backgroundColor: colors.redLight }}>
           {t('form:failed_load_equipment')}
         </div>
       </div>
@@ -472,7 +473,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
   if (wizardMode) {
     return (
       <div className="p-4 space-y-4 overflow-y-auto">
-        <div className="text-sm text-white bg-red-600 p-3 rounded-lg border border-red-700">
+        <div className="text-sm p-3 rounded-lg border" style={{ color: colors.textOnAccent, backgroundColor: colors.red, borderColor: colors.red }}>
           <p>{t('form:equipment_management_description')}</p>
         </div>
         
@@ -483,60 +484,64 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
         {/* Machines Section */}
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <h3 className="text-lg font-semibold mb-3 flex items-center gap-2" style={{ color: colors.textPrimary }}>
             <Truck className="w-5 h-5" />
             {t('form:machines_count', { count: filteredMachines.length })}
           </h3>
           <div className="space-y-2">
             {filteredMachines.map(item => (
-              <div key={item.id} className="p-3 bg-gray-50 rounded border border-gray-200">
-                <div className="font-medium text-gray-900">{item.name}</div>
-                {item.description && <div className="text-sm text-gray-600">{item.description}</div>}
-                <div className="text-xs text-gray-500 mt-1">{t('form:quantity_label', { quantity: item.quantity })}</div>
+              <div key={item.id} className="p-3 rounded border" style={{ backgroundColor: colors.bgSubtle, borderColor: colors.borderDefault }}>
+                <div className="font-medium" style={{ color: colors.textPrimary }}>{item.name}</div>
+                {item.description && <div className="text-sm" style={{ color: colors.textMuted }}>{item.description}</div>}
+                <div className="text-xs mt-1" style={{ color: colors.textSubtle }}>{t('form:quantity_label', { quantity: item.quantity })}</div>
               </div>
             ))}
-            {filteredMachines.length === 0 && <p className="text-sm text-gray-500">{t('form:no_machines_added')}</p>}
+            {filteredMachines.length === 0 && <p className="text-sm" style={{ color: colors.textSubtle }}>{t('form:no_machines_added')}</p>}
           </div>
         </div>
 
         {/* Tools Section */}
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <h3 className="text-lg font-semibold mb-3 flex items-center gap-2" style={{ color: colors.textPrimary }}>
             <Wrench className="w-5 h-5" />
             {t('form:tools_count', { count: filteredTools.length })}
           </h3>
           <div className="space-y-2">
             {filteredTools.map(item => (
-              <div key={item.id} className="p-3 bg-gray-50 rounded border border-gray-200">
-                <div className="font-medium text-gray-900">{item.name}</div>
-                {item.description && <div className="text-sm text-gray-600">{item.description}</div>}
-                <div className="text-xs text-gray-500 mt-1">{t('form:quantity_label', { quantity: item.quantity })}</div>
+              <div key={item.id} className="p-3 rounded border" style={{ backgroundColor: colors.bgSubtle, borderColor: colors.borderDefault }}>
+                <div className="font-medium" style={{ color: colors.textPrimary }}>{item.name}</div>
+                {item.description && <div className="text-sm" style={{ color: colors.textMuted }}>{item.description}</div>}
+                <div className="text-xs mt-1" style={{ color: colors.textSubtle }}>{t('form:quantity_label', { quantity: item.quantity })}</div>
               </div>
             ))}
-            {filteredTools.length === 0 && <p className="text-sm text-gray-500">{t('form:no_tools_added')}</p>}
+            {filteredTools.length === 0 && <p className="text-sm" style={{ color: colors.textSubtle }}>{t('form:no_tools_added')}</p>}
           </div>
         </div>
 
         {/* Add Equipment Modal */}
         {showAddModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
+            <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold">{t('form:add_new_equipment')}</h3>
+                <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('form:add_new_equipment')}</h3>
                 <button
                   onClick={() => setShowAddModal(false)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  className="p-2 rounded-full transition-colors"
+                  style={{ backgroundColor: 'transparent' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:equipment_type_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:equipment_type_label')}</label>
                 <select
                   value={newEquipment.type}
                   onChange={(e) => setNewEquipment(prev => ({ ...prev, type: e.target.value as 'machine' | 'tool' }))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                  style={{ borderColor: colors.borderDefault }}
                 >
                   <option value="machine">{t('form:machine_option')}</option>
                   <option value="tool">{t('form:tool_option')}</option>
@@ -544,35 +549,38 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:equipment_name_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:equipment_name_label')}</label>
                 <input
                   type="text"
                   value={newEquipment.name}
                   onChange={(e) => setNewEquipment(prev => ({ ...prev, name: e.target.value }))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                  style={{ borderColor: colors.borderDefault }}
                   placeholder={t('form:enter_equipment_name')}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:equipment_description_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:equipment_description_label')}</label>
                 <textarea
                   value={newEquipment.description}
                   onChange={(e) => setNewEquipment(prev => ({ ...prev, description: e.target.value }))}
                   rows={3}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                  style={{ borderColor: colors.borderDefault }}
                   placeholder={t('form:enter_equipment_description')}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:equipment_quantity_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:equipment_quantity_label')}</label>
                 <input
                   type="number"
                   value={newEquipment.quantity}
                   onChange={(e) => setNewEquipment(prev => ({ ...prev, quantity: Math.max(1, parseInt(e.target.value) || 1) }))}
                   min="1"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                  style={{ borderColor: colors.borderDefault }}
                 />
               </div>
 
@@ -601,8 +609,8 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
   }) => (
     <div className="space-y-4">
       <div className="flex items-center space-x-2">
-        <Icon className="w-6 h-6 text-gray-600" />
-        <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+        <Icon className="w-6 h-6" style={{ color: colors.textMuted }} />
+        <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{title}</h2>
       </div>
       <div className="relative w-64">
         <input
@@ -610,21 +618,23 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
           value={searchValue}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder={t('form:search_equipment_placeholder', { title })}
-          className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+          className="w-full pl-10 pr-4 py-2 rounded-lg border focus:ring-2 focus:ring-[var(--accent)]"
+          style={{ borderColor: colors.borderDefault }}
         />
-        <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+        <Search className="absolute left-3 top-2.5 h-5 w-5" style={{ color: colors.textSubtle }} />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {items.map((item) => (
           <div
             key={item.id}
-            className="bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow"
+            className="p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow"
+            style={{ backgroundColor: colors.bgCard }}
           >
             <div className="flex justify-between items-start gap-2">
               <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-base text-gray-900 break-words">{item.name}</h3>
+                <h3 className="font-bold text-base break-words" style={{ color: colors.textPrimary }}>{item.name}</h3>
                 <div className="mt-1 space-y-1">
-                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(item.status, item)}`}>
+                  <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium" style={getStatusColor(item.status, item)}>
                     {item.broken_quantity >= item.quantity
                       ? t('form:status_broken')
                       : item.quantity - (item.in_use_quantity + (item.broken_quantity || 0)) > 0
@@ -634,26 +644,27 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                           : t('form:status_free_to_use')
                     }
                   </span>
-                  <div className="text-xs text-gray-600">
+                  <div className="text-xs" style={{ color: colors.textMuted }}>
                     {item.broken_quantity > 0 && (
-                      <span className="text-red-600">{t('form:broken_count', { count: item.broken_quantity })}</span>
+                      <span style={{ color: colors.red }}>{t('form:broken_count', { count: item.broken_quantity })}</span>
                     )}
                     {item.in_use_quantity > 0 && (
-                      <span className="ml-2 text-amber-600">{t('form:in_use_count', { count: item.in_use_quantity })}</span>
+                      <span className="ml-2" style={{ color: colors.amber }}>{t('form:in_use_count', { count: item.in_use_quantity })}</span>
                     )}
                     {item.quantity - (item.in_use_quantity + (item.broken_quantity || 0)) > 0 && (
-                      <span className="ml-2 text-green-600">
+                      <span className="ml-2" style={{ color: colors.green }}>
                         {t('form:free_count', { count: item.quantity - (item.in_use_quantity + (item.broken_quantity || 0)) })}
                       </span>
                     )}
-                    <span className="ml-2 text-gray-400">{t('form:total_count', { count: item.quantity })}</span>
+                    <span className="ml-2" style={{ color: colors.textSubtle }}>{t('form:total_count', { count: item.quantity })}</span>
                   </div>
                 </div>
               </div>
               <div className="flex space-x-1">
                 <button
                   onClick={() => handleEditClick(item)}
-                  className="p-2 text-green-600 hover:text-green-700 transition-colors"
+                  className="p-2 transition-colors"
+                  style={{ color: colors.green }}
                   title={t('form:edit_equipment_title')}
                 >
                   <Pencil className="w-4 h-4" />
@@ -664,7 +675,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                     setShowStatusModal(true);
                     setEquipmentUsage(prev => ({ ...prev, quantity: 1 }));
                   }}
-                  className="p-2 text-blue-600 hover:text-blue-700 transition-colors"
+                  className="p-2 transition-colors"
+                  style={{ color: colors.accentBlue }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = colors.accentBlueDark; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = colors.accentBlue; }}
                   title={t('form:update_status_title')}
                 >
                   <Info className="w-4 h-4" />
@@ -674,7 +688,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
           </div>
         ))}
         {items.length === 0 && (
-          <div className="col-span-full text-center py-8 text-gray-500">
+          <div className="col-span-full text-center py-8" style={{ color: colors.textSubtle }}>
             {t('form:no_equipment_found', { title })}
           </div>
         )}
@@ -683,13 +697,16 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
   );
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto flex flex-col">
-        <div className="sticky top-0 z-10 flex-shrink-0 bg-white border-b py-3 px-4 flex justify-between items-center rounded-t-lg">
-          <h1 className="text-base font-semibold">{t('form:equipment_manager_heading')}</h1>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
+      <div className="rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto flex flex-col" style={{ backgroundColor: colors.bgCard }}>
+        <div className="sticky top-0 z-10 flex-shrink-0 border-b py-3 px-4 flex justify-between items-center rounded-t-lg" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}>
+          <h1 className="text-base font-semibold" style={{ color: colors.textPrimary }}>{t('form:equipment_manager_heading')}</h1>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 rounded-full transition-colors"
+            style={{ backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             <X className="w-5 h-5" />
           </button>
@@ -697,7 +714,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
         <div className="p-4">
       <div className="w-full">
-        <p className="text-red-500 italic mb-4">
+        <p className="italic mb-4" style={{ color: colors.red }}>
           {t('form:equipment_creation_warning')}
         </p>
       </div>
@@ -705,7 +722,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
         <div className="space-x-4">
           <button
             onClick={() => setShowAddModal(true)}
-            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center px-4 py-2 rounded-lg transition-colors"
+            style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.accentBlueDark; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.accentBlue; }}
           >
             <Plus className="w-5 h-5 mr-2" />
             {t('form:add_equipment_button')}
@@ -714,7 +734,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
       </div>
 
       {equipment.length === 0 ? (
-        <p className="text-gray-600 bg-gray-50 p-4 rounded-lg">{t('form:no_equipment_found', { title: 'equipment' })}</p>
+        <p className="p-4 rounded-lg" style={{ color: colors.textMuted, backgroundColor: colors.bgSubtle }}>{t('form:no_equipment_found', { title: 'equipment' })}</p>
       ) : (
         <div className="space-y-12">
           <EquipmentSection 
@@ -736,24 +756,28 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
       {/* Add Equipment Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
+          <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">{t('form:add_new_equipment')}</h3>
+              <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('form:add_new_equipment')}</h3>
               <button
                 onClick={() => setShowAddModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-2 rounded-full transition-colors"
+                style={{ backgroundColor: 'transparent' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('form:equipment_type_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:equipment_type_label')}</label>
               <select
                 value={newEquipment.type}
                 onChange={(e) => setNewEquipment(prev => ({ ...prev, type: e.target.value as 'machine' | 'tool' }))}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
               >
                 <option value="machine">{t('form:machine_option')}</option>
                 <option value="tool">{t('form:tool_option')}</option>
@@ -761,44 +785,48 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('form:equipment_name_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:equipment_name_label')}</label>
               <input
                 type="text"
                 value={newEquipment.name}
                 onChange={(e) => setNewEquipment(prev => ({ ...prev, name: e.target.value }))}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('form:enter_equipment_name')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('form:equipment_description_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:equipment_description_label')}</label>
               <textarea
                 value={newEquipment.description}
                 onChange={(e) => setNewEquipment(prev => ({ ...prev, description: e.target.value }))}
                 rows={3}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('form:enter_equipment_description')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('form:equipment_quantity_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:equipment_quantity_label')}</label>
               <input
                 type="number"
                 value={newEquipment.quantity}
                 onChange={(e) => setNewEquipment(prev => ({ ...prev, quantity: Math.max(1, parseInt(e.target.value) || 1) }))}
                 min="1"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
               />
             </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:equipment_initial_status_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:equipment_initial_status_label')}</label>
                 <select
                   value={newEquipment.status}
                   onChange={(e) => setNewEquipment(prev => ({ ...prev, status: e.target.value as Equipment['status'] }))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                  style={{ borderColor: colors.borderDefault }}
                 >
                   <option value="free_to_use">{t('form:status_free_to_use_option')}</option>
                   <option value="in_use">{t('form:status_in_use_option')}</option>
@@ -809,7 +837,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
             <button
               onClick={handleAddEquipment}
               disabled={!newEquipment.name || addEquipmentMutation.isPending}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="w-full py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+              style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
+              onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = colors.accentBlueDark; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.accentBlue; }}
             >
               {addEquipmentMutation.isPending ? t('form:adding_in_progress') : t('form:add_equipment_button')}
             </button>
@@ -819,27 +850,31 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
       {/* Edit Equipment Modal */}
       {showEditModal && editingEquipment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
+          <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">{t('form:edit_equipment_heading')}</h3>
+              <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('form:edit_equipment_heading')}</h3>
               <button
                 onClick={() => {
                   setShowEditModal(false);
                   setEditingEquipment(null);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-2 rounded-full transition-colors"
+                style={{ backgroundColor: 'transparent' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('form:type_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:type_label')}</label>
               <select
                 value={editingEquipment.type}
                 onChange={(e) => setEditingEquipment(prev => ({ ...prev!, type: e.target.value as 'machine' | 'tool' }))}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
               >
                 <option value="machine">{t('form:machine_option')}</option>
                 <option value="tool">{t('form:tool_option')}</option>
@@ -847,38 +882,41 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('form:name_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:name_label')}</label>
               <input
                 type="text"
                 value={editingEquipment.name}
                 onChange={(e) => setEditingEquipment(prev => ({ ...prev!, name: e.target.value }))}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('form:enter_equipment_name')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('form:equipment_description_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:equipment_description_label')}</label>
               <textarea
                 value={editingEquipment.description || ''}
                 onChange={(e) => setEditingEquipment(prev => ({ ...prev!, description: e.target.value }))}
                 rows={3}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('form:enter_equipment_description')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('form:total_quantity_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:total_quantity_label')}</label>
               <input
                 type="number"
                 value={editingEquipment.quantity}
                 onChange={(e) => setEditingEquipment(prev => ({ ...prev!, quantity: Math.max(prev!.in_use_quantity, parseInt(e.target.value) || 1) }))}
                 min={editingEquipment.in_use_quantity}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
               />
               {editingEquipment.in_use_quantity > 0 && (
-                <p className="mt-1 text-sm text-amber-600">
+                <p className="mt-1 text-sm" style={{ color: colors.amber }}>
                   {t('form:minimum_quantity_in_use', { count: editingEquipment.in_use_quantity })}
                 </p>
               )}
@@ -887,7 +925,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
             <button
               onClick={handleEditEquipment}
               disabled={!editingEquipment.name || editEquipmentMutation.isPending}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="w-full py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+              style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
+              onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = colors.accentBlueDark; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.accentBlue; }}
             >
               {editEquipmentMutation.isPending ? t('form:saving_changes_text') : t('form:save_changes_button_text')}
             </button>
@@ -897,30 +938,33 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
       {/* Status Update Modal */}
       {showStatusModal && selectedEquipment && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
+          <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">{t('form:update_equipment_status_heading')}</h3>
+              <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('form:update_equipment_status_heading')}</h3>
               <button
                 onClick={() => {
                   setShowStatusModal(false);
                   setValidationError(null);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-2 rounded-full transition-colors"
+                style={{ backgroundColor: 'transparent' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {validationError && (
-              <div className="bg-red-50 text-red-700 p-3 rounded-md flex items-center">
+              <div className="p-3 rounded-md flex items-center" style={{ backgroundColor: colors.redLight, color: colors.red }}>
                 <AlertCircle className="w-5 h-5 mr-2" />
                 {validationError}
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('form:status_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:status_label')}</label>
               <select
                 value={newStatus}
                 onChange={(e) => {
@@ -930,7 +974,8 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                     setEquipmentUsage({ event_id: '', start_date: '', end_date: '', quantity: 1 });
                   }
                 }}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
               >
                 <option value="free_to_use">{t('form:status_free_to_use_option')}</option>
                 <option value="in_use">{t('form:status_in_use_option')}</option>
@@ -941,7 +986,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
             {newStatus === 'in_use' && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('form:project_label')}</label>
+                  <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:project_label')}</label>
                   <select
                     value={equipmentUsage.event_id}
                     onChange={(e) => {
@@ -953,7 +998,8 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                         quantity: equipmentUsage.quantity
                       });
                     }}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
                   >
                     <option value="">{t('form:select_project')}</option>
                     {events.map((event) => (
@@ -965,7 +1011,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('form:quantity_to_use_label')}</label>
+                  <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:quantity_to_use_label')}</label>
                   <input
                     type="number"
                     value={equipmentUsage.quantity}
@@ -978,9 +1024,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                     }))}
                     min="1"
                     max={selectedEquipment.quantity - selectedEquipment.in_use_quantity}
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
                   />
-                  <p className="mt-1 text-sm text-gray-600">
+                  <p className="mt-1 text-sm" style={{ color: colors.textMuted }}>
                     {t('form:available_of_total', { available: selectedEquipment.quantity - selectedEquipment.in_use_quantity, total: selectedEquipment.quantity })}
                   </p>
                 </div>
@@ -988,7 +1035,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                 {selectedProject && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">{t('form:start_date_label')}</label>
+                      <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:start_date_label')}</label>
                       <DatePicker
                         value={equipmentUsage.start_date}
                         onChange={(v) => setEquipmentUsage(prev => ({ ...prev, start_date: v }))}
@@ -999,7 +1046,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">{t('form:end_date_label')}</label>
+                      <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:end_date_label')}</label>
                       <DatePicker
                         value={equipmentUsage.end_date}
                         onChange={(v) => setEquipmentUsage(prev => ({ ...prev, end_date: v }))}
@@ -1015,7 +1062,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
             {newStatus === 'broken' && selectedEquipment && (
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:quantity_to_mark_broken')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:quantity_to_mark_broken')}</label>
                 <input
                   type="number"
                   min={1}
@@ -1032,9 +1079,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                       )
                     )
                   }
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
                 />
-                <p className="mt-1 text-sm text-gray-600">
+                <p className="mt-1 text-sm" style={{ color: colors.textMuted }}>
                   {t('form:available_to_mark_broken', { count: selectedEquipment.quantity - selectedEquipment.in_use_quantity - (selectedEquipment.broken_quantity || 0) })}
                 </p>
               </div>
@@ -1042,7 +1090,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
             {newStatus === 'free_to_use' && selectedEquipment && (selectedEquipment.broken_quantity || 0) > 0 && (
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('form:quantity_to_restore_broken')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textMuted }}>{t('form:quantity_to_restore_broken')}</label>
                 <input
                   type="number"
                   min={1}
@@ -1056,9 +1104,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                       )
                     )
                   }
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md border shadow-sm focus:ring-2 focus:ring-[var(--accent)]"
+                style={{ borderColor: colors.borderDefault }}
                 />
-                <p className="mt-1 text-sm text-gray-600">
+                <p className="mt-1 text-sm" style={{ color: colors.textMuted }}>
                   {t('form:broken_units_available_restore', { count: selectedEquipment.broken_quantity })}
                 </p>
               </div>
@@ -1070,7 +1119,10 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
                 updateStatusMutation.isPending ||
                 (newStatus === 'in_use' && (!equipmentUsage.event_id || !equipmentUsage.start_date || !equipmentUsage.end_date))
               }
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="w-full py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+              style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
+              onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = colors.accentBlueDark; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.accentBlue; }}
             >
               {updateStatusMutation.isPending ? t('form:updating_in_progress') : t('form:update_status_button')}
             </button>

@@ -7,6 +7,7 @@ type Filter = "all" | Category;
 
 interface TableRow {
   name: string;
+  labelKey: string;
   tag?: "readonly";
   category: Category;
   user: [PermValue, PermValue, PermValue, PermValue];
@@ -15,26 +16,26 @@ interface TableRow {
 }
 
 const data: TableRow[] = [
-  { name: "tasks (tasks_done)", category: "tasks", user: ["y","y","y","n"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
-  { name: "task_progress_entries", category: "tasks", user: ["y","y","-","c"], leader: ["y","y","-","c"], pm: ["y","y","-","c"] },
-  { name: "task_requirements", tag: "readonly", category: "tasks", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
-  { name: "task_folders", category: "tasks", user: ["y","n","n","n"], leader: ["y","y","y","n"], pm: ["y","y","y","y"] },
-  { name: "setup_digging", category: "tasks", user: ["y","y","n","n"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
-  { name: "additional_tasks", category: "tasks", user: ["y","y","y","n"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
-  { name: "additional_task_progress_entries", category: "tasks", user: ["y","y","-","c"], leader: ["y","y","-","c"], pm: ["y","y","-","c"] },
-  { name: "events", category: "events", user: ["y","y","y","n"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
-  { name: "event_tasks", category: "events", user: ["y","y","y","-"], leader: ["y","y","y","-"], pm: ["y","y","y","-"] },
-  { name: "hours_entries", tag: "readonly", category: "events", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
-  { name: "equipment_usage", tag: "readonly", category: "events", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
-  { name: "equipment", category: "events", user: ["y","y","y","y"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
-  { name: "materials_delivered", tag: "readonly", category: "materials", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
-  { name: "materials (event)", category: "materials", user: ["y","y","y","-"], leader: ["y","y","y","-"], pm: ["y","y","y","-"] },
-  { name: "calendar_materials", tag: "readonly", category: "materials", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
-  { name: "additional_materials", category: "materials", user: ["y","y","y","y"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
-  { name: "additional_task_materials", category: "materials", user: ["y","y","y","y"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
-  { name: "day_notes", tag: "readonly", category: "other", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
-  { name: "deletion_requests", category: "other", user: ["y","y","n","n"], leader: ["y","y","n","n"], pm: ["y","y","y","y"] },
-  { name: "invoices", category: "other", user: ["n","n","n","n"], leader: ["n","n","n","n"], pm: ["y","y","y","n"] },
+  { name: "tasks (tasks_done)", labelKey: "rls_label_tasks", category: "tasks", user: ["y","y","y","n"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
+  { name: "task_progress_entries", labelKey: "rls_label_task_progress", category: "tasks", user: ["y","y","-","c"], leader: ["y","y","-","c"], pm: ["y","y","-","c"] },
+  { name: "task_requirements", labelKey: "rls_label_task_requirements", tag: "readonly", category: "tasks", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
+  { name: "task_folders", labelKey: "rls_label_task_folders", category: "tasks", user: ["y","n","n","n"], leader: ["y","y","y","n"], pm: ["y","y","y","y"] },
+  { name: "setup_digging", labelKey: "rls_label_setup_digging", category: "tasks", user: ["y","y","n","n"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
+  { name: "additional_tasks", labelKey: "rls_label_additional_tasks", category: "tasks", user: ["y","y","y","n"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
+  { name: "additional_task_progress_entries", labelKey: "rls_label_additional_task_progress", category: "tasks", user: ["y","y","-","c"], leader: ["y","y","-","c"], pm: ["y","y","-","c"] },
+  { name: "events", labelKey: "rls_label_events", category: "events", user: ["y","y","y","n"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
+  { name: "event_tasks", labelKey: "rls_label_event_tasks", category: "events", user: ["y","y","y","-"], leader: ["y","y","y","-"], pm: ["y","y","y","-"] },
+  { name: "hours_entries", labelKey: "rls_label_hours_entries", tag: "readonly", category: "events", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
+  { name: "equipment_usage", labelKey: "rls_label_equipment_usage", tag: "readonly", category: "events", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
+  { name: "equipment", labelKey: "rls_label_equipment", category: "events", user: ["y","y","y","y"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
+  { name: "materials_delivered", labelKey: "rls_label_materials_delivered", tag: "readonly", category: "materials", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
+  { name: "materials (event)", labelKey: "rls_label_materials_event", category: "materials", user: ["y","y","y","-"], leader: ["y","y","y","-"], pm: ["y","y","y","-"] },
+  { name: "calendar_materials", labelKey: "rls_label_calendar_materials", tag: "readonly", category: "materials", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
+  { name: "additional_materials", labelKey: "rls_label_additional_materials", category: "materials", user: ["y","y","y","y"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
+  { name: "additional_task_materials", labelKey: "rls_label_additional_task_materials", category: "materials", user: ["y","y","y","y"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
+  { name: "day_notes", labelKey: "rls_label_day_notes", tag: "readonly", category: "other", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
+  { name: "deletion_requests", labelKey: "rls_label_deletion_requests", category: "other", user: ["y","y","n","n"], leader: ["y","y","n","n"], pm: ["y","y","y","y"] },
+  { name: "invoices", labelKey: "rls_label_invoices", category: "other", user: ["n","n","n","n"], leader: ["n","n","n","n"], pm: ["y","y","y","n"] },
 ];
 
 const getFilters = (t: (key: string) => string): { label: string; value: Filter }[] => [
@@ -50,6 +51,7 @@ const getFilters = (t: (key: string) => string): { label: string; value: Filter 
 const c = {
   bg: "#0c0e14",
   surface: "#13151e",
+  surfaceAlt: "rgba(255,255,255,0.04)",
   surfaceHover: "#1a1d2a",
   border: "#1e2233",
   borderLight: "#2a2e42",
@@ -173,7 +175,7 @@ const codeStyle = (color: string, bg: string): React.CSSProperties => ({
 
 /* ── Main Component ── */
 
-const crudLabels = ["S", "I", "U", "D"] as const;
+const crudLabelKeys = ["rls_crud_select", "rls_crud_insert", "rls_crud_update", "rls_crud_delete"] as const;
 
 export function RLSPermissionsTable() {
   const { t } = useTranslation("common");
@@ -196,55 +198,77 @@ export function RLSPermissionsTable() {
     { icon: "✓*", labelKey: "rls_legend_conditional", bg: c.blueBg, fg: c.blue, bd: c.blueBorder },
   ];
 
+  const notesContent = [
+    t("rls_notes_crud"),
+    t("rls_notes_conditional_delete"),
+    t("rls_notes_readonly"),
+    t("rls_notes_invoices"),
+  ];
+
   return (
     <div style={{ minHeight: "100vh", background: c.bg, color: c.text, fontFamily: "'Outfit', 'Segoe UI', sans-serif", padding: "40px 24px", WebkitFontSmoothing: "antialiased" }}>
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
 
-        {/* Header */}
-        <div style={{ marginBottom: 40 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.5px", marginBottom: 8, background: `linear-gradient(135deg, ${c.text} 0%, ${c.textMuted} 100%)`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-            {t("rls_matrix_title")}
-          </h1>
-          <p style={{ color: c.textMuted, fontSize: 14 }}>{t("rls_matrix_subtitle")}</p>
-        </div>
-
-        {/* Legend */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: 32, padding: "16px 20px", background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12 }}>
-          {legendItems.map((item) => (
-            <div key={item.labelKey} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: c.textMuted, fontFamily: "'JetBrains Mono', monospace" }}>
-              <span style={{ width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, background: item.bg, color: item.fg, border: `1px solid ${item.bd}` }}>
-                {item.icon}
-              </span>
-              {t(item.labelKey)}
+        {/* Lewa kolumna: tytuł, legenda, filtry | Prawa kolumna: Notes — na całą wysokość */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr minmax(300px, 380px)", gap: 24, marginBottom: 24, alignItems: "stretch" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div>
+              <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: "-0.5px", marginBottom: 8, background: `linear-gradient(135deg, ${c.text} 0%, ${c.textMuted} 100%)`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                {t("rls_matrix_title")}
+              </h1>
+              <p style={{ color: c.textMuted, fontSize: 14 }}>{t("rls_matrix_subtitle")}</p>
             </div>
-          ))}
-        </div>
-
-        {/* Filters */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
-          {filters.map((f) => {
-            const active = activeFilter === f.value;
-            return (
-              <button
-                key={f.value}
-                onClick={() => setActiveFilter(f.value)}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: 8,
-                  border: `1px solid ${active ? c.blue : c.border}`,
-                  background: active ? c.blueBg : c.surface,
-                  color: active ? c.blue : c.textMuted,
-                  fontFamily: "'Outfit', sans-serif",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
-              >
-                {f.label}
-              </button>
-            );
-          })}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 20, padding: "18px 24px", background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12, width: "fit-content" }}>
+              {legendItems.map((item) => (
+                <div key={item.labelKey} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: c.text, fontFamily: "'Outfit', 'Segoe UI', sans-serif" }}>
+                  <span style={{ width: 22, height: 22, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, background: item.bg, color: item.fg, border: `1px solid ${item.bd}` }}>
+                    {item.icon}
+                  </span>
+                  {t(item.labelKey)}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {filters.map((f) => {
+                const active = activeFilter === f.value;
+                return (
+                  <button
+                    key={f.value}
+                    onClick={() => setActiveFilter(f.value)}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: 8,
+                      border: `1px solid ${active ? c.blue : c.border}`,
+                      background: active ? c.blueBg : c.surface,
+                      color: active ? c.blue : c.textMuted,
+                      fontFamily: "'Outfit', sans-serif",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+            <div style={{ flex: 1, padding: "20px 24px", background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12, display: "flex", flexDirection: "column" }}>
+              <h3 style={{ fontSize: 16, fontWeight: 600, color: c.text, marginBottom: 14, textTransform: "uppercase", letterSpacing: "0.5px", fontFamily: "'Outfit', 'Segoe UI', sans-serif" }}>
+                {t("rls_notes_title")}
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {notesContent.map((content, i) => (
+                  <p key={i} style={{ fontSize: 15, color: c.text, paddingLeft: 18, position: "relative", lineHeight: 1.6, fontFamily: "'Outfit', 'Segoe UI', sans-serif" }}>
+                    <span style={{ position: "absolute", left: 0, color: c.blue, fontWeight: 700 }}>›</span>
+                    {content}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Table */}
@@ -252,7 +276,7 @@ export function RLSPermissionsTable() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 900 }}>
             <thead>
               <tr>
-                <th rowSpan={2} style={{ textAlign: "left", paddingLeft: 20, paddingBottom: 12, verticalAlign: "bottom", color: c.textMuted, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", background: c.surface }}>
+                <th rowSpan={2} style={{ textAlign: "left", paddingLeft: 20, paddingBottom: 12, verticalAlign: "bottom", color: c.text, fontSize: 13, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", background: c.surface, fontFamily: "'Outfit', 'Segoe UI', sans-serif" }}>
                   {t("rls_table_header")}
                 </th>
                 {roles.map((role, idx) => (
@@ -265,41 +289,41 @@ export function RLSPermissionsTable() {
               </tr>
               <tr>
                 {[0, 1, 2].map((roleIdx) =>
-                  crudLabels.map((label, i) => (
+                  crudLabelKeys.map((labelKey, i) => (
                     <th
                       key={`crud-${roleIdx}-${i}`}
                       style={{
-                        padding: "4px 0 12px",
-                        fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: 11,
-                        fontWeight: 500,
-                        color: c.textDim,
+                        padding: "6px 4px 14px",
+                        fontFamily: "'Outfit', 'Segoe UI', sans-serif",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: c.text,
                         textAlign: "center",
                         borderBottom: `1px solid ${c.border}`,
                         background: c.surface,
-                        minWidth: 36,
+                        minWidth: 72,
                         borderLeft: i === 0 && roleIdx > 0 ? `1px solid ${c.borderLight}` : undefined,
                       }}
                     >
-                      {label}
+                      {t(labelKey)}
                     </th>
                   ))
                 )}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => (
+              {filtered.map((row, idx) => (
                 <tr
                   key={row.name}
-                  style={{ transition: "background 0.15s" }}
+                  style={{ transition: "background 0.15s", background: idx % 2 === 1 ? c.surfaceAlt : undefined }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = c.surfaceHover)}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = idx % 2 === 1 ? c.surfaceAlt : "transparent")}
                 >
-                  <td style={{ textAlign: "left", padding: "10px 0 10px 20px", fontFamily: "'JetBrains Mono', monospace", fontSize: 12, fontWeight: 500, color: c.text, whiteSpace: "nowrap", borderBottom: `1px solid ${c.border}` }}>
-                    {row.name}
+                  <td style={{ textAlign: "left", padding: "10px 0 10px 20px", fontSize: 13, fontWeight: 500, color: c.text, borderBottom: `1px solid ${c.border}` }} title={row.name}>
+                    {t(row.labelKey)}
                     {row.tag === "readonly" && (
                       <span style={{ display: "inline-block", marginLeft: 8, padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", background: c.yellowBg, color: c.yellow }}>
-                        readonly
+                        {t("rls_tag_readonly")}
                       </span>
                     )}
                   </td>
@@ -310,26 +334,6 @@ export function RLSPermissionsTable() {
               ))}
             </tbody>
           </table>
-        </div>
-
-        {/* Notes */}
-        <div style={{ marginTop: 24, padding: "16px 20px", background: c.surface, border: `1px solid ${c.border}`, borderRadius: 12 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600, color: c.textMuted, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.5px" }}>
-            {t("rls_notes_title")}
-          </h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {[
-              t("rls_notes_crud"),
-              t("rls_notes_conditional_delete"),
-              t("rls_notes_readonly"),
-              t("rls_notes_invoices"),
-            ].map((content, i) => (
-              <p key={i} style={{ fontSize: 13, color: c.textMuted, paddingLeft: 16, position: "relative", lineHeight: 1.6 }}>
-                <span style={{ position: "absolute", left: 0, color: c.textDim, fontWeight: 700 }}>›</span>
-                {content}
-              </p>
-            ))}
-          </div>
         </div>
       </div>
     </div>

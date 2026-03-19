@@ -37,32 +37,34 @@ export default function CreateProjectChoiceModal({ onClose }: CreateProjectChoic
           {t('create_project_choice_description')}
         </p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.base }}>
+        <div data-testid="create-project-choice-cards" style={{ display: 'flex', flexDirection: 'column', gap: spacing.base }}>
             <div
+              data-testid="create-choice-form-based"
               onClick={handleFormBased}
-              style={{ display: 'flex', alignItems: 'flex-start', gap: spacing["5xl"], padding: spacing["5xl"], borderRadius: radii.lg, border: `2px solid ${colors.borderLight}`, cursor: 'pointer', transition: 'all 0.2s', background: colors.bgSubtle }}
+              style={{ display: 'flex', alignItems: 'flex-start', gap: spacing["5xl"], padding: spacing["5xl"], borderRadius: radii.lg, border: `2px solid ${colors.borderLight}`, cursor: 'pointer', transition: 'all 0.2s', background: colors.bgSubtle, minHeight: 140 }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = colors.accentBlue; (e.currentTarget as HTMLElement).style.background = `${colors.accentBlue}10`; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = colors.borderLight; (e.currentTarget as HTMLElement).style.background = colors.bgSubtle; }}
             >
               <div style={{ flexShrink: 0, width: 48, height: 48, borderRadius: radii.lg, background: `${colors.accentBlue}25`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <FileSpreadsheet style={{ width: 24, height: 24, color: colors.accentBlue }} />
               </div>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <h3 style={{ fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('create_project_form_based_title')}</h3>
                 <p style={{ fontSize: fontSizes.base, color: colors.textDim, marginTop: spacing.xs, fontFamily: fonts.body }}>{t('create_project_form_based_description')}</p>
               </div>
             </div>
 
             <div
+              data-testid="create-choice-canvas"
               onClick={handleCanvas}
-              style={{ display: 'flex', alignItems: 'flex-start', gap: spacing["5xl"], padding: spacing["5xl"], borderRadius: radii.lg, border: `2px solid ${colors.borderLight}`, cursor: 'pointer', transition: 'all 0.2s', background: colors.bgSubtle }}
+              style={{ display: 'flex', alignItems: 'flex-start', gap: spacing["5xl"], padding: spacing["5xl"], borderRadius: radii.lg, border: `2px solid ${colors.borderLight}`, cursor: 'pointer', transition: 'all 0.2s', background: colors.bgSubtle, minHeight: 140 }}
               onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.borderColor = colors.green; (e.currentTarget as HTMLElement).style.background = `${colors.green}10`; }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.borderColor = colors.borderLight; (e.currentTarget as HTMLElement).style.background = colors.bgSubtle; }}
             >
               <div style={{ flexShrink: 0, width: 48, height: 48, borderRadius: radii.lg, background: `${colors.green}25`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Paintbrush style={{ width: 24, height: 24, color: colors.green }} />
               </div>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <h3 style={{ fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('create_project_canvas_title')}</h3>
                 <p style={{ fontSize: fontSizes.base, color: colors.textDim, marginTop: spacing.xs, fontFamily: fonts.body }}>{t('create_project_canvas_description')}</p>
               </div>

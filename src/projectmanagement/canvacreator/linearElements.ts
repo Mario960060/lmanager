@@ -87,6 +87,56 @@ function cross(a: Point, b: Point): number {
   return a.x * b.y - a.y * b.x;
 }
 
+/** Miter join at corner curr with incoming prev→curr and outgoing curr→next (same math as interior of computeThickPolyline). */
+function miterOffsetsAtCorner(prev: Point, curr: Point, next: Point, half: number, miterLimit: number): { left: Point; right: Point } {
+  const d1x = curr.x - prev.x;
+  const d1y = curr.y - prev.y;
+  const d2x = next.x - curr.x;
+  const d2y = next.y - curr.y;
+  const l1 = Math.sqrt(d1x * d1x + d1y * d1y);
+  const l2 = Math.sqrt(d2x * d2x + d2y * d2y);
+  if (l1 < 0.001 || l2 < 0.001) {
+    const nx = l1 > 0.001 ? -d1y / l1 : 0;
+    const ny = l1 > 0.001 ? d1x / l1 : 0;
+    return {
+      left: { x: curr.x + nx * half, y: curr.y + ny * half },
+      right: { x: curr.x - nx * half, y: curr.y - ny * half },
+    };
+  }
+  const n1x = -d1y / l1;
+  const n1y = d1x / l1;
+  const n2x = -d2y / l2;
+  const n2y = d2x / l2;
+  const p1 = { x: prev.x + n1x * half, y: prev.y + n1y * half };
+  const p2 = { x: curr.x + n2x * half, y: curr.y + n2y * half };
+  const dir1 = { x: d1x / l1, y: d1y / l1 };
+  const dir2 = { x: d2x / l2, y: d2y / l2 };
+  const denom = cross(dir1, dir2);
+  if (Math.abs(denom) < 0.0001) {
+    return {
+      left: { x: curr.x + n1x * half, y: curr.y + n1y * half },
+      right: { x: curr.x - n1x * half, y: curr.y - n1y * half },
+    };
+  }
+  const diff = { x: p2.x - p1.x, y: p2.y - p1.y };
+  const t = cross(diff, dir2) / denom;
+  let miterLeft = { x: p1.x + t * dir1.x, y: p1.y + t * dir1.y };
+  const distLeft = Math.sqrt((miterLeft.x - curr.x) ** 2 + (miterLeft.y - curr.y) ** 2);
+  if (distLeft > miterLimit) {
+    miterLeft = { x: curr.x + n1x * half, y: curr.y + n1y * half };
+  }
+  const r1 = { x: prev.x - n1x * half, y: prev.y - n1y * half };
+  const r2 = { x: curr.x - n2x * half, y: curr.y - n2y * half };
+  const rdiff = { x: r2.x - r1.x, y: r2.y - r1.y };
+  const tr = cross(rdiff, dir2) / denom;
+  let miterRight = { x: r1.x + tr * dir1.x, y: r1.y + tr * dir1.y };
+  const distRight = Math.sqrt((miterRight.x - curr.x) ** 2 + (miterRight.y - curr.y) ** 2);
+  if (distRight > miterLimit) {
+    miterRight = { x: curr.x - n1x * half, y: curr.y - n1y * half };
+  }
+  return { left: miterLeft, right: miterRight };
+}
+
 /**
  * Compute polygon outline for a thick polyline.
  * Offset each segment by +/- thickness/2 along normals, with proper miter joins at corners.
@@ -105,6 +155,34 @@ export function getPathPolygon(shape: Shape): Point[] {
   const pathWidthM = Number(shape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
   const thicknessPx = toPixels(pathWidthM);
   return computeThickPolyline(pts, thicknessPx);
+}
+
+/**
+ * Closed centerline loop (no repeated first vertex): one miter per corner, same outline format as open thick polyline
+ * [left0..left_n, right_n..right0] with n = vertex count (duplicate of left0/right0 at end for indexing).
+ */
+export function computeThickPolylineClosed(points: Point[], thicknessPx: number): Point[] {
+  const V = points.length;
+  if (V < 3) return [];
+  const half = thicknessPx / 2;
+  const MITER_LIMIT = half * 4;
+  const left: Point[] = [];
+  const right: Point[] = [];
+  for (let i = 0; i < V; i++) {
+    const prev = points[(i - 1 + V) % V];
+    const curr = points[i];
+    const next = points[(i + 1) % V];
+    const { left: L, right: R } = miterOffsetsAtCorner(prev, curr, next, half, MITER_LIMIT);
+    left.push(L);
+    right.push(R);
+  }
+  left.push({ ...left[0] });
+  right.push({ ...right[0] });
+  const result: Point[] = [...left];
+  for (let i = right.length - 1; i >= 0; i--) {
+    result.push(right[i]);
+  }
+  return result;
 }
 
 export function computeThickPolyline(points: Point[], thicknessPx: number): Point[] {
@@ -206,8 +284,13 @@ export function computeThickPolyline(points: Point[], thicknessPx: number): Poin
 
 /**
  * Build path outline from centerline + per-segment side choices.
- * segmentSides[i] = side for segment from pts[i] to pts[i+1].
- * Uses left/right offset points; forward chain uses chosen side, back chain uses opposite.
+ * segmentSides[i] = side for segment i (pts[i] → pts[i+1]).
+ *
+ * Two chains: leftChain (left of centerline, +normal) and rightChain (right, -normal).
+ * For each segment, the chain on the path side carries the offset line; the opposite chain carries the centerline.
+ * At every vertex each chain gets exactly ONE point:
+ *   - Same side: miter intersection of the two offset lines (or two centerlines = vertex itself).
+ *   - Side change: intersection of the offset line (from the segment on that side) with the centerline (from the other segment).
  */
 export function computePathOutlineFromSegmentSides(
   centerline: Point[],
@@ -215,40 +298,114 @@ export function computePathOutlineFromSegmentSides(
   pathWidthM: number
 ): Point[] {
   if (centerline.length < 2 || segmentSides.length !== centerline.length - 1) return [];
-  const half = toPixels(pathWidthM) / 2;
-  const leftPts: Point[] = [];
-  const rightPts: Point[] = [];
-  for (let i = 0; i < centerline.length - 1; i++) {
+  const full = toPixels(pathWidthM);
+  const MITER_LIMIT = full * 4;
+  const n = centerline.length;
+
+  const normals: { x: number; y: number }[] = [];
+  const dirs: { x: number; y: number }[] = [];
+  for (let i = 0; i < n - 1; i++) {
     const a = centerline[i];
     const b = centerline[i + 1];
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const len = Math.sqrt(dx * dx + dy * dy);
-    if (len < 0.001) continue;
-    const nx = -dy / len;
-    const ny = dx / len;
-    leftPts.push({ x: a.x + nx * half, y: a.y + ny * half });
-    rightPts.push({ x: a.x - nx * half, y: a.y - ny * half });
+    if (len < 0.001) { normals.push({ x: 0, y: 0 }); dirs.push({ x: 0, y: 0 }); continue; }
+    normals.push({ x: -dy / len, y: dx / len });
+    dirs.push({ x: dx / len, y: dy / len });
   }
-  const last = centerline[centerline.length - 1];
-  const prevLast = centerline[centerline.length - 2];
-  const dx = last.x - prevLast.x;
-  const dy = last.y - prevLast.y;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  const nx = len > 0.001 ? -dy / len : 0;
-  const ny = len > 0.001 ? dx / len : 0;
-  leftPts.push({ x: last.x + nx * half, y: last.y + ny * half });
-  rightPts.push({ x: last.x - nx * half, y: last.y - ny * half });
-  const n = centerline.length;
-  const outline: Point[] = [];
-  outline.push(segmentSides[0] === "left" ? leftPts[0] : rightPts[0]);
-  for (let i = 0; i < n - 1; i++) {
-    outline.push(segmentSides[i] === "left" ? leftPts[i + 1] : rightPts[i + 1]);
+
+  function cross2d(ax: number, ay: number, bx: number, by: number): number {
+    return ax * by - ay * bx;
   }
-  for (let i = n - 1; i >= 0; i--) {
-    outline.push(segmentSides[Math.max(0, i - 1)] === "left" ? rightPts[i] : leftPts[i]);
+
+  function offsetPt(vi: number, si: number, side: "left" | "right"): Point {
+    const sign = side === "left" ? 1 : -1;
+    const pt = centerline[vi];
+    const nm = normals[si];
+    return { x: pt.x + sign * nm.x * full, y: pt.y + sign * nm.y * full };
   }
-  return outline;
+
+  /** Intersect two lines: (px,py)+t*(dx,dy) and (qx,qy)+s*(ex,ey). Returns intersection or null. */
+  function lineIsect(
+    px: number, py: number, dx: number, dy: number,
+    qx: number, qy: number, ex: number, ey: number
+  ): Point | null {
+    const denom = cross2d(dx, dy, ex, ey);
+    if (Math.abs(denom) < 0.0001) return null;
+    const t = cross2d(qx - px, qy - py, ex, ey) / denom;
+    return { x: px + t * dx, y: py + t * dy };
+  }
+
+  /** Miter join of two offset lines (same side, same offset sign) at interior vertex i. */
+  function miterJoin(i: number, side: "left" | "right"): Point {
+    const p = offsetPt(i, i - 1, side);
+    const q = offsetPt(i, i, side);
+    const d1 = dirs[i - 1], d2 = dirs[i];
+    if ((d1.x === 0 && d1.y === 0) || (d2.x === 0 && d2.y === 0)) return p;
+    const pt = lineIsect(p.x, p.y, d1.x, d1.y, q.x, q.y, d2.x, d2.y);
+    if (!pt) return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+    const cx = centerline[i].x, cy = centerline[i].y;
+    const ddx = pt.x - cx, ddy = pt.y - cy;
+    const dist = Math.sqrt(ddx * ddx + ddy * ddy);
+    if (dist > MITER_LIMIT) {
+      return { x: cx + (ddx / dist) * MITER_LIMIT, y: cy + (ddy / dist) * MITER_LIMIT };
+    }
+    return pt;
+  }
+
+  /**
+   * Side-change intersection for one chain at interior vertex i.
+   * offsetSeg = index of the segment that IS on this chain's side (carries offset line).
+   * centerSeg = index of the other segment (carries centerline).
+   */
+  function sideChangePoint(i: number, offsetSeg: number, centerSeg: number, side: "left" | "right"): Point {
+    const d1 = dirs[offsetSeg], d2 = dirs[centerSeg];
+    if ((d1.x === 0 && d1.y === 0) || (d2.x === 0 && d2.y === 0)) return offsetPt(i, offsetSeg, side);
+    const op = offsetPt(i, offsetSeg, side);
+    const cp = centerline[i];
+    const pt = lineIsect(op.x, op.y, d1.x, d1.y, cp.x, cp.y, d2.x, d2.y);
+    if (!pt) return op;
+    const dist = Math.sqrt((pt.x - centerline[i].x) ** 2 + (pt.y - centerline[i].y) ** 2);
+    return dist > MITER_LIMIT ? op : pt;
+  }
+
+  function leftPoint(i: number): Point {
+    const prevSide = segmentSides[i - 1];
+    const nextSide = segmentSides[i];
+    if (prevSide === "left" && nextSide === "left") return miterJoin(i, "left");
+    if (prevSide === "right" && nextSide === "right") return { ...centerline[i] };
+    if (prevSide === "left") return sideChangePoint(i, i - 1, i, "left");
+    return sideChangePoint(i, i, i - 1, "left");
+  }
+
+  function rightPoint(i: number): Point {
+    const prevSide = segmentSides[i - 1];
+    const nextSide = segmentSides[i];
+    if (prevSide === "right" && nextSide === "right") return miterJoin(i, "right");
+    if (prevSide === "left" && nextSide === "left") return { ...centerline[i] };
+    if (prevSide === "right") return sideChangePoint(i, i - 1, i, "right");
+    return sideChangePoint(i, i, i - 1, "right");
+  }
+
+  const leftChain: Point[] = [];
+  const rightChain: Point[] = [];
+
+  leftChain.push(segmentSides[0] === "left" ? offsetPt(0, 0, "left") : { ...centerline[0] });
+  rightChain.push(segmentSides[0] === "right" ? offsetPt(0, 0, "right") : { ...centerline[0] });
+
+  for (let i = 1; i < n - 1; i++) {
+    leftChain.push(leftPoint(i));
+    rightChain.push(rightPoint(i));
+  }
+
+  leftChain.push(segmentSides[n - 2] === "left" ? offsetPt(n - 1, n - 2, "left") : { ...centerline[n - 1] });
+  rightChain.push(segmentSides[n - 2] === "right" ? offsetPt(n - 1, n - 2, "right") : { ...centerline[n - 1] });
+
+  const rightReversed: Point[] = [];
+  for (let i = rightChain.length - 1; i >= 0; i--) rightReversed.push(rightChain[i]);
+
+  return [...leftChain, ...rightReversed];
 }
 
 /**
@@ -379,6 +536,26 @@ export function polygonToCenterline(outline: Point[]): Point[] {
       rightMid = midpoint(outline[rightIdx], outline[rightIdx - 1]);
     }
     centerline.push(midpoint(leftMid, rightMid));
+  }
+  const EPS = 1e-8;
+  while (centerline.length >= 2) {
+    const a = centerline[centerline.length - 1];
+    const b = centerline[centerline.length - 2];
+    if (distance(a, b) < EPS) {
+      centerline.pop();
+    } else {
+      break;
+    }
+  }
+  // One-segment outline (n===4): collapsing duplicates can leave a single point while
+  // polygonToSegmentLengths still reports one edge — same cap midpoints as that function.
+  if (centerline.length < 2 && segCount === 1) {
+    const centerStart = midpoint(outline[0], outline[n - 1]);
+    const centerEnd = midpoint(outline[1], outline[2]);
+    return [centerStart, centerEnd];
+  }
+  if (centerline.length === segCount && segCount >= 2) {
+    centerline.push({ ...centerline[0] });
   }
   return centerline;
 }
@@ -588,12 +765,15 @@ export function drawLinearElement(
   }
 
   // Segment length labels
-  const segCount = isPolygon ? segmentLengthsM.length : pts.length - 1;
+  const segCount = isPolygon
+    ? Math.min(segmentLengthsM.length, Math.max(0, centerlinePts.length - 1))
+    : pts.length - 1;
   for (let i = 0; i < segCount; i++) {
     const len = isPolygon ? toPixels(segmentLengthsM[i]!) : calcEdgeLengthWithArcs(pts[i], pts[i + 1], shape.edgeArcs?.[i]);
-    const mid = isPolygon ? centerlinePts[i]! : midpoint(pts[i], pts[i + 1]);
+    const mid = isPolygon ? centerlinePts[i] : midpoint(pts[i], pts[i + 1]);
+    const nextPt = isPolygon ? centerlinePts[i + 1] : pts[i + 1];
+    if (!mid || !nextPt) continue;
     const sm = worldToScreen(mid.x, mid.y);
-    const nextPt = isPolygon ? centerlinePts[i + 1]! : pts[i + 1];
     const dx = nextPt.x - mid.x;
     const dy = nextPt.y - mid.y;
     const norm = Math.atan2(-dx, dy);

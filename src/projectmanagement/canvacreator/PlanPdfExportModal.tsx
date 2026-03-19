@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { FileDown } from "lucide-react";
 import { C } from "./geometry";
+import { colors, shadows } from "../../themes/designTokens";
 
 interface PlanPdfExportModalProps {
   isOpen: boolean;
@@ -73,7 +74,7 @@ export default function PlanPdfExportModal({
           width: "90%",
           maxWidth: 400,
           padding: 24,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+          boxShadow: shadows.modal,
         }}
         onClick={(e) => e.stopPropagation()}
       >

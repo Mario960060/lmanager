@@ -5,8 +5,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
-import { colors, fontSizes, radii, spacing } from '../../themes/designTokens';
-import { Button } from '../../themes/uiComponents';
+import { colors, fonts, fontSizes, fontWeights, radii, spacing, gradients } from '../../themes/designTokens';
+import { Button, Card, DataTable, TextInput, SelectDropdown, Checkbox, CalculatorInputGrid } from '../../themes/uiComponents';
 
 interface FenceCalculatorProps {
   fenceType: 'vertical' | 'horizontal';
@@ -516,182 +516,137 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
   }, [totalHours, materials]);
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold">{fenceType === 'vertical' ? 'Vertical' : 'Horizontal'} Fence Calculator</h2>
-      <p className="text-sm text-gray-600">
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display, letterSpacing: '0.3px', margin: `${spacing.md}px 0 ${spacing.sm}px` }}>
+        {fenceType === 'vertical' ? t('calculator:vertical_fence_calculator', { defaultValue: 'Vertical Fence Calculator' }) : t('calculator:horizontal_fence_calculator', { defaultValue: 'Horizontal Fence Calculator' })}
+      </h2>
+      <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, lineHeight: 1.5 }}>
         Calculate materials, time, and costs for {fenceType} fence installation projects.
       </p>
 
-      {canvasMode && segmentLengths.length > 0 && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 600, color: colors.textWarm, marginBottom: 6 }}>{t('calculator:fence_configuration_label')}</div>
-          <div style={{ display: 'flex', background: colors.bgDeep, borderRadius: radii.md, border: `1px solid ${colors.bgDeepBorder}`, padding: 3, gap: 3 }}>
-            <button
-              type="button"
-              disabled={segmentLengths.length > 1}
-              onClick={() => segmentLengths.length <= 1 && setFenceConfigMode('single')}
-              title={segmentLengths.length > 1 ? 'Remove segments to use single length' : undefined}
-              style={{
-                flex: 1, padding: '9px 12px', borderRadius: 6, border: 'none', background: fenceConfigMode === 'single' ? colors.greenBg : 'transparent',
-                color: segmentLengths.length > 1 ? colors.textDisabled : (fenceConfigMode === 'single' ? colors.green : colors.textLabel), fontWeight: 600, fontSize: fontSizes.md, cursor: segmentLengths.length > 1 ? 'not-allowed' : 'pointer', opacity: segmentLengths.length > 1 ? 0.5 : 1
-              }}
-            >
-              Single length
-            </button>
-            <button
-              type="button"
-              onClick={() => setFenceConfigMode('segments')}
-              style={{
-                flex: 1, padding: '9px 12px', borderRadius: 6, border: 'none', background: fenceConfigMode === 'segments' ? 'rgba(34, 197, 94, 0.1)' : 'transparent',
-                color: fenceConfigMode === 'segments' ? colors.green : colors.textLabel, fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer'
-              }}
-            >
-              Segments ({segmentLengths.length})
-            </button>
-          </div>
-          <div style={{ fontSize: fontSizes.sm, color: colors.textLabel, marginTop: 6 }}>
-            Total length: <strong style={{ color: colors.textPrimaryLight }}>{totalLengthCanvas.toFixed(3)} m</strong>
-          </div>
-        </div>
-      )}
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:input_fence_length_m')}</label>
-        <input
-          type="number"
-          value={length}
-          onChange={(e) => setLength(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder={t('calculator:placeholder_enter_length_m')}
-          readOnly={canvasMode && fenceConfigMode === 'single' && totalLengthCanvas > 0}
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:input_fence_height_m')}</label>
-        <input
-          type="number"
-          value={height}
-          onChange={(e) => setHeight(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder={t('calculator:placeholder_enter_height_m')}
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:input_slat_width_cm')}</label>
-        <select
-          value={slatWidth}
-          onChange={(e) => setSlatWidth(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        >
-          <option value="10">10 cm</option>
-          <option value="12">12 cm</option>
-          <option value="15">15 cm</option>
-        </select>
-      </div>
-
-      {fenceType === 'horizontal' && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_slat_length_cm')}</label>
-          <select
-            value={slatLength}
-            onChange={(e) => setSlatLength(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="180">180 cm</option>
-            <option value="360">360 cm</option>
-          </select>
-        </div>
-      )}
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:input_postmix_per_post_bags')}</label>
-        <input
-          type="number"
-          value={postmixPerPost}
-          onChange={(e) => setPostmixPerPost(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder={t('calculator:placeholder_enter_postmix')}
-          min="0"
-          step="0.1"
-        />
-      </div>
-
-      {!isInProjectCreating && (
-        <label className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            checked={calculateTransport}
-            onChange={(e) => setCalculateTransport(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-        </label>
-      )}
-
-      {/* Transport Carrier Selection */}
-      {!isInProjectCreating && calculateTransport && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier')}</label>
-          <div className="space-y-2">
-            <div 
-              className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded"
-              onClick={() => setSelectedTransportCarrier(null)}
-            >
-              <div className={`w-4 h-4 rounded-full border mr-2 ${
-                selectedTransportCarrier === null 
-                  ? 'border-gray-400' 
-                  : 'border-gray-400'
-              }`}>
-                <div className={`w-2 h-2 rounded-full m-0.5 ${
-                  selectedTransportCarrier === null 
-                    ? 'bg-gray-400' 
-                    : 'bg-transparent'
-                }`}></div>
-              </div>
-              <div>
-                <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
-              </div>
-            </div>
-            {carriers.length > 0 && carriers.map((carrier) => (
-              <div 
-                key={carrier.id}
-                className="flex items-center p-2 cursor-pointer"
-                onClick={() => setSelectedTransportCarrier(carrier)}
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
+        {canvasMode && segmentLengths.length > 0 && (
+          <div style={{ marginBottom: spacing["3xl"] }}>
+            <div style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.bold, color: colors.textSubtle, marginBottom: spacing.md }}>{t('calculator:fence_configuration_label')}</div>
+            <div style={{ display: 'flex', background: colors.bgCardInner, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}`, padding: 3, gap: 3 }}>
+              <button
+                type="button"
+                disabled={segmentLengths.length > 1}
+                onClick={() => segmentLengths.length <= 1 && setFenceConfigMode('single')}
+                title={segmentLengths.length > 1 ? 'Remove segments to use single length' : undefined}
+                style={{
+                  flex: 1, padding: `${spacing.lg}px ${spacing.xl}px`, borderRadius: radii.lg, border: 'none', background: fenceConfigMode === 'single' ? colors.accentBlueBg : 'transparent',
+                  color: segmentLengths.length > 1 ? colors.textDisabled : (fenceConfigMode === 'single' ? colors.accentBlue : colors.textDim), fontWeight: fontWeights.semibold, fontSize: fontSizes.md, cursor: segmentLengths.length > 1 ? 'not-allowed' : 'pointer', opacity: segmentLengths.length > 1 ? 0.5 : 1
+                }}
               >
-                <div className={`w-4 h-4 rounded-full border mr-2 ${
-                  selectedTransportCarrier?.id === carrier.id 
-                    ? 'border-gray-400' 
-                    : 'border-gray-400'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full m-0.5 ${
-                    selectedTransportCarrier?.id === carrier.id 
-                      ? 'bg-gray-400' 
-                      : 'bg-transparent'
-                  }`}></div>
-                </div>
-                <div>
-                  <span className="text-gray-800">{carrier.name}</span>
-                  <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
-                </div>
-              </div>
-            ))}
+                Single length
+              </button>
+              <button
+                type="button"
+                onClick={() => setFenceConfigMode('segments')}
+                style={{
+                  flex: 1, padding: `${spacing.lg}px ${spacing.xl}px`, borderRadius: radii.lg, border: 'none', background: fenceConfigMode === 'segments' ? colors.accentBlueBg : 'transparent',
+                  color: fenceConfigMode === 'segments' ? colors.accentBlue : colors.textDim, fontWeight: fontWeights.semibold, fontSize: fontSizes.sm, cursor: 'pointer'
+                }}
+              >
+                Segments ({segmentLengths.length})
+              </button>
             </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
-              <input
-                type="number"
-                value={transportDistance}
-                onChange={(e) => setTransportDistance(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:placeholder_enter_transport_distance')}
-                min="0"
-                step="1"
-              />
+            <div style={{ fontSize: fontSizes.sm, color: colors.textDim, marginTop: spacing.md }}>
+              Total length: <strong style={{ color: colors.textPrimary }}>{totalLengthCanvas.toFixed(3)} m</strong>
             </div>
           </div>
+        )}
+
+        <CalculatorInputGrid columns={2}>
+          <TextInput
+            label={t('calculator:input_fence_length_m')}
+            value={length}
+            onChange={setLength}
+            placeholder={t('calculator:placeholder_enter_length_m')}
+            unit="m"
+            readOnly={canvasMode && fenceConfigMode === 'single' && totalLengthCanvas > 0}
+          />
+          <TextInput
+            label={t('calculator:input_fence_height_m')}
+            value={height}
+            onChange={setHeight}
+            placeholder={t('calculator:placeholder_enter_height_m')}
+            unit="m"
+          />
+        </CalculatorInputGrid>
+
+        <CalculatorInputGrid columns={2}>
+          <SelectDropdown
+            label={t('calculator:input_slat_width_cm')}
+            value={slatWidth + ' cm'}
+            options={['10 cm', '12 cm', '15 cm']}
+            onChange={(v) => setSlatWidth(v.replace(/\s*cm\s*$/, ''))}
+            placeholder={t('calculator:input_slat_width_cm')}
+          />
+          {fenceType === 'horizontal' && (
+            <SelectDropdown
+              label={t('calculator:input_slat_length_cm')}
+              value={slatLength + ' cm'}
+              options={['180 cm', '360 cm']}
+              onChange={(v) => setSlatLength(v.replace(/\s*cm\s*$/, ''))}
+              placeholder={t('calculator:input_slat_length_cm')}
+            />
+          )}
+        </CalculatorInputGrid>
+
+        <TextInput
+          label={t('calculator:input_postmix_per_post_bags')}
+          value={postmixPerPost}
+          onChange={setPostmixPerPost}
+          placeholder={t('calculator:placeholder_enter_postmix')}
+          unit="bags"
+        />
+
+        {!isInProjectCreating && (
+          <Checkbox label={t('calculator:calculate_transport_time_label')} checked={calculateTransport} onChange={setCalculateTransport} />
+        )}
+
+        {!isInProjectCreating && calculateTransport && (
+          <>
+            <div>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:transport_carrier')}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: !selectedTransportCarrier ? colors.bgHover : 'transparent', border: `1px solid ${!selectedTransportCarrier ? colors.accentBlueBorder : colors.borderLight}` }}
+                  onClick={() => setSelectedTransportCarrier(null)}
+                >
+                  <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${!selectedTransportCarrier ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {!selectedTransportCarrier && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                  </div>
+                  <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{t('calculator:default_wheelbarrow')}</span>
+                </div>
+                {carriers.length > 0 && carriers.map((carrier) => (
+                  <div
+                    key={carrier.id}
+                    style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: selectedTransportCarrier?.id === carrier.id ? colors.bgHover : 'transparent', border: `1px solid ${selectedTransportCarrier?.id === carrier.id ? colors.accentBlueBorder : colors.borderLight}` }}
+                    onClick={() => setSelectedTransportCarrier(carrier)}
+                  >
+                    <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedTransportCarrier?.id === carrier.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {selectedTransportCarrier?.id === carrier.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                    </div>
+                    <div>
+                      <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{carrier.name}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({carrier["size (in tones)"]} tons)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <TextInput
+              label={t('calculator:transport_distance_label')}
+              value={transportDistance}
+              onChange={setTransportDistance}
+              placeholder={t('calculator:placeholder_enter_transport_distance')}
+              unit="m"
+              helperText={t('calculator:set_to_zero_no_transport')}
+            />
+          </>
         )}
 
       <Button variant="accent" color={colors.accentBlue} onClick={calculate} disabled={isLoading}>
@@ -699,18 +654,18 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
       </Button>
 
       {calculationError && (
-        <div className="mt-4 p-4 bg-red-900/90 border border-red-600 rounded-lg text-white">
+        <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: colors.red, border: `1px solid ${colors.redLight}`, color: colors.textOnAccent }}>
           {calculationError}
         </div>
       )}
 
       {totalHours !== null && (
-        <div className="mt-6 space-y-4" ref={resultsRef}>
+        <div style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }} ref={resultsRef}>
           {segmentResults.length > 1 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: colors.textCool, marginBottom: 8 }}>Fence segments</div>
-              <div style={{ background: colors.bgDeep, border: `1px solid ${colors.bgDeepBorder}`, borderRadius: radii.lg, overflow: 'hidden' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 70px 70px 80px 70px', padding: '8px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel, textTransform: 'uppercase' }}>
+            <div style={{ marginBottom: spacing["3xl"] }}>
+              <div style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.bold, color: colors.textSubtle, marginBottom: spacing.md }}>{t('calculator:fence_segments_label', { defaultValue: 'Fence segments' })}</div>
+              <div style={{ background: colors.bgCardInner, border: `1px solid ${colors.borderDefault}`, borderRadius: radii["2xl"], overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 70px 70px 80px 70px', padding: `${spacing.md}px ${spacing.xl}px`, borderBottom: `1px solid ${colors.borderLight}`, fontSize: fontSizes.xs, fontWeight: fontWeights.bold, color: colors.textDim, textTransform: 'uppercase' }}>
                   <span>#</span>
                   <span>{t('calculator:length_label')}</span>
                   <span style={{ textAlign: 'center' }}>{t('calculator:rails_label')}</span>
@@ -719,92 +674,84 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
                   <span style={{ textAlign: 'center' }}>{t('calculator:posts_label')}</span>
                 </div>
                 {segmentResults.map((seg, idx) => (
-                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 70px 70px 80px 70px', alignItems: 'center', padding: '10px 12px', borderBottom: idx < segmentResults.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', background: idx % 2 === 1 ? 'rgba(255,255,255,0.022)' : undefined, fontSize: '0.82rem' }}>
-                    <span style={{ fontWeight: 600, color: colors.textLabel }}>{idx + 1}</span>
-                    <span style={{ fontWeight: 600, color: colors.textPrimaryLight }}>{seg.lengthM.toFixed(2)} m</span>
-                    <span style={{ textAlign: 'center', color: colors.textPrimaryLight }}>{seg.rails}</span>
-                    <span style={{ textAlign: 'center', color: colors.textPrimaryLight }}>{seg.slats}</span>
-                    <span style={{ textAlign: 'center', color: seg.remainderCm > 0 ? colors.amber : colors.textLabel }}>{seg.remainderCm.toFixed(0)} cm</span>
-                    <span style={{ textAlign: 'center', color: colors.textPrimaryLight }}>{seg.posts}</span>
+                  <div key={idx} style={{ display: 'grid', gridTemplateColumns: '40px 1fr 70px 70px 80px 70px', alignItems: 'center', padding: `${spacing.lg}px ${spacing.xl}px`, borderBottom: idx < segmentResults.length - 1 ? `1px solid ${colors.borderLight}` : 'none', background: idx % 2 === 1 ? colors.bgTableRowAlt : undefined, fontSize: fontSizes.base }}>
+                    <span style={{ fontWeight: fontWeights.semibold, color: colors.textDim }}>{idx + 1}</span>
+                    <span style={{ fontWeight: fontWeights.semibold, color: colors.textSecondary }}>{seg.lengthM.toFixed(2)} m</span>
+                    <span style={{ textAlign: 'center', color: colors.textSecondary }}>{seg.rails}</span>
+                    <span style={{ textAlign: 'center', color: colors.textSecondary }}>{seg.slats}</span>
+                    <span style={{ textAlign: 'center', color: seg.remainderCm > 0 ? colors.amber : colors.textDim }}>{seg.remainderCm.toFixed(0)} cm</span>
+                    <span style={{ textAlign: 'center', color: colors.textSecondary }}>{seg.posts}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
-          <div>
-            <h3 className="text-lg font-medium">{t('calculator:total_labor_hours_label')} <span className="text-blue-600">{totalHours.toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
-            
-            <div className="mt-2">
-              <h4 className="font-medium text-gray-700 mb-2">{t('calculator:task_breakdown_label')}</h4>
-              <ul className="space-y-1 pl-5 list-disc">
+          <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg }}>
+              <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                {t('calculator:total_labor_hours_label')}
+              </span>
+              <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                {totalHours.toFixed(2)}
+              </span>
+              <span style={{ fontSize: fontSizes.md, color: colors.accentBlue, fontFamily: fonts.body, fontWeight: fontWeights.medium }}>
+                {t('calculator:hours_abbreviation')}
+              </span>
+            </div>
+          </Card>
+          <Card>
+            <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+              {t('calculator:task_breakdown_label')}
+            </h3>
+            <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
               {taskBreakdown.map((task, index) => (
-                  <li key={index} className="text-sm">
-                    <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}
-                  </li>
-                ))}
-              </ul>
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                    background: index % 2 === 1 ? colors.bgTableRowAlt : undefined,
+                    borderBottom: index < taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
+                  }}
+                >
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName(task.task, t)}</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                    <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{task.hours.toFixed(2)}</span>
+                    <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-
-          <div>
-            <h3 className="font-medium mb-2">{t('calculator:materials_required_label')}</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                    <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Material
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Quantity
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Unit
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Price per Unit
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Total Price
-                    </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {materials.map((material, index) => (
-                    <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {translateMaterialName(material.name, t)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {material.amount.toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {translateUnit(material.unit, t)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}
-                        </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.total_price ? `£${material.total_price.toFixed(2)}` : 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              
-              {/* Add total price row */}
-              <div className="mt-4 text-right pr-6">
-                <p className="text-sm font-medium">
-                  {t('calculator:total_cost_colon')}{' '}
-                  {materials.some(m => m.total_price !== null) 
-                    ? `£${materials.reduce((sum: number, m: Material) => sum + (m.total_price || 0), 0).toFixed(2)}`
-                    : t('calculator:not_available')}
-                </p>
+          </Card>
+          <DataTable
+            columns={[
+              { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+              { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+              { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+              { key: 'price', label: t('calculator:table_price_per_unit_header'), width: '1fr' },
+              { key: 'total', label: t('calculator:table_total_header'), width: '1fr' },
+            ]}
+            rows={materials.map((m) => ({
+              name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName(m.name, t)}</span>,
+              quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.amount.toFixed(2)}</span>,
+              unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
+              price: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : 'N/A'}</span>,
+              total: <span style={{ fontSize: fontSizes.md, fontWeight: fontWeights.bold, color: colors.textSecondary }}>{m.total_price ? `£${m.total_price.toFixed(2)}` : 'N/A'}</span>,
+            }))}
+            footer={
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: spacing.md }}>
+                <span style={{ fontSize: fontSizes.base, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>{t('calculator:total_cost_colon')}</span>
+                <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display }}>
+                  {materials.some(m => m.total_price !== null) ? `£${materials.reduce((sum: number, m: Material) => sum + (m.total_price || 0), 0).toFixed(2)}` : t('calculator:not_available')}
+                </span>
               </div>
-            </div>
-          </div>
+            }
+          />
         </div>
       )}
+      </Card>
     </div>
   );
 };

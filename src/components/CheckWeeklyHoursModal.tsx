@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../themes/designTokens';
 import { supabase } from '../lib/supabase';
 import Modal from './Modal';
 import DatePicker from './DatePicker';
@@ -227,9 +228,8 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
               setSelectedWeek('');
               setDateRange({ start: '', end: '' });
             }}
-            className={`px-4 py-2 rounded-lg ${
-              selectedTimeRange === 'preset' ? 'bg-gray-700 text-white' : 'bg-gray-100'
-            }`}
+            className="px-4 py-2 rounded-lg"
+            style={selectedTimeRange === 'preset' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
           >
             {t('event:quick_select')}
           </button>
@@ -240,9 +240,8 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
               setSelectedWeek('');
               setDateRange({ start: '', end: '' });
             }}
-            className={`px-4 py-2 rounded-lg ${
-              selectedTimeRange === 'single' ? 'bg-gray-700 text-white' : 'bg-gray-100'
-            }`}
+            className="px-4 py-2 rounded-lg"
+            style={selectedTimeRange === 'single' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
           >
             {t('event:single_day')}
           </button>
@@ -253,9 +252,8 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
               setSelectedDate('');
               setDateRange({ start: '', end: '' });
             }}
-            className={`px-4 py-2 rounded-lg ${
-              selectedTimeRange === 'weekly' ? 'bg-gray-700 text-white' : 'bg-gray-100'
-            }`}
+            className="px-4 py-2 rounded-lg"
+            style={selectedTimeRange === 'weekly' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
           >
             {t('event:weekly_label')}
           </button>
@@ -266,9 +264,8 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
               setSelectedDate('');
               setSelectedWeek('');
             }}
-            className={`px-4 py-2 rounded-lg ${
-              selectedTimeRange === 'range' ? 'bg-gray-700 text-white' : 'bg-gray-100'
-            }`}
+            className="px-4 py-2 rounded-lg"
+            style={selectedTimeRange === 'range' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
           >
             {t('event:date_range')}
           </button>
@@ -277,17 +274,17 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
         {/* Quick Select Options */}
         {selectedTimeRange === 'preset' && (
           <div className="flex gap-2 mb-4">
-            <button className={`px-4 py-2 rounded-lg ${tab === 'today' ? 'bg-gray-700 text-white' : 'bg-gray-100'}`} onClick={() => setTab('today')}>{t('event:today_label')}</button>
-            <button className={`px-4 py-2 rounded-lg ${tab === 'yesterday' ? 'bg-gray-700 text-white' : 'bg-gray-100'}`} onClick={() => setTab('yesterday')}>{t('event:yesterday_label')}</button>
-            <button className={`px-4 py-2 rounded-lg ${tab === 'thisweek' ? 'bg-gray-700 text-white' : 'bg-gray-100'}`} onClick={() => setTab('thisweek')}>{t('event:this_week')}</button>
-            <button className={`px-4 py-2 rounded-lg ${tab === 'lastweek' ? 'bg-gray-700 text-white' : 'bg-gray-100'}`} onClick={() => setTab('lastweek')}>{t('event:last_week')}</button>
+            <button className="px-4 py-2 rounded-lg" style={tab === 'today' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }} onClick={() => setTab('today')}>{t('event:today_label')}</button>
+            <button className="px-4 py-2 rounded-lg" style={tab === 'yesterday' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }} onClick={() => setTab('yesterday')}>{t('event:yesterday_label')}</button>
+            <button className="px-4 py-2 rounded-lg" style={tab === 'thisweek' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }} onClick={() => setTab('thisweek')}>{t('event:this_week')}</button>
+            <button className="px-4 py-2 rounded-lg" style={tab === 'lastweek' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }} onClick={() => setTab('lastweek')}>{t('event:last_week')}</button>
           </div>
         )}
 
         {/* Single Day Selection */}
         {selectedTimeRange === 'single' && (
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:select_date')}</label>
+            <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('event:select_date')}</label>
             <DatePicker
               value={selectedDate}
               onChange={setSelectedDate}
@@ -298,23 +295,18 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
         {/* Weekly Selection */}
         {selectedTimeRange === 'weekly' && (
           <div className="mb-4 max-h-48 overflow-y-auto">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:select_week')}</label>
+            <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('event:select_week')}</label>
             {weeks.map((week, index) => (
               <div
                 key={index}
                 onClick={() => setSelectedWeek(`${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}`)}
-                className={`p-2 rounded-lg cursor-pointer hover:bg-gray-50 ${
-                  selectedWeek === `${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}`
-                    ? 'bg-gray-700 border border-gray-800 text-white'
-                    : ''
-                }`}
+                className="p-2 rounded-lg cursor-pointer"
+                style={selectedWeek === `${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}`
+                  ? { backgroundColor: colors.bgElevated, borderWidth: 1, borderStyle: 'solid', borderColor: colors.borderDefault, color: colors.textOnAccent }
+                  : {}}
               >
                 <div className="flex items-center">
-                  <CalendarIcon className={`w-4 h-4 mr-2 ${
-                    selectedWeek === `${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}`
-                      ? 'text-gray-300'
-                      : 'text-gray-500'
-                  }`} />
+                  <CalendarIcon className="w-4 h-4 mr-2" style={{ color: selectedWeek === `${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}` ? colors.textMuted : colors.textSubtle }} />
                   <span>
                     {format(week.start, 'MMM d', { locale: dateLocale })} - {format(week.end, 'MMM d, yyyy', { locale: dateLocale })}
                   </span>
@@ -328,14 +320,14 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
         {selectedTimeRange === 'range' && (
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:start_date')}</label>
+              <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('event:start_date')}</label>
               <DatePicker
                 value={dateRange.start}
                 onChange={(v) => setDateRange(prev => ({ ...prev, start: v }))}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:end_date')}</label>
+              <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('event:end_date')}</label>
               <DatePicker
                 value={dateRange.end}
                 onChange={(v) => setDateRange(prev => ({ ...prev, end: v }))}
@@ -347,12 +339,12 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
       </div>
       <div className="space-y-4">
         {/* Show total hours at the top, no breakdown */}
-        <div className="bg-gray-700 text-white rounded-lg mb-4 px-6 py-4 flex flex-col items-start">
+        <div className="rounded-lg mb-4 px-6 py-4 flex flex-col items-start" style={{ backgroundColor: colors.bgElevated, color: colors.textOnAccent }}>
           <h3 className="font-medium">{t('event:total_hours')}</h3>
           <p className="text-3xl font-bold mt-1">{totalHours.toFixed(2)} {t('event:hours_label')}</p>
         </div>
         {Object.entries(grouped).map(([eventId, project]) => (
-          <div key={eventId} className="bg-gray-700 text-white rounded-lg">
+          <div key={eventId} className="rounded-lg" style={{ backgroundColor: colors.bgElevated, color: colors.textPrimary }}>
             <button className="w-full flex items-center justify-between px-6 py-4 focus:outline-none" onClick={() => setExpanded(e => ({ ...e, [eventId]: !e[eventId] }))}>
               <div>
                 <h3 className="font-medium">{eventTitles[eventId] || t('event:project_label')}</h3>
@@ -361,11 +353,11 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
               <ChevronRight className={`w-5 h-5 ml-4 transform transition-transform ${expanded[eventId] ? 'rotate-90' : ''}`} />
             </button>
             {expanded[eventId] && (
-              <div className="bg-gray-800 p-4 rounded-b-lg">
+              <div className="p-4 rounded-b-lg" style={{ backgroundColor: colors.bgCard }}>
                 {(tab === 'today' || tab === 'yesterday' ? 
                   // For today/yesterday, show entries directly
                   project.entries.map((entry, idx) => (
-                    <div key={idx} className="flex justify-between text-sm py-1 border-b border-gray-700 last:border-b-0">
+                    <div key={idx} className="flex justify-between text-sm py-1 border-b last:border-b-0" style={{ borderColor: colors.borderDefault }}>
                       <span>{entry.type === 'regular' ? (entry.tasks_done?.name || t('common:unknown_task')) : (additionalTaskDescriptions[entry.task_id] || t('calculator:unknown_additional_task'))}</span>
                       <span>{entry.hours_spent?.toFixed(2)} {t('event:hours_label')}</span>
                     </div>
@@ -376,12 +368,12 @@ const CheckWeeklyHoursModal = ({ open, onClose }) => {
                     const dailyTotal = entries.reduce((sum, entry) => sum + (entry.hours_spent || 0), 0);
                     return (
                       <div key={date} className="mb-2">
-                        <div className="flex justify-between items-center text-sm font-medium text-gray-400 mb-1">
+                        <div className="flex justify-between items-center text-sm font-medium mb-1" style={{ color: colors.textSubtle }}>
                           <span>{format(parseISO(date), 'EEEE, MMMM d, yyyy', { locale: dateLocale })}</span>
-                          <span className="text-gray-300 font-semibold">{dailyTotal.toFixed(2)} {t('event:hrs_short')}</span>
+                          <span className="font-semibold" style={{ color: colors.textMuted }}>{dailyTotal.toFixed(2)} {t('event:hrs_short')}</span>
                         </div>
                         {entries.map((entry, idx) => (
-                          <div key={idx} className="flex justify-between text-sm py-1 border-b border-gray-700 last:border-b-0">
+                          <div key={idx} className="flex justify-between text-sm py-1 border-b last:border-b-0" style={{ borderColor: colors.borderDefault }}>
                             <span>{entry.type === 'regular' ? (entry.tasks_done?.name || t('common:unknown_task')) : (additionalTaskDescriptions[entry.task_id] || t('calculator:unknown_additional_task'))}</span>
                             <span>{entry.hours_spent?.toFixed(2)} {t('event:hours_label')}</span>
                           </div>

@@ -171,28 +171,32 @@ const AdminDayNotesModal: React.FC<AdminDayNotesModalProps> = ({ onClose }) => {
     : userGroups;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
         {/* Header */}
-        <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
+        <div className="p-4 border-b flex justify-between items-center sticky top-0 z-10" style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard }}>
           <h2 className="text-xl font-semibold flex items-center">
-            <Trash2 className="w-5 h-5 mr-2 text-red-500" />
+            <Trash2 className="w-5 h-5 mr-2" style={{ color: colors.red }} />
             {t('event:delete_day_notes_records_title')}
           </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="p-1 rounded-full transition-colors"
+            style={{ backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             <X className="w-6 h-6" />
           </button>
         </div>
 
         {/* Search */}
-        <div className="p-4 border-b dark:border-gray-700">
+        <div className="p-4 border-b" style={{ borderColor: colors.borderDefault }}>
           <input
             type="text"
             placeholder={t('event:search_day_notes')}
-            className="w-full px-4 py-2 border dark:border-gray-600 rounded-lg dark:bg-gray-700"
+            className="w-full px-4 py-2 border rounded-lg"
+            style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated }}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -206,15 +210,15 @@ const AdminDayNotesModal: React.FC<AdminDayNotesModalProps> = ({ onClose }) => {
             </div>
           ) : isError ? (
             <div className="flex flex-col items-center justify-center py-10">
-              <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-              <p className="text-red-500 dark:text-red-400 text-center">
+              <AlertCircle className="w-12 h-12 mb-4" style={{ color: colors.red }} />
+              <p className="text-center" style={{ color: colors.red }}>
                 {t('event:error_loading_day_notes')}
               </p>
             </div>
           ) : filteredUserGroups.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10">
-              <AlertCircle className="w-12 h-12 text-gray-400 mb-4" />
-              <p className="text-gray-500 dark:text-gray-400 text-center">
+              <AlertCircle className="w-12 h-12 mb-4" style={{ color: colors.textMuted }} />
+              <p className="text-center" style={{ color: colors.textSubtle }}>
                 {searchTerm ? t('event:no_day_notes_records_match') : t('event:no_day_notes_records')}
               </p>
             </div>
@@ -223,35 +227,37 @@ const AdminDayNotesModal: React.FC<AdminDayNotesModalProps> = ({ onClose }) => {
               {filteredUserGroups.map((group) => (
                 <div 
                   key={group.user_id} 
-                  className="border dark:border-gray-700 rounded-lg overflow-hidden"
+                  className="border rounded-lg overflow-hidden"
+                  style={{ borderColor: colors.borderDefault }}
                 >
                   {/* User header */}
                   <div 
-                    className="bg-gray-50 dark:bg-gray-700 p-4 flex justify-between items-center cursor-pointer"
+                    className="p-4 flex justify-between items-center cursor-pointer"
+                    style={{ backgroundColor: colors.bgElevated }}
                     onClick={() => toggleUserExpand(group.user_id)}
                   >
                     <div className="flex items-center">
-                      <User className="w-5 h-5 mr-2 text-blue-500" />
+                      <User className="w-5 h-5 mr-2" style={{ color: colors.accentBlue }} />
                       <span className="font-medium">{group.user_name}</span>
-                      <span className="ml-2 text-sm text-gray-500">
+                      <span className="ml-2 text-sm" style={{ color: colors.textSubtle }}>
                         ({group.records.length} {group.records.length !== 1 ? t('event:notes_label_plural') : t('event:notes_label')})
                       </span>
                     </div>
                     {expandedUsers.includes(group.user_id) ? (
-                      <ChevronUp className="w-5 h-5 text-gray-500" />
+                      <ChevronUp className="w-5 h-5" style={{ color: colors.textSubtle }} />
                     ) : (
-                      <ChevronDown className="w-5 h-5 text-gray-500" />
+                      <ChevronDown className="w-5 h-5" style={{ color: colors.textSubtle }} />
                     )}
                   </div>
                   
                   {/* User records */}
                   {expandedUsers.includes(group.user_id) && (
-                    <div className="divide-y dark:divide-gray-700">
+                    <div className="divide-y" style={{ borderColor: colors.borderDefault }}>
                       {group.records.map((record) => (
-                        <div key={record.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-750">
+                        <div key={record.id} className="p-4" style={{ backgroundColor: colors.bgCard }}>
                           <div className="flex justify-between">
                             <div className="flex-1 pr-4">
-                              <div className="flex items-center text-gray-500 mb-2">
+                              <div className="flex items-center mb-2" style={{ color: colors.textSubtle }}>
                                 <Calendar className="w-4 h-4 mr-1" />
                                 {formatDate(record.created_at)}
                               </div>
@@ -262,7 +268,7 @@ const AdminDayNotesModal: React.FC<AdminDayNotesModalProps> = ({ onClose }) => {
                               )}
                               <div className="mt-2">
                                 <span className="font-medium">{t('event:description_colon')}</span>
-                                <div className="mt-1 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                                <div className="mt-1 whitespace-pre-wrap" style={{ color: colors.textMuted }}>
                                   {record.content || t('event:no_description_provided')}
                                 </div>
                               </div>
@@ -272,7 +278,8 @@ const AdminDayNotesModal: React.FC<AdminDayNotesModalProps> = ({ onClose }) => {
                                 recordId: record.id,
                                 recordDate: formatDate(record.created_at)
                               })}
-                              className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-full h-fit"
+                              className="p-2 rounded-full h-fit"
+                              style={{ color: colors.red, backgroundColor: 'transparent' }}
                             >
                               <Trash2 className="w-5 h-5" />
                             </button>
@@ -290,8 +297,8 @@ const AdminDayNotesModal: React.FC<AdminDayNotesModalProps> = ({ onClose }) => {
 
       {/* Delete Confirmation Dialog */}
       {deleteConfirmation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full">
+        <div className="fixed inset-0 flex items-center justify-center z-[60] p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="rounded-lg shadow-xl p-6 max-w-md w-full" style={{ backgroundColor: colors.bgCard }}>
             <h3 className="text-xl font-semibold mb-4">{t('event:confirm_deletion_title')}</h3>
             <p className="mb-6">
               {t('event:delete_record_confirmation')}

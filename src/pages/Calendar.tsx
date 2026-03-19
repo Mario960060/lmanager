@@ -1,27 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  format, 
-  startOfMonth, 
-  endOfMonth, 
-  eachDayOfInterval, 
-  isToday, 
-  addMonths, 
-  subMonths, 
-  parseISO, 
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  isToday,
+  addMonths,
+  subMonths,
+  parseISO,
   isSameMonth,
   startOfWeek,
   endOfWeek,
   eachWeekOfInterval,
   isSameDay,
-  isFuture,
-  isAfter,
   subDays,
-  addDays
+  addDays,
+  getWeek,
 } from 'date-fns';
 import { pl } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ClipboardList, Package, Wrench } from 'lucide-react';
 import PageInfoModal from '../components/PageInfoModal';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
@@ -31,14 +30,141 @@ import BackButton from '../components/BackButton';
 import DayDetailsModal from '../components/DayDetailsModal';
 import DatePicker from '../components/DatePicker';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
-import { Button, Card, Modal, ChipToggle } from '../themes/uiComponents';
+import { Button, Modal } from '../themes/uiComponents';
 
 type Event = Database['public']['Tables']['events']['Row'];
 
+// Status config matching the design from images
+const statusConfig: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  in_progress: { label: 'W Trakcie', color: '#f97316', bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.3)' },
+  scheduled: { label: 'Zaplanowany', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)' },
+  planned: { label: 'Zaplanowany', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)' },
+  finished: { label: 'Zakończony', color: '#64748b', bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)' },
+};
+
+function StatusBadge({ status, t }: { status: string; t: (k: string) => string }) {
+  const cfg = statusConfig[status] || statusConfig.planned;
+  const labelKey = `project:status_${status?.replace(/-/g, '_')}`;
+  const label = t(labelKey) !== labelKey ? t(labelKey) : cfg.label;
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        fontSize: 10.5,
+        fontWeight: 600,
+        color: cfg.color,
+        background: cfg.bg,
+        border: `1px solid ${cfg.border}`,
+        borderRadius: 16,
+        padding: '2px 8px 2px 6px',
+      }}
+    >
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.color }} />
+      {label}
+    </span>
+  );
+}
+
+function MiniEventBar({ event, onClick }: { event: Event; onClick: () => void }) {
+  const cfg = statusConfig[event.status || 'planned'] || statusConfig.planned;
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '2px 6px',
+        borderRadius: 4,
+        background: `${cfg.color}18`,
+        overflow: 'hidden',
+        minWidth: 0,
+        cursor: 'pointer',
+      }}
+    >
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
+      <span style={{ fontSize: 10.5, color: cfg.color, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {event.title}
+      </span>
+    </div>
+  );
+}
+
+function WeeklyEventCard({
+  event,
+  tasksCount,
+  materialsCount,
+  equipmentCount,
+  onClick,
+  t,
+}: {
+  event: Event;
+  tasksCount: number;
+  materialsCount: number;
+  equipmentCount: number;
+  onClick: () => void;
+  t: (k: string) => string;
+}) {
+  const cfg = statusConfig[event.status || 'planned'] || statusConfig.planned;
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => e.key === 'Enter' && onClick()}
+      style={{
+        background: colors.bgCard,
+        borderRadius: 12,
+        border: '1px solid rgba(255,255,255,0.06)',
+        overflow: 'hidden',
+        transition: 'border-color 0.15s ease',
+        cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; }}
+    >
+      <div style={{ height: 2, background: cfg.color }} />
+      <div style={{ padding: '10px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: colors.textPrimary }}>{event.title}</span>
+          <StatusBadge status={event.status || 'planned'} t={t} />
+        </div>
+        <div style={{ fontSize: 11.5, color: colors.textDim, marginBottom: 8 }}>
+          {event.description || t('event:no_description_provided')}
+        </div>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: colors.textDim, fontWeight: 500 }}>
+            <ClipboardList size={12} style={{ opacity: 0.6 }} />
+            {tasksCount} {t('dashboard:tasks_short')}
+          </span>
+          {materialsCount > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: colors.textDim, fontWeight: 500 }}>
+              <Package size={12} style={{ opacity: 0.6 }} />
+              {materialsCount} {t('dashboard:materials_short')}
+            </span>
+          )}
+          {equipmentCount > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: colors.textDim, fontWeight: 500 }}>
+              <Wrench size={12} style={{ opacity: 0.6 }} />
+              {equipmentCount} {t('dashboard:equipment_short')}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Calendar = () => {
-  const { t, i18n } = useTranslation(['common', 'dashboard', 'utilities', 'project']);
+  const { t, i18n } = useTranslation(['common', 'dashboard', 'utilities', 'project', 'event']);
   const dateLocale = i18n.language === 'pl' ? pl : undefined;
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [view, setView] = useState<'month' | 'week'>('month');
   const [selectedStatus, setSelectedStatus] = useState<Event['status'] | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
@@ -47,17 +173,15 @@ const Calendar = () => {
   const [searchParams] = useSearchParams();
   const companyId = useAuthStore(state => state.getCompanyId());
 
-  // Get date from URL parameter
   useEffect(() => {
     const dateParam = searchParams.get('date');
     if (dateParam) {
       const parsedDate = parseISO(dateParam);
       setSelectedDate(parsedDate);
-      setCurrentDate(parsedDate); // Set current month to show the selected date
+      setCurrentDate(parsedDate);
     }
   }, [searchParams]);
 
-  // Fetch events from Supabase
   const { data: events = [], isLoading } = useQuery({
     queryKey: ['events', companyId],
     queryFn: async () => {
@@ -65,134 +189,140 @@ const Calendar = () => {
         .from('events')
         .select('*')
         .eq('company_id', companyId)
-        .neq('status', 'finished') // Exclude finished events
+        .neq('status', 'finished')
         .order('start_date', { ascending: true });
-
       if (error) throw error;
       return data as Event[];
     },
-    enabled: !!companyId
+    enabled: !!companyId,
   });
 
-  // Fetch equipment usage
   const { data: equipmentUsage = [] } = useQuery({
     queryKey: ['equipment_usage', companyId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('equipment_usage')
-        .select(`
-          *,
-          equipment (
-            id,
-            name
-          ),
-          events (
-            id,
-            status
-          )
-        `)
+        .select(`*, equipment (id, name), events (id, status)`)
         .eq('company_id', companyId);
       if (error) throw error;
       return data;
     },
-    enabled: !!companyId
+    enabled: !!companyId,
   });
 
-  // Filter events by selected status
   const filteredEvents = events.filter(event => {
-    // Skip events with invalid dates
     if (!event.start_date || !event.end_date) return false;
-
-    // If a status filter is active, apply it
-    if (selectedStatus && event.status !== selectedStatus) {
-      return false;
-    }
-
+    if (selectedStatus && event.status !== selectedStatus) return false;
     return true;
   });
 
-  const getStatusBgColor = (status: Event['status']) => {
-    switch (status) {
-      case 'scheduled': return colors.accentBlue;
-      case 'in_progress': return colors.orange;
-      case 'finished': return colors.green;
-      case 'planned':
-      default: return colors.textFaint;
-    }
-  };
+  const eventIds = useMemo(() => filteredEvents.map(e => e.id).filter(Boolean), [filteredEvents]);
 
-  const formatStatus = (status: Event['status']) => {
-    if (!status) return t('project:unknown');
-    
-    const statusKey = `project:status_${status.replace(/_/g, '_')}`;
-    const translated = t(statusKey);
-    
-    // Fallback if translation key doesn't exist
-    if (translated === statusKey) {
-      return status.replace('_', ' ').replace(/\b\w/g, char => char.toUpperCase());
-    }
-    return translated;
-  };
+  const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
+  const weekDates = eachDayOfInterval({ start: weekStart, end: weekEnd });
+  const weekDateStrings = weekDates.map(d => format(d, 'yyyy-MM-dd'));
 
-  // Helper function to get translated day abbreviation
-  const getDayAbbreviation = (date: Date) => {
-    const dayOfWeek = date.getDay();
-    // Map day of week (0 = Sunday) to our dashboard translation keys
-    const dayKeys = [
-      'dashboard:day_sunday',
-      'dashboard:day_monday',
-      'dashboard:day_tuesday',
-      'dashboard:day_wednesday',
-      'dashboard:day_thursday',
-      'dashboard:day_friday',
-      'dashboard:day_saturday'
-    ];
-    return t(dayKeys[dayOfWeek]);
+  const { data: tasksCountByEvent = {} } = useQuery({
+    queryKey: ['tasks_done_count', eventIds, companyId],
+    queryFn: async () => {
+      if (eventIds.length === 0) return {};
+      const { data, error } = await supabase
+        .from('tasks_done')
+        .select('event_id')
+        .eq('company_id', companyId)
+        .in('event_id', eventIds);
+      if (error) throw error;
+      const acc: Record<string, number> = {};
+      (data || []).forEach((row: { event_id: string | null }) => {
+        if (row.event_id) acc[row.event_id] = (acc[row.event_id] || 0) + 1;
+      });
+      return acc;
+    },
+    enabled: !!companyId && eventIds.length > 0,
+  });
+
+  const { data: weekMaterials = [] } = useQuery({
+    queryKey: ['calendar_materials_week', weekDateStrings, companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('calendar_materials')
+        .select('event_id, date')
+        .eq('company_id', companyId)
+        .in('date', weekDateStrings);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!companyId && view === 'week' && weekDateStrings.length > 0,
+  });
+
+  const { data: weekEquipment = [] } = useQuery({
+    queryKey: ['calendar_equipment_week', weekDateStrings, companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('calendar_equipment')
+        .select('event_id, date')
+        .eq('company_id', companyId)
+        .in('date', weekDateStrings);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!companyId && view === 'week' && weekDateStrings.length > 0,
+  });
+
+  const materialsByEventDate = useMemo(() => {
+    const m: Record<string, number> = {};
+    weekMaterials.forEach((row: { event_id: string | null; date: string }) => {
+      if (row.event_id) {
+        const key = `${row.event_id}:${row.date}`;
+        m[key] = (m[key] || 0) + 1;
+      }
+    });
+    return m;
+  }, [weekMaterials]);
+
+  const equipmentByEventDate = useMemo(() => {
+    const e: Record<string, number> = {};
+    weekEquipment.forEach((row: { event_id: string | null; date: string }) => {
+      if (row.event_id) {
+        const key = `${row.event_id}:${row.date}`;
+        e[key] = (e[key] || 0) + 1;
+      }
+    });
+    return e;
+  }, [weekEquipment]);
+
+  const filterEquipmentForDay = (date: Date) => {
+    return equipmentUsage.filter(usage => {
+      if (!usage.start_date || !usage.end_date) return false;
+      if (usage.events?.status === 'finished') return false;
+      const start = parseISO(usage.start_date);
+      const end = parseISO(usage.end_date);
+      return date >= start && date <= end;
+    });
   };
 
   const handleEventClick = (eventId: string) => {
     navigate(`/events/${eventId}`);
   };
 
-  // Get days for the current month, starting from Monday
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const calendarStart = startOfWeek(monthStart, { weekStartsOn: 1 });
   const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+  const weeks = eachWeekOfInterval({ start: calendarStart, end: calendarEnd }, { weekStartsOn: 1 });
+  const weekNum = getWeek(currentDate, { weekStartsOn: 1 });
 
-  // Get weeks for the calendar
-  const weeks = eachWeekOfInterval(
-    { start: calendarStart, end: calendarEnd },
-    { weekStartsOn: 1 }
-  );
+  const dayNamesShort = [
+    t('dashboard:day_monday_short'),
+    t('dashboard:day_tuesday_short'),
+    t('dashboard:day_wednesday_short'),
+    t('dashboard:day_thursday_short'),
+    t('dashboard:day_friday_short'),
+    t('dashboard:day_saturday_short'),
+    t('dashboard:day_sunday_short'),
+  ];
 
-  // Get current week for mobile view
-  const currentWeekStart = startOfWeek(currentDate, { weekStartsOn: 1 });
-  const currentWeekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
-  const currentWeekDays = eachDayOfInterval({
-    start: currentWeekStart,
-    end: currentWeekEnd
-  });
-
-  // Filter equipment for a specific date
-  const filterEquipmentForDay = (date: Date) => {
-    return equipmentUsage.filter(usage => {
-      if (!usage.start_date || !usage.end_date) return false;
-      
-      const start = parseISO(usage.start_date);
-      const end = parseISO(usage.end_date);
-      
-      // Skip equipment from finished events
-      if (usage.events?.status === 'finished') {
-        return false;
-      }
-      
-      // For active events, check if the equipment is scheduled for this date
-      return date >= start && date <= end;
-    });
-  };
-
-  // Loading spinner
   if (isLoading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: fonts.body }}>
@@ -201,247 +331,367 @@ const Calendar = () => {
     );
   }
 
-  const statusOptions = ['planned', 'scheduled', 'in_progress'] as const;
+  const statusFilterOptions = ['in_progress', 'planned', 'scheduled'] as const;
 
   return (
-    <div style={{ padding: spacing["6xl"], maxWidth: 1600, margin: '0 auto', fontFamily: fonts.body }}>
-      <BackButton />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing["6xl"], flexDirection: 'column' }} className="md:flex-row">
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <h1 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('dashboard:calendar_title')}</h1>
-          <PageInfoModal
-            description={t('dashboard:calendar_info_description')}
-            title={t('dashboard:calendar_info_title')}
-            quickTips={[]}
-          />
+    <div
+      style={{
+        minHeight: '100vh',
+        background: colors.bgApp,
+        fontFamily: fonts.body,
+        padding: 20,
+        position: 'relative',
+      }}
+    >
+      <div style={{ maxWidth: 1100, margin: '0 auto', position: 'relative' }}>
+        <BackButton />
+        {/* Header - toggle centered, more to the left to stay within card bounds */}
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: colors.textPrimary, fontFamily: fonts.display }}>
+                {t('dashboard:calendar_title')}
+              </h1>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: colors.textDim }}>{format(currentDate, 'MMMM yyyy', { locale: dateLocale })}</p>
+            </div>
+            <PageInfoModal description={t('dashboard:calendar_info_description')} title={t('dashboard:calendar_info_title')} quickTips={[]} />
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              background: 'rgba(255,255,255,0.04)',
+              borderRadius: 10,
+              border: '1px solid rgba(255,255,255,0.06)',
+              overflow: 'hidden',
+              marginLeft: 24,
+            }}
+          >
+            {(['month', 'week'] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: view === v ? colors.textPrimary : colors.textDim,
+                  background: view === v ? 'rgba(99,140,255,0.15)' : 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {v === 'month' ? t('dashboard:view_month') : t('dashboard:view_week')}
+              </button>
+            ))}
+          </div>
         </div>
-        <Button variant="accent" color={colors.accentBlue} icon="📦" onClick={() => setShowAddMaterialModal(true)} className="md:flex hidden">
-          {t('dashboard:order_material_equipment')}
-        </Button>
-      </div>
 
-      {/* Mobile Button - compact, not full width */}
-      <Button variant="accent" color={colors.accentBlue} icon="📦" onClick={() => setShowAddMaterialModal(true)} style={{ alignSelf: 'flex-start', marginBottom: spacing["6xl"] }} className="md:hidden">
-        {t('dashboard:order_material_equipment')}
-      </Button>
+        {/* Order button - separate row below header to avoid overlapping Back button */}
+        <div style={{ marginBottom: 16 }}>
+          <button
+            onClick={() => setShowAddMaterialModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 16px',
+              borderRadius: 10,
+              background: 'rgba(249,115,22,0.12)',
+              border: '1px solid rgba(249,115,22,0.25)',
+              color: colors.orange,
+              fontSize: 12.5,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            <Package size={14} />
+            {t('dashboard:order_material_equipment')}
+          </button>
+        </div>
 
-      {/* Status Filter */}
-      <div style={{ marginBottom: spacing["6xl"] }}>
-        <ChipToggle
-          options={statusOptions.map(s => formatStatus(s))}
-          value={selectedStatus ? formatStatus(selectedStatus) : ''}
-          onChange={(val) => {
-            const s = statusOptions.find(x => formatStatus(x) === val);
-            setSelectedStatus(s && selectedStatus === s ? null : s || null);
+        {/* Status filters */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+          {statusFilterOptions.map(key => {
+            const cfg = statusConfig[key] || statusConfig.planned;
+            const labelKey = `project:status_${key.replace(/_/g, '_')}`;
+            const label = t(labelKey) !== labelKey ? t(labelKey) : cfg.label;
+            return (
+              <button
+                key={key}
+                onClick={() => setSelectedStatus(selectedStatus === key ? null : key)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '5px 12px',
+                  borderRadius: 20,
+                  background: selectedStatus === key ? cfg.bg : 'transparent',
+                  border: `1px solid ${selectedStatus === key ? cfg.border : 'rgba(255,255,255,0.06)'}`,
+                  color: cfg.color,
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.color }} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Calendar container */}
+        <div
+          style={{
+            position: 'relative',
+            overflow: 'hidden',
+            borderRadius: 16,
+            border: '1px solid rgba(255,255,255,0.06)',
+            background: colors.bgCard,
           }}
-        />
-      </div>
-
-      {/* Calendar Grid */}
-      <Card style={{ overflow: 'hidden' }}>
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
+        >
+          {/* Nav */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '14px 20px',
+              borderBottom: '1px solid rgba(255,255,255,0.05)',
+            }}
+          >
             <button
-              onClick={() => setCurrentDate(subMonths(currentDate, 1))}
-              style={{ padding: spacing.sm, borderRadius: radii.full, background: 'transparent', border: 'none', color: colors.textSecondary, cursor: 'pointer' }}
-              className="md:block hidden"
+              onClick={() => setCurrentDate(view === 'month' ? subMonths(currentDate, 1) : subDays(currentDate, 7))}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 8,
+                width: 34,
+                height: 34,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: colors.textDim,
+              }}
             >
-              <ChevronLeft style={{ width: 20, height: 20 }} />
+              <ChevronLeft size={16} />
             </button>
+            <span style={{ fontSize: 15, fontWeight: 700, color: colors.textPrimary }}>
+              {view === 'month'
+                ? format(currentDate, 'MMMM yyyy', { locale: dateLocale })
+                : `${t('dashboard:view_week')} ${weekNum} — ${format(currentDate, 'MMMM yyyy', { locale: dateLocale })}`}
+            </span>
             <button
-              onClick={() => setCurrentDate(prev => subDays(prev, 7))}
-              style={{ padding: spacing.sm, borderRadius: radii.full, background: 'transparent', border: 'none', color: colors.textSecondary, cursor: 'pointer' }}
-              className="md:hidden"
+              onClick={() => setCurrentDate(view === 'month' ? addMonths(currentDate, 1) : addDays(currentDate, 7))}
+              style={{
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: 8,
+                width: 34,
+                height: 34,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: colors.textDim,
+              }}
             >
-              <ChevronLeft style={{ width: 20, height: 20 }} />
-            </button>
-            <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, margin: 0 }}>
-              <span className="md:inline hidden">{format(currentDate, 'MMMM yyyy', { locale: dateLocale })}</span>
-              <span className="md:hidden">
-                {format(currentWeekStart, 'MMM d', { locale: dateLocale })} - {format(currentWeekEnd, 'MMM d, yyyy', { locale: dateLocale })}
-              </span>
-            </h2>
-            <button
-              onClick={() => setCurrentDate(addMonths(currentDate, 1))}
-              style={{ padding: spacing.sm, borderRadius: radii.full, background: 'transparent', border: 'none', color: colors.textSecondary, cursor: 'pointer' }}
-              className="md:block hidden"
-            >
-              <ChevronRight style={{ width: 20, height: 20 }} />
-            </button>
-            <button
-              onClick={() => setCurrentDate(prev => addDays(prev, 7))}
-              style={{ padding: spacing.sm, borderRadius: radii.full, background: 'transparent', border: 'none', color: colors.textSecondary, cursor: 'pointer' }}
-              className="md:hidden"
-            >
-              <ChevronRight style={{ width: 20, height: 20 }} />
+              <ChevronRight size={16} />
             </button>
           </div>
 
-          {/* Desktop Calendar View */}
-          <div className="md:grid hidden grid-cols-7 gap-4">
-            {/* Day headers - Starting from Monday */}
-            {[
-              t('dashboard:day_monday'),
-              t('dashboard:day_tuesday'),
-              t('dashboard:day_wednesday'),
-              t('dashboard:day_thursday'),
-              t('dashboard:day_friday'),
-              t('dashboard:day_saturday'),
-              t('dashboard:day_sunday')
-            ].map(day => (
-              <div key={day} style={{ textAlign: 'center', fontWeight: fontWeights.medium, color: colors.textDim, paddingBottom: spacing['4xl'] }}>
-                {day}
+          {/* Month View */}
+          {view === 'month' && (
+            <div style={{ padding: '8px 12px 12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 4 }}>
+                {dayNamesShort.map(d => (
+                  <div
+                    key={d}
+                    style={{
+                      textAlign: 'center',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: colors.textDim,
+                      padding: '6px 0',
+                      textTransform: 'uppercase',
+                      letterSpacing: 0.8,
+                    }}
+                  >
+                    {d}
+                  </div>
+                ))}
               </div>
-            ))}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+                {weeks.map(week =>
+                  eachDayOfInterval({
+                    start: startOfWeek(week, { weekStartsOn: 1 }),
+                    end: endOfWeek(week, { weekStartsOn: 1 }),
+                  }).map(date => {
+                    const dayEvents = filteredEvents.filter(event => {
+                      const eventStart = parseISO(event.start_date);
+                      const eventEnd = parseISO(event.end_date);
+                      return date >= eventStart && date <= eventEnd;
+                    });
+                    const isOtherMonth = !isSameMonth(date, currentDate);
+                    const isSelected = selectedDate ? isSameDay(date, selectedDate) : false;
+                    const maxShow = 3;
+                    const extra = dayEvents.length - maxShow;
 
-            {/* Calendar weeks */}
-            {weeks.map(week => (
-              <React.Fragment key={week.toISOString()}>
-                {eachDayOfInterval({
-                  start: startOfWeek(week, { weekStartsOn: 1 }),
-                  end: endOfWeek(week, { weekStartsOn: 1 })
-                }).map(date => {
+                    return (
+                      <button
+                        key={date.toISOString()}
+                        onClick={() => setSelectedDate(date)}
+                        style={{
+                          padding: '6px 5px 4px',
+                          minHeight: 90,
+                          background: isSelected ? 'rgba(99,140,255,0.08)' : isToday(date) ? 'rgba(99,140,255,0.04)' : 'transparent',
+                          border: isSelected ? '1px solid rgba(99,140,255,0.3)' : '1px solid rgba(255,255,255,0.03)',
+                          borderRadius: 10,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 3,
+                          opacity: isOtherMonth ? 0.3 : 1,
+                          transition: 'all 0.15s ease',
+                          fontFamily: 'inherit',
+                          textAlign: 'left',
+                          position: 'relative',
+                          overflow: 'hidden',
+                        }}
+                        onMouseEnter={e => {
+                          if (!isOtherMonth && !isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                        }}
+                        onMouseLeave={e => {
+                          if (!isOtherMonth && !isSelected) e.currentTarget.style.background = isToday(date) ? 'rgba(99,140,255,0.04)' : 'transparent';
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                          <span
+                            style={{
+                              fontSize: 12.5,
+                              fontWeight: isToday(date) ? 800 : 500,
+                              color: isToday(date) ? '#8bb4ff' : colors.textDim,
+                              width: 22,
+                              height: 22,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              borderRadius: '50%',
+                              background: isToday(date) ? 'rgba(99,140,255,0.15)' : 'none',
+                            }}
+                          >
+                            {format(date, 'd')}
+                          </span>
+                          {dayEvents.length > 0 && isToday(date) && (
+                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#8bb4ff' }} />
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                          {dayEvents.slice(0, maxShow).map(ev => (
+                            <MiniEventBar key={ev.id} event={ev} onClick={() => handleEventClick(ev.id)} />
+                          ))}
+                          {extra > 0 && (
+                            <span style={{ fontSize: 10, color: colors.textDim, fontWeight: 500, paddingLeft: 4 }}>+{extra} więcej</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Week View */}
+          {view === 'week' && (
+            <div style={{ padding: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+                {weekDates.map((date, i) => {
                   const dayEvents = filteredEvents.filter(event => {
                     const eventStart = parseISO(event.start_date);
                     const eventEnd = parseISO(event.end_date);
                     return date >= eventStart && date <= eventEnd;
                   });
-
-                  const dayEquipment = filterEquipmentForDay(date);
+                  const isCurrentMonth = isSameMonth(date, currentDate);
                   const isSelected = selectedDate ? isSameDay(date, selectedDate) : false;
-
-                  const isOtherMonth = !isSameMonth(date, currentDate);
-                  const dayCellStyle: React.CSSProperties = {
-                    minHeight: 120, padding: spacing['4xl'], border: `1px solid ${
-                      isOtherMonth ? colors.borderSubtle : isToday(date) ? colors.accentBlue : isSelected ? colors.accentBlueBorder : colors.borderDefault
-                    }`, borderRadius: radii.lg, cursor: 'pointer', transition: 'all 0.2s ease',
-                    background: isOtherMonth ? colors.bgSubtle : isToday(date) ? colors.accentBlueBg : isSelected ? colors.accentBlueBg : colors.bgCard,
-                    boxShadow: isSelected ? `0 0 0 2px ${colors.accentBlue}` : undefined,
-                  };
-                  const dayNumColor = isOtherMonth ? colors.textFaint : isToday(date) ? colors.accentBlue : colors.textPrimary;
+                  const dateStr = format(date, 'yyyy-MM-dd');
 
                   return (
-                    <div key={date.toISOString()} onClick={() => setSelectedDate(date)} style={dayCellStyle}>
-                      <div style={{ fontWeight: fontWeights.medium, marginBottom: spacing.sm, display: 'flex', alignItems: 'center', color: dayNumColor }}>
-                        {format(date, 'd')}
-                        {isToday(date) && (
-                          <span style={{ marginLeft: spacing.sm, width: 8, height: 8, borderRadius: '50%', background: colors.accentBlue }} />
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
-                        {dayEvents.map(event => (
-                          <button
-                            key={event.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEventClick(event.id);
-                            }}
-                            style={{
-                              width: '100%',
-                              textAlign: 'left',
-                              padding: `${spacing.sm} ${spacing.base}`,
-                              borderRadius: radii.lg,
-                              fontSize: fontSizes.base,
-                              fontWeight: fontWeights.medium,
-                              background: getStatusBgColor(event.status),
-                              color: '#fff',
-                              border: 'none',
-                              cursor: 'pointer',
-                              fontFamily: fonts.body,
-                            }}
-                          >
-                            <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.title}</span>
-                          </button>
+                    <div key={date.toISOString()} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <button
+                        onClick={() => setSelectedDate(date)}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: 2,
+                          padding: '8px 4px',
+                          borderRadius: 10,
+                          background: isSelected ? 'rgba(99,140,255,0.12)' : isToday(date) ? 'rgba(99,140,255,0.06)' : 'transparent',
+                          border: isSelected ? '1px solid rgba(99,140,255,0.3)' : '1px solid transparent',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          opacity: isCurrentMonth ? 1 : 0.3,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <span style={{ fontSize: 10, fontWeight: 600, color: colors.textDim, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                          {dayNamesShort[i]}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 18,
+                            fontWeight: isToday(date) ? 800 : 600,
+                            color: isToday(date) ? '#8bb4ff' : colors.textPrimary,
+                            width: 32,
+                            height: 32,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '50%',
+                            background: isToday(date) ? 'rgba(99,140,255,0.15)' : 'none',
+                          }}
+                        >
+                          {format(date, 'd')}
+                        </span>
+                      </button>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {dayEvents.map(ev => (
+                          <WeeklyEventCard
+                            key={ev.id}
+                            event={ev}
+                            tasksCount={tasksCountByEvent[ev.id] || 0}
+                            materialsCount={materialsByEventDate[`${ev.id}:${dateStr}`] || 0}
+                            equipmentCount={equipmentByEventDate[`${ev.id}:${dateStr}`] || 0}
+                            onClick={() => handleEventClick(ev.id)}
+                            t={t}
+                          />
                         ))}
-                        {dayEquipment.length > 0 && (
-                          <div style={{ fontSize: fontSizes.xs, color: isOtherMonth ? colors.textFaint : colors.textDim }}>
-                            {dayEquipment.length} {t('dashboard:equipment_in_use')}
-                          </div>
+                        {dayEvents.length === 0 && (
+                          <div style={{ textAlign: 'center', padding: '16px 0', fontSize: 11, color: colors.textFaint }}>—</div>
                         )}
                       </div>
                     </div>
                   );
                 })}
-              </React.Fragment>
-            ))}
-          </div>
-
-          {/* Mobile Calendar View - 7 Days */}
-          <div className="md:hidden grid grid-cols-1 gap-4">
-            {/* Day headers and content combined for mobile */}
-            {currentWeekDays.map(date => {
-              const dayEvents = filteredEvents.filter(event => {
-                const eventStart = parseISO(event.start_date);
-                const eventEnd = parseISO(event.end_date);
-                return date >= eventStart && date <= eventEnd;
-              });
-
-              const dayEquipment = filterEquipmentForDay(date);
-              const isSelected = selectedDate ? isSameDay(date, selectedDate) : false;
-
-              const mobileCellStyle: React.CSSProperties = {
-                padding: spacing['4xl'], border: `1px solid ${isToday(date) ? colors.accentBlue : isSelected ? colors.accentBlueBorder : colors.borderDefault}`,
-                borderRadius: radii.lg, cursor: 'pointer', transition: 'all 0.2s ease',
-                background: isToday(date) ? colors.accentBlueBg : isSelected ? colors.accentBlueBg : colors.bgCard,
-                boxShadow: isSelected ? `0 0 0 2px ${colors.accentBlue}` : undefined,
-              };
-              return (
-                <div key={date.toISOString()} onClick={() => setSelectedDate(date)} style={mobileCellStyle}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg }}>
-                    <div style={{ fontWeight: fontWeights.medium, display: 'flex', alignItems: 'center', color: isToday(date) ? colors.accentBlue : colors.textPrimary }}>
-                      <span className="text-lg">{getDayAbbreviation(date)}</span>
-                      <span className="ml-2">{format(date, 'd')}</span>
-                      {isToday(date) && (
-                        <span className="ml-2 w-2 h-2 rounded-full bg-blue-500"></span>
-                      )}
-                    </div>
-                    {dayEquipment.length > 0 && (
-                      <div style={{ fontSize: fontSizes.xs, color: colors.textDim }}>
-                        {dayEquipment.length} {t('dashboard:equipment_in_use')}
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
-                    {dayEvents.map(event => (
-                      <button
-                        key={event.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEventClick(event.id);
-                        }}
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: `${spacing.sm} ${spacing.base}`,
-                          borderRadius: radii.lg,
-                          fontSize: fontSizes.base,
-                          fontWeight: fontWeights.medium,
-                          background: getStatusBgColor(event.status),
-                          color: '#fff',
-                          border: 'none',
-                          cursor: 'pointer',
-                          fontFamily: fonts.body,
-                        }}
-                      >
-                        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{event.title}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+              </div>
+            </div>
+          )}
         </div>
-      </Card>
+      </div>
 
-      {/* Add Material & Equipment Modal */}
       <Modal
         open={showAddMaterialModal}
         onClose={() => setShowAddMaterialModal(false)}
         title={t('dashboard:add_material_equipment')}
         width={448}
         footer={
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: spacing.base, paddingTop: spacing["5xl"] }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: spacing.base, paddingTop: spacing['5xl'] }}>
             <Button variant="secondary" onClick={() => setShowAddMaterialModal(false)}>
               {t('dashboard:cancel')}
             </Button>
@@ -465,7 +715,6 @@ const Calendar = () => {
         </div>
       </Modal>
 
-      {/* Day Details Modal */}
       {selectedDate && (
         <DayDetailsModal
           date={selectedDate}
@@ -477,7 +726,6 @@ const Calendar = () => {
           equipment={filterEquipmentForDay(selectedDate)}
           onClose={() => {
             setSelectedDate(null);
-            // Remove date parameter from URL when closing modal
             navigate('/calendar', { replace: true });
           }}
         />

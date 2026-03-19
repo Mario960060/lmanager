@@ -11,6 +11,8 @@ import {
   type MaterialUsageDefaults,
 } from "../../../lib/materialUsageDefaults";
 import PageInfoModal from "../../../components/PageInfoModal";
+import { colors, fonts, fontSizes, fontWeights, spacing, radii, transitions, gradients, shadows } from "../../../themes/designTokens";
+import { SectionHeader } from "../../../themes/uiComponents";
 
 const SAND_OPTION_KEYS = ["form:material_usage_sand_granite", "form:material_usage_sand_building", "form:material_usage_sand_sharp"] as const;
 const SAND_OPTIONS_RAW = ["Granite Sand", "Building sand", "Sharp Sand"] as const;
@@ -138,20 +140,20 @@ function SelectDropdown({
         onChange={(e) => onChange(e.target.value)}
         style={{
           width: "100%",
-          padding: "8px 32px 8px 12px",
-          background: "#1e293b",
-          border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 8,
-          color: "#e2e8f0",
-          fontSize: 13,
-          fontFamily: "'Exo 2', sans-serif",
+          padding: `${spacing.md}px 32px ${spacing.md}px ${spacing.xl}px`,
+          background: colors.bgElevated,
+          border: `1px solid ${colors.borderHover}`,
+          borderRadius: radii.lg,
+          color: colors.textSecondary,
+          fontSize: fontSizes.base,
+          fontFamily: fonts.body,
           appearance: "none",
           cursor: "pointer",
           outline: "none",
-          transition: "border-color 0.2s",
+          transition: transitions.fast,
         }}
-        onFocus={(e) => (e.target.style.borderColor = "rgba(139,92,246,0.5)")}
-        onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.1)")}
+        onFocus={(e) => (e.target.style.borderColor = colors.borderInputFocus)}
+        onBlur={(e) => (e.target.style.borderColor = colors.borderHover)}
       >
         {opts.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -162,12 +164,12 @@ function SelectDropdown({
       <div
         style={{
           position: "absolute",
-          right: 10,
+          right: spacing.lg,
           top: "50%",
           transform: "translateY(-50%)",
           pointerEvents: "none",
-          color: "#64748b",
-          fontSize: 10,
+          color: colors.textDim,
+          fontSize: fontSizes.xs,
         }}
       >
         ▼
@@ -192,11 +194,11 @@ function NumberInput({
       style={{
         display: "flex",
         alignItems: "center",
-        background: "#1e293b",
-        border: "1px solid rgba(255,255,255,0.1)",
-        borderRadius: 8,
+        background: colors.bgElevated,
+        border: `1px solid ${colors.borderHover}`,
+        borderRadius: radii.lg,
         overflow: "hidden",
-        transition: "border-color 0.2s",
+        transition: transitions.fast,
       }}
     >
       <input
@@ -206,12 +208,12 @@ function NumberInput({
         onChange={(e) => onChange(e.target.value)}
         style={{
           flex: 1,
-          padding: "8px 12px",
+          padding: `${spacing.md}px ${spacing.xl}px`,
           background: "transparent",
           border: "none",
-          color: "#e2e8f0",
-          fontSize: 13,
-          fontFamily: "'Exo 2', sans-serif",
+          color: colors.textSecondary,
+          fontSize: fontSizes.base,
+          fontFamily: fonts.body,
           outline: "none",
           width: 60,
           minWidth: 0,
@@ -219,48 +221,16 @@ function NumberInput({
       />
       <span
         style={{
-          padding: "8px 10px",
-          color: "#64748b",
-          fontSize: 12,
-          borderLeft: "1px solid rgba(255,255,255,0.06)",
-          background: "rgba(255,255,255,0.02)",
-          fontFamily: "'Exo 2', sans-serif",
+          padding: `${spacing.md}px ${spacing.lg}px`,
+          color: colors.textDim,
+          fontSize: fontSizes.sm,
+          borderLeft: `1px solid ${colors.borderDefault}`,
+          background: colors.bgSubtle,
+          fontFamily: fonts.body,
         }}
       >
         {unit}
       </span>
-    </div>
-  );
-}
-
-function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <h2
-        style={{
-          margin: 0,
-          fontSize: 14,
-          fontWeight: 700,
-          color: "#e2e8f0",
-          fontFamily: "'Rajdhani', sans-serif",
-          letterSpacing: "0.5px",
-          textTransform: "uppercase",
-        }}
-      >
-        {title}
-      </h2>
-      {subtitle && (
-        <p
-          style={{
-            margin: "2px 0 0",
-            fontSize: 12,
-            color: "#475569",
-            fontFamily: "'Exo 2', sans-serif",
-          }}
-        >
-          {subtitle}
-        </p>
-      )}
     </div>
   );
 }
@@ -598,8 +568,8 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
   const content = (
     <div
       style={{
-        fontFamily: "'Exo 2', 'Rajdhani', sans-serif",
-        background: "#0f172a",
+        fontFamily: fonts.body,
+        background: colors.bgMain,
         minHeight: "100vh",
         padding: 0,
       }}
@@ -609,16 +579,16 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
         rel="stylesheet"
       />
 
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: "24px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: `${spacing["6xl"]}px ${spacing["3xl"]}px` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: spacing["7xl"] }}>
+          <div style={{ display: "flex", alignItems: "center", gap: spacing.md }}>
             <h1
               style={{
                 margin: 0,
-                fontSize: 20,
-                fontWeight: 700,
-                color: "#f1f5f9",
-                fontFamily: "'Rajdhani', sans-serif",
+                fontSize: fontSizes.xl,
+                fontWeight: fontWeights.bold,
+                color: colors.textPrimary,
+                fontFamily: fonts.display,
                 letterSpacing: "0.5px",
               }}
             >
@@ -638,10 +608,10 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
             style={{
               background: "transparent",
               border: "none",
-              color: "#64748b",
-              fontSize: 22,
+              color: colors.textDim,
+              fontSize: fontSizes["2xl"],
               cursor: saving ? "wait" : "pointer",
-              padding: 4,
+              padding: spacing.xs,
               lineHeight: 1,
             }}
           >
@@ -651,14 +621,14 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
 
         <SectionHeader title={t("form:default_thicknesses_title")} subtitle={t("form:default_thicknesses_subtitle")} />
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 28 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: spacing.xl, marginBottom: spacing["7xl"] }}>
           {CALCULATORS.filter((c) => c.thicknesses.length > 0).map((calc) => (
             <div
               key={calc.key}
               style={{
-                background: "#1a2332",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.06)",
+                background: colors.bgCardInner,
+                borderRadius: radii["2xl"],
+                border: `1px solid ${colors.borderDefault}`,
                 overflow: "hidden",
               }}
             >
@@ -668,14 +638,14 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                   width: "100%",
                   display: "flex",
                   alignItems: "center",
-                  gap: 10,
-                  padding: "14px 16px",
+                  gap: spacing.lg,
+                  padding: `${spacing["2xl"]}px ${spacing["3xl"]}px`,
                   background: "transparent",
                   border: "none",
                   cursor: "pointer",
-                  transition: "background 0.15s",
+                  transition: transitions.fast,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
+                onMouseEnter={(e) => (e.currentTarget.style.background = colors.bgSubtle)}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               >
                 <span
@@ -697,26 +667,26 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                   style={{
                     flex: 1,
                     textAlign: "left",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#e2e8f0",
-                    fontFamily: "'Rajdhani', sans-serif",
+                    fontSize: fontSizes.md,
+                    fontWeight: fontWeights.semibold,
+                    color: colors.textSecondary,
+                    fontFamily: fonts.display,
                     letterSpacing: "0.3px",
                   }}
                 >
                   {t(calc.labelKey)}
                 </span>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", marginRight: 8 }}>
+                <div style={{ display: "flex", gap: spacing.sm, alignItems: "center", marginRight: spacing.md }}>
                   {calc.thicknesses.map((thick) => (
                     <span
                       key={thick.key}
                       style={{
-                        padding: "2px 8px",
-                        background: "rgba(255,255,255,0.06)",
-                        borderRadius: 4,
-                        fontSize: 11,
-                        color: "#94a3b8",
-                        fontFamily: "'Exo 2', sans-serif",
+                        padding: `${spacing.xs / 2}px ${spacing.md}px`,
+                        background: colors.bgOverlay,
+                        borderRadius: radii.sm,
+                        fontSize: fontSizes.sm,
+                        color: colors.textSubtle,
+                        fontFamily: fonts.body,
                         whiteSpace: "nowrap",
                       }}
                     >
@@ -726,9 +696,9 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                 </div>
                 <span
                   style={{
-                    color: "#475569",
-                    fontSize: 12,
-                    transition: "transform 0.2s",
+                    color: colors.textFaint,
+                    fontSize: fontSizes.sm,
+                    transition: transitions.normal,
                     transform: activeTab === calc.key ? "rotate(180deg)" : "rotate(0deg)",
                   }}
                 >
@@ -745,10 +715,10 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
               >
                 <div
                   style={{
-                    padding: "0 16px 16px",
+                    padding: `0 ${spacing["3xl"]}px ${spacing["3xl"]}px`,
                     display: "grid",
                     gridTemplateColumns: calc.thicknesses.length <= 2 ? "1fr 1fr" : "1fr 1fr 1fr",
-                    gap: 12,
+                    gap: spacing.xl,
                   }}
                 >
                   {calc.thicknesses.map((thick) => (
@@ -756,11 +726,11 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                       <label
                         style={{
                           display: "block",
-                          fontSize: 11,
-                          color: "#64748b",
-                          marginBottom: 5,
-                          fontFamily: "'Exo 2', sans-serif",
-                          fontWeight: 500,
+                          fontSize: fontSizes.sm,
+                          color: colors.textDim,
+                          marginBottom: spacing.sm,
+                          fontFamily: fonts.body,
+                          fontWeight: fontWeights.medium,
                         }}
                       >
                         {t(thick.labelKey)}
@@ -782,11 +752,11 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
 
         <div
           style={{
-            background: "#1a2332",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.06)",
+            background: colors.bgCardInner,
+            borderRadius: radii["2xl"],
+            border: `1px solid ${colors.borderDefault}`,
             overflow: "hidden",
-            marginBottom: 28,
+            marginBottom: spacing["7xl"],
           }}
         >
           {CALCULATORS.filter((c) => c.hasSand).map((calc, i, arr) => (
@@ -795,9 +765,9 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 10,
-                padding: "12px 16px",
-                borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                gap: spacing.lg,
+                padding: `${spacing.xl}px ${spacing["3xl"]}px`,
+                borderBottom: i < arr.length - 1 ? `1px solid ${colors.borderLight}` : "none",
               }}
             >
               <span
@@ -818,10 +788,10 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
               <span
                 style={{
                   flex: 1,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: "#cbd5e1",
-                  fontFamily: "'Rajdhani', sans-serif",
+                  fontSize: fontSizes.base,
+                  fontWeight: fontWeights.semibold,
+                  color: colors.textMuted,
+                  fontFamily: fonts.display,
                   letterSpacing: "0.3px",
                 }}
               >
@@ -841,11 +811,11 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
 
         <div
           style={{
-            background: "#1a2332",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.06)",
+            background: colors.bgCardInner,
+            borderRadius: radii["2xl"],
+            border: `1px solid ${colors.borderDefault}`,
             overflow: "hidden",
-            marginBottom: 32,
+            marginBottom: spacing["8xl"],
           }}
         >
           {MORTAR_CONFIG.map((item, i) => (
@@ -854,24 +824,24 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 12,
-                padding: "12px 16px",
-                borderBottom: i < MORTAR_CONFIG.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                gap: spacing.xl,
+                padding: `${spacing.xl}px ${spacing["3xl"]}px`,
+                borderBottom: i < MORTAR_CONFIG.length - 1 ? `1px solid ${colors.borderLight}` : "none",
               }}
             >
               <div style={{ flex: 1 }}>
                 <div
                   style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "#cbd5e1",
-                    fontFamily: "'Rajdhani', sans-serif",
+                    fontSize: fontSizes.base,
+                    fontWeight: fontWeights.semibold,
+                    color: colors.textMuted,
+                    fontFamily: fonts.display,
                     letterSpacing: "0.3px",
                   }}
                 >
                   {t(item.labelKey)}
                 </div>
-                <div style={{ fontSize: 11, color: "#475569", fontFamily: "'Exo 2', sans-serif" }}>
+                <div style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>
                   {t(item.subtitleKey)}
                 </div>
               </div>
@@ -885,22 +855,22 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
           ))}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.xl }}>
           <button
             onClick={handleClose}
             disabled={saving}
             style={{
-              padding: "10px 24px",
+              padding: `${spacing.lg}px ${spacing["6xl"]}px`,
               background: "transparent",
-              border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 8,
-              color: "#94a3b8",
-              fontSize: 14,
-              fontWeight: 600,
-              fontFamily: "'Rajdhani', sans-serif",
+              border: `1px solid ${colors.borderHover}`,
+              borderRadius: radii.lg,
+              color: colors.textSubtle,
+              fontSize: fontSizes.md,
+              fontWeight: fontWeights.semibold,
+              fontFamily: fonts.display,
               cursor: "pointer",
               letterSpacing: "0.3px",
-              transition: "all 0.15s",
+              transition: transitions.fast,
             }}
           >
             {t("form:material_usage_close_button")}
@@ -909,20 +879,18 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
             onClick={handleSave}
             disabled={saving}
             style={{
-              padding: "10px 28px",
-              background: saving
-                ? "linear-gradient(135deg, #22c55e, #16a34a)"
-                : "linear-gradient(135deg, #7c3aed, #6d28d9)",
+              padding: `${spacing.lg}px ${spacing["7xl"]}px`,
+              background: saving ? gradients.greenSave : gradients.bluePrimary,
               border: "none",
-              borderRadius: 8,
-              color: "#fff",
-              fontSize: 14,
-              fontWeight: 700,
-              fontFamily: "'Rajdhani', sans-serif",
+              borderRadius: radii.lg,
+              color: colors.textOnAccent,
+              fontSize: fontSizes.md,
+              fontWeight: fontWeights.bold,
+              fontFamily: fonts.display,
               cursor: saving ? "wait" : "pointer",
               letterSpacing: "0.5px",
-              transition: "all 0.25s",
-              boxShadow: "0 2px 8px rgba(124,58,237,0.3)",
+              transition: transitions.slow,
+              boxShadow: shadows.blue,
             }}
           >
             {saving ? t("form:saved") : t("form:save_changes")}
@@ -934,11 +902,11 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
 
   if (!companyId) {
     const errorContent = (
-      <div className="p-6">
-        <p className="text-red-600">{t("form:no_company_selected")}</p>
+      <div style={{ padding: spacing["6xl"] }}>
+        <p style={{ color: colors.red }}>{t("form:no_company_selected")}</p>
       </div>
     );
-    if (wizardMode) return <div className="p-6">{errorContent}</div>;
+    if (wizardMode) return <div style={{ padding: spacing["6xl"] }}>{errorContent}</div>;
     return (
       <Modal isOpen={true} onClose={onClose} title={t("form:material_usage_setup_modal_title")}>
         {errorContent}
@@ -947,7 +915,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
   }
 
   if (wizardMode) {
-    return <div className="overflow-y-auto h-full">{content}</div>;
+    return <div style={{ overflowY: "auto", height: "100%" }}>{content}</div>;
   }
 
   return (

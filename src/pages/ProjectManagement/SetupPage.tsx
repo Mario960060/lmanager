@@ -420,57 +420,67 @@ const SetupPage = () => {
         <p style={{ fontSize: fontSizes.xl, color: colors.textMuted }}>{t('form:setup_page_title')}</p>
       </div>
       
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: spacing['6xl'] }}>
-        <Card padding={cardStyle.padding}>
-          <div style={cardTitleStyle}>
-            <Clock style={{ width: 24, height: 24, color: colors.accentBlue }} />
-            <h2 style={h2Style}>{t('form:setup_tasks_label')}</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: spacing['6xl'], alignItems: 'stretch' }}>
+        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={cardTitleStyle}>
+              <Clock style={{ width: 24, height: 24, color: colors.accentBlue }} />
+              <h2 style={h2Style}>{t('form:setup_tasks_label')}</h2>
+            </div>
+            <p style={{ ...cardDescStyle, flex: 1, marginBottom: 0 }}>{t('form:setup_tasks_description')}</p>
           </div>
-          <p style={cardDescStyle}>{t('form:setup_tasks_description')}</p>
           <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowTasksModal(true))}>
             {t('form:manage_tasks_button')}
           </Button>
         </Card>
         
-        <Card padding={cardStyle.padding}>
-          <div style={cardTitleStyle}>
-            <Package style={{ width: 24, height: 24, color: colors.green }} />
-            <h2 style={h2Style}>{t('form:setup_materials_label')}</h2>
+        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={cardTitleStyle}>
+              <Package style={{ width: 24, height: 24, color: colors.green }} />
+              <h2 style={h2Style}>{t('form:setup_materials_label')}</h2>
+            </div>
+            <p style={{ ...cardDescStyle, flex: 1, marginBottom: 0 }}>{t('form:setup_materials_description')}</p>
           </div>
-          <p style={cardDescStyle}>{t('form:setup_materials_description')}</p>
           <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowMaterialsModal(true))} style={{ background: `linear-gradient(135deg, ${colors.green}, #16a34a)` }}>
             {t('form:manage_materials_button')}
           </Button>
         </Card>
         
-        <Card padding={cardStyle.padding}>
-          <div style={cardTitleStyle}>
-            <Wrench style={{ width: 24, height: 24, color: colors.purple }} />
-            <h2 style={h2Style}>{t('form:setup_equipment_label')}</h2>
+        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={cardTitleStyle}>
+              <Wrench style={{ width: 24, height: 24, color: colors.purple }} />
+              <h2 style={h2Style}>{t('form:setup_equipment_label')}</h2>
+            </div>
+            <p style={{ ...cardDescStyle, flex: 1, marginBottom: 0 }}>{t('form:setup_equipment_description')}</p>
           </div>
-          <p style={cardDescStyle}>{t('form:setup_equipment_description')}</p>
           <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowEquipmentModal(true))} style={{ background: `linear-gradient(135deg, ${colors.purple}, ${colors.purpleLight})` }}>
             {t('form:manage_equipment_button')}
           </Button>
         </Card>
         
-        <Card padding={cardStyle.padding}>
-          <div style={cardTitleStyle}>
-            <Truck style={{ width: 24, height: 24, color: colors.orange }} />
-            <h2 style={h2Style}>{t('form:setup_excavators_dumpers_label')}</h2>
+        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={cardTitleStyle}>
+              <Truck style={{ width: 24, height: 24, color: colors.orange }} />
+              <h2 style={h2Style}>{t('form:setup_excavators_dumpers_label')}</h2>
+            </div>
+            <p style={{ ...cardDescStyle, flex: 1, marginBottom: 0 }}>{t('form:setup_excavators_description')}</p>
           </div>
-          <p style={cardDescStyle}>{t('form:setup_excavators_description')}</p>
           <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowDiggingModal(true))} style={{ background: `linear-gradient(135deg, ${colors.orange}, ${colors.orangeLight})` }}>
             {t('form:manage_excavators_dumpers_button')}
           </Button>
         </Card>
         
-        <Card padding={cardStyle.padding}>
-          <div style={cardTitleStyle}>
-            <Package style={{ width: 24, height: 24, color: colors.accentBlue }} />
-            <h2 style={h2Style}>{t('form:setup_material_usage_label')}</h2>
+        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={cardTitleStyle}>
+              <Package style={{ width: 24, height: 24, color: colors.accentBlue }} />
+              <h2 style={h2Style}>{t('form:setup_material_usage_label')}</h2>
+            </div>
+            <p style={{ ...cardDescStyle, flex: 1, marginBottom: 0 }}>{t('form:setup_material_usage_description')}</p>
           </div>
-          <p style={cardDescStyle}>{t('form:setup_material_usage_description')}</p>
           <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowMaterialUsageModal(true))}>
             {t('form:manage_material_usage_button')}
           </Button>

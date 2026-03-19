@@ -7,18 +7,14 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Database } from '../lib/database.types';
 import { format, parseISO } from 'date-fns';
-import { CheckCircle2, Clock, Package, AlertCircle, Wrench, Pencil, ChevronDown, ChevronUp, Folder, FolderPlus, MoreHorizontal, Edit2, Trash2, Move, ArrowUp, Edit, Plus, X, Loader2 } from 'lucide-react';
+import { CheckCircle2, Clock, Package, AlertCircle, Wrench, Pencil, ChevronDown, ChevronUp, Folder, FolderPlus, MoreHorizontal, Edit2, Trash2, Move, ArrowUp, Edit, Plus, X, Loader2, ClipboardList } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import TaskProgressModal from '../components/TaskProgressModal';
 import MaterialProgressModal from '../components/MaterialProgressModal';
 import HoursWorkedModal from '../components/HoursWorkedModal';
 import AdditionalFeatures from '../components/AdditionalFeatures';
 import DatePicker from '../components/DatePicker';
-import {
-  Card,
-  Button,
-  CollapsibleCard,
-} from '../themes/uiComponents';
+import { Button } from '../themes/uiComponents';
 import { colors, spacing, fonts, fontSizes, fontWeights, radii, transitions } from '../themes/designTokens';
 
 type Event = Database['public']['Tables']['events']['Row'];
@@ -56,6 +52,62 @@ type TaskFolder = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+};
+
+const EventDetailsProgressBar = ({ value, color, height = 4 }: { value: number; color: string; height?: number }) => (
+  <div style={{ width: "100%", height, borderRadius: height, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+    <div style={{ width: `${Math.min(100, Math.max(0, value))}%`, height: "100%", borderRadius: height, background: color, transition: "width 0.4s ease" }} />
+  </div>
+);
+
+const EventDetailsSectionCard = ({ title, icon, count, open, onOpenChange, headerActions, children }: {
+  title: string;
+  icon: React.ReactNode;
+  count?: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  headerActions?: React.ReactNode;
+  children: React.ReactNode;
+}) => {
+  const accent = count != null ? "#8bb4ff" : undefined;
+  return (
+    <div style={{ background: colors.bgCard, borderRadius: 14, border: `1px solid ${colors.borderDefault}`, overflow: "hidden" }}>
+      <div
+        style={{
+          width: "100%", display: "flex", alignItems: "center", gap: 10,
+          padding: "14px 18px", background: open ? "rgba(255,255,255,0.02)" : "transparent",
+          transition: "background 0.15s ease",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => onOpenChange(!open)}
+          style={{
+            flex: 1, display: "flex", alignItems: "center", gap: 10, border: "none", background: "transparent",
+            cursor: "pointer", fontFamily: "inherit", padding: 0, textAlign: "left",
+          }}
+        >
+          <span style={{ fontSize: 15, display: "flex" }}>{icon}</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: colors.textPrimary }}>{title}</span>
+          {count != null && (
+            <span style={{
+              fontSize: 11.5, fontWeight: 700, color: accent || colors.accentBlue,
+              background: `${accent || colors.accentBlue}15`, borderRadius: 10, padding: "2px 9px", minWidth: 20, textAlign: "center",
+            }}>
+              {count}
+            </span>
+          )}
+          <ChevronDown style={{ width: 16, height: 16, color: colors.textDim, transition: "transform 0.2s ease", transform: open ? "rotate(180deg)" : "rotate(0deg)" }} />
+        </button>
+        {headerActions}
+      </div>
+      {open && (
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const EventDetails = () => {
@@ -894,8 +946,11 @@ const EventDetails = () => {
         }, 0) / folderTasks.length : 0;
 
       return (
-        <div key={folder.id} className={`border rounded-lg overflow-hidden ${depth > 0 ? 'ml-4 mt-4' : ''}`}>
-          <div className="bg-gray-50 p-4 cursor-pointer hover:bg-gray-100 transition-colors"
+        <div key={folder.id} className={`border rounded-lg overflow-hidden ${depth > 0 ? 'ml-4 mt-4' : ''}`} style={{ borderColor: colors.borderDefault }}>
+          <div className="p-4 cursor-pointer transition-colors"
+            style={{ background: colors.bgSubtle }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgSubtle; }}
             onClick={() => setExpandedFolders(prev => ({ ...prev, [folder.id]: !prev[folder.id] }))}
           >
             {/* Folder Header */}
@@ -906,7 +961,7 @@ const EventDetails = () => {
                 <Folder className="w-5 h-5" style={{ color: folder.color }} />
                 <h3 className="font-medium">{folder.name}</h3>
                 {childFolders.length > 0 && (
-                  <span className="text-xs text-gray-500">({childFolders.length} folders)</span>
+                  <span className="text-xs" style={{ color: colors.textSubtle }}>({childFolders.length} folders)</span>
                 )}
               </div>
               <div className="flex items-center space-x-4">
@@ -920,184 +975,118 @@ const EventDetails = () => {
                       y: e.clientY
                     });
                   }}
-                  className="p-1.5 text-gray-500 hover:text-gray-700 rounded-md"
+                  className="p-1.5 rounded-md"
+                style={{ color: colors.textSubtle }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textSubtle; }}
                 >
                   <MoreHorizontal className="w-5 h-5" />
                 </button>
                 {expandedFolders[folder.id] ? (
-                  <ChevronUp className="w-5 h-5 text-gray-500" />
+                  <ChevronUp className="w-5 h-5" style={{ color: colors.textSubtle }} />
                 ) : (
-                  <ChevronDown className="w-5 h-5 text-gray-500" />
+                  <ChevronDown className="w-5 h-5" style={{ color: colors.textSubtle }} />
                 )}
               </div>
             </div>
 
-            {/* Folder Progress Section - Always Visible */}
-            <div className="mt-3 space-y-2">
-              {/* Work Progress Bar */}
+            {/* Folder Progress Section - dynamic colors (≤90 blue, 90–110 green, >110 red) */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12, padding: "10px 12px", background: "rgba(255,255,255,0.015)", borderRadius: 10, marginBottom: 10 }}>
               <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-xs font-medium text-gray-700">{t('event:work_progress')}</span>
-                  <span className="text-xs text-green-600">
-                    {parseFloat(overallWorkProgress.toFixed(1))}%
-                  </span>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 11.5, color: colors.textMuted, fontWeight: 500 }}>{t('event:work_progress')}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, ...getProgressTextStyle(overallWorkProgress, folderHoursPercent) }}>{parseFloat(overallWorkProgress.toFixed(1))}%</span>
                 </div>
-                <div className="w-full bg-gray-600 rounded-full h-2 border border-gray-500">
-                  <div
-                    className="bg-green-600 h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${Math.min(overallWorkProgress, 100)}%` }}
-                  ></div>
-                </div>
+                <EventDetailsProgressBar value={overallWorkProgress} color={getProgressColor(overallWorkProgress, folderHoursPercent)} height={4} />
               </div>
-
-              {/* Hours Progress Bar */}
               <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-xs font-medium text-gray-700">{t('event:hours_progress')}</span>
-                  <div className="text-xs">
-                    <span style={getProgressTextStyle(folderHoursPercent)}>
-                      {parseFloat(folderHoursPercent.toFixed(1))}%
-                    </span>
-                    <span className="text-gray-500 ml-2">
-                      ({parseFloat(folderTotalHoursSpent.toFixed(1))} / {parseFloat(folderTotalHoursWorked.toFixed(1))})
-                    </span>
-                  </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 11.5, color: colors.textMuted, fontWeight: 500 }}>{t('event:hours_progress')}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 600, ...getProgressTextStyle(overallWorkProgress, folderHoursPercent) }}>{parseFloat(folderHoursPercent.toFixed(1))}% ({parseFloat(folderTotalHoursSpent.toFixed(1))} / {parseFloat(folderTotalHoursWorked.toFixed(1))})</span>
                 </div>
-                <div className="w-full bg-gray-600 rounded-full h-2 border border-gray-500">
-                    <div
-                      style={{ height: 8, borderRadius: radii.pill, transition: 'all 0.3s', width: `${Math.min(folderHoursPercent, 100)}%`, ...getProgressBarStyle(folderHoursPercent) }}
-                    />
-                </div>
+                <EventDetailsProgressBar value={folderHoursPercent} color={getProgressColor(overallWorkProgress, folderHoursPercent)} height={4} />
               </div>
-
-              {/* Folder Stats */}
-              <div className="flex flex-wrap gap-2 text-xs text-gray-600">
-                <span>{t('event:tasks_count')} {folderTasks.length}</span>
-                <span>•</span>
-                <span>{t('event:completed_count')} {completedTasks.length}</span>
-                <span>•</span>
-                <span>{t('event:in_progress_count')} {inProgressTasks}</span>
-              </div>
+            </div>
+            <div style={{ display: "flex", gap: 16, fontSize: 12, color: colors.textMuted, fontWeight: 500 }}>
+              <span>{t('event:tasks_count')} <strong style={{ color: colors.textMuted }}>{folderTasks.length}</strong></span>
+              <span>{t('event:completed_count')} <strong style={{ color: colors.green }}>{completedTasks.length}</strong></span>
+              <span>{t('event:in_progress_count')} <strong style={{ color: colors.orange }}>{inProgressTasks}</strong></span>
             </div>
           </div>
 
           {/* Expanded Content */}
           <div className={`${!expandedFolders[folder.id] && 'hidden'}`}>
-            <div className="border-t divide-y">
+            <div style={{ borderTop: `1px solid ${colors.borderDefault}`, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
               {/* Child Folders */}
               {childFolders.length > 0 && (
-                <div className="p-4 bg-gray-900 bg-opacity-20 border-b">
-                  <h4 className="text-sm font-semibold text-gray-700 mb-3">{t('event:sub_folders')}</h4>
+                <div className="p-4 border-b" style={{ background: colors.bgElevated, borderColor: colors.borderDefault }}>
+                  <h4 className="text-sm font-semibold mb-3" style={{ color: colors.textMuted }}>{t('event:sub_folders')}</h4>
                   <div className="space-y-4">
                     {renderFolders(folder.id, depth + 1)}
                   </div>
                 </div>
               )}
 
-              {/* Tasks in this folder */}
+              {/* Tasks in this folder - mock: card, one progress line, Praca/Godziny orange bars */}
               {folderTasks.map(task => {
-                const [amount, ...unitParts] = task.amount.split(' ');
+                const [amount] = task.amount.split(' ');
                 const totalAmount = parseFloat(amount);
-                const unit = task.unit || unitParts.join(' ');
-                const displayTotal = task.unit ? `${totalAmount} ${translateUnit(task.unit, t)}` : task.amount;
                 const percentComplete = (task.progress_completed / totalAmount) * 100;
-                const taskHoursPercent = (task.hours_spent / task.hours_worked) * 100;
+                const taskHoursPercent = task.hours_worked > 0 ? (task.hours_spent / task.hours_worked) * 100 : 0;
 
                 return (
                   <div
                     key={task.id}
-                    className="p-4 hover:bg-gray-50 transition-colors"
+                    style={{
+                      padding: "12px 14px", borderRadius: 10,
+                      background: "rgba(255,255,255,0.015)",
+                      border: `1px solid rgba(255,255,255,0.03)`,
+                    }}
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-medium text-gray-900 truncate">{translateTaskName(task.name ?? '', t)}</h4>
-                        <div className="flex flex-col sm:flex-row sm:items-center mt-1 space-y-2 sm:space-y-0 sm:space-x-4">
-                  <p className="text-sm text-gray-600">
-                            {t('event:progress_label_short')} {parseFloat(task.progress_completed.toFixed(2))} {unit} / {displayTotal}
-                            <span className="ml-2 font-medium text-green-600">
-                              ({parseFloat(percentComplete.toFixed(2))}%)
-                    </span>
-                  </p>
-                          <div className="flex justify-between items-center w-full sm:w-auto">
-                  <p className="text-sm text-gray-600">
-                              {t('event:hours_label_short')} {parseFloat(task.hours_spent.toFixed(2))} / {parseFloat(task.hours_worked.toFixed(2))}
-                              <span style={{ marginLeft: spacing.md, fontWeight: fontWeights.medium, ...getProgressTextStyle(taskHoursPercent) }}>
-                                ({parseFloat(taskHoursPercent.toFixed(2))}%)
-                    </span>
-                  </p>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setContextMenu({
-                                  type: 'task',
-                                  id: task.id,
-                                  x: e.clientX,
-                                  y: e.clientY
-                                });
-                              }}
-                              className="flex-none ml-2 p-1.5 text-gray-500 hover:text-gray-700 rounded-md sm:hidden"
-                            >
-                              <MoreHorizontal className="w-5 h-5" />
-                            </button>
-                        </div>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 700, color: colors.textPrimary }}>{translateTaskName(task.name ?? '', t)}</div>
                       </div>
-                        {/* Individual Task Progress Bars */}
-                        <div className="mt-3 space-y-2">
-                          {/* Work Progress Bar */}
-                          <div>
-                            <div className="flex justify-between mb-1">
-                              <span className="text-xs font-medium text-gray-700">{t('event:work_progress')}</span>
-                              <span className="text-xs text-green-600">{parseFloat(percentComplete.toFixed(1))}%</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-1.5">
-                              <div
-                                className="bg-green-600 h-1.5 rounded-full transition-all duration-300"
-                                style={{ width: `${Math.min(percentComplete, 100)}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                          {/* Hours Progress Bar */}
-                          <div>
-                            <div className="flex justify-between mb-1">
-                              <span className="text-xs font-medium text-gray-700">{t('event:hours_progress')}</span>
-                              <span style={{ fontSize: fontSizes.xs, ...getProgressTextStyle(taskHoursPercent) }}>
-                                {parseFloat(taskHoursPercent.toFixed(1))}%
-                        </span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                <div
-                                  style={{ height: 6, borderRadius: radii.pill, transition: 'all 0.3s', width: `${Math.min(taskHoursPercent, 100)}%`, ...getProgressBarStyle(taskHoursPercent) }}
-                                />
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 mt-4 sm:mt-0">
-                          <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                            setSelectedTask(task);
-                            setShowTaskProgressModal(true);
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setSelectedTask(task); setShowTaskProgressModal(true); }}
+                          style={{
+                            padding: "5px 12px", borderRadius: 7,
+                            background: "rgba(99,140,255,0.12)", border: "1px solid rgba(99,140,255,0.2)",
+                            color: colors.accentBlue, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
                           }}
-                          className="flex-none w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white py-1.5 px-3 rounded-md transition-colors text-sm whitespace-nowrap"
                         >
                           {t('event:update_progress')}
                         </button>
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setContextMenu({
-                              type: 'task',
-                              id: task.id,
-                              x: e.clientX,
-                              y: e.clientY
-                            });
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setContextMenu({ type: 'task', id: task.id, x: e.clientX, y: e.clientY }); }}
+                          style={{
+                            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)",
+                            borderRadius: 6, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+                            cursor: "pointer", color: colors.textSubtle,
                           }}
-                          className="flex-none p-1.5 text-gray-500 hover:text-gray-700 rounded-md hidden sm:block"
                         >
-                          <MoreHorizontal className="w-5 h-5" />
-                      </button>
-                  </div>
+                          <MoreHorizontal className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ fontSize: 10.5, color: colors.textMuted }}>{t('event:work_label_short')}</span>
+                          <span style={{ fontSize: 10.5, fontWeight: 600, ...getProgressTextStyle(percentComplete, taskHoursPercent) }}>{parseFloat(percentComplete.toFixed(1))}%</span>
+                        </div>
+                        <EventDetailsProgressBar value={percentComplete} color={getProgressColor(percentComplete, taskHoursPercent)} height={3} />
+                      </div>
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ fontSize: 10.5, color: colors.textMuted }}>{t('event:hours_bar_label')}</span>
+                          <span style={{ fontSize: 10.5, fontWeight: 600, ...getProgressTextStyle(percentComplete, taskHoursPercent) }}>{parseFloat(taskHoursPercent.toFixed(1))}%</span>
+                        </div>
+                        <EventDetailsProgressBar value={taskHoursPercent} color={getProgressColor(percentComplete, taskHoursPercent)} height={3} />
+                      </div>
                     </div>
                   </div>
                 );
@@ -1135,13 +1124,19 @@ const EventDetails = () => {
   const totalEstimatedHours = regularEstimatedHours + additionalEstimatedHours;
   const hoursProgress = totalEstimatedHours > 0 ? (totalHours / totalEstimatedHours) * 100 : 0;
 
-  // Determine progress color based on percentage
-  const getProgressBarStyle = (percent: number): React.CSSProperties => ({
-    background: percent <= 90 ? colors.accentBlue : percent <= 110 ? colors.green : colors.red,
-  });
+  // Color based on work vs hours: work ahead → green, work behind → red, roughly equal (±5%) → blue
+  const getProgressColorFromWorkVsHours = (workPercent: number, hoursPercent: number): string => {
+    const diff = workPercent - hoursPercent;
+    if (diff > 5) return colors.green;   // więcej pracy niż godzin – dobrze
+    if (diff < -5) return colors.red;    // mniej pracy niż godzin – źle
+    return colors.accentBlue;             // mniej więcej równo (±5%) – neutralnie
+  };
 
-  const getProgressTextStyle = (percent: number): React.CSSProperties => ({
-    color: percent <= 90 ? colors.accentBlue : percent <= 110 ? colors.green : colors.red,
+  const getProgressColor = (workPercent: number, hoursPercent: number) =>
+    getProgressColorFromWorkVsHours(workPercent, hoursPercent);
+
+  const getProgressTextStyle = (workPercent: number, hoursPercent: number): React.CSSProperties => ({
+    color: getProgressColorFromWorkVsHours(workPercent, hoursPercent),
   });
 
   const getStatusStyle = (status: string): React.CSSProperties => {
@@ -1209,8 +1204,10 @@ const EventDetails = () => {
 
     return (
       <div
-        className="fixed bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-48 max-w-xs max-h-96 overflow-y-auto"
+        className="fixed rounded-lg shadow-lg py-1 w-48 max-w-xs max-h-96 overflow-y-auto"
         style={{
+          background: colors.bgCard,
+          border: `1px solid ${colors.borderDefault}`,
           top: `${Math.max(0, y)}px`,
           left: `${Math.max(0, Math.min(x, window.innerWidth - 200))}px`,
           zIndex: 50,
@@ -1219,26 +1216,35 @@ const EventDetails = () => {
         {!isFirstFolder && (
           <button
             onClick={handleMoveUp}
-            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+            className="w-full text-left px-4 py-2 text-sm flex items-center"
+            style={{ color: colors.textMuted }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
           >
             <ArrowUp className="w-4 h-4 mr-2" />
             {t('event:move_up')}
           </button>
         )}
         <div className="border-t my-1">
-          <div className="px-4 py-1 text-xs font-semibold text-gray-500 uppercase">{t('event:move_to_folder')}</div>
+          <div className="px-4 py-1 text-xs font-semibold uppercase" style={{ color: colors.textSubtle }}>{t('event:move_to_folder')}</div>
           <button
             onClick={() => handleMoveToFolder(null)}
-            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+            className="w-full text-left px-4 py-2 text-sm flex items-center"
+            style={{ color: colors.textMuted }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
           >
-            <Folder className="w-4 h-4 mr-2 text-gray-400" />
+            <Folder className="w-4 h-4 mr-2" style={{ color: colors.textSubtle }} />
             {t('event:root_no_parent')}
           </button>
           {availableFoldersForMove.map(f => (
             <button
               key={f.id}
               onClick={() => handleMoveToFolder(f.id)}
-              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+              className="w-full text-left px-4 py-2 text-sm flex items-center"
+            style={{ color: colors.textMuted }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
             >
               <Folder className="w-4 h-4 mr-2" style={{ color: f.color }} />
               {f.name}
@@ -1251,7 +1257,10 @@ const EventDetails = () => {
               if (folder) setEditingFolder(folder);
               setContextMenu(null);
             }}
-            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+            className="w-full text-left px-4 py-2 text-sm flex items-center"
+            style={{ color: colors.textMuted }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
           >
             <Edit className="w-4 h-4 mr-2" />
             {t('event:edit')}
@@ -1259,7 +1268,10 @@ const EventDetails = () => {
         </div>
         <button
           onClick={handleDelete}
-          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flex items-center"
+          className="w-full text-left px-4 py-2 text-sm flex items-center"
+          style={{ color: colors.red }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
         >
           <Trash2 className="w-4 h-4 mr-2" />
           {t('event:delete')}
@@ -1274,8 +1286,10 @@ const EventDetails = () => {
 
     return (
       <div
-        className="fixed bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-48 max-w-xs"
+        className="fixed rounded-lg shadow-lg py-1 w-48 max-w-xs"
         style={{
+          background: colors.bgCard,
+          border: `1px solid ${colors.borderDefault}`,
           top: `${Math.max(0, y)}px`,
           left: `${Math.max(0, Math.min(x, window.innerWidth - 200))}px`,
           zIndex: 50,
@@ -1287,7 +1301,10 @@ const EventDetails = () => {
             setShowMoveFolderModal(true);
             setContextMenu(null);
           }}
-          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+          className="w-full text-left px-4 py-2 text-sm flex items-center"
+            style={{ color: colors.textMuted }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
         >
           <Move className="w-4 h-4 mr-2" />
           {t('event:move_to_folder')}
@@ -1299,7 +1316,10 @@ const EventDetails = () => {
               setShowDeleteConfirm(true);
               setContextMenu(null);
             }}
-            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 flex items-center"
+            className="w-full text-left px-4 py-2 text-sm flex items-center"
+          style={{ color: colors.red }}
+          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
           >
             <Trash2 className="w-4 h-4 mr-2" />
             {t('event:delete_task')}
@@ -1309,103 +1329,98 @@ const EventDetails = () => {
     );
   };
 
+  const statusConfig: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    planned: { label: t('event:planned'), color: "#22c55e", bg: "rgba(34,197,94,0.1)", border: "rgba(34,197,94,0.25)" },
+    scheduled: { label: t('event:scheduled'), color: "#22c55e", bg: "rgba(34,197,94,0.1)", border: "rgba(34,197,94,0.25)" },
+    in_progress: { label: t('event:in_progress'), color: "#f97316", bg: "rgba(249,115,22,0.1)", border: "rgba(249,115,22,0.25)" },
+    finished: { label: t('event:finished'), color: "#64748b", bg: "rgba(100,116,139,0.1)", border: "rgba(100,116,139,0.25)" },
+  };
+  const st = statusConfig[event.status] || statusConfig.in_progress;
+
   return (
-    <div style={{ padding: spacing["6xl"], maxWidth: 1280, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <BackButton />
-      </div>
-      {/* Header Section */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing["3xl"] }}>
-        {/* Project Info */}
-        <Card>
-          <h1 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold, marginBottom: spacing.md, color: colors.textPrimary, fontFamily: fonts.display }}>{event.title}</h1>
-          <p style={{ color: colors.textDim, fontFamily: fonts.body, fontSize: fontSizes.base }}>
-            {event.start_date && format(new Date(event.start_date), 'MMM dd, yyyy')} - {event.end_date && format(new Date(event.end_date), 'MMM dd, yyyy')}
-          </p>
-          <div style={{ marginTop: spacing["4xl"] }}>
+    <div style={{ minHeight: "100vh", background: colors.bgApp, fontFamily: fonts.body, padding: "20px 16px" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
+        <div style={{ marginBottom: 16 }}>
+          <BackButton />
+        </div>
+        {/* Header row */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+          {/* Event info */}
+          <div style={{
+            background: colors.bgCard, borderRadius: 14, border: `1px solid ${colors.borderDefault}`,
+            padding: "20px 22px",
+          }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: colors.textPrimary, marginBottom: 4 }}>{event.title}</div>
+            <div style={{ fontSize: 12.5, color: colors.textDim, marginBottom: 14 }}>
+              {event.start_date && format(new Date(event.start_date), 'MMM dd, yyyy')} - {event.end_date && format(new Date(event.end_date), 'MMM dd, yyyy')}
+            </div>
             {event.status === 'finished' ? (
-              <span style={{ padding: '4px 12px', borderRadius: radii.pill, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, ...getStatusStyle('finished') }}>
-                {t('event:finished')}
-              </span>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px 7px 10px", borderRadius: 10, background: st.bg, border: `1px solid ${st.border}`, fontSize: 13, fontWeight: 600, color: st.color }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: st.color }} />
+                {st.label}
+              </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <select
                   value={event.status}
                   onChange={(e) => handleStatusChange(e.target.value)}
-                  style={{ padding: '4px 12px', borderRadius: radii.pill, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, border: `1px solid ${colors.borderDefault}`, cursor: 'pointer', ...getStatusStyle(event.status) }}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 14px 7px 10px", borderRadius: 10,
+                    background: st.bg, border: `1px solid ${st.border}`, fontSize: 13, fontWeight: 600, color: st.color, cursor: "pointer", fontFamily: "inherit",
+                  }}
                 >
                   <option value="planned">{t('event:planned')}</option>
                   <option value="scheduled">{t('event:scheduled')}</option>
                   <option value="in_progress">{t('event:in_progress')}</option>
                   <option value="finished">{t('event:finished')}</option>
                 </select>
-                {statusError && (
-                  <p style={{ fontSize: fontSizes.sm, color: colors.red, fontFamily: fonts.body }}>{statusError}</p>
-                )}
+                {statusError && <p style={{ fontSize: 12, color: colors.red }}>{statusError}</p>}
+                {updateEventStatusMutation.isPending && <span style={{ fontSize: 12, color: colors.textDim }}>{t('event:updating_status')}</span>}
               </div>
             )}
-            {updateEventStatusMutation.isPending && (
-              <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md, fontFamily: fonts.body }}>{t('event:updating_status')}</span>
-            )}
           </div>
-        </Card>
 
-        {/* Progress Summary */}
-        <Card>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["4xl"] }}>
-            <CheckCircle2 style={{ width: 20, height: 20, color: colors.green, marginRight: spacing.md }} />
-            <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display }}>{t('event:progress_title')}</h2>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["4xl"] }}>
-            {/* Hours Progress */}
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: spacing.sm }}>
-                <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, fontFamily: fonts.body }}>{t('event:hours_progress')}</span>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, ...getProgressTextStyle(hoursProgress) }}>
-                    {parseFloat(totalHours.toFixed(2))} / {parseFloat(totalEstimatedHours.toFixed(2))} {t('event:hours_label')}
-                  </span>
-                  <span style={{ marginLeft: spacing.md, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, ...getProgressTextStyle(hoursProgress) }}>
-                    ({parseFloat(hoursProgress.toFixed(2))}%)
-                  </span>
-                </div>
+          {/* Progress */}
+          <div style={{
+            background: colors.bgCard, borderRadius: 14, border: `1px solid ${colors.borderDefault}`,
+            padding: "20px 22px", display: "flex", flexDirection: "column", gap: 14,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 24, height: 24, borderRadius: "50%", background: "rgba(34,197,94,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <CheckCircle2 style={{ width: 13, height: 13, color: colors.green }} />
               </div>
-              <div style={{ width: '100%', height: 10, background: colors.bgOverlay, borderRadius: radii.pill, overflow: 'hidden' }}>
-                <div
-                  style={{ width: `${Math.min(hoursProgress, 100)}%`, height: '100%', borderRadius: radii.pill, transition: 'all 0.3s', ...getProgressBarStyle(hoursProgress) }}
-                />
-              </div>
+              <span style={{ fontSize: 14, fontWeight: 700, color: colors.textPrimary }}>{t('event:progress_title')}</span>
             </div>
-
-            {/* Task Completion Progress */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: spacing.sm }}>
-                <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, fontFamily: fonts.body }}>{t('event:task_completion')}</span>
-                <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.green, fontFamily: fonts.body }}>
-                  {parseFloat(taskCompletionPercentage.toFixed(2))}%
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                <span style={{ fontSize: 12.5, color: colors.textMuted, fontWeight: 500 }}>{t('event:hours_progress')}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, ...getProgressTextStyle(taskCompletionPercentage, hoursProgress) }}>
+                  {parseFloat(totalHours.toFixed(2))} / {parseFloat(totalEstimatedHours.toFixed(2))} {t('event:hours_label')} ({hoursProgress.toFixed(0)}%)
                 </span>
               </div>
-              <div style={{ width: '100%', height: 10, background: colors.bgOverlay, borderRadius: radii.pill, overflow: 'hidden' }}>
-                <div
-                  style={{ width: `${Math.min(taskCompletionPercentage, 100)}%`, height: '100%', background: colors.green, borderRadius: radii.pill, transition: 'all 0.3s' }}
-                />
+              <EventDetailsProgressBar value={hoursProgress} color={getProgressColor(taskCompletionPercentage, hoursProgress)} />
+            </div>
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                <span style={{ fontSize: 12.5, color: colors.textMuted, fontWeight: 500 }}>{t('event:task_completion')}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, ...getProgressTextStyle(taskCompletionPercentage, hoursProgress) }}>{parseFloat(taskCompletionPercentage.toFixed(2))}%</span>
               </div>
+              <EventDetailsProgressBar value={taskCompletionPercentage} color={getProgressColor(taskCompletionPercentage, hoursProgress)} />
             </div>
           </div>
-        </Card>
-      </div>
+        </div>
 
+        {/* Sections */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Tasks Section */}
-      <CollapsibleCard
+      <EventDetailsSectionCard
         title={t('event:tasks_title')}
+        icon={<ClipboardList style={{ width: 18, height: 18, color: colors.accentBlue }} />}
+        count={tasks.length}
         open={expandedSections.tasks}
         onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, tasks: open }))}
         headerActions={expandedSections.tasks && (
-          <Button
-            variant="ghost"
-            onClick={() => setShowCreateFolderModal(true)}
-            style={{ padding: spacing.sm, fontSize: fontSizes.sm }}
-          >
+          <Button variant="ghost" onClick={() => setShowCreateFolderModal(true)} style={{ padding: spacing.sm, fontSize: fontSizes.sm }}>
             <FolderPlus style={{ width: 16, height: 16, marginRight: spacing.xs }} />
             {t('event:new_folder')}
           </Button>
@@ -1440,149 +1455,109 @@ const EventDetails = () => {
                       ...prev,
                       'unorganized': !prev['unorganized']
                     }))}
-                    className="bg-gray-50 p-4 cursor-pointer hover:bg-gray-100 transition-colors"
+                    className="p-4 cursor-pointer transition-colors"
+                    style={{ background: colors.bgSubtle }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgSubtle; }}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center space-x-3">
-                        <Folder className="w-5 h-5 text-gray-400" />
-                        <h3 className="text-lg font-semibold text-gray-900">{t('event:other_tasks')}</h3>
-                        <span className="text-sm text-gray-500">({unorganizedTasks.length} {t('event:tasks_count_label')})</span>
+                        <Folder className="w-5 h-5" style={{ color: colors.textSubtle }} />
+                        <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('event:other_tasks')}</h3>
+                        <span className="text-sm" style={{ color: colors.textSubtle }}>({unorganizedTasks.length} {t('event:tasks_count_label')})</span>
                       </div>
                       <div className="flex items-center space-x-4">
-                        <span className="text-sm font-medium text-gray-600">
+                        <span className="text-sm font-medium" style={{ color: colors.textMuted }}>
                           {completedUnorganizedTasks.length}/{unorganizedTasks.length} {t('event:tasks_count_label')} ({taskCompletionPercentage}%)
                         </span>
-                        <span className="text-sm text-gray-600">
+                        <span className="text-sm" style={{ color: colors.textMuted }}>
                           {unorganizedTasks.reduce((sum, task) => sum + (task.hours_worked || 0), 0).toFixed(1)}{t('event:hours_total')}
                         </span>
-                        <span className="text-sm font-medium text-gray-600">
+                        <span className="text-sm font-medium" style={{ color: colors.textMuted }}>
                           {workProgressPercentage}{t('event:work_done')}
                         </span>
                       </div>
                     </div>
                     {/* Other Tasks Progress Bar */}
-                    <div className="w-full bg-gray-600 rounded-full h-3 mb-3 border border-gray-500">
+                    <div className="w-full rounded-full h-3 mb-3" style={{ background: colors.bgElevated, border: `1px solid ${colors.borderDefault}` }}>
                       <div
-                        className="h-full rounded-full transition-all duration-300 bg-gray-400"
+                        className="h-full rounded-full transition-all duration-300"
                         style={{ 
+                          background: colors.textSubtle,
                           width: `${Math.min(workProgressPercentage, 100)}%`
                         }}
                         ></div>
                       </div>
                     <div className="flex items-center justify-between">
                       <div></div>
-                      {expandedFolders['unorganized'] ? (
-                        <ChevronUp className="w-5 h-5 text-gray-500" />
+                        {expandedFolders['unorganized'] ? (
+                        <ChevronUp className="w-5 h-5" style={{ color: colors.textSubtle }} />
                       ) : (
-                        <ChevronDown className="w-5 h-5 text-gray-500" />
+                        <ChevronDown className="w-5 h-5" style={{ color: colors.textSubtle }} />
                       )}
                     </div>
                   </div>
 
                   {expandedFolders['unorganized'] && (
-                    <div className="border-t divide-y">
+                    <div style={{ borderTop: `1px solid ${colors.borderDefault}`, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
                       {unorganizedTasks.map(task => {
-                        const [amount, ...unitParts] = task.amount.split(' ');
+                        const [amount] = task.amount.split(' ');
                         const totalAmount = parseFloat(amount);
-                        const unit = task.unit || unitParts.join(' ');
-                        const displayTotal = task.unit ? `${totalAmount} ${task.unit}` : task.amount;
                         const percentComplete = (task.progress_completed / totalAmount) * 100;
-                        const taskHoursPercent = (task.hours_spent / task.hours_worked) * 100;
+                        const taskHoursPercent = task.hours_worked > 0 ? (task.hours_spent / task.hours_worked) * 100 : 0;
 
                         return (
                           <div
                             key={task.id}
-                            className="p-4 hover:bg-gray-50 transition-colors"
+                            style={{
+                              padding: "12px 14px", borderRadius: 10,
+                              background: "rgba(255,255,255,0.015)",
+                              border: `1px solid rgba(255,255,255,0.03)`,
+                            }}
                           >
-                            <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-medium text-gray-900 truncate">{translateTaskName(task.name ?? '', t)}</h4>
-                                <div className="flex flex-col sm:flex-row sm:items-center mt-1 space-y-2 sm:space-y-0 sm:space-x-4">
-                                  <p className="text-sm text-gray-600">
-                                    {t('event:progress_label')} {parseFloat(task.progress_completed.toFixed(2))} {translateUnit(unit, t)} / {displayTotal}
-                                    <span className="ml-2 font-medium text-green-600">
-                                      ({parseFloat(percentComplete.toFixed(2))}%)
-                                    </span>
-                                  </p>
-                                  <div className="flex justify-between items-center w-full sm:w-auto">
-                                  <p className="text-sm text-gray-600">
-                                    {t('event:hours_details_label')} {parseFloat(task.hours_spent.toFixed(2))} / {parseFloat(task.hours_worked.toFixed(2))}
-                                    <span style={{ marginLeft: spacing.md, fontWeight: fontWeights.medium, ...getProgressTextStyle(taskHoursPercent) }}>
-                                      ({parseFloat(taskHoursPercent.toFixed(2))}%)
-                                    </span>
-                                  </p>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setContextMenu({
-                                          type: 'task',
-                                          id: task.id,
-                                          x: e.clientX,
-                                          y: e.clientY
-                                        });
-                                      }}
-                                      className="flex-none ml-2 p-1.5 text-gray-500 hover:text-gray-700 rounded-md sm:hidden"
-                                    >
-                                      <MoreHorizontal className="w-5 h-5" />
-                                    </button>
-                                </div>
+                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13.5, fontWeight: 700, color: colors.textPrimary }}>{translateTaskName(task.name ?? '', t)}</div>
                               </div>
-                                {/* Individual Task Progress Bars */}
-                                <div className="mt-3 space-y-2">
-                                  {/* Work Progress Bar */}
-                                  <div>
-                                    <div className="flex justify-between mb-1">
-                                      <span className="text-xs font-medium text-gray-700">{t('event:work_progress')}</span>
-                                      <span className="text-xs text-green-600">{parseFloat(percentComplete.toFixed(1))}%</span>
-                                    </div>
-                                    <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                      <div
-                                        className="bg-green-600 h-1.5 rounded-full transition-all duration-300"
-                                        style={{ width: `${Math.min(percentComplete, 100)}%` }}
-                                      ></div>
-                                    </div>
-                                  </div>
-                                  {/* Hours Progress Bar */}
-                                  <div>
-                                    <div className="flex justify-between mb-1">
-                                      <span className="text-xs font-medium text-gray-700">{t('event:hours_progress')}</span>
-                                      <span style={{ fontSize: fontSizes.xs, ...getProgressTextStyle(taskHoursPercent) }}>
-                                        {parseFloat(taskHoursPercent.toFixed(1))}%
-                                      </span>
-                                    </div>
-                                    <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                      <div
-                                        style={{ height: 6, borderRadius: radii.pill, transition: 'all 0.3s', width: `${Math.min(taskHoursPercent, 100)}%`, ...getProgressBarStyle(taskHoursPercent) }}
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 mt-4 sm:mt-0">
+                              <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedTask(task);
-                                    setShowTaskProgressModal(true);
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setSelectedTask(task); setShowTaskProgressModal(true); }}
+                                  style={{
+                                    padding: "5px 12px", borderRadius: 7,
+                                    background: "rgba(99,140,255,0.12)", border: "1px solid rgba(99,140,255,0.2)",
+                                    color: colors.accentBlue, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
                                   }}
-                                  className="flex-none w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white py-1.5 px-3 rounded-md transition-colors text-sm whitespace-nowrap"
                                 >
                                   {t('event:update_progress')}
                                 </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                    setContextMenu({
-                                      type: 'task',
-                                      id: task.id,
-                                      x: e.clientX,
-                                      y: e.clientY
-                                    });
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setContextMenu({ type: 'task', id: task.id, x: e.clientX, y: e.clientY }); }}
+                                  style={{
+                                    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)",
+                                    borderRadius: 6, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center",
+                                    cursor: "pointer", color: colors.textSubtle,
                                   }}
-                                  className="flex-none p-1.5 text-gray-500 hover:text-gray-700 rounded-md hidden sm:block"
                                 >
-                                  <MoreHorizontal className="w-5 h-5" />
-                                  </button>
+                                  <MoreHorizontal className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                              <div>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                                  <span style={{ fontSize: 10.5, color: colors.textMuted }}>{t('event:work_label_short')}</span>
+                                  <span style={{ fontSize: 10.5, fontWeight: 600, ...getProgressTextStyle(percentComplete, taskHoursPercent) }}>{parseFloat(percentComplete.toFixed(1))}%</span>
+                                </div>
+                                <EventDetailsProgressBar value={percentComplete} color={getProgressColor(percentComplete, taskHoursPercent)} height={3} />
+                              </div>
+                              <div>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                                  <span style={{ fontSize: 10.5, color: colors.textMuted }}>{t('event:hours_bar_label')}</span>
+                                  <span style={{ fontSize: 10.5, fontWeight: 600, ...getProgressTextStyle(percentComplete, taskHoursPercent) }}>{parseFloat(taskHoursPercent.toFixed(1))}%</span>
+                                </div>
+                                <EventDetailsProgressBar value={taskHoursPercent} color={getProgressColor(percentComplete, taskHoursPercent)} height={3} />
                               </div>
                             </div>
                           </div>
@@ -1622,8 +1597,8 @@ const EventDetails = () => {
         {/* Create Folder Modal */}
         {showCreateFolderModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg w-96">
-              <h3 className="text-lg font-semibold mb-4">{t('event:create_new_folder')}</h3>
+            <div className="p-6 rounded-lg w-96" style={{ background: colors.bgCard }}>
+              <h3 className="text-lg font-semibold mb-4" style={{ color: colors.textPrimary }}>{t('event:create_new_folder')}</h3>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -1636,21 +1611,23 @@ const EventDetails = () => {
                 }}
               >
                 <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">{t('event:folder_name')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:folder_name')}</label>
                   <input
                     type="text"
                     name="name"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    className="w-full rounded-md px-3 py-2"
+                    style={{ border: `1px solid ${colors.borderInput}` }}
                     placeholder={t('event:enter_folder_name')}
                     required
                   />
                 </div>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">{t('event:color')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:color')}</label>
                   <input
                     type="color"
                     name="color"
-                    className="w-full h-10 border border-gray-300 rounded-md"
+                    className="w-full h-10 rounded-md"
+                    style={{ border: `1px solid ${colors.borderInput}` }}
                     defaultValue="#3B82F6"
                   />
                 </div>
@@ -1658,13 +1635,19 @@ const EventDetails = () => {
                   <button
                     type="button"
                     onClick={() => setShowCreateFolderModal(false)}
-                    className="px-4 py-2 bg-gray-800 text-gray-300 rounded-md hover:bg-gray-700 transition-colors"
+                    className="px-4 py-2 rounded-md transition-colors"
+                    style={{ background: colors.bgCard, color: colors.textMuted }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgElevated; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgCard; }}
                   >
                     {t('event:cancel')}
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    className="px-4 py-2 rounded-md"
+                    style={{ background: colors.accentBlue, color: colors.textOnAccent }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.accentBlueDark; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.accentBlue; }}
                   >
                     {t('event:create')}
                   </button>
@@ -1677,8 +1660,8 @@ const EventDetails = () => {
         {/* Edit Folder Modal */}
         {editingFolder && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg w-96">
-              <h3 className="text-lg font-semibold mb-4">{t('event:edit_folder')}</h3>
+            <div className="p-6 rounded-lg w-96" style={{ background: colors.bgCard }}>
+              <h3 className="text-lg font-semibold mb-4" style={{ color: colors.textPrimary }}>{t('event:edit_folder')}</h3>
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -1694,21 +1677,23 @@ const EventDetails = () => {
                 }}
               >
                 <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">{t('event:folder_name')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:folder_name')}</label>
                   <input
                     type="text"
                     name="name"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    className="w-full rounded-md px-3 py-2"
+                    style={{ border: `1px solid ${colors.borderInput}` }}
                     defaultValue={editingFolder.name}
                     required
                   />
                 </div>
                 <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">{t('event:color')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:color')}</label>
                   <input
                     type="color"
                     name="color"
-                    className="w-full h-10 border border-gray-300 rounded-md"
+                    className="w-full h-10 rounded-md"
+                    style={{ border: `1px solid ${colors.borderInput}` }}
                     defaultValue={editingFolder.color}
                   />
                 </div>
@@ -1716,13 +1701,19 @@ const EventDetails = () => {
                   <button
                     type="button"
                     onClick={() => setEditingFolder(null)}
-                    className="px-4 py-2 bg-gray-800 text-gray-300 rounded-md hover:bg-gray-700 transition-colors"
+                    className="px-4 py-2 rounded-md transition-colors"
+                    style={{ background: colors.bgCard, color: colors.textMuted }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgElevated; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgCard; }}
                   >
                     {t('event:cancel')}
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                    className="px-4 py-2 rounded-md"
+                    style={{ background: colors.accentBlue, color: colors.textOnAccent }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.accentBlueDark; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.accentBlue; }}
                   >
                     {t('event:update')}
                   </button>
@@ -1735,9 +1726,9 @@ const EventDetails = () => {
         {/* Move Task Modal */}
         {showMoveFolderModal && selectedTaskToMove && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg w-96">
-              <h3 className="text-lg font-semibold mb-4">{t('event:move_task_to_folder')}</h3>
-              <p className="text-sm text-gray-600 mb-4">
+            <div className="p-6 rounded-lg w-96" style={{ background: colors.bgCard }}>
+              <h3 className="text-lg font-semibold mb-4" style={{ color: colors.textPrimary }}>{t('event:move_task_to_folder')}</h3>
+              <p className="text-sm mb-4" style={{ color: colors.textMuted }}>
                 {t('event:moving_task')} <strong>{translateTaskName(selectedTaskToMove.name ?? '', t)}</strong>
               </p>
               <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -1748,9 +1739,12 @@ const EventDetails = () => {
                       folderId: null
                     });
                   }}
-                  className="w-full text-left p-3 border border-gray-200 rounded-md hover:bg-gray-50 flex items-center space-x-3"
+                  className="w-full text-left p-3 rounded-md flex items-center space-x-3"
+                  style={{ border: `1px solid ${colors.borderDefault}` }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                 >
-                  <Folder className="w-4 h-4 text-gray-400" />
+                  <Folder className="w-4 h-4" style={{ color: colors.textSubtle }} />
                   <span>{t('event:no_folder_other_tasks')}</span>
                 </button>
                 {folders.map(folder => (
@@ -1762,7 +1756,10 @@ const EventDetails = () => {
                         folderId: folder.id
                       });
                     }}
-                    className="w-full text-left p-3 border border-gray-200 rounded-md hover:bg-gray-50 flex items-center space-x-3"
+                    className="w-full text-left p-3 rounded-md flex items-center space-x-3"
+                    style={{ border: `1px solid ${colors.borderDefault}` }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
                   >
                     <Folder className="w-4 h-4" style={{ color: folder.color }} />
                     <span>{folder.name}</span>
@@ -1775,7 +1772,10 @@ const EventDetails = () => {
                     setShowMoveFolderModal(false);
                     setSelectedTaskToMove(null);
                   }}
-                  className="px-4 py-2 bg-gray-800 text-gray-300 rounded-md hover:bg-gray-700 transition-colors"
+                  className="px-4 py-2 rounded-md transition-colors"
+                  style={{ background: colors.bgCard, color: colors.textMuted }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgElevated; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgCard; }}
                 >
                   {t('event:cancel')}
                 </button>
@@ -1783,174 +1783,172 @@ const EventDetails = () => {
             </div>
           </div>
         )}
-      </CollapsibleCard>
+      </EventDetailsSectionCard>
 
       {/* Materials Section */}
-      <CollapsibleCard
+      <EventDetailsSectionCard
         title={t('event:materials_title')}
+        icon={<Package style={{ width: 18, height: 18, color: colors.green }} />}
+        count={materials.length}
         open={expandedSections.materials}
         onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, materials: open }))}
       >
-        <div style={{ marginTop: spacing["3xl"], display: 'flex', flexDirection: 'column', gap: spacing["4xl"] }}>
-            {materials.map(material => {
+        <div style={{ padding: "6px 8px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.2fr 80px", padding: "8px 12px", gap: 8 }}>
+              {[t('event:material_column'), t('event:quantity_column'), t('event:delivery_label_short'), ""].map((h, i) => (
+                <span key={i} style={{ fontSize: 10, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", letterSpacing: 1 }}>{h}</span>
+              ))}
+            </div>
+            {materials.map((material, i) => {
               const totalDelivered = material.material_deliveries
                 ? material.material_deliveries.reduce((sum: number, delivery: any) => sum + (delivery.amount || 0), 0)
                 : material.amount;
               const percentDelivered = (totalDelivered / material.total_amount) * 100;
               const isCompleted = percentDelivered >= 100;
+              const deliveryColor = isCompleted ? colors.green : percentDelivered > 0 ? colors.orange : colors.red;
+              const desc = translateMaterialDescription(material.name, material.description, t) || "";
               return (
                 <div
                   key={material.id}
-                  style={{ padding: spacing["4xl"], transition: transitions.fast }}
-                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+                  style={{
+                    display: "grid", gridTemplateColumns: "2fr 1fr 1.2fr 80px",
+                    padding: "10px 12px", gap: 8, alignItems: "center",
+                    borderRadius: 8, background: i % 2 === 0 ? "rgba(255,255,255,0.015)" : "transparent",
+                  }}
                 >
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["4xl"] }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <h4 style={{ fontWeight: fontWeights.medium, color: colors.textPrimary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: fonts.display }}>{translateMaterialName(material.name, t)}</h4>
-                      {translateMaterialDescription(material.name, material.description, t) && (
-                        <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body, marginTop: spacing.xs }}>{translateMaterialDescription(material.name, material.description, t)}</p>
-                      )}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
-                        <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>
-                          {t('event:amount_label')} {material.total_amount} {material.unit}
-                        </p>
-                        {material.material_deliveries && material.material_deliveries.length > 0 && (
-                          <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>
-                            {t('event:delivered_label')} {totalDelivered} {translateUnit(material.unit, t)}
-                            <span style={{ marginLeft: spacing.md, fontWeight: fontWeights.medium, color: colors.green }}>
-                              ({parseFloat(percentDelivered.toFixed(1))}%)
-                            </span>
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Material Progress Bar */}
-                      <div style={{ marginTop: spacing["2xl"] }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: spacing.sm }}>
-                          <span style={{ fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textMuted, fontFamily: fonts.body }}>{t('event:delivery_progress')}</span>
-                          <span style={{ fontSize: fontSizes.xs, color: isCompleted ? colors.green : colors.accentBlue, fontFamily: fonts.body }}>
-                            {parseFloat(percentDelivered.toFixed(1))}%
-                          </span>
-                        </div>
-                        <div style={{ width: '100%', height: 8, background: colors.bgOverlay, borderRadius: radii.pill, overflow: 'hidden', border: `1px solid ${colors.borderDefault}` }}>
-                          <div
-                            style={{
-                              width: `${Math.min(percentDelivered, 100)}%`,
-                              height: '100%',
-                              background: isCompleted ? colors.green : colors.accentBlue,
-                              borderRadius: radii.pill,
-                              transition: 'all 0.3s',
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Update Progress Button */}
-                      <div style={{ marginTop: spacing["4xl"] }}>
-                        <Button
-                          variant={isCompleted ? 'success' : 'primary'}
-                          onClick={() => { setSelectedMaterial(material); setShowMaterialProgressModal(true); }}
-                          style={{ padding: `${spacing.sm}px ${spacing["2xl"]}px`, fontSize: fontSizes.sm, whiteSpace: 'nowrap' }}
-                        >
-                          {isCompleted ? `✓ ${t('project:done')}` : t('event:update_progress')}
-                        </Button>
-                      </div>
-                    </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: colors.textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{translateMaterialName(material.name, t)}</div>
+                    {desc && <div style={{ fontSize: 10.5, color: colors.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{desc}</div>}
+                  </div>
+                  <span style={{ fontSize: 13, color: colors.textMuted, fontWeight: 500 }}>{material.total_amount} {translateUnit(material.unit, t)}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flex: 1 }}><EventDetailsProgressBar value={percentDelivered} color={deliveryColor} height={3} /></div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: deliveryColor, minWidth: 28, textAlign: "right" }}>{parseFloat(percentDelivered.toFixed(0))}%</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    {isCompleted ? (
+                      <span style={{ fontSize: 11, color: colors.green, fontWeight: 600 }}>✓</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedMaterial(material); setShowMaterialProgressModal(true); }}
+                        style={{
+                          padding: "4px 10px", borderRadius: 6,
+                          background: "rgba(99,140,255,0.1)", border: "1px solid rgba(99,140,255,0.18)",
+                          color: colors.accentBlue, fontSize: 10.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                        }}
+                      >
+                        {t('event:update_progress')}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
             })}
         </div>
-      </CollapsibleCard>
+      </EventDetailsSectionCard>
 
       {/* Equipment Section */}
-      <CollapsibleCard
+      <EventDetailsSectionCard
         title={t('event:equipment_title')}
+        icon={<Wrench style={{ width: 18, height: 18, color: colors.orange }} />}
+        count={equipmentUsage.length}
         open={expandedSections.equipment}
         onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, equipment: open }))}
       >
-        <div style={{ marginTop: spacing["3xl"], padding: spacing["4xl"], background: colors.bgSubtle, borderRadius: radii.xl }}>
+        <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
             {equipmentError && (
-              <div style={{ marginBottom: spacing["4xl"], padding: spacing["2xl"], background: colors.statusPaused.bg, border: `1px solid ${colors.statusPaused.border}`, borderRadius: radii.lg, display: 'flex', alignItems: 'center', color: colors.statusPaused.text }}>
-                <AlertCircle style={{ width: 20, height: 20, marginRight: spacing.md, flexShrink: 0 }} />
+              <div style={{ marginBottom: 12, padding: 12, background: colors.statusPaused.bg, border: `1px solid ${colors.statusPaused.border}`, borderRadius: 10, display: 'flex', alignItems: 'center', color: colors.statusPaused.text, fontSize: 13 }}>
+                <AlertCircle style={{ width: 18, height: 18, marginRight: 8, flexShrink: 0 }} />
                 {equipmentError}
               </div>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing["4xl"] }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: spacing.md }}>
-                <Wrench style={{ width: 20, height: 20, color: colors.accentBlue }} />
-                <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display }}>{t('event:equipment_needed')}</h3>
-              </div>
-              <Button onClick={() => setShowAddEquipmentModal(true)} variant="primary" style={{ padding: `${spacing.md}px ${spacing["2xl"]}px`, fontSize: fontSizes.sm }}>
-                <Plus style={{ width: 16, height: 16, marginRight: spacing.sm }} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary }}>{t('event:equipment_needed')}</span>
+              <Button onClick={() => setShowAddEquipmentModal(true)} variant="primary" style={{ padding: "6px 12px", fontSize: 12 }}>
+                <Plus style={{ width: 14, height: 14, marginRight: 6 }} />
                 {t('event:add_equipment')}
               </Button>
             </div>
-
-            {/* Equipment List */}
             {isEquipmentLoading ? (
-              <p style={{ textAlign: 'center', padding: spacing["4xl"], color: colors.textDim, fontFamily: fonts.body }}>{t('event:loading_equipment')}</p>
+              <p style={{ textAlign: 'center', padding: 16, color: colors.textDim, fontSize: 13 }}>{t('event:loading_equipment')}</p>
             ) : equipmentUsage.length === 0 ? (
-              <p style={{ fontSize: fontSizes.sm, color: colors.textDim, textAlign: 'center', padding: spacing["4xl"], fontFamily: fonts.body }}>{t('event:no_equipment_added')}</p>
+              <p style={{ fontSize: 13, color: colors.textDim, textAlign: 'center', padding: 16 }}>{t('event:no_equipment_added')}</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["2xl"] }}>
-                {equipmentUsage.map(usage => (
-                  <div key={usage.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: colors.bgCard, padding: spacing["2xl"], borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontWeight: fontWeights.medium, color: colors.textPrimary, fontFamily: fonts.display }}>{usage.equipment.name}</p>
-                      <p style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>{t('event:quantity_label')} {usage.quantity}</p>
-                      {usage.start_date && usage.end_date && (
-                        <p style={{ fontSize: fontSizes.xs, color: colors.textFaint, fontFamily: fonts.body }}>
-                          {format(new Date(usage.start_date), 'MMM dd, yyyy')} - {format(new Date(usage.end_date), 'MMM dd, yyyy')}
-                        </p>
-                      )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {equipmentUsage.map(usage => {
+                  const reserved = usage.equipment.status === 'in_use';
+                  return (
+                  <div key={usage.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: "12px 16px", borderRadius: 10,
+                    background: "rgba(255,255,255,0.015)",
+                    border: `1px solid ${colors.borderDefault}`,
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary }}>{usage.equipment.name}</div>
+                      <div style={{ fontSize: 12, color: colors.textDim, marginTop: 2 }}>
+                        {usage.equipment.description || usage.equipment.type || ""} — {usage.quantity} {t('event:equipment_unit')}
+                      </div>
                     </div>
-                    <div style={{ display: 'flex', gap: spacing.md }}>
-                      <Button variant="ghost" onClick={() => { setEditingEquipmentId(usage.id); setSelectedEquipmentToAdd(usage.equipment); setEquipmentQuantity(usage.quantity); setEquipmentStartDate(usage.start_date); setEquipmentEndDate(usage.end_date); setShowAddEquipmentModal(true); }} style={{ padding: spacing.sm }}>
-                        <Pencil style={{ width: 16, height: 16 }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 16,
+                        color: reserved ? colors.orange : colors.green,
+                        background: reserved ? "rgba(249,115,22,0.1)" : "rgba(34,197,94,0.1)",
+                        border: `1px solid ${reserved ? "rgba(249,115,22,0.2)" : "rgba(34,197,94,0.2)"}`,
+                      }}>
+                        {reserved ? t('event:equipment_status_reserved') : t('event:equipment_status_available')}
+                      </span>
+                      <Button variant="ghost" onClick={() => { setEditingEquipmentId(usage.id); setSelectedEquipmentToAdd(usage.equipment); setEquipmentQuantity(usage.quantity); setEquipmentStartDate(usage.start_date); setEquipmentEndDate(usage.end_date); setShowAddEquipmentModal(true); }} style={{ padding: 6 }}>
+                        <Pencil style={{ width: 14, height: 14 }} />
                       </Button>
-                      <Button variant="ghost" color={colors.red} onClick={() => setReleaseEquipmentConfirm({ id: usage.id, name: usage.equipment.name })} style={{ padding: spacing.sm }}>
-                        <Trash2 style={{ width: 16, height: 16 }} />
+                      <Button variant="ghost" color={colors.red} onClick={() => setReleaseEquipmentConfirm({ id: usage.id, name: usage.equipment.name })} style={{ padding: 6 }}>
+                        <Trash2 style={{ width: 14, height: 14 }} />
                       </Button>
                     </div>
                   </div>
-                ))}
+                );
+                })}
               </div>
             )}
         </div>
-      </CollapsibleCard>
+      </EventDetailsSectionCard>
 
       {/* Additional Features Section */}
       <AdditionalFeatures eventId={id!} />
+        </div>
+      </div>
 
       {/* Add Equipment to Event Modal */}
       {showAddEquipmentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+          <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ background: colors.bgCard }}>
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">{t('event:add_equipment_to_event')}</h3>
+              <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('event:add_equipment_to_event')}</h3>
               <button
                 onClick={() => {
                   setShowAddEquipmentModal(false);
                   setSelectedEquipmentToAdd(null);
                   setEquipmentAddError(null);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-2 rounded-full transition-colors"
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {equipmentAddError && (
-              <div className="p-3 bg-red-50 text-red-700 rounded-md flex items-center">
+              <div className="p-3 rounded-md flex items-center" style={{ background: colors.redLight, color: colors.red }}>
                 <AlertCircle className="w-5 h-5 mr-2" />
                 {equipmentAddError}
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:equipment_title')}</label>
+              <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:equipment_title')}</label>
               <select
                 value={selectedEquipmentToAdd?.id || ''}
                 onChange={(e) => {
@@ -1958,7 +1956,8 @@ const EventDetails = () => {
                   setSelectedEquipmentToAdd(equip || null);
                   setEquipmentQuantity(1);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+                className="w-full px-3 py-2 rounded-md"
+                style={{ border: `1px solid ${colors.borderInput}` }}
               >
                 <option value="">{t('event:select_equipment')}</option>
                 {allEquipment.map((equip: any) => {
@@ -1976,40 +1975,43 @@ const EventDetails = () => {
             {selectedEquipmentToAdd && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:quantity')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:quantity')}</label>
                   <input
                     type="number"
                     min="1"
                     max={selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity}
                     value={equipmentQuantity}
                     onChange={(e) => setEquipmentQuantity(Math.min(Math.max(1, parseInt(e.target.value) || 1), selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-3 py-2 rounded-md"
+                    style={{ border: `1px solid ${colors.borderInput}` }}
                   />
-                  <p className="mt-1 text-sm text-gray-600">
+                  <p className="mt-1 text-sm" style={{ color: colors.textMuted }}>
                     {t('event:available')}: {selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity} {t('event:of')} {selectedEquipmentToAdd.quantity}
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:start_date')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:start_date')}</label>
                   <DatePicker
                     value={event?.start_date ? event.start_date.split('T')[0] : ''}
                     onChange={() => {}}
                     disabled
-                    className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                    className="rounded-md"
+                    style={{ background: colors.bgInput, color: colors.textMuted }}
                   />
-                  <p className="mt-1 text-xs text-gray-500">{t('event:event_start_date')}</p>
+                  <p className="mt-1 text-xs" style={{ color: colors.textSubtle }}>{t('event:event_start_date')}</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:end_date')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:end_date')}</label>
                   <DatePicker
                     value={event?.end_date ? event.end_date.split('T')[0] : ''}
                     onChange={() => {}}
                     disabled
-                    className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                    className="rounded-md"
+                    style={{ background: colors.bgInput, color: colors.textMuted }}
                   />
-                  <p className="mt-1 text-xs text-gray-500">{t('event:event_end_date')}</p>
+                  <p className="mt-1 text-xs" style={{ color: colors.textSubtle }}>{t('event:event_end_date')}</p>
                 </div>
               </>
             )}
@@ -2021,7 +2023,10 @@ const EventDetails = () => {
                   setSelectedEquipmentToAdd(null);
                   setEquipmentAddError(null);
                 }}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                className="px-4 py-2"
+                style={{ color: colors.textMuted }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textPrimary; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
               >
                 {t('event:cancel')}
               </button>
@@ -2039,7 +2044,10 @@ const EventDetails = () => {
                   addEquipmentToEventMutation.isPending ||
                   selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity === 0
                 }
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                style={{ background: colors.accentBlue, color: colors.textOnAccent }}
+                onMouseEnter={(e) => { if (!e.currentTarget.disabled) (e.currentTarget as HTMLElement).style.background = colors.accentBlueDark; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.accentBlue; }}
               >
                 {addEquipmentToEventMutation.isPending ? t('event:adding') : t('event:add_equipment')}
               </button>
@@ -2073,11 +2081,11 @@ const EventDetails = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && itemToDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold mb-4">{t('event:confirm_delete')}</h3>
-            <p className="text-gray-600 mb-6">
+          <div className="rounded-lg max-w-md w-full p-6" style={{ background: colors.bgCard }}>
+            <h3 className="text-lg font-semibold mb-4" style={{ color: colors.textPrimary }}>{t('event:confirm_delete')}</h3>
+            <p className="mb-6" style={{ color: colors.textMuted }}>
               {t('event:are_you_sure_delete')} {itemToDelete.type.replace('_', ' ')}? 
-              <span className="block mt-2 text-red-600">
+              <span className="block mt-2" style={{ color: colors.red }}>
                 Warning: {itemToDelete.type === 'task_group' 
                   ? t('event:warning_delete_task_group')
                   : itemToDelete.type === 'task' 
@@ -2092,14 +2100,20 @@ const EventDetails = () => {
                   setShowDeleteConfirm(false);
                   setItemToDelete(null);
                 }}
-                className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+                className="px-4 py-2 rounded-lg transition-colors"
+                style={{ background: colors.bgCard, color: colors.textMuted }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgElevated; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgCard; }}
               >
                 {t('event:cancel')}
               </button>
               <button
                 onClick={handleDelete}
                 disabled={deleteTaskMutation.isPending || deleteMaterialMutation.isPending || deleteTaskGroupMutation.isPending}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                className="px-4 py-2 rounded-lg disabled:opacity-50"
+                style={{ background: colors.red, color: colors.textOnAccent }}
+                onMouseEnter={(e) => { if (!e.currentTarget.disabled) (e.currentTarget as HTMLElement).style.background = colors.redLight; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.red; }}
               >
                 {deleteTaskMutation.isPending || deleteMaterialMutation.isPending || deleteTaskGroupMutation.isPending 
                   ? t('event:deleting') 
@@ -2113,15 +2127,18 @@ const EventDetails = () => {
       {/* Release Equipment Confirmation Modal */}
       {releaseEquipmentConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-sm w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('event:release_equipment')}</h3>
-            <p className="text-gray-600 mb-6">
+          <div className="rounded-lg max-w-sm w-full p-6" style={{ background: colors.bgCard }}>
+            <h3 className="text-lg font-semibold mb-2" style={{ color: colors.textPrimary }}>{t('event:release_equipment')}</h3>
+            <p className="mb-6" style={{ color: colors.textMuted }}>
               {t('event:release_equipment_confirm')} <span className="font-medium">{releaseEquipmentConfirm.name}</span> {t('event:from_this_event')}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setReleaseEquipmentConfirm(null)}
-                className="flex-1 px-4 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg transition-colors"
+                style={{ background: colors.bgCard, color: colors.textMuted }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgElevated; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgCard; }}
               >
                 {t('event:cancel')}
               </button>
@@ -2131,7 +2148,10 @@ const EventDetails = () => {
                   setReleaseEquipmentConfirm(null);
                 }}
                 disabled={releaseEquipmentMutation.isPending}
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg disabled:opacity-50 transition-colors"
+                style={{ background: colors.green, color: colors.textOnAccent }}
+                onMouseEnter={(e) => { if (!e.currentTarget.disabled) (e.currentTarget as HTMLElement).style.background = colors.greenLight; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.green; }}
               >
                 {releaseEquipmentMutation.isPending ? t('event:releasing') : t('event:release')}
               </button>

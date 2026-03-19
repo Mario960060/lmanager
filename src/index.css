@@ -322,97 +322,9 @@
     color: var(--color-text-muted) !important;
   }
   
-  /* ========== FONT STYLES ========== */
-  
-  * {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif !important;
-  }
-  
-  h1, h2, h3, h4, h5, h6 {
-    font-weight: 600 !important;
-    color: var(--color-text-primary) !important;
-  }
-  
-  p, span, div, button, a {
-    color: var(--color-text-primary) !important;
-  }
-  
-  button {
-    font-weight: 500 !important;
-    font-size: 0.875rem !important;
-  }
-  
-  label {
-    color: var(--color-text-secondary) !important;
-    font-weight: 500 !important;
-  }
-  
-  small {
-    color: var(--color-text-muted) !important;
-  }
-
-  /* Calculator error text - override global p color for visibility */
+  /* Calculator error text - override for visibility */
   [data-calculator-error] p {
     color: rgb(254 226 226) !important;
-  }
-  
-  /* Dark mode overrides - już są CSS variables, ta część jest OK */
-
-  .dark body {
-    @apply bg-gray-900 text-gray-100;
-  }
-
-  .dark .bg-white {
-    @apply bg-gray-800;
-  }
-
-  .dark .text-gray-900 {
-    @apply text-gray-100;
-  }
-
-  .dark .text-gray-800 {
-    @apply text-gray-200;
-  }
-
-  .dark .text-gray-700 {
-    @apply text-gray-300;
-  }
-
-  .dark .text-gray-600 {
-    @apply text-gray-400;
-  }
-
-  /* Use direct color value instead of @apply to avoid circular dependency */
-  .dark .text-gray-500 {
-    color: rgb(107 114 128); /* Equivalent to text-gray-500 */
-  }
-
-  .dark .border-gray-200 {
-    @apply border-gray-700;
-  }
-
-  .dark .border-gray-300 {
-    @apply border-gray-600;
-  }
-
-  .dark .hover\:bg-gray-50:hover {
-    @apply hover:bg-gray-700;
-  }
-
-  .dark .bg-gray-50 {
-    @apply bg-gray-700;
-  }
-
-  .dark .bg-gray-100 {
-    @apply bg-gray-700;
-  }
-
-  .dark .shadow-lg {
-    @apply shadow-[0_4px_6px_-1px_rgba(0,0,0,0.5)];
-  }
-
-  .dark .shadow-md {
-    @apply shadow-[0_4px_6px_-1px_rgba(0,0,0,0.3)];
   }
 }
 

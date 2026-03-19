@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { useNavigate } from 'react-router-dom';
-import { User, LogOut, Save, AlertCircle, BarChart, ClipboardList, Package, FileText, Truck } from 'lucide-react';
+import { User, LogOut, Save, AlertCircle, BarChart, ClipboardList, Package, FileText, Truck, Loader2 } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import PageInfoModal from '../components/PageInfoModal';
 import TaskPerformanceModal from '../components/TaskPerformanceModal';
@@ -280,11 +280,11 @@ const UserProfile = () => {
       </div>
 
       {/* User Info Card */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+      <div className="rounded-lg shadow-md p-6 mb-6" style={{ backgroundColor: colors.bgCard }}>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
-            <div className="h-16 w-16 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-              <User className="h-8 w-8 text-blue-600 dark:text-blue-300" />
+            <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ backgroundColor: colors.accentBlueBg }}>
+              <User className="h-8 w-8" style={{ color: colors.accentBlue }} />
             </div>
             <div className="ml-4">
               {isEditing ? (
@@ -293,7 +293,8 @@ const UserProfile = () => {
                     type="text"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
-                    className="border rounded-md px-3 py-2 text-lg font-medium dark:bg-gray-700 dark:border-gray-600"
+                    className="border rounded-md px-3 py-2 text-lg font-medium"
+                    style={{ backgroundColor: colors.bgElevated, borderColor: colors.borderDefault }}
                     placeholder={t('common:enter_your_name')}
                   />
                   <Button variant="primary" onClick={handleUpdateName} disabled={updateNameMutation.isPending} style={{ padding: 8, marginLeft: 8 }}>
@@ -307,8 +308,8 @@ const UserProfile = () => {
               ) : (
                 <h2 className="text-xl font-semibold">{profile?.full_name || t('common:user_fallback')}</h2>
               )}
-              <p className="text-gray-600 dark:text-gray-400">{profile?.email}</p>
-              <p className="text-sm text-gray-500 dark:text-gray-500">{t('common:role')}: {profile?.role ? t(`common:role_${profile.role === 'Team_Leader' ? 'team_leader' : profile.role.toLowerCase()}`) : '-'}</p>
+              <p style={{ color: colors.textSubtle }}>{profile?.email}</p>
+              <p className="text-sm" style={{ color: colors.textSubtle }}>{t('common:role')}: {profile?.role ? t(`common:role_${profile.role === 'Team_Leader' ? 'team_leader' : profile.role.toLowerCase()}`) : '-'}</p>
             </div>
           </div>
           
@@ -320,14 +321,14 @@ const UserProfile = () => {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-md flex items-center">
+          <div className="mb-4 p-3 rounded-md flex items-center" style={{ backgroundColor: colors.redLight, color: colors.red }}>
             <AlertCircle className="h-5 w-5 mr-2" />
             {error}
           </div>
         )}
 
         {success && (
-          <div className="mb-4 p-3 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-md">
+          <div className="mb-4 p-3 rounded-md" style={{ backgroundColor: colors.greenBg, color: colors.green }}>
             {success}
           </div>
         )}
@@ -348,82 +349,88 @@ const UserProfile = () => {
       {/* Feature Cards - ProjectManagement style */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Check Weekly Hours Card */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" onClick={() => setShowCheckWeeklyHoursModal(true)}>
+        <div className="p-6 rounded-lg shadow-lg cursor-pointer transition-colors" style={{ backgroundColor: colors.bgCard }} onClick={() => setShowCheckWeeklyHoursModal(true)} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.bgCard; }}>
           <div className="flex items-center mb-4">
-            <BarChart className="w-6 h-6 text-indigo-600 mr-3" />
+            <BarChart className="w-6 h-6 mr-3" style={{ color: colors.accentBlue }} />
             <h2 className="text-xl font-semibold">{t('common:check_weekly_hours')}</h2>
           </div>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
+          <p className="mb-4" style={{ color: colors.textSubtle }}>
             {t('common:check_weekly_hours_desc')}
           </p>
           <Button variant="primary" fullWidth>{t('common:check_hours')}</Button>
         </div>
 
         {/* Task Performance Card */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+        <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
           <div className="flex items-center mb-4">
-            <BarChart className="w-6 h-6 text-blue-600 mr-3" />
+            <BarChart className="w-6 h-6 mr-3" style={{ color: colors.accentBlue }} />
             <h2 className="text-xl font-semibold">{t('common:your_task_performance')}</h2>
           </div>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
+          <p className="mb-4" style={{ color: colors.textSubtle }}>
             {t('common:task_performance_desc')}
           </p>
           <button
             onClick={() => setShowTaskPerformanceModal(true)}
-            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+            className="w-full py-2 px-4 rounded-lg transition-colors"
+            style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.accentBlueDark; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.accentBlue; }}
           >
             {t('common:view_performance')}
           </button>
         </div>
 
         {/* Additional Tasks Card */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+        <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
           <div className="flex items-center mb-4">
-            <ClipboardList className="w-6 h-6 text-green-600 mr-3" />
+            <ClipboardList className="w-6 h-6 mr-3" style={{ color: colors.green }} />
             <h2 className="text-xl font-semibold">{t('common:additional_tasks')}</h2>
           </div>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
+          <p className="mb-4" style={{ color: colors.textSubtle }}>
             {t('common:additional_tasks_desc')}
           </p>
           <Button variant="success" fullWidth onClick={() => setShowAdditionalTasksModal(true)}>{t('common:view_tasks')}</Button>
         </div>
 
         {/* Material Added Card */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+        <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
           <div className="flex items-center mb-4">
-            <Truck className="w-6 h-6 text-purple-600 mr-3" />
+            <Truck className="w-6 h-6 mr-3" style={{ color: colors.purple }} />
             <h2 className="text-xl font-semibold">{t('common:material_added')}</h2>
           </div>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
+          <p className="mb-4" style={{ color: colors.textSubtle }}>
             {t('common:material_added_desc')}
           </p>
           <Button variant="primary" fullWidth onClick={() => setShowMaterialAddedModal(true)} style={{ background: `linear-gradient(135deg, ${colors.purple}, ${colors.purpleLight})` }}>{t('common:view_materials')}</Button>
         </div>
 
         {/* Additional Materials Card */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+        <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
           <div className="flex items-center mb-4">
-            <Package className="w-6 h-6 text-indigo-600 mr-3" />
+            <Package className="w-6 h-6 mr-3" style={{ color: colors.accentBlue }} />
             <h2 className="text-xl font-semibold">{t('common:additional_materials')}</h2>
           </div>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
+          <p className="mb-4" style={{ color: colors.textSubtle }}>
             {t('common:additional_materials_desc')}
           </p>
           <Button variant="primary" fullWidth onClick={() => setShowAdditionalMaterialsModal(true)}>{t('common:view_materials')}</Button>
         </div>
 
         {/* Day Notes Card */}
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg">
+        <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
           <div className="flex items-center mb-4">
-            <FileText className="w-6 h-6 text-teal-600 mr-3" />
+            <FileText className="w-6 h-6 mr-3" style={{ color: colors.teal }} />
             <h2 className="text-xl font-semibold">{t('common:day_notes')}</h2>
           </div>
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
+          <p className="mb-4" style={{ color: colors.textSubtle }}>
             {t('common:day_notes_desc')}
           </p>
           <button
             onClick={() => setShowDayNotesModal(true)}
-            className="w-full bg-teal-600 text-white py-2 px-4 rounded-lg hover:bg-teal-700 transition-colors"
+            className="w-full py-2 px-4 rounded-lg transition-colors"
+            style={{ backgroundColor: colors.teal, color: colors.textOnAccent }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
           >
             {t('common:view_notes')}
           </button>
@@ -457,19 +464,19 @@ const UserProfile = () => {
 
       {/* Abandon Team / Delete Company Confirmation Modal */}
       {showAbandonConfirmation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="rounded-lg max-w-md w-full p-6" style={{ backgroundColor: colors.bgCard }}>
             {isAdmin && (
-              <div className="flex items-center gap-2 mb-4 p-3 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-4 p-3 rounded-lg" style={{ backgroundColor: colors.amberBg, color: colors.amber }}>
                 <AlertCircle className="h-5 w-5 flex-shrink-0" />
                 <span className="text-sm font-medium">{t('common:delete_company_confirm_msg')}</span>
               </div>
             )}
-            <h3 className={`text-lg font-semibold dark:text-white ${isAdmin ? 'mb-6' : 'mb-4'}`}>
+            <h3 className={`text-lg font-semibold ${isAdmin ? 'mb-6' : 'mb-4'}`} style={{ color: colors.textPrimary }}>
               {isAdmin ? t('common:delete_company_confirm') : t('common:leave_team_confirm')}
             </h3>
             {!isAdmin && (
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
+              <p className="mb-6" style={{ color: colors.textSubtle }}>
                 {t('common:leave_team_confirm_msg')}
               </p>
             )}

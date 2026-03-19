@@ -4,6 +4,7 @@
 // ══════════════════════════════════════════════════════════════
 
 import { Shape, Point, distance, toMeters, pointInPolygon } from "./geometry";
+import { getEffectivePolygon } from "./arcMath";
 import { buildDelaunay, DelaunayResult } from "./delaunay";
 import { interpolateNN } from "./naturalNeighbor";
 
@@ -200,8 +201,14 @@ export function fillShapeHeightHeatmap(
   ctx.save();
   ctx.clip();
 
-  let minX = pts[0].x, maxX = pts[0].x, minY = pts[0].y, maxY = pts[0].y;
-  for (const p of pts) {
+  // Use effective polygon (with arc sampling) for shapes with curved edges — otherwise pointInPolygon
+  // would use the chord and exclude the area between chord and arc (black field).
+  const polygonForTest = shape.edgeArcs?.some(a => a && a.length > 0)
+    ? getEffectivePolygon(shape)
+    : pts;
+
+  let minX = polygonForTest[0].x, maxX = polygonForTest[0].x, minY = polygonForTest[0].y, maxY = polygonForTest[0].y;
+  for (const p of polygonForTest) {
     minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
     minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
   }
@@ -216,7 +223,7 @@ export function fillShapeHeightHeatmap(
     for (let j = 0; j < CELLS; j++) {
       const cx = minX + (maxX - minX) * (i + 0.5) / CELLS;
       const cy = minY + (maxY - minY) * (j + 0.5) / CELLS;
-      if (!pointInPolygon({ x: cx, y: cy }, pts)) continue;
+      if (!pointInPolygon({ x: cx, y: cy }, polygonForTest)) continue;
       const h = interpolateNN(cx, cy, delaunay, { walkCtx, idwSamples });
       if (h === null) continue;
       const x0 = minX + (maxX - minX) * i / CELLS;

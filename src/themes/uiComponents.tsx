@@ -451,9 +451,10 @@ interface TextInputProps {
   helperText?: string;
   type?: string;
   style?: React.CSSProperties;
+  readOnly?: boolean;
 }
 
-export function TextInput({ label, value, onChange, placeholder, unit, helperText, type = "number", style: wrapStyle }: TextInputProps) {
+export function TextInput({ label, value, onChange, placeholder, unit, helperText, type = "number", style: wrapStyle, readOnly }: TextInputProps) {
   const [focused, setFocused] = useState(false);
   return (
     <div style={{ marginBottom: spacing["5xl"], ...wrapStyle }}>
@@ -464,7 +465,7 @@ export function TextInput({ label, value, onChange, placeholder, unit, helperTex
         border: `1px solid ${focused ? colors.borderInputFocus : colors.borderInput}`,
         borderRadius: radii.xl, transition: transitions.normal, overflow: "hidden",
       }}>
-        <input type={type} value={value} onChange={(e) => onChange(e.target.value)}
+        <input type={type} value={value} onChange={(e) => onChange(e.target.value)} readOnly={readOnly}
           placeholder={placeholder || "0"}
           onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
           style={{
@@ -502,19 +503,33 @@ export function CalculatorInputGrid({ columns = 3, children, style }: Calculator
 }
 
 // ─── SelectDropdown ─────────────────────────────────────────────
+export type SelectDropdownOption = string | { value: string; label: string };
+
 interface SelectDropdownProps {
   label?: string;
   value: string;
-  options: string[];
+  options: SelectDropdownOption[];
   onChange: (val: string) => void;
   helperText?: string;
   width?: number | string;
   placeholder?: string;
 }
 
+function getOptValue(opt: SelectDropdownOption): string {
+  return typeof opt === 'string' ? opt : opt.value;
+}
+
+function getOptLabel(opt: SelectDropdownOption): string {
+  return typeof opt === 'string' ? opt : opt.label;
+}
+
 export function SelectDropdown({ label, value, options, onChange, helperText, width, placeholder = "Wybierz..." }: SelectDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  const displayValue = options.some(opt => getOptValue(opt) === value)
+    ? getOptLabel(options.find(opt => getOptValue(opt) === value)!)
+    : value;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -534,7 +549,7 @@ export function SelectDropdown({ label, value, options, onChange, helperText, wi
           transition: transitions.normal, display: "flex", alignItems: "center",
           justifyContent: "space-between", textAlign: "left",
         }}>
-          <span>{value || placeholder}</span>
+          <span>{displayValue || placeholder}</span>
           <span style={{ color: colors.textFaint, fontSize: fontSizes.xs, transition: "transform 0.2s", transform: open ? "rotate(180deg)" : "none" }}>{"\u25BC"}</span>
         </button>
         {open && (
@@ -544,18 +559,23 @@ export function SelectDropdown({ label, value, options, onChange, helperText, wi
             borderRadius: radii.xl, boxShadow: shadows.xl, overflow: "hidden",
             animation: "dropIn 0.15s ease", maxHeight: 240, overflowY: "auto",
           }}>
-            {options.map((opt) => (
-              <div key={opt} onClick={() => { onChange(opt); setOpen(false); }} style={{
-                padding: `${spacing.lg}px ${spacing["2xl"]}px`, fontSize: fontSizes.base,
-                color: opt === value ? colors.accentBlue : colors.textMuted,
-                fontFamily: fonts.body, cursor: "pointer",
-                background: opt === value ? "rgba(59,130,246,0.08)" : "transparent",
-                transition: "background 0.1s",
-              }}
-                onMouseEnter={(e) => { if (opt !== value) (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
-                onMouseLeave={(e) => { if (opt !== value) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-              >{opt}</div>
-            ))}
+            {options.map((opt) => {
+              const optVal = getOptValue(opt);
+              const optLabel = getOptLabel(opt);
+              const isSelected = optVal === value;
+              return (
+                <div key={optVal} onClick={() => { onChange(optVal); setOpen(false); }} style={{
+                  padding: `${spacing.lg}px ${spacing["2xl"]}px`, fontSize: fontSizes.base,
+                  color: isSelected ? colors.accentBlue : colors.textMuted,
+                  fontFamily: fonts.body, cursor: "pointer",
+                  background: isSelected ? "rgba(59,130,246,0.08)" : "transparent",
+                  transition: "background 0.1s",
+                }}
+                  onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
+                  onMouseLeave={(e) => { if (!isSelected) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                >{optLabel}</div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -660,7 +680,7 @@ export function Label({ children, style }: LabelProps) {
 export function HelperText({ children }: { children: React.ReactNode }) {
   return (
     <p style={{
-      fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body,
+      fontSize: fontSizes.sm, color: colors.textSubtle, fontFamily: fonts.body,
       marginTop: spacing.xs, lineHeight: 1.4,
     }}>{children}</p>
   );
@@ -902,10 +922,11 @@ export function Button({ children, onClick, type = "button", variant = "primary"
           ? `0 0 28px ${glowColor}, 0 0 14px ${glowColor}, 0 4px 16px ${glowColor}`
           : `0 0 20px ${glowColor}, 0 4px 14px ${glowColor}`
         : shadows.none;
+      const isSolidAccent = color && (color === colors.green || color === colors.red || color === colors.accentBlue || (typeof color === "string" && color.startsWith("var(--")));
       return {
         padding: `${spacing.lg}px ${spacing["4xl"]}px`, borderRadius: radii.xl,
         background: bg, border: `1px solid ${border}`,
-        color: color || colors.textPrimary, fontSize: fontSizes.base, fontWeight: fontWeights.semibold,
+        color: isSolidAccent ? colors.textOnAccent : (color || colors.textPrimary), fontSize: fontSizes.base, fontWeight: fontWeights.semibold,
         boxShadow: shadow,
       };
     })(),
@@ -1037,6 +1058,7 @@ export function ProjectCard({ name, description, date, statusDisplay, tasksCount
 
   return (
     <div
+      data-testid="project-card"
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -1054,6 +1076,7 @@ export function ProjectCard({ name, description, date, statusDisplay, tasksCount
         display: "flex",
         flexDirection: "column",
         gap: spacing.lg,
+        minHeight: 200,
       }}
     >
       {/* Top accent bar */}
@@ -1064,61 +1087,64 @@ export function ProjectCard({ name, description, date, statusDisplay, tasksCount
         transition: transitions.normal,
       }} />
 
-      {/* Name + Status row */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md }}>
-        <div style={{ flex: 1 }}>
-          <h3 style={{
-            fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary,
-            fontFamily: fonts.display, letterSpacing: "0.3px",
-            margin: 0, lineHeight: 1.2,
-          }}>
-            {name}
-          </h3>
-          {description && (
-            <p style={{
-              fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body,
-              margin: `${spacing.xs}px 0 0`, lineHeight: 1.3,
+      {/* Content area - flex: 1 pushes stats to bottom on desktop grid */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: spacing.lg, minHeight: 0 }}>
+        {/* Name + Status row */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: spacing.md }}>
+          <div style={{ flex: 1 }}>
+            <h3 style={{
+              fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary,
+              fontFamily: fonts.display, letterSpacing: "0.3px",
+              margin: 0, lineHeight: 1.2,
             }}>
-              {description}
-            </p>
-          )}
+              {name}
+            </h3>
+            {description && (
+              <p style={{
+                fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body,
+                margin: `${spacing.xs}px 0 0`, lineHeight: 1.3,
+              }}>
+                {description}
+              </p>
+            )}
+          </div>
+          <StatusBadge status={statusDisplay} />
         </div>
-        <StatusBadge status={statusDisplay} />
-      </div>
 
-      {/* Date */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: spacing.sm,
-        fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body,
-      }}>
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ opacity: 0.5, flexShrink: 0 }}>
-          <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
-          <path d="M2 7h12M5 1v4M11 1v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-        </svg>
-        {date}
-      </div>
-
-      {/* Progress bar */}
-      <div style={{ display: "flex", alignItems: "center", gap: spacing.md }}>
+        {/* Date */}
         <div style={{
-          flex: 1, height: 3, background: colors.borderSubtle,
-          borderRadius: radii.sm, overflow: "hidden",
+          display: "flex", alignItems: "center", gap: spacing.sm,
+          fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body,
         }}>
-          <div style={{
-            width: `${progress}%`, height: "100%",
-            background: accent, borderRadius: radii.sm,
-            transition: "width 0.4s ease",
-          }} />
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ opacity: 0.5, flexShrink: 0 }}>
+            <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+            <path d="M2 7h12M5 1v4M11 1v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          {date}
         </div>
-        <span style={{
-          fontSize: fontSizes.xs, color: colors.textDim, fontFamily: fonts.body, fontWeight: fontWeights.semibold,
-          minWidth: 28, textAlign: "right",
-        }}>
-          {progress}%
-        </span>
+
+        {/* Progress bar */}
+        <div style={{ display: "flex", alignItems: "center", gap: spacing.md }}>
+          <div style={{
+            flex: 1, height: 3, background: colors.borderSubtle,
+            borderRadius: radii.sm, overflow: "hidden",
+          }}>
+            <div style={{
+              width: `${progress}%`, height: "100%",
+              background: accent, borderRadius: radii.sm,
+              transition: "width 0.4s ease",
+            }} />
+          </div>
+          <span style={{
+            fontSize: fontSizes.xs, color: colors.textDim, fontFamily: fonts.body, fontWeight: fontWeights.semibold,
+            minWidth: 28, textAlign: "right",
+          }}>
+            {progress}%
+          </span>
+        </div>
       </div>
 
-      {/* Stats row */}
+      {/* Stats row - always at bottom */}
       <div style={{
         display: "flex", alignItems: "center", gap: spacing["3xl"],
         paddingTop: spacing.sm, borderTop: `1px solid ${colors.borderSubtle}`,

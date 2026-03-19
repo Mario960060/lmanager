@@ -1,11 +1,11 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../themes/designTokens';
 import { X } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import WallCalculator from '../components/Calculator/WallCalculator';
-import SleeperWallCalculator from '../components/Calculator/SleeperWallCalculator';
 import KerbsEdgesAndSetsCalculator from '../components/Calculator/KerbsEdgesAndSetsCalculator';
 import FenceCalculator from '../components/Calculator/FenceCalculator';
 import SlabCalculator from '../components/Calculator/SlabCalculator';
@@ -174,10 +174,12 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
       case 'paving':
         return <PavingCalculator {...commonProps} savedInputs={pavingDefaults} />;
       case 'wall':
-        if (calculatorSubType === 'sleeper') {
-          return <SleeperWallCalculator {...commonProps} />;
-        }
-        return <WallCalculator type={calculatorSubType as 'brick' | 'block4' | 'block7'} {...commonProps} />;
+        return (
+          <WallCalculator
+            type={calculatorSubType as 'brick' | 'block4' | 'block7' | 'sleeper'}
+            {...commonProps}
+          />
+        );
       case 'kerbs':
         return <KerbsEdgesAndSetsCalculator type={calculatorSubType as 'kl' | 'rumbled' | 'flat' | 'sets'} {...commonProps} />;
       case 'slab':
@@ -265,14 +267,14 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
-        <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">{t('project:calculator_modal_title')}</h2>
+      <div className="rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
+        <div className="flex justify-between items-center p-6 border-b" style={{ borderColor: colors.borderDefault }}>
+          <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{t('project:calculator_modal_title')}</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 rounded-full transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" style={{ color: colors.textSubtle }} />
           </button>
         </div>
 
@@ -281,17 +283,19 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
           {renderCalculator()}
         </div>
 
-        <div className="flex flex-row justify-end gap-3 p-4 sm:p-6 border-t bg-gray-50" style={{ flexWrap: 'nowrap' }}>
+        <div className="flex flex-row justify-end gap-3 p-4 sm:p-6 border-t" style={{ flexWrap: 'nowrap', backgroundColor: colors.bgSubtle }}>
           <button
             onClick={onClose}
-            className="flex-1 sm:flex-none min-h-[48px] px-5 py-3 text-base font-medium bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+            className="flex-1 sm:flex-none min-h-[48px] px-5 py-3 text-base font-medium rounded-lg transition-colors"
+            style={{ backgroundColor: colors.bgCard, color: colors.textMuted }}
           >
             {t('project:cancel_button_label')}
           </button>
           <button
             onClick={handleSaveResults}
             disabled={!calculatorResults}
-            className="flex-1 sm:flex-none min-h-[48px] px-5 py-3 text-base font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+            className="flex-1 sm:flex-none min-h-[48px] px-5 py-3 text-base font-medium rounded-lg disabled:opacity-50"
+            style={{ color: colors.textOnAccent, backgroundColor: colors.accentBlue }}
           >
             {t('project:add_to_project_button')}
           </button>

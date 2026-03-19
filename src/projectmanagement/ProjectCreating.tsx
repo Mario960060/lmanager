@@ -879,6 +879,7 @@ const ProjectCreating = () => {
               const excavatorSize = selectedExcavator["size (in tones)"] || 0;
               const loadingSandDiggerTimeEstimates = [
                 { equipment: 'Shovel (1 Person)', sizeInTons: 0.02, timePerTon: 0.5 },
+                { equipment: 'Digger 0.5T', sizeInTons: 0.5, timePerTon: 0.36 },
                 { equipment: 'Digger 1T', sizeInTons: 1, timePerTon: 0.18 },
                 { equipment: 'Digger 2T', sizeInTons: 2, timePerTon: 0.12 },
                 { equipment: 'Digger 3-5T', sizeInTons: 3, timePerTon: 0.08 },
@@ -1567,7 +1568,7 @@ const ProjectCreating = () => {
         <BackButton />
         <div className="flex justify-between items-center mb-8">
             <div className="flex items-center">
-              <h1 className="text-3xl font-bold text-gray-900">{t('project:create_new_project')}</h1>
+              <h1 className="text-3xl font-bold" style={{ color: colors.textPrimary }}>{t('project:create_new_project')}</h1>
               <PageInfoModal
                 description={t('project:project_creating_info_description')}
                 title={t('project:project_creating_info_title')}
@@ -1590,32 +1591,35 @@ const ProjectCreating = () => {
             <h2 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary, marginBottom: spacing.xl }}>{t('project:basic_information')}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('project:project_title')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:project_title')}</label>
                 <input
                   type="text"
                   value={formData.title}
                   onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm"
+                  style={{ borderColor: colors.borderDefault }}
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('project:project_description')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:project_description')}</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   rows={3}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm"
+                  style={{ borderColor: colors.borderDefault }}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('project:status')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:status')}</label>
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as FormData['status'] }))}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm"
+                  style={{ borderColor: colors.borderDefault }}
                 >
                   <option value="planned">{t('project:planned')}</option>
                   <option value="scheduled">{t('project:ongoing')}</option>
@@ -1625,23 +1629,23 @@ const ProjectCreating = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('project:start_date')}</label>
+                  <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:start_date')}</label>
                   <DatePicker
                     value={formData.start_date}
                     onChange={(v) => setFormData(prev => ({ ...prev, start_date: v }))}
                     required
-                    className="mt-1 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    className="mt-1 cursor-pointer transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('project:end_date')}</label>
+                  <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:end_date')}</label>
                   <DatePicker
                     value={formData.end_date}
                     onChange={(v) => setFormData(prev => ({ ...prev, end_date: v }))}
                     minDate={formData.start_date}
                     required
-                    className="mt-1 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    className="mt-1 cursor-pointer transition-colors"
                   />
                 </div>
               </div>
@@ -1652,19 +1656,20 @@ const ProjectCreating = () => {
                     type="checkbox"
                     checked={formData.has_equipment}
                     onChange={(e) => setFormData(prev => ({ ...prev, has_equipment: e.target.checked }))}
-                    className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    className="rounded shadow-sm"
+                    style={{ borderColor: colors.borderDefault, accentColor: colors.accentBlue }}
                   />
-                  <span className="ml-2 text-sm text-gray-600">{t('project:has_equipment')}</span>
+                  <span className="ml-2 text-sm" style={{ color: colors.textSubtle }}>{t('project:has_equipment')}</span>
                 </label>
               </div>
 
               {/* Equipment Section */}
               {formData.has_equipment && (
-                <div className="mt-6 bg-gray-50 p-4 rounded-lg">
+                <div className="mt-6 p-4 rounded-lg" style={{ backgroundColor: colors.bgSubtle }}>
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-2">
-                      <Wrench className="w-5 h-5 text-blue-600" />
-                      <h3 className="text-lg font-semibold text-gray-900">{t('utilities:equipment_needed')}</h3>
+                      <Wrench className="w-5 h-5" style={{ color: colors.accentBlue }} />
+                      <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('utilities:equipment_needed')}</h3>
                     </div>
                     <Button
                       onClick={() => {
@@ -1683,18 +1688,18 @@ const ProjectCreating = () => {
 
                   {/* Equipment List */}
                   {projectEquipment.length === 0 ? (
-                    <p className="text-sm text-gray-500 text-center py-4">{t('utilities:no_equipment_added')}</p>
+                    <p className="text-sm text-center py-4" style={{ color: colors.textMuted }}>{t('utilities:no_equipment_added')}</p>
                   ) : (
                     <div className="space-y-3">
                       {projectEquipment.map((item, index) => {
                         const equip = item.equipment || allEquipment.find(e => e.id === item.equipment_id);
                         return (
-                          <div key={index} className="flex items-center justify-between bg-white p-3 rounded border border-gray-200">
+                          <div key={index} className="flex items-center justify-between p-3 rounded border" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderLight }}>
                             <div className="flex-1">
-                              <p className="font-medium text-gray-900">{equip?.name || t('project:unknown_equipment')}</p>
-                              <p className="text-sm text-gray-600">{t('project:quantity_with_value', { count: item.quantity })}</p>
+                              <p className="font-medium" style={{ color: colors.textPrimary }}>{equip?.name || t('project:unknown_equipment')}</p>
+                              <p className="text-sm" style={{ color: colors.textSubtle }}>{t('project:quantity_with_value', { count: item.quantity })}</p>
                               {item.start_date && item.end_date && (
-                                <p className="text-xs text-gray-500">
+                                <p className="text-xs" style={{ color: colors.textMuted }}>
                                   {new Date(item.start_date).toLocaleDateString()} - {new Date(item.end_date).toLocaleDateString()}
                                 </p>
                               )}
@@ -1709,7 +1714,8 @@ const ProjectCreating = () => {
                                   setEquipmentEndDate(item.end_date || formData.end_date);
                                   setShowAddEquipmentModal(true);
                                 }}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                className="p-2 rounded-md transition-colors"
+                                style={{ color: colors.accentBlue }}
                               >
                                 <Pencil className="w-4 h-4" />
                               </button>
@@ -1770,12 +1776,14 @@ const ProjectCreating = () => {
                   {/* Task Breakdown */}
                   <div className="mb-4">
                     <h4 style={{ color: colors.accentBlue, marginBottom: spacing.sm }}>{t('utilities:task_breakdown')}:</h4>
-                    {task.results.taskBreakdown?.map((breakdown, i) => (
-                      <div key={i} className="flex justify-between" style={{ color: colors.textSecondary }}>
-                        <span>{breakdown.name || breakdown.task}</span>
-                        <span>{breakdown.hours.toFixed(2)} {t('common:hrs_abbr')}</span>
-                      </div>
-                    ))}
+                    <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
+                      {task.results.taskBreakdown?.map((breakdown, i) => (
+                        <div key={i} className="flex justify-between" style={{ padding: `${spacing.lg}px ${spacing['4xl']}px`, background: i % 2 === 1 ? colors.bgTableRowAlt : undefined, borderBottom: i < (task.results.taskBreakdown?.length ?? 0) - 1 ? `1px solid ${colors.borderLight}` : 'none', color: colors.textSecondary }}>
+                          <span>{breakdown.name || breakdown.task}</span>
+                          <span>{breakdown.hours.toFixed(2)} {t('common:hrs_abbr')}</span>
+                        </div>
+                      ))}
+                    </div>
                     <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${colors.borderDefault}` }}>
                       <div className="flex justify-between font-medium" style={{ color: colors.textPrimary }}>
                         <span>{t('utilities:total_labor_hours')}</span>
@@ -1800,7 +1808,7 @@ const ProjectCreating = () => {
                         </thead>
                         <tbody style={{ color: colors.textSecondary }}>
                           {task.results.materials?.map((material, i) => (
-                            <tr key={i}>
+                            <tr key={i} style={{ background: i % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
                               <td className="py-1" style={{ color: colors.textSecondary }}>{translateMaterialName(material.name, t)}</td>
                               <td className="text-right py-1" style={{ color: colors.textSecondary }}>{material.quantity.toFixed(2)}</td>
                               <td className="pl-4 py-1" style={{ color: colors.textSecondary }}>{translateUnit(material.unit, t)}</td>
@@ -1832,10 +1840,10 @@ const ProjectCreating = () => {
             {minorTasks
               .filter(task => !task.name.toLowerCase().includes('preparation') && !task.name.toLowerCase().includes('excavation'))
               .map((task, index) => (
-                <div key={index} className="flex items-start space-x-4 bg-gray-50 p-4 rounded-lg">
+                <div key={index} className="flex items-start space-x-4 p-4 rounded-lg" style={{ backgroundColor: colors.bgSubtle }}>
                   <div className="flex-1 space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">{t('utilities:task_name')}</label>
+                      <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('utilities:task_name')}</label>
                       <select
                         value={task.template_id || ''}
                         onChange={(e) => {
@@ -1851,7 +1859,8 @@ const ProjectCreating = () => {
                           };
                           setMinorTasks(newTasks);
                         }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md shadow-sm"
+                        style={{ borderColor: colors.borderDefault }}
                       >
                         <option value="">{t('utilities:select_a_task_type')}</option>
                       {taskTemplates
@@ -1870,7 +1879,7 @@ const ProjectCreating = () => {
                     {task.template_id && (
                       <>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">{t('project:task_name')}</label>
+                          <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:task_name')}</label>
                           <input
                             type="text"
                             value={task.name}
@@ -1879,13 +1888,14 @@ const ProjectCreating = () => {
                               newTasks[index].name = e.target.value;
                               setMinorTasks(newTasks);
                             }}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            className="mt-1 block w-full rounded-md shadow-sm"
+                            style={{ borderColor: colors.borderDefault }}
                           />
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700">{t('project:quantity')}</label>
+                            <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:quantity')}</label>
                             <input
                               type="number"
                               min="1"
@@ -1896,23 +1906,25 @@ const ProjectCreating = () => {
                                 newTasks[index].results = null;
                                 setMinorTasks(newTasks);
                               }}
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                              className="mt-1 block w-full rounded-md shadow-sm"
+                              style={{ borderColor: colors.borderDefault }}
                             />
                           </div>
 
                           <div>
-                            <label className="block text-sm font-medium text-gray-700">{t('project:unit')}</label>
+                            <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:unit')}</label>
                             <input
                               type="text"
                               value={task.unit}
-                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                              className="mt-1 block w-full rounded-md shadow-sm"
+                              style={{ borderColor: colors.borderDefault }}
                               readOnly
                             />
                           </div>
                         </div>
 
                         {task.estimated_hours && !task.results && (
-                          <div className="text-sm text-gray-600">
+                          <div className="text-sm" style={{ color: colors.textSubtle }}>
                             {t('project:estimated_time')} {formatTime(task.estimated_hours * task.quantity)}
                           </div>
                         )}
@@ -1937,7 +1949,8 @@ const ProjectCreating = () => {
                   <div className="flex flex-col gap-2">
                     <button
                       onClick={() => handleDeleteMinorTask(index)}
-                      className="p-2 text-red-600 hover:text-red-700"
+                      className="p-2 transition-colors"
+                      style={{ color: colors.red }}
                       title={t('project:delete_task')}
                     >
                       <X className="w-5 h-5" />
@@ -1962,10 +1975,10 @@ const ProjectCreating = () => {
 
             <div className="space-y-4">
               {materials.map((material, index) => (
-                <div key={index} className="flex items-start space-x-4 bg-gray-50 p-4 rounded-lg">
+                <div key={index} className="flex items-start space-x-4 p-4 rounded-lg" style={{ backgroundColor: colors.bgSubtle }}>
                   <div className="flex-1 space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">{t('project:material_type')}</label>
+                      <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:material_type')}</label>
                       <select
                         value={material.template_id}
                         onChange={(e) => {
@@ -1989,11 +2002,12 @@ const ProjectCreating = () => {
                         };
                           setMaterials(newMaterials);
                         }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md shadow-sm"
+                      style={{ borderColor: colors.borderDefault }}
                       disabled={material.confirmed}
                       >
                         <option value="">{t('project:select_a_material')}</option>
-                        <option value="other" className="font-medium text-blue-600">{t('project:other_custom_material')}</option>
+                        <option value="other" className="font-medium" style={{ color: colors.accentBlue }}>{t('project:other_custom_material')}</option>
 {materialTemplates.map(template => (
                           <option key={template.id} value={template.id}>
                             {translateMaterialName(template.name, t)} ({translateUnit(template.unit, t)})
@@ -2003,13 +2017,13 @@ const ProjectCreating = () => {
                     </div>
 
                   {translateMaterialDescription(material.name, material.description, t) && (
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm" style={{ color: colors.textSubtle }}>
                       {translateMaterialDescription(material.name, material.description, t)}
                     </div>
                   )}
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">{t('project:quantity')}</label>
+                      <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:quantity')}</label>
                       <input
                         type="number"
                         min="1"
@@ -2020,13 +2034,14 @@ const ProjectCreating = () => {
                         newMaterials[index].confirmed = false;
                           setMaterials(newMaterials);
                         }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md shadow-sm"
+                        style={{ borderColor: colors.borderDefault }}
                       disabled={material.confirmed}
                       />
                     </div>
 
                   {material.price !== undefined && material.price !== null && (
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm" style={{ color: colors.textSubtle }}>
                       {t('project:price_per_unit')}: £{material.price.toFixed(2)}
                     </div>
                   )}
@@ -2070,8 +2085,9 @@ const ProjectCreating = () => {
                         newMaterials[index].confirmed = false;
                         setMaterials(newMaterials);
                       }}
-                      className="p-2 text-blue-600 hover:text-blue-700"
-                      title={t('project:edit_material')}
+className="p-2 transition-colors"
+                        style={{ color: colors.accentBlue }}
+                        title={t('project:edit_material')}
                     >
                       <Pencil className="w-5 h-5" />
                     </button>
@@ -2083,35 +2099,27 @@ const ProjectCreating = () => {
           </Card>
 
         {/* Shared Equipment Selection */}
-        <div className="mb-8 bg-white p-6 rounded-lg shadow-sm">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('project:equipment_selection')}</h2>
+        <div className="mb-8 p-6 rounded-lg shadow-sm" style={{ backgroundColor: colors.bgCard }}>
+          <h2 className="text-xl font-semibold mb-4" style={{ color: colors.textPrimary }}>{t('project:equipment_selection')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('project:excavation_machinery')}</label>
+              <label className="block text-sm font-medium mb-3" style={{ color: colors.textSecondary }}>{t('project:excavation_machinery')}</label>
               <div className="space-y-2">
                 {excavators.length === 0 ? (
-                  <p className="text-gray-500">{t('project:no_excavators_found')}</p>
+                  <p style={{ color: colors.textMuted }}>{t('project:no_excavators_found')}</p>
                 ) : (
                   excavators.map((excavator) => (
                     <div 
                       key={excavator.id}
-                      className="flex items-start p-2 cursor-pointer hover:bg-gray-50 rounded-md"
+                      className="flex items-start p-2 cursor-pointer rounded-md"
                       onClick={() => setSelectedExcavator(excavator)}
                     >
-                      <div className={`w-4 h-4 rounded-full border mr-2 mt-0.5 flex-shrink-0 ${
-                        selectedExcavator?.id === excavator.id 
-                          ? 'border-gray-400' 
-                          : 'border-gray-400'
-                      }`}>
-                        <div className={`w-2 h-2 rounded-full m-0.5 ${
-                          selectedExcavator?.id === excavator.id 
-                            ? 'bg-gray-400' 
-                            : 'bg-transparent'
-                        }`}></div>
+                      <div className="w-4 h-4 rounded-full border mr-2 mt-0.5 flex-shrink-0" style={{ borderColor: colors.borderDefault }}>
+                        <div className="w-2 h-2 rounded-full m-0.5" style={{ backgroundColor: selectedExcavator?.id === excavator.id ? colors.accentBlue : 'transparent' }}></div>
                       </div>
                       <div>
-                        <div className="text-gray-800">{excavator.name}</div>
-                        <div className="text-sm text-gray-600">({excavator["size (in tones)"]} {t('project:tons')})</div>
+                        <div style={{ color: colors.textPrimary }}>{excavator.name}</div>
+                        <div className="text-sm" style={{ color: colors.textSubtle }}>({excavator["size (in tones)"]} {t('project:tons')})</div>
                       </div>
                     </div>
                   ))
@@ -2121,31 +2129,23 @@ const ProjectCreating = () => {
             
             {/* Carrier Machinery */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('project:carrier_machinery')}</label>
+              <label className="block text-sm font-medium mb-3" style={{ color: colors.textSecondary }}>{t('project:carrier_machinery')}</label>
               <div className="space-y-2">
                 {carriers.length === 0 ? (
-                  <p className="text-gray-500">{t('project:no_carriers_found')}</p>
+                  <p style={{ color: colors.textMuted }}>{t('project:no_carriers_found')}</p>
                 ) : (
                   carriers.map((carrier) => (
                     <div 
                       key={carrier.id}
-                      className="flex items-start p-2 cursor-pointer hover:bg-gray-50 rounded-md"
+                      className="flex items-start p-2 cursor-pointer rounded-md"
                       onClick={() => setSelectedCarrier(carrier)}
                     >
-                      <div className={`w-4 h-4 rounded-full border mr-2 mt-0.5 flex-shrink-0 ${
-                        selectedCarrier?.id === carrier.id 
-                          ? 'border-gray-400' 
-                          : 'border-gray-400'
-                      }`}>
-                        <div className={`w-2 h-2 rounded-full m-0.5 ${
-                          selectedCarrier?.id === carrier.id 
-                            ? 'bg-gray-400' 
-                            : 'bg-transparent'
-                        }`}></div>
+                      <div className="w-4 h-4 rounded-full border mr-2 mt-0.5 flex-shrink-0" style={{ borderColor: colors.borderDefault }}>
+                        <div className="w-2 h-2 rounded-full m-0.5" style={{ backgroundColor: selectedCarrier?.id === carrier.id ? colors.accentBlue : 'transparent' }}></div>
                       </div>
                       <div>
-                        <div className="text-gray-800">{carrier.name}</div>
-                        <div className="text-sm text-gray-600">({carrier["size (in tones)"]} {t('project:tons')}, {carrier.speed_m_per_hour || 4000} {t('project:speed')})</div>
+                        <div style={{ color: colors.textPrimary }}>{carrier.name}</div>
+                        <div className="text-sm" style={{ color: colors.textSubtle }}>({carrier["size (in tones)"]} {t('project:tons')}, {carrier.speed_m_per_hour || 4000} {t('project:speed')})</div>
                       </div>
                     </div>
                   ))
@@ -2156,20 +2156,20 @@ const ProjectCreating = () => {
         </div>
 
         {/* Soil Excavation Section */}
-        <div className="mb-8 bg-gray-800 p-6 rounded-lg shadow-sm">
+        <div className="mb-8 p-6 rounded-lg shadow-sm" style={{ backgroundColor: colors.bgCard }}>
               <h2 className="text-xl font-semibold text-white mb-4">{t('project:soil_excavation')}</h2>
           <div className="flex justify-between items-center mb-4">
-            <p className="text-gray-300">
+            <p style={{ color: colors.textMuted }}>
               {t('project:soil_excavation_amount')}: {totalSoilExcavation.toFixed(2)} {t('project:tonnes')}
             </p>
-            <p className="text-gray-300">
+            <p style={{ color: colors.textMuted }}>
               {t('project:estimated_time')}: <span className="font-medium">{formatTime(soilExcavationHours)}</span>
             </p>
           </div>
               
               <div className="mt-4">
-            <h3 className="text-lg font-medium text-gray-800 mb-2">
-              {t('project:additional_excavation')} <span className="text-sm font-normal text-gray-600">({t('project:description_additional_excavation')})</span>
+            <h3 className="text-lg font-medium mb-2" style={{ color: colors.textPrimary }}>
+              {t('project:additional_excavation')} <span className="text-sm font-normal" style={{ color: colors.textSubtle }}>({t('project:description_additional_excavation')})</span>
 
             </h3>
             
@@ -2182,9 +2182,9 @@ const ProjectCreating = () => {
                     value="area"
                     checked={excavationMeasureType === 'area'}
                     onChange={(e) => setExcavationMeasureType(e.target.value as 'area' | 'weight')}
-                    className="text-blue-600 focus:ring-blue-500"
+                    style={{ accentColor: colors.accentBlue }}
                   />
-                  <span className="text-gray-700">{t('project:area_m3')}</span>
+                  <span style={{ color: colors.textSecondary }}>{t('project:area_m3')}</span>
                 </label>
                 <label className="flex items-center space-x-2">
                   <input
@@ -2193,9 +2193,9 @@ const ProjectCreating = () => {
                     value="weight"
                     checked={excavationMeasureType === 'weight'}
                     onChange={(e) => setExcavationMeasureType(e.target.value as 'area' | 'weight')}
-                    className="text-blue-600 focus:ring-blue-500"
+                    style={{ accentColor: colors.accentBlue }}
                   />
-                  <span className="text-gray-700">{t('project:weight_tonnes_label')}</span>
+                  <span style={{ color: colors.textSecondary }}>{t('project:weight_tonnes_label')}</span>
                 </label>
               </div>
 
@@ -2205,7 +2205,8 @@ const ProjectCreating = () => {
                       value={extraSoilExcavation.area}
                   onChange={(e) => setExtraSoilExcavation(prev => ({ ...prev, area: e.target.value, weight: '' }))}
                   placeholder={t('project:enter_area_placeholder')}
-                  className="block w-full rounded-md border-gray-300 bg-gray-700 text-white placeholder-gray-400 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-lg py-3"
+                  className="block w-full rounded-md shadow-sm text-lg py-3"
+                    style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated, color: colors.textPrimary }}
                     />
               ) : (
                     <input
@@ -2213,7 +2214,8 @@ const ProjectCreating = () => {
                       value={extraSoilExcavation.weight}
                   onChange={(e) => setExtraSoilExcavation(prev => ({ ...prev, weight: e.target.value, area: '' }))}
                   placeholder={t('project:enter_weight_placeholder')}
-                  className="block w-full rounded-md border-gray-300 bg-gray-700 text-white placeholder-gray-400 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-lg py-3"
+                  className="block w-full rounded-md shadow-sm text-lg py-3"
+                  style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated, color: colors.textPrimary }}
                     />
               )}
               
@@ -2227,9 +2229,10 @@ const ProjectCreating = () => {
                     placeholder={t('project:transport_distance_placeholder')}
                     min="0"
                     step="1"
-                    className="block w-full rounded-md border-gray-300 bg-gray-700 text-white placeholder-gray-400 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-lg py-3"
+                    className="block w-full rounded-md shadow-sm text-lg py-3"
+                    style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated, color: colors.textPrimary }}
                   />
-                  <label className="block text-xs text-gray-500 mt-1">
+                  <label className="block text-xs mt-1" style={{ color: colors.textMuted }}>
                     {t('project:transport_distance_info')}
                   </label>
                 </div>
@@ -2240,13 +2243,13 @@ const ProjectCreating = () => {
               {/* Soil Excavation Results */}
               {mainTasks.some(task => task.calculatorType === 'soil_excavation' && task.results) && (
                 <div className="mt-6 border-t pt-6">
-                  <h3 className="text-lg font-medium text-gray-800 mb-4">{t('project:excavation_details')}</h3>
+                  <h3 className="text-lg font-medium mb-4" style={{ color: colors.textPrimary }}>{t('project:excavation_details')}</h3>
                   <div className="space-y-6">
                     {mainTasks
                       .filter(task => task.calculatorType === 'soil_excavation' && task.results)
                       .map((task, index) => (
-                        <div key={index} className="bg-gray-50 p-4 rounded-lg">
-                          <h4 className="font-medium text-gray-900 mb-3">{translateTaskName(task.name, t)}</h4>
+                        <div key={index} className="p-4 rounded-lg" style={{ backgroundColor: colors.bgSubtle }}>
+                          <h4 className="font-medium mb-3" style={{ color: colors.textPrimary }}>{translateTaskName(task.name, t)}</h4>
                           <div className="space-y-4">
                             {task.results?.totalTons && (
                               <div className="text-sm">
@@ -2288,13 +2291,13 @@ const ProjectCreating = () => {
             </div>
 
         {/* Tape 1 Preparation Section */}
-        <div className="mb-8 bg-white p-6 rounded-lg shadow-sm">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('project:tape1_preparation')}</h2>
+        <div className="mb-8 p-6 rounded-lg shadow-sm" style={{ backgroundColor: colors.bgCard }}>
+              <h2 className="text-xl font-semibold mb-4" style={{ color: colors.textPrimary }}>{t('project:tape1_preparation')}</h2>
           <div className="flex justify-between items-center mb-4">
-            <p className="text-gray-300">
+            <p style={{ color: colors.textMuted }}>
               {t('project:tape1_amount')}: {totalTape1.toFixed(2)} {t('project:tonnes')}
             </p>
-            <p className="text-gray-300">
+            <p style={{ color: colors.textMuted }}>
               {t('project:estimated_time')}: <span className="font-medium">{formatTime(tape1Hours)}</span>
             </p>
             </div>
@@ -2309,9 +2312,10 @@ const ProjectCreating = () => {
                   placeholder={t('project:transport_distance_placeholder')}
                   min="0"
                   step="1"
-                  className="block w-full rounded-md border-gray-300 bg-gray-700 text-white placeholder-gray-400 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-lg py-3"
+                  className="block w-full rounded-md shadow-sm text-lg py-3"
+                style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated, color: colors.textPrimary }}
                 />
-                <label className="block text-xs text-gray-500 mt-1">
+                <label className="block text-xs mt-1" style={{ color: colors.textMuted }}>
                   {t('project:transport_distance_info')}
                 </label>
               </div>
@@ -2319,7 +2323,7 @@ const ProjectCreating = () => {
           </div>
 
           {/* Results Section */}
-        <div className="mt-8 bg-gray-800 rounded-lg p-6">
+        <div className="mt-8 rounded-lg p-6" style={{ backgroundColor: colors.bgCard }}>
           <h2 className="text-xl font-semibold text-white mb-4">{t('project:total_results')}</h2>
           
           {/* Total Hours */}
@@ -2332,11 +2336,11 @@ const ProjectCreating = () => {
 
           {/* Combined Materials Table */}
           <div>
-            <h3 className="text-blue-300 mb-2">{t('project:total_materials_required')}:</h3>
+            <h3 className="mb-2" style={{ color: colors.accentBlue }}>{t('project:total_materials_required')}:</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
-                  <tr className="text-gray-400 text-sm">
+                  <tr className="text-sm" style={{ color: colors.textSubtle }}>
                     <th className="text-left py-2">{t('project:material')}</th>
                     <th className="text-right py-2">{t('project:quantity')}</th>
                     <th className="text-left py-2">{t('project:unit')}</th>
@@ -2344,7 +2348,7 @@ const ProjectCreating = () => {
                     <th className="text-right py-2">{t('common:total')}</th>
                   </tr>
                 </thead>
-                <tbody className="text-gray-300">
+                <tbody style={{ color: colors.textMuted }}>
                   {mainTasks.reduce((materials, task) => {
                     // Process main task materials
                     if (task.results?.materials) {
@@ -2472,11 +2476,11 @@ const ProjectCreating = () => {
                     return merged;
                   }, [] as { name: string; quantity: number; unit: string; pricePerUnit: number; totalPrice: number; description?: string; category?: string }[])
                   .map((material, i) => (
-                    <tr key={i}>
+                    <tr key={i} style={{ background: i % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
                       <td className="py-1">
                         <div>{translateMaterialName(material.name, t)}</div>
-                        {translateMaterialDescription(material.name, material.description, t) && <div className="text-sm text-gray-400">{translateMaterialDescription(material.name, material.description, t)}</div>}
-                        {material.category && <div className="text-sm text-gray-400">{t('project:category')}: {material.category}</div>}
+                        {translateMaterialDescription(material.name, material.description, t) && <div className="text-sm" style={{ color: colors.textSubtle }}>{translateMaterialDescription(material.name, material.description, t)}</div>}
+                        {material.category && <div className="text-sm" style={{ color: colors.textSubtle }}>{t('project:category')}: {material.category}</div>}
                       </td>
                       <td className="text-right py-1">{(material.quantity ?? 0).toFixed(2)}</td>
                       <td className="pl-4 py-1">{translateUnit(material.unit, t)}</td>
@@ -2491,10 +2495,11 @@ const ProjectCreating = () => {
         </div>
 
         {/* Bottom Action Buttons */}
-        <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-gray-200">
+        <div className="flex justify-end gap-4 mt-8 pt-6 border-t" style={{ borderColor: colors.borderLight }}>
           <button
             onClick={() => window.history.back()}
-            className="px-6 py-2 bg-gray-800 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors font-medium"
+            className="px-6 py-2 rounded-lg transition-colors font-medium"
+            style={{ backgroundColor: colors.bgCard, color: colors.textMuted }}
           >
             {t('project:cancel_button')}
           </button>
@@ -2540,7 +2545,7 @@ const ProjectCreating = () => {
 
       {showNamePrompt && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+          <div className="p-6 rounded-lg shadow-lg max-w-md w-full" style={{ backgroundColor: colors.bgCard }}>
             <h3 className="text-lg font-semibold mb-4">{t('project:enter_task_name')}</h3>
             <input
               type="text"
@@ -2556,14 +2561,16 @@ const ProjectCreating = () => {
                   setTempMainTask(null);
                   setShowNamePrompt(false);
                 }}
-                className="px-4 py-2 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition-colors"
+                className="px-4 py-2 rounded transition-colors"
+                style={{ backgroundColor: colors.bgCard, color: colors.textMuted }}
               >
                 {t('project:cancel_button_label')}
               </button>
               <button
                 onClick={handleConfirmTaskName}
                 disabled={!taskName.trim()}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 rounded disabled:opacity-50"
+                style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
               >
                 {t('project:confirm_button_label')}
               </button>
@@ -2586,7 +2593,7 @@ const ProjectCreating = () => {
       {/* Add Equipment to Project Modal */}
       {showAddEquipmentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 space-y-4">
+          <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">
                 {editingEquipmentIndex !== null ? t('project:edit_equipment') : t('project:add_equipment_to_project')}
@@ -2601,14 +2608,14 @@ const ProjectCreating = () => {
                   setEditingEquipmentIndex(null);
                   setEquipmentConflict(null);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-2 rounded-full transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('project:equipment')}</label>
+              <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('project:equipment')}</label>
               <select
                 value={selectedEquipmentToAdd?.id || ''}
                 onChange={(e) => {
@@ -2616,7 +2623,8 @@ const ProjectCreating = () => {
                   setSelectedEquipmentToAdd(equip || null);
                   setEquipmentQuantity(1);
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+                className="w-full px-3 py-2 border rounded-md"
+                style={{ borderColor: colors.borderDefault }}
               >
                 <option value="">{t('project:select_equipment')}</option>
                 {allEquipment.map((equip: any) => (
@@ -2630,32 +2638,33 @@ const ProjectCreating = () => {
             {selectedEquipmentToAdd && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('project:quantity')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('project:quantity')}</label>
                   <input
                     type="number"
                     min="1"
                     value={equipmentQuantity}
                     onChange={(e) => setEquipmentQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border rounded-md"
+                    style={{ borderColor: colors.borderDefault }}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('project:start_date')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('project:start_date')}</label>
                   <DatePicker
                     value={equipmentStartDate}
                     onChange={setEquipmentStartDate}
-                    className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    className="cursor-pointer transition-colors"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('project:end_date')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('project:end_date')}</label>
                   <DatePicker
                     value={equipmentEndDate}
                     onChange={setEquipmentEndDate}
                     minDate={equipmentStartDate}
-                    className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    className="cursor-pointer transition-colors"
                   />
                 </div>
 
@@ -2684,7 +2693,8 @@ const ProjectCreating = () => {
                   setEditingEquipmentIndex(null);
                   setEquipmentConflict(null);
                 }}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                className="px-4 py-2"
+                style={{ color: colors.textSubtle }}
               >
                 {t('project:cancel_button_label')}
               </button>
@@ -2731,7 +2741,8 @@ const ProjectCreating = () => {
                   }
                 }}
                 disabled={!selectedEquipmentToAdd || !!equipmentConflict}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
               >
                 {editingEquipmentIndex !== null ? t('project:update_equipment') : t('project:add_equipment')}
               </button>

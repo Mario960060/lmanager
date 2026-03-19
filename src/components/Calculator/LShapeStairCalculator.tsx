@@ -1251,17 +1251,17 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
 
       {/* Step height adjustment info */}
       {adjustedStepHeightInfo && (
-        <div className="bg-red-900/90 border border-red-600 rounded-lg p-4 flex items-start">
-          <AlertCircle className="w-5 h-5 text-red-300 mr-2 mt-0.5 shrink-0" />
-          <p className="font-medium text-white">{adjustedStepHeightInfo}</p>
+        <div className="rounded-lg p-4 flex items-start" style={{ background: `${colors.red}15`, border: `1px solid ${colors.red}40` }}>
+          <AlertCircle className="w-5 h-5 mr-2 mt-0.5 shrink-0" style={{ color: colors.redLight }} />
+          <p className="font-medium" style={{ color: colors.textPrimary }}>{adjustedStepHeightInfo}</p>
         </div>
       )}
 
       {/* Error */}
       {calculationError && (
-        <div className="bg-red-900/90 border border-red-600 p-4 rounded-lg flex items-start">
-          <AlertCircle className="w-5 h-5 text-red-300 mr-2 mt-0.5 shrink-0" />
-          <p className="font-medium text-white">{calculationError}</p>
+        <div className="p-4 rounded-lg flex items-start" style={{ background: `${colors.red}15`, border: `1px solid ${colors.red}40` }}>
+          <AlertCircle className="w-5 h-5 mr-2 mt-0.5 shrink-0" style={{ color: colors.redLight }} />
+          <p className="font-medium" style={{ color: colors.textPrimary }}>{calculationError}</p>
         </div>
       )}
 
@@ -1423,7 +1423,7 @@ const LShapeStairCalculator: React.FC<LShapeStairCalculatorProps> = ({
 
               {/* Materials table */}
               <div className="w-full">
-                <h4 className="font-medium mb-2 text-white">{t('calculator:total_materials_needed_label')}</h4>
+                <h4 className="font-medium mb-2" style={{ color: colors.textPrimary }}>{t('calculator:total_materials_needed_label')}</h4>
                 <div style={{ overflowX: 'auto', border: `1px solid ${colors.borderDefault}`, borderRadius: radii["2xl"] }}>
                   <table style={{ width: '100%', backgroundColor: colors.bgCardInner }}>
                     <thead style={{ borderBottom: `1px solid ${colors.borderDefault}`, background: colors.bgOverlay }}>

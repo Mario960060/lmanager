@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { colors, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -1296,27 +1297,22 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
   if (!stairResult) return null;
 
   return (
-    <div className="mt-8 bg-gray-800 p-6 rounded-lg text-white">
-      <h3 className="text-xl font-semibold text-white mb-4">
+    <div style={{ marginTop: spacing["8xl"], background: colors.bgCard, padding: spacing["6xl"], borderRadius: radii.lg, color: colors.textPrimary }}>
+      <h3 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, marginBottom: spacing["3xl"] }}>
         {t('calculator:slab_requirements_for_stairs')} - L-Shape
       </h3>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: spacing["6xl"], marginBottom: spacing["6xl"] }}>
         {/* Left column */}
-        <div className="space-y-4">
+        <div style={{ display: "flex", flexDirection: "column", gap: spacing["3xl"] }}>
           {/* Slab dimensions */}
           <div>
-            <h4 className="text-lg font-medium text-white mb-2">{t('calculator:slab_dimensions_label')}</h4>
-            <div className="space-y-2">
+            <h4 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.xs }}>{t('calculator:slab_dimensions_label')}</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
               {slabDimensions.map((slab) => (
-                <label key={slab.size} className="flex items-center cursor-pointer min-h-[44px] py-2">
-                  <input
-                    type="radio"
-                    checked={selectedSlabDimension === slab.size}
-                    onChange={() => setSelectedSlabDimension(slab.size)}
-                    className="h-4 w-4 text-blue-600 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-300">{slab.size} cm</span>
+                <label key={slab.size} style={{ display: "flex", alignItems: "center", cursor: "pointer", minHeight: 44, padding: `${spacing.xs}px 0` }}>
+                  <input type="radio" checked={selectedSlabDimension === slab.size} onChange={() => setSelectedSlabDimension(slab.size)} style={{ width: 16, height: 16, accentColor: colors.accentBlue }} />
+                  <span style={{ marginLeft: spacing.xs, fontSize: fontSizes.sm, color: colors.textMuted }}>{slab.size} cm</span>
                 </label>
               ))}
             </div>
@@ -1324,17 +1320,12 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
 
           {/* Placement */}
           <div>
-            <h4 className="text-lg font-medium text-white mb-2">{t('calculator:fronts_and_front_steps_label')}</h4>
-            <div className="space-y-2">
+            <h4 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.xs }}>{t('calculator:fronts_and_front_steps_label')}</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
               {slabPlacementOptions.map((option) => (
-                <label key={option.id} className="flex items-center cursor-pointer min-h-[44px] py-2">
-                  <input
-                    type="radio"
-                    checked={selectedPlacement === option.id}
-                    onChange={() => setSelectedPlacement(option.id)}
-                    className="h-4 w-4 text-blue-600 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-300">{t(option.labelKey)}</span>
+                <label key={option.id} style={{ display: "flex", alignItems: "center", cursor: "pointer", minHeight: 44, padding: `${spacing.xs}px 0` }}>
+                  <input type="radio" checked={selectedPlacement === option.id} onChange={() => setSelectedPlacement(option.id)} style={{ width: 16, height: 16, accentColor: colors.accentBlue }} />
+                  <span style={{ marginLeft: spacing.xs, fontSize: fontSizes.sm, color: colors.textMuted }}>{t(option.labelKey)}</span>
                 </label>
               ))}
             </div>
@@ -1342,17 +1333,12 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
 
           {/* Corner joint type */}
           <div>
-            <h4 className="text-lg font-medium text-white mb-2">{t('calculator:lshape_slabs_corner_joint_type')}</h4>
-            <div className="space-y-2">
+            <h4 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.xs }}>{t('calculator:lshape_slabs_corner_joint_type')}</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
               {cornerJointOptions.map((option) => (
-                <label key={option.id} className="flex items-center cursor-pointer min-h-[44px] py-2">
-                  <input
-                    type="radio"
-                    checked={cornerJoint === option.id}
-                    onChange={() => setCornerJoint(option.id)}
-                    className="h-4 w-4 text-blue-600 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-300">{t(option.labelKey)}</span>
+                <label key={option.id} style={{ display: "flex", alignItems: "center", cursor: "pointer", minHeight: 44, padding: `${spacing.xs}px 0` }}>
+                  <input type="radio" checked={cornerJoint === option.id} onChange={() => setCornerJoint(option.id)} style={{ width: 16, height: 16, accentColor: colors.accentBlue }} />
+                  <span style={{ marginLeft: spacing.xs, fontSize: fontSizes.sm, color: colors.textMuted }}>{t(option.labelKey)}</span>
                 </label>
               ))}
             </div>
@@ -1361,17 +1347,12 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
           {/* Top dominant arm (only for butt joint) */}
           {cornerJoint === 'buttJoint' && (
             <div>
-              <h4 className="text-lg font-medium text-white mb-2">{t('calculator:lshape_top_slab_dominant_arm')}</h4>
-              <div className="space-y-2">
+              <h4 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.xs }}>{t('calculator:lshape_top_slab_dominant_arm')}</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
                 {armDominanceOptions.map((option) => (
-                  <label key={option.id} className="flex items-center cursor-pointer min-h-[44px] py-2">
-                    <input
-                      type="radio"
-                      checked={topDominantArm === option.id}
-                      onChange={() => setTopDominantArm(option.id)}
-                      className="h-4 w-4 text-blue-600 rounded"
-                    />
-                    <span className="ml-2 text-sm text-gray-300">{t(option.labelKey)}</span>
+                  <label key={option.id} style={{ display: "flex", alignItems: "center", cursor: "pointer", minHeight: 44, padding: `${spacing.xs}px 0` }}>
+                    <input type="radio" checked={topDominantArm === option.id} onChange={() => setTopDominantArm(option.id)} style={{ width: 16, height: 16, accentColor: colors.accentBlue }} />
+                    <span style={{ marginLeft: spacing.xs, fontSize: fontSizes.sm, color: colors.textMuted }}>{t(option.labelKey)}</span>
                   </label>
                 ))}
               </div>
@@ -1380,17 +1361,12 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
 
           {/* Front dominant arm */}
           <div>
-            <h4 className="text-lg font-medium text-white mb-2">{t('calculator:lshape_front_slab_dominant_arm')}</h4>
-            <div className="space-y-2">
+            <h4 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.xs }}>{t('calculator:lshape_front_slab_dominant_arm')}</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
               {armDominanceOptions.map((option) => (
-                <label key={option.id} className="flex items-center cursor-pointer min-h-[44px] py-2">
-                  <input
-                    type="radio"
-                    checked={frontDominantArm === option.id}
-                    onChange={() => setFrontDominantArm(option.id)}
-                    className="h-4 w-4 text-blue-600 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-300">{t(option.labelKey)}</span>
+                <label key={option.id} style={{ display: "flex", alignItems: "center", cursor: "pointer", minHeight: 44, padding: `${spacing.xs}px 0` }}>
+                  <input type="radio" checked={frontDominantArm === option.id} onChange={() => setFrontDominantArm(option.id)} style={{ width: 16, height: 16, accentColor: colors.accentBlue }} />
+                  <span style={{ marginLeft: spacing.xs, fontSize: fontSizes.sm, color: colors.textMuted }}>{t(option.labelKey)}</span>
                 </label>
               ))}
             </div>
@@ -1398,37 +1374,32 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
         </div>
 
         {/* Right column */}
-        <div className="space-y-4">
+        <div style={{ display: "flex", flexDirection: "column", gap: spacing["3xl"] }}>
           {/* Adhesive thickness */}
           <div>
-            <h4 className="text-lg font-medium text-white mb-2">{t('calculator:adhesive_thickness_label')}</h4>
+            <h4 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.xs }}>{t('calculator:adhesive_thickness_label')}</h4>
             <input
               type="number"
               value={adhesiveThickness}
               onChange={(e) => setAdhesiveThickness(e.target.value)}
-              className="w-full p-2 border rounded bg-gray-700 text-white"
+              style={{ width: "100%", padding: spacing.xs, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md, background: colors.bgElevated, color: colors.textPrimary }}
               placeholder="cm"
               min="0"
               step="0.1"
             />
-            <p className="text-xs text-gray-400 mt-1">
+            <p style={{ fontSize: fontSizes.xs, color: colors.textSubtle, marginTop: spacing.xs }}>
               {t('calculator:consumption_label')}: {((parseFloat(adhesiveThickness) || 0.5) * 12).toFixed(1)} kg/m²
             </p>
           </div>
 
           {/* Cutting option */}
           <div>
-            <h4 className="text-lg font-medium text-white mb-2">{t('calculator:slab_cutting_long_ways_label')}</h4>
-            <div className="space-y-2">
+            <h4 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.xs }}>{t('calculator:slab_cutting_long_ways_label')}</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
               {cuttingOptions.map((option) => (
-                <label key={option.type} className="flex items-center cursor-pointer min-h-[44px] py-2">
-                  <input
-                    type="radio"
-                    checked={selectedCutting === option.type}
-                    onChange={() => setSelectedCutting(option.type)}
-                    className="h-4 w-4 text-blue-600 rounded"
-                  />
-                  <span className="ml-2 text-sm text-gray-300">{t(option.descriptionKey)}</span>
+                <label key={option.type} style={{ display: "flex", alignItems: "center", cursor: "pointer", minHeight: 44, padding: `${spacing.xs}px 0` }}>
+                  <input type="radio" checked={selectedCutting === option.type} onChange={() => setSelectedCutting(option.type)} style={{ width: 16, height: 16, accentColor: colors.accentBlue }} />
+                  <span style={{ marginLeft: spacing.xs, fontSize: fontSizes.sm, color: colors.textMuted }}>{t(option.descriptionKey)}</span>
                 </label>
               ))}
             </div>
@@ -1439,10 +1410,10 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
       {/* ── Results ──────────────────────────────────────────────────────── */}
       {slabCalculationResult && (
         <div>
-          <h4 className="text-lg font-medium text-white mb-3">{t('calculator:slab_details_label')}</h4>
+          <h4 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.lg }}>{t('calculator:slab_details_label')}</h4>
 
           {/* Corner joint info */}
-          <div className="bg-blue-900 text-white text-sm rounded p-3 mb-3 border border-blue-700">
+          <div style={{ background: colors.accentBlueBg, color: colors.textPrimary, fontSize: fontSizes.sm, borderRadius: radii.md, padding: spacing.lg, marginBottom: spacing.lg, border: `1px solid ${colors.accentBlueBorder}` }}>
             <p className="font-semibold">
               {t('calculator:lshape_corner_label')} {cornerJoint === 'mitre45' ? t('calculator:lshape_corner_info_mitre') : t('calculator:lshape_corner_info_butt', { arm: topDominantArm === 'armA' ? t('calculator:lshape_arm_a') : t('calculator:lshape_arm_b') })}
             </p>
@@ -1450,98 +1421,98 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
           </div>
 
           {/* Step-by-step slab details table */}
-          <div className="overflow-x-auto border border-gray-700 rounded-lg">
-            <table className="w-full bg-gray-700 rounded-lg text-sm">
+          <div style={{ overflowX: "auto", border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg }}>
+            <table style={{ width: "100%", background: colors.bgElevated, borderRadius: radii.lg, fontSize: fontSizes.sm }}>
               <thead>
-                <tr className="border-b border-gray-600">
-                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:step_label')}</th>
-                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_surface')}</th>
-                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_arm')}</th>
-                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_slabs')}</th>
-                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_dimensions')}</th>
-                  <th className="py-2 px-3 text-left text-gray-300">{t('calculator:lshape_table_surface_size_cm')}</th>
+                <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                  <th style={{ padding: `${spacing.xs}px ${spacing.lg}px`, textAlign: "left", color: colors.textMuted }}>{t('calculator:step_label')}</th>
+                  <th style={{ padding: `${spacing.xs}px ${spacing.lg}px`, textAlign: "left", color: colors.textMuted }}>{t('calculator:lshape_table_surface')}</th>
+                  <th style={{ padding: `${spacing.xs}px ${spacing.lg}px`, textAlign: "left", color: colors.textMuted }}>{t('calculator:lshape_table_arm')}</th>
+                  <th style={{ padding: `${spacing.xs}px ${spacing.lg}px`, textAlign: "left", color: colors.textMuted }}>{t('calculator:lshape_table_slabs')}</th>
+                  <th style={{ padding: `${spacing.xs}px ${spacing.lg}px`, textAlign: "left", color: colors.textMuted }}>{t('calculator:lshape_table_dimensions')}</th>
+                  <th style={{ padding: `${spacing.xs}px ${spacing.lg}px`, textAlign: "left", color: colors.textMuted }}>{t('calculator:lshape_table_surface_size_cm')}</th>
                 </tr>
               </thead>
               <tbody>
                 {slabCalculationResult.stepResults.map((result: any) => (
                   <React.Fragment key={`step-${result.step}`}>
                     {/* Top Arm A */}
-                    <tr className="border-b border-gray-600">
-                      <td className="py-2 px-3 text-gray-300" rowSpan={4}>
+                    <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }} rowSpan={4}>
                         {result.step}
-                        {result.isPlatform && <span className="text-xs text-blue-400 block">{t('calculator:lshape_platform_label')}</span>}
+                        {result.isPlatform && <span style={{ fontSize: fontSizes.xs, color: colors.accentBlue, display: "block" }}>{t('calculator:lshape_platform_label')}</span>}
                       </td>
-                      <td className="py-2 px-3 text-gray-300">{t('calculator:lshape_top_surface')}</td>
-                      <td className="py-2 px-3 text-gray-300">
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_top_surface')}</td>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
                         {t('calculator:lshape_arm_a')} {cornerJoint === 'buttJoint' && topDominantArm === 'armA' ? '★' : ''}
                       </td>
-                      <td className="py-2 px-3 text-gray-300">{result.topArmA_slabsNeeded}</td>
-                      <td className="py-2 px-3">
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.topArmA_slabsNeeded}</td>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
                         {(result.topArmA_dimensionsParts ?? [{ text: result.topArmA_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
                           <span key={pi}>
                             {pi > 0 && ' + '}
-                            <span className={part.fromWaste ? '!text-green-400' : ''}>{part.text}</span>
+                            <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
                           </span>
                         ))}
                       </td>
-                      <td className="py-2 px-3 text-gray-400">
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
                         {result.topArmA_width.toFixed(1)} × {result.topArmA_depth.toFixed(1)}
                       </td>
                     </tr>
                     {/* Top Arm B */}
-                    <tr className="border-b border-gray-600">
-                      <td className="py-2 px-3 text-gray-300">{t('calculator:lshape_top_surface')}</td>
-                      <td className="py-2 px-3 text-gray-300">
+                    <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_top_surface')}</td>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
                         {t('calculator:lshape_arm_b')} {cornerJoint === 'buttJoint' && topDominantArm === 'armB' ? '★' : ''}
                       </td>
-                      <td className="py-2 px-3 text-gray-300">{result.topArmB_slabsNeeded}</td>
-                      <td className="py-2 px-3">
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.topArmB_slabsNeeded}</td>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
                         {(result.topArmB_dimensionsParts ?? [{ text: result.topArmB_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
                           <span key={pi}>
                             {pi > 0 && ' + '}
-                            <span className={part.fromWaste ? '!text-green-400' : ''}>{part.text}</span>
+                            <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
                           </span>
                         ))}
                       </td>
-                      <td className="py-2 px-3 text-gray-400">
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
                         {result.topArmB_width.toFixed(1)} × {result.topArmB_depth.toFixed(1)}
                       </td>
                     </tr>
                     {/* Front Arm A */}
-                    <tr className="border-b border-gray-600">
-                      <td className="py-2 px-3 text-gray-300">{t('calculator:lshape_front_surface')}</td>
-                      <td className="py-2 px-3 text-gray-300">
+                    <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_front_surface')}</td>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
                         {t('calculator:lshape_arm_a')} {frontDominantArm === 'armA' ? '★' : ''}
                       </td>
-                      <td className="py-2 px-3 text-gray-300">{result.frontArmA_slabsNeeded}</td>
-                      <td className="py-2 px-3">
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.frontArmA_slabsNeeded}</td>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
                         {(result.frontArmA_dimensionsParts ?? [{ text: result.frontArmA_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
                           <span key={pi}>
                             {pi > 0 && ' + '}
-                            <span className={part.fromWaste ? '!text-green-400' : ''}>{part.text}</span>
+                            <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
                           </span>
                         ))}
                       </td>
-                      <td className="py-2 px-3 text-gray-400">
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
                         {result.frontArmA_width.toFixed(1)} × {result.frontArmA_height.toFixed(1)}
                       </td>
                     </tr>
                     {/* Front Arm B */}
-                    <tr className="border-b border-gray-600">
-                      <td className="py-2 px-3 text-gray-300">{t('calculator:lshape_front_surface')}</td>
-                      <td className="py-2 px-3 text-gray-300">
+                    <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_front_surface')}</td>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
                         {t('calculator:lshape_arm_b')} {frontDominantArm === 'armB' ? '★' : ''}
                       </td>
-                      <td className="py-2 px-3 text-gray-300">{result.frontArmB_slabsNeeded}</td>
-                      <td className="py-2 px-3">
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.frontArmB_slabsNeeded}</td>
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
                         {(result.frontArmB_dimensionsParts ?? [{ text: result.frontArmB_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
                           <span key={pi}>
                             {pi > 0 && ' + '}
-                            <span className={part.fromWaste ? '!text-green-400' : ''}>{part.text}</span>
+                            <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
                           </span>
                         ))}
                       </td>
-                      <td className="py-2 px-3 text-gray-400">
+                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
                         {result.frontArmB_width.toFixed(1)} × {result.frontArmB_height.toFixed(1)}
                       </td>
                     </tr>
@@ -1552,30 +1523,30 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
           </div>
 
           {/* Summary cards */}
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gray-700 p-4 rounded">
-              <h5 className="font-medium mb-2">{t('calculator:total_step_slabs_needed_label')} (Top)</h5>
-              <p className="text-xl">{slabCalculationResult.totalTopSlabs}</p>
+          <div style={{ marginTop: spacing["6xl"], display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: spacing["3xl"] }}>
+            <div style={{ background: colors.bgElevated, padding: spacing["3xl"], borderRadius: radii.md }}>
+              <h5 style={{ fontWeight: fontWeights.medium, marginBottom: spacing.xs, color: colors.textPrimary }}>{t('calculator:total_step_slabs_needed_label')} (Top)</h5>
+              <p style={{ fontSize: fontSizes.xl, color: colors.textPrimary }}>{slabCalculationResult.totalTopSlabs}</p>
             </div>
-            <div className="bg-gray-700 p-4 rounded">
-              <h5 className="font-medium mb-2">{t('calculator:total_front_slabs_needed_label')}</h5>
-              <p className="text-xl">{slabCalculationResult.totalFrontSlabs}</p>
+            <div style={{ background: colors.bgElevated, padding: spacing["3xl"], borderRadius: radii.md }}>
+              <h5 style={{ fontWeight: fontWeights.medium, marginBottom: spacing.xs, color: colors.textPrimary }}>{t('calculator:total_front_slabs_needed_label')}</h5>
+              <p style={{ fontSize: fontSizes.xl, color: colors.textPrimary }}>{slabCalculationResult.totalFrontSlabs}</p>
             </div>
-            <div className="bg-gray-700 p-4 rounded">
-              <h5 className="font-medium mb-2">{t('calculator:total_cuts_required_label')}</h5>
-              <p className="text-xl">{slabCalculationResult.totalCuts}</p>
+            <div style={{ background: colors.bgElevated, padding: spacing["3xl"], borderRadius: radii.md }}>
+              <h5 style={{ fontWeight: fontWeights.medium, marginBottom: spacing.xs, color: colors.textPrimary }}>{t('calculator:total_cuts_required_label')}</h5>
+              <p style={{ fontSize: fontSizes.xl, color: colors.textPrimary }}>{slabCalculationResult.totalCuts}</p>
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-gray-700 p-4 rounded">
-              <h5 className="font-medium mb-2">{t('calculator:total_slabs_needed_label')}</h5>
-              <p className="text-xl">{slabCalculationResult.totalSlabs}</p>
+          <div style={{ marginTop: spacing["3xl"], display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: spacing["3xl"] }}>
+            <div style={{ background: colors.bgElevated, padding: spacing["3xl"], borderRadius: radii.md }}>
+              <h5 style={{ fontWeight: fontWeights.medium, marginBottom: spacing.xs, color: colors.textPrimary }}>{t('calculator:total_slabs_needed_label')}</h5>
+              <p style={{ fontSize: fontSizes.xl, color: colors.textPrimary }}>{slabCalculationResult.totalSlabs}</p>
             </div>
-            <div className="bg-gray-700 p-4 rounded">
-              <h5 className="font-medium mb-2">{t('calculator:lshape_adhesive_needed')}</h5>
-              <p className="text-xl">{slabCalculationResult.totalAdhesiveNeeded.toFixed(1)} kg</p>
-              <p className="text-sm text-gray-400">
+            <div style={{ background: colors.bgElevated, padding: spacing["3xl"], borderRadius: radii.md }}>
+              <h5 style={{ fontWeight: fontWeights.medium, marginBottom: spacing.xs, color: colors.textPrimary }}>{t('calculator:lshape_adhesive_needed')}</h5>
+              <p style={{ fontSize: fontSizes.xl, color: colors.textPrimary }}>{slabCalculationResult.totalAdhesiveNeeded.toFixed(1)} kg</p>
+              <p style={{ fontSize: fontSizes.sm, color: colors.textSubtle }}>
                 {t('calculator:lshape_adhesive_top_front', { top: slabCalculationResult.topAdhesiveNeeded.toFixed(1), front: slabCalculationResult.frontAdhesiveNeeded.toFixed(1) })}
               </p>
             </div>
@@ -1583,25 +1554,25 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
 
           {/* Waste materials */}
           {wasteMaterials.length > 0 && (
-            <div className="mt-6">
-              <h4 className="text-lg font-medium text-white mb-3">{t('calculator:waste_material_available_for_reuse_label')}</h4>
-              <div className="overflow-x-auto border border-gray-700 rounded-lg">
-                <table className="w-full bg-gray-700 rounded-lg text-sm">
+            <div style={{ marginTop: spacing["6xl"] }}>
+              <h4 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.lg }}>{t('calculator:waste_material_available_for_reuse_label')}</h4>
+              <div style={{ overflowX: "auto", border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg }}>
+                <table style={{ width: "100%", background: colors.bgElevated, borderRadius: radii.lg, fontSize: fontSizes.sm }}>
                   <thead>
-                    <tr className="border-b border-gray-600">
-                      <th className="py-2 px-4 text-left text-gray-300">{t('calculator:lshape_source')}</th>
-                      <th className="py-2 px-4 text-left text-gray-300">Dimensions</th>
-                      <th className="py-2 px-4 text-left text-gray-300">{t('calculator:can_be_rotated')}</th>
+                    <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                      <th style={{ padding: `${spacing.xs}px ${spacing["3xl"]}px`, textAlign: "left", color: colors.textMuted }}>{t('calculator:lshape_source')}</th>
+                      <th style={{ padding: `${spacing.xs}px ${spacing["3xl"]}px`, textAlign: "left", color: colors.textMuted }}>Dimensions</th>
+                      <th style={{ padding: `${spacing.xs}px ${spacing["3xl"]}px`, textAlign: "left", color: colors.textMuted }}>{t('calculator:can_be_rotated')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {wasteMaterials.map((waste, index) => (
-                      <tr key={`waste-${index}`} className={index % 2 === 0 ? "bg-gray-750" : "bg-gray-700"}>
-                        <td className="py-2 px-4 border-t border-gray-600">{waste.source}</td>
-                        <td className="py-2 px-4 border-t border-gray-600">
+                      <tr key={`waste-${index}`} style={{ background: index % 2 === 0 ? colors.bgCardInner : colors.bgElevated }}>
+                        <td style={{ padding: `${spacing.xs}px ${spacing["3xl"]}px`, borderTop: `1px solid ${colors.borderMedium}`, color: colors.textPrimary }}>{waste.source}</td>
+                        <td style={{ padding: `${spacing.xs}px ${spacing["3xl"]}px`, borderTop: `1px solid ${colors.borderMedium}`, color: colors.textPrimary }}>
                           {waste.width.toFixed(1)}x{waste.length.toFixed(1)}cm
                         </td>
-                        <td className="py-2 px-4 border-t border-gray-600">
+                        <td style={{ padding: `${spacing.xs}px ${spacing["3xl"]}px`, borderTop: `1px solid ${colors.borderMedium}`, color: colors.textPrimary }}>
                           {waste.canBeRotated ? t('calculator:yes_label') : t('calculator:no_label')}
                         </td>
                       </tr>

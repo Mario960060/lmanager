@@ -5,6 +5,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii, gradients } from '../../themes/designTokens';
+import { Card, DataTable } from '../../themes/uiComponents';
 
 interface SleeperWallCalculatorProps {
   onResultsChange?: (results: CalculationResult) => void;
@@ -608,55 +610,77 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-semibold">{t('calculator:sleeper_wall_calculator_title_alt')}</h2>
-      <p className="text-sm text-gray-600">
+      <p style={{ fontSize: fontSizes.sm, color: colors.textDim }}>
         {t('calculator:sleeper_wall_calculator_description')}
       </p>
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_wall_length_m')}</label>
+          <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_wall_length_m')}</label>
           <input
             type="number"
             value={length}
             onChange={(e) => handleInputChange(e, setLength)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
+            style={{ marginTop: spacing.sm, display: 'block', width: '100%', borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: '8px 12px', outline: 'none' }}
             step="0.01"
             placeholder={t('calculator:placeholder_enter_wall_length_metres')}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_wall_height_m')}</label>
+          <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_wall_height_m')}</label>
           <input
             type="number"
             value={height}
             onChange={(e) => handleInputChange(e, setHeight)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
+            style={{ marginTop: spacing.sm, display: 'block', width: '100%', borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: '8px 12px', outline: 'none' }}
             step="0.01"
             placeholder={t('calculator:placeholder_enter_wall_height_metres')}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_post_installation_method')}</label>
-          <div className="mt-2 space-x-4">
-            <label className={`inline-flex items-center p-2 rounded text-white ${postMethod === 'concrete' ? 'bg-blue-600' : 'bg-gray-500'}`}>
+          <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_post_installation_method')}</label>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: spacing['2xl'],
+                borderRadius: radii.md,
+                cursor: 'pointer',
+                color: postMethod === 'concrete' ? '#fff' : colors.textPrimary,
+                background: postMethod === 'concrete' ? colors.accentBlue : colors.bgInput,
+                border: `1px solid ${postMethod === 'concrete' ? colors.accentBlue : colors.borderDefault}`,
+              }}
+            >
               <input
                 type="radio"
                 value="concrete"
                 checked={postMethod === 'concrete'}
                 onChange={() => setPostMethod('concrete')}
-                className="form-radio"
+                style={{ accentColor: colors.accentBlue }}
               />
               <span className="ml-2">{t('calculator:input_concrete_in_posts')}</span>
             </label>
-            <label className={`inline-flex items-center p-2 rounded text-white ${postMethod === 'direct' ? 'bg-blue-600' : 'bg-gray-500'}`}>
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: spacing['2xl'],
+                borderRadius: radii.md,
+                cursor: 'pointer',
+                color: postMethod === 'direct' ? '#fff' : colors.textPrimary,
+                background: postMethod === 'direct' ? colors.accentBlue : colors.bgInput,
+                border: `1px solid ${postMethod === 'direct' ? colors.accentBlue : colors.borderDefault}`,
+              }}
+            >
               <input
                 type="radio"
                 value="direct"
                 checked={postMethod === 'direct'}
                 onChange={() => setPostMethod('direct')}
-                className="form-radio"
+                style={{ accentColor: colors.accentBlue }}
               />
               <span className="ml-2">{t('calculator:input_drive_posts_directly')}</span>
             </label>
@@ -669,34 +693,26 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
               type="checkbox"
               checked={calculateTransport}
               onChange={(e) => setCalculateTransport(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              style={{ accentColor: colors.accentBlue }}
             />
-            <span className="text-sm font-medium text-gray-700">{t('calculator:input_calculate_transport_time')}</span>
+            <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_calculate_transport_time')}</span>
           </label>
         )}
 
         {/* Transport Carrier Selection */}
         {!isInProjectCreating && calculateTransport && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:input_transport_carrier_optional')}</label>
+            <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:input_transport_carrier_optional')}</label>
             <div className="space-y-2">
               <div 
-                className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded"
+                style={{ display: 'flex', alignItems: 'center', padding: spacing['2xl'], cursor: 'pointer', border: `2px dashed ${colors.borderDefault}`, borderRadius: radii.md }}
                 onClick={() => setSelectedTransportCarrier(null)}
               >
-                <div className={`w-4 h-4 rounded-full border mr-2 ${
-                  selectedTransportCarrier === null 
-                    ? 'border-gray-400' 
-                    : 'border-gray-400'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full m-0.5 ${
-                    selectedTransportCarrier === null 
-                      ? 'bg-gray-400' 
-                      : 'bg-transparent'
-                  }`}></div>
+                <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${colors.textSubtle}`, marginRight: spacing['2xl'] }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', margin: 2, background: selectedTransportCarrier === null ? colors.textSubtle : 'transparent' }}></div>
                 </div>
                 <div>
-                  <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
+                  <span style={{ color: colors.textPrimary }}>{t('calculator:default_wheelbarrow')}</span>
                 </div>
               </div>
               {carriers.length > 0 && carriers.map((carrier) => (
@@ -705,27 +721,19 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
                   className="flex items-center p-2 cursor-pointer"
                   onClick={() => setSelectedTransportCarrier(carrier)}
                 >
-                  <div className={`w-4 h-4 rounded-full border mr-2 ${
-                    selectedTransportCarrier?.id === carrier.id 
-                      ? 'border-gray-400' 
-                      : 'border-gray-400'
-                  }`}>
-                    <div className={`w-2 h-2 rounded-full m-0.5 ${
-                      selectedTransportCarrier?.id === carrier.id 
-                        ? 'bg-gray-400' 
-                        : 'bg-transparent'
-                    }`}></div>
+                  <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${colors.textSubtle}`, marginRight: spacing['2xl'] }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', margin: 2, background: selectedTransportCarrier?.id === carrier.id ? colors.textSubtle : 'transparent' }}></div>
                   </div>
                   <div>
-                    <span className="text-gray-800">{carrier.name}</span>
-                    <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
+                    <span style={{ color: colors.textPrimary }}>{carrier.name}</span>
+                    <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing['2xl'] }}>({carrier["size (in tones)"]} tons)</span>
                   </div>
                 </div>
               ))}
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:input_transport_distance_meters')}</label>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing['2xl'] }}>{t('calculator:input_transport_distance_meters')}</label>
               <input
                 type="number"
                 value={transportDistance}
@@ -741,25 +749,25 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
 
         <button
           onClick={calculate}
-          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-300"
+          style={{ width: '100%', background: colors.accentBlue, color: colors.textPrimary, padding: `${spacing['2xl']}px ${spacing['4xl']}px`, borderRadius: radii.md, border: 'none', cursor: 'pointer' }}
         >
           {t('calculator:calculate_button')}
         </button>
 
         {result && (
-          <div ref={resultsRef} className="mt-6 space-y-4">
+          <div style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }} ref={resultsRef}>
             {result.roundedUpHeight !== result.originalHeight && (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-md text-blue-700">
-                <p>
+              <div style={{ padding: spacing['4xl'], background: colors.bgCard, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md, color: colors.accentBlue }}>
+                <p style={{ fontSize: fontSizes.sm, fontFamily: fonts.body }}>
                   {t('calculator:sleeper_rounded_up_note', { height: (result.roundedUpHeight / 1000).toFixed(2), diff: ((result.roundedUpHeight - result.originalHeight) / 1000).toFixed(2) })}
                 </p>
               </div>
             )}
 
             {postMethod === 'concrete' && result.postHeightMeters && (
-              <div className="p-4 bg-gray-50 border border-gray-200 rounded-md">
-                <p className="font-medium mb-2 text-white">{t('calculator:post_calculation_details')}:</p>
-                <ul className="text-sm space-y-1 text-white">
+              <div style={{ padding: spacing['4xl'], background: colors.bgCard, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md }}>
+                <p style={{ fontWeight: fontWeights.medium, marginBottom: spacing.lg, color: colors.textPrimary, fontFamily: fonts.body }}>{t('calculator:post_calculation_details')}:</p>
+                <ul style={{ fontSize: fontSizes.sm, color: colors.textPrimary, fontFamily: fonts.body, paddingLeft: spacing["2xl"], margin: 0 }}>
                   <li>• {t('calculator:sleeper_required_post_height', { height: result.postHeightMeters.toFixed(2) })}</li>
                   <li>• {t('calculator:sleeper_posts_per_length', { count: result.piecesPerPost })}</li>
                   <li>• {t('calculator:sleeper_total_posts_needed', { count: result.totalPosts })}</li>
@@ -768,81 +776,71 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
               </div>
             )}
 
-            <div>
-              <h3 className="text-lg font-medium">{t('calculator:total_labor_hours_label')} <span className="text-blue-600">{result.labor.toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
-              
-              <div className="mt-4">
-                <h4 className="font-medium text-gray-700 mb-2">{t('calculator:task_breakdown_label')}</h4>
-                <div className="bg-gray-50 p-4 rounded-md">
-                  <ul className="space-y-2">
-                    {result.taskBreakdown.map((task, index) => (
-                      <li key={index} className="flex justify-between text-sm">
-                        <span className="font-medium">{translateTaskName(task.task, t)}</span>
-                        <span className="text-blue-600">{task.hours.toFixed(2)} {t('calculator:hours_label')}</span>
-                      </li>
-                    ))}
-                  </ul>
+            <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg }}>
+                <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                  {t('calculator:total_labor_hours_label')}
+                </span>
+                <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                  {result.labor.toFixed(2)}
+                </span>
+                <span style={{ fontSize: fontSizes.md, color: colors.accentBlue, fontFamily: fonts.body, fontWeight: fontWeights.medium }}>
+                  {t('calculator:hours_abbreviation')}
+                </span>
+              </div>
+            </Card>
+
+            <Card>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+                {t('calculator:task_breakdown_label')}
+              </h3>
+              <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
+                {result.taskBreakdown.map((task, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                      background: index % 2 === 1 ? colors.bgTableRowAlt : undefined,
+                      borderBottom: index < result.taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
+                    }}
+                  >
+                    <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName(task.task, t)}</span>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                      <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{task.hours.toFixed(2)}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <DataTable
+              columns={[
+                { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+                { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+                { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+                { key: 'price', label: t('calculator:table_price_per_unit_header'), width: '1fr' },
+                { key: 'total', label: t('calculator:table_total_header'), width: '1fr' },
+              ]}
+              rows={result.materials.map((m) => ({
+                name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName(m.name, t)}</span>,
+                quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.amount.toFixed(2)}</span>,
+                unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
+                price: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : 'N/A'}</span>,
+                total: <span style={{ fontSize: fontSizes.md, fontWeight: fontWeights.bold, color: colors.textSecondary }}>{m.total_price ? `£${m.total_price.toFixed(2)}` : 'N/A'}</span>,
+              }))}
+              footer={
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: spacing.md }}>
+                  <span style={{ fontSize: fontSizes.base, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>{t('calculator:total_cost_colon')}</span>
+                  <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display }}>
+                    {result.materials.some(m => m.total_price !== null) ? `£${result.materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}` : t('calculator:not_available')}
+                  </span>
                 </div>
-              </div>
-            </div>
-
-            <div>
-              <h4 className="font-medium text-gray-700 mb-2">{t('calculator:materials_required_label')}</h4>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {t('calculator:material_label')}
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {t('calculator:quantity_label')}
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {t('calculator:unit_label')}
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {t('calculator:price_per_unit_label')}
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {t('calculator:total_price_label')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {result.materials.map((material, index) => (
-                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {translateMaterialName(material.name, t)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.amount.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {translateUnit(material.unit, t)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.total_price ? `£${material.total_price.toFixed(2)}` : 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Add total price row */}
-              <div className="mt-4 text-right pr-6">
-                <p className="text-sm font-medium">
-                  {t('calculator:total_cost_colon')}{' '}
-                  {result.materials.some(m => m.total_price !== null) 
-                    ? `£${result.materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}`
-                    : t('calculator:not_available')}
-                </p>
-              </div>
-            </div>
+              }
+            />
           </div>
         )}
       </div>

@@ -23,6 +23,23 @@ function findTaskTemplate(taskTemplates: any[], taskName: string): any | null {
   ) ?? null;
 }
 
+/** Tasks related to digging and preparation go into a separate folder (like ProjectCreating). */
+function isDiggingOrPreparationTask(taskName: string): boolean {
+  const n = (taskName || "").toLowerCase();
+  return (
+    n.includes("excavation") ||
+    n.includes("digging") ||
+    n.includes("preparation with") ||
+    n.includes("loading tape1") ||
+    n.includes("transporting soil") ||
+    n.includes("transporting tape1") ||
+    n.includes("transport tape1") ||
+    n.includes("transport soil") ||
+    n.includes("foundation excavation") ||
+    n.includes("soil excavation")
+  );
+}
+
 export async function submitProject({
   shapes,
   projectSettings,
@@ -50,6 +67,24 @@ export async function submitProject({
 
   const createdFolders = new Map<string, string>();
 
+  /** Get unique folder name — each element gets its own folder (patio, wall, etc.).
+   * Uses shape.label (element name from layer 2) as primary; falls back to results.name, calculatorType.
+   * When duplicate names exist, appends " (2)", " (3)" so tasks don't merge. */
+  function getUniqueFolderName(
+    shape: Shape,
+    results: NonNullable<Shape["calculatorResults"]>,
+    createdFolders: Map<string, string>
+  ): string {
+    const baseName = (shape.label || "").trim() || results.name || shape.calculatorType || "Element";
+    let folderName = baseName;
+    let counter = 1;
+    while (createdFolders.has(folderName)) {
+      counter++;
+      folderName = `${baseName} (${counter})`;
+    }
+    return folderName;
+  }
+
   // Create event
   const { data: event, error: eventError } = await supabase
     .from("events")
@@ -75,15 +110,40 @@ export async function submitProject({
 
   if (eventError) throw eventError;
 
-  // Process each shape with calculator results
+  const EXCAVATION_FOLDER_NAME = "Digging and Preparation";
+
+  /** Get or create the Digging and Preparation folder (like ProjectCreating). */
+  async function getExcavationFolderId(): Promise<string | null> {
+    if (createdFolders.has(EXCAVATION_FOLDER_NAME)) {
+      return createdFolders.get(EXCAVATION_FOLDER_NAME) ?? null;
+    }
+    const { data: folder, error } = await supabase
+      .from("task_folders")
+      .insert({
+        name: EXCAVATION_FOLDER_NAME,
+        event_id: event.id,
+        color: "#8B5CF6",
+        sort_order: -1,
+        company_id: companyId,
+      })
+      .select()
+      .single();
+    if (error || !folder) return null;
+    createdFolders.set(EXCAVATION_FOLDER_NAME, folder.id);
+    return folder.id;
+  }
+
+  // Process each shape with calculator results — each element (patio, wall, etc.) gets its own folder
   for (const shape of layer2Shapes) {
     const results = shape.calculatorResults;
     if (!results) continue;
 
-    const folderName = shape.label || results.name || shape.calculatorType || "Element";
+    const folderName = getUniqueFolderName(shape, results, createdFolders);
     let folderId: string | null = null;
 
-    if (results.taskBreakdown && results.taskBreakdown.length > 0) {
+    const hasTasks = (results.taskBreakdown && results.taskBreakdown.length > 0) ||
+      (results.hours_worked > 0 || (results.totalTime ?? 0) > 0);
+    if (hasTasks) {
       if (!createdFolders.has(folderName)) {
         const { data: folder, error: folderError } = await supabase
           .from("task_folders")
@@ -107,17 +167,21 @@ export async function submitProject({
     }
 
     const round2 = (v: number) => Math.round(v * 100) / 100;
+    const formatTaskAmount = (am: string | number | undefined, u: string | undefined) =>
+      typeof am === 'string' && am.trim().includes(' ') ? am.trim() : `${am ?? 0} ${u ?? ''}`.trim();
 
-    // Create tasks from taskBreakdown
+    // Create tasks from taskBreakdown — digging tasks go to "Digging and Preparation" folder
     if (results.taskBreakdown) {
       for (const item of results.taskBreakdown) {
         if (!item.hours || item.hours <= 0) continue;
 
         const template = findTaskTemplate(taskTemplates, item.task);
         const templateId = item.event_task_id ?? template?.id ?? null;
+        const useExcavationFolder = isDiggingOrPreparationTask(item.task ?? "");
+        const taskFolderId = useExcavationFolder
+          ? await getExcavationFolderId()
+          : folderId;
 
-        const formatTaskAmount = (am: string | number | undefined, u: string | undefined) =>
-          typeof am === 'string' && am.trim().includes(' ') ? am.trim() : `${am ?? 0} ${u ?? ''}`.trim();
         const { error: taskError } = await supabase.from("tasks_done").insert({
           event_id: event.id,
           user_id: userId,
@@ -129,7 +193,7 @@ export async function submitProject({
           hours_worked: round2(item.hours),
           is_finished: false,
           event_task_id: templateId,
-          folder_id: folderId,
+          folder_id: taskFolderId,
           company_id: companyId,
         });
 
@@ -150,6 +214,7 @@ export async function submitProject({
         hours_worked: taskHours,
         is_finished: false,
         event_task_id: template?.id ?? null,
+        folder_id: folderId,
         company_id: companyId,
       });
 

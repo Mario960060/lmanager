@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../themes/designTokens';
 import { X } from 'lucide-react';
 
 interface UnspecifiedCalendarMaterialModalProps {
@@ -39,24 +40,25 @@ const UnspecifiedCalendarMaterialModal: React.FC<UnspecifiedCalendarMaterialModa
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+      <div className="rounded-lg shadow-lg w-full max-w-md" style={{ backgroundColor: colors.bgCard }}>
         <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">{t('event:other_custom_item')}</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-500">
+          <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{t('event:other_custom_item')}</h2>
+          <button onClick={onClose} style={{ color: colors.textSubtle }}>
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>
               {t('event:select_project_label')}
             </label>
             <select
               required
               value={materialData.event_id}
               onChange={(e) => setMaterialData(prev => ({ ...prev, event_id: e.target.value }))}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="mt-1 block w-full rounded-md shadow-sm"
+              style={{ borderColor: colors.borderDefault }}
             >
               <option value="">{t('event:select_project')}</option>
               {projects.map(project => (
@@ -68,7 +70,7 @@ const UnspecifiedCalendarMaterialModal: React.FC<UnspecifiedCalendarMaterialModa
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>
               {t('event:material_name')}
             </label>
             <input
@@ -76,13 +78,14 @@ const UnspecifiedCalendarMaterialModal: React.FC<UnspecifiedCalendarMaterialModa
               required
               value={materialData.name}
               onChange={(e) => setMaterialData(prev => ({ ...prev, name: e.target.value }))}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="block w-full rounded-md shadow-sm"
+              style={{ borderColor: colors.borderDefault }}
               placeholder={t('event:enter_material_name')}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>
               {t('event:quantity_label')}
             </label>
             <input
@@ -92,13 +95,14 @@ const UnspecifiedCalendarMaterialModal: React.FC<UnspecifiedCalendarMaterialModa
               step="0.01"
               value={materialData.total_amount || ''}
               onChange={(e) => setMaterialData(prev => ({ ...prev, total_amount: parseFloat(e.target.value) || 0 }))}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="block w-full rounded-md shadow-sm"
+              style={{ borderColor: colors.borderDefault }}
               placeholder={t('event:enter_quantity')}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>
               {t('event:unit_label')}
             </label>
             <input
@@ -106,19 +110,21 @@ const UnspecifiedCalendarMaterialModal: React.FC<UnspecifiedCalendarMaterialModa
               required
               value={materialData.unit}
               onChange={(e) => setMaterialData(prev => ({ ...prev, unit: e.target.value }))}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="block w-full rounded-md shadow-sm"
+              style={{ borderColor: colors.borderDefault }}
               placeholder={t('event:unit_placeholder')}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>
               {t('event:notes_label')}
             </label>
             <textarea
               value={materialData.notes}
               onChange={(e) => setMaterialData(prev => ({ ...prev, notes: e.target.value }))}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              className="block w-full rounded-md shadow-sm"
+              style={{ borderColor: colors.borderDefault }}
               placeholder={t('event:add_notes_material')}
               rows={3}
             />
@@ -128,13 +134,15 @@ const UnspecifiedCalendarMaterialModal: React.FC<UnspecifiedCalendarMaterialModa
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              className="px-4 py-2 border rounded-md hover:bg-gray-50"
+              style={{ borderColor: colors.borderDefault, color: colors.textSecondary }}
             >
               {t('common:cancel')}
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              className="px-4 py-2 rounded-md"
+              style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
             >
               {t('event:add_material')}
             </button>

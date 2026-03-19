@@ -652,11 +652,11 @@ const Projects = () => {
           <div className="flex flex-col h-[calc(100vh-16rem)]">
             <div className="space-y-4 flex-none">
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('project:select_project')}</label>
+                <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('project:select_project')}</label>
                 <select
                   value={selectedProject}
                   onChange={(e) => setSelectedProject(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  style={{ marginTop: spacing.sm, display: 'block', width: '100%', borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}`, padding: spacing.sm, background: colors.bgCard, fontFamily: fonts.body, fontSize: fontSizes.base }}
                 >
                   <option value="">{t('project:please_select_project')}</option>
                   {projects.map((proj) => (
@@ -664,27 +664,35 @@ const Projects = () => {
                   ))}
                 </select>
                 {!selectedProject && (
-                  <p className="mt-2 text-sm text-red-600">{t('project:please_select_project_continue')}</p>
+                  <p style={{ marginTop: spacing.sm, fontSize: fontSizes.sm, color: colors.red }}>{t('project:please_select_project_continue')}</p>
                 )}
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => setIsMainTaskMode(false)}
-                  className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                    !isMainTaskMode 
-                      ? 'bg-blue-600 text-white hover:border-2 hover:border-blue-400' 
-                      : 'bg-gray-100 text-gray-700 hover:border-2 hover:border-blue-400'
-                  }`}
+                  style={{
+                    flex: 1, padding: `${spacing.sm}px ${spacing.md}px`, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, borderRadius: radii.lg, transition: 'all 0.2s',
+                    background: !isMainTaskMode ? colors.accentBlue : colors.bgSubtle,
+                    color: !isMainTaskMode ? colors.textOnAccent : colors.textMuted,
+                    border: !isMainTaskMode ? '2px solid transparent' : '2px solid transparent',
+                    fontFamily: fonts.body,
+                  }}
+                  onMouseEnter={(e) => { const t = e.currentTarget; t.style.borderColor = colors.accentBlueBorder; }}
+                  onMouseLeave={(e) => { const t = e.currentTarget; t.style.borderColor = 'transparent'; }}
                 >
                   {t('project:minor_task')}
                 </button>
                 <button
                   onClick={() => setIsMainTaskMode(true)}
-                  className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
-                    isMainTaskMode 
-                      ? 'bg-blue-600 text-white hover:border-2 hover:border-blue-400' 
-                      : 'bg-gray-100 text-gray-700 hover:border-2 hover:border-blue-400'
-                  }`}
+                  style={{
+                    flex: 1, padding: `${spacing.sm}px ${spacing.md}px`, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, borderRadius: radii.lg, transition: 'all 0.2s',
+                    background: isMainTaskMode ? colors.accentBlue : colors.bgSubtle,
+                    color: isMainTaskMode ? colors.textOnAccent : colors.textMuted,
+                    border: '2px solid transparent',
+                    fontFamily: fonts.body,
+                  }}
+                  onMouseEnter={(e) => { const t = e.currentTarget; t.style.borderColor = colors.accentBlueBorder; }}
+                  onMouseLeave={(e) => { const t = e.currentTarget; t.style.borderColor = 'transparent'; }}
                 >
                   {t('project:main_task')}
                 </button>
@@ -695,16 +703,16 @@ const Projects = () => {
                 <div className="flex flex-col h-[calc(100vh-16rem)]">
                   <div className="space-y-2 flex-none">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">{t('project:search_tasks')}</label>
+                      <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('project:search_tasks')}</label>
                       <div className="relative mt-1">
                         <input
                           type="text"
                           value={taskSearch}
                           onChange={(e) => setTaskSearch(e.target.value)}
-                          className="block w-full rounded-md border-gray-300 pl-10 focus:border-blue-500 focus:ring-blue-500"
+                          style={{ display: 'block', width: '100%', borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}`, paddingLeft: spacing["3xl"], padding: spacing.sm, background: colors.bgCard, fontFamily: fonts.body, fontSize: fontSizes.base }}
                           placeholder={t('project:search_tasks_placeholder')}
                         />
-                        <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                        <Search style={{ position: 'absolute', left: spacing.lg, top: 10, width: 20, height: 20, color: colors.textSubtle }} />
                       </div>
                     </div>
                   </div>
@@ -716,18 +724,18 @@ const Projects = () => {
                           setSelectedTask(null);
                           setTaskName('');
                         }}
-                        className="w-full bg-gray-700 text-white p-2 rounded-lg cursor-pointer hover:bg-gray-600"
+                        style={{ width: '100%', background: colors.bgElevated, color: colors.textPrimary, padding: spacing.sm, borderRadius: radii.lg, cursor: 'pointer' }}
                       >
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="font-medium">{translateTaskName(selectedTask.name, t)}</div>
-                            <div className="text-sm text-gray-300">{selectedTask.description}</div>
-                            <div className="text-sm mt-1">
-                              <span className="text-gray-300">{t('project:unit_label')}: {selectedTask.unit}</span>
-                              <span className="ml-3 text-gray-300">{t('project:est_hours')}: {(selectedTask.estimated_hours || 0).toFixed(2)} {t('project:per_unit')}</span>
+                            <div style={{ fontSize: fontSizes.sm, color: colors.textMuted }}>{selectedTask.description}</div>
+                            <div style={{ fontSize: fontSizes.sm, marginTop: spacing.xs }}>
+                              <span style={{ color: colors.textMuted }}>{t('project:unit_label')}: {selectedTask.unit}</span>
+                              <span className="ml-3" style={{ color: colors.textMuted }}>{t('project:est_hours')}: {(selectedTask.estimated_hours || 0).toFixed(2)} {t('project:per_unit')}</span>
                             </div>
                           </div>
-                          <div className="text-sm text-blue-300 ml-2">{t('project:click_to_change')}</div>
+                          <div style={{ fontSize: fontSizes.sm, color: colors.accentBlue, marginLeft: spacing.sm }}>{t('project:click_to_change')}</div>
                         </div>
                       </div>
                     ) : (
@@ -739,14 +747,16 @@ const Projects = () => {
                               setSelectedTask(task as unknown as EventTask);
                               setTaskName(task.name || '');
                             }}
-                            className="p-2 hover:bg-gray-50 rounded-lg cursor-pointer border border-gray-200 hover:border-blue-200 transition-all"
+                            style={{ padding: spacing.sm, borderRadius: radii.lg, cursor: 'pointer', border: `1px solid ${colors.borderDefault}`, transition: 'all 0.2s' }}
+                            onMouseEnter={(e) => { const el = e.currentTarget; el.style.background = colors.bgHover; el.style.borderColor = colors.accentBlueBorder; }}
+                            onMouseLeave={(e) => { const el = e.currentTarget; el.style.background = 'transparent'; el.style.borderColor = colors.borderDefault; }}
                           >
                             <div>
-                              <h3 className="text-sm font-medium text-gray-900">{translateTaskName(task.name, t)}</h3>
-                              <p className="text-xs mt-0.5 text-gray-600">{translateTaskDescription(task.description, t)}</p>
+                              <h3 style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textPrimary }}>{translateTaskName(task.name, t)}</h3>
+                              <p style={{ fontSize: fontSizes.xs, marginTop: 2, color: colors.textSubtle }}>{translateTaskDescription(task.description, t)}</p>
                               <div className="flex items-center mt-1 space-x-3">
-                                <span className="text-xs text-gray-500">{t('project:unit_label')}: {translateUnit(task.unit, t)}</span>
-                                <span className="text-xs text-gray-500">{t('project:est_hours')}: {task.estimated_hours !== null ? parseFloat((task.estimated_hours || 0).toFixed(2)) : 0} {t('project:per_unit')}</span>
+                                <span style={{ fontSize: fontSizes.xs, color: colors.textSubtle }}>{t('project:unit_label')}: {translateUnit(task.unit, t)}</span>
+                                <span style={{ fontSize: fontSizes.xs, color: colors.textSubtle }}>{t('project:est_hours')}: {task.estimated_hours !== null ? parseFloat((task.estimated_hours || 0).toFixed(2)) : 0} {t('project:per_unit')}</span>
                               </div>
                             </div>
                           </div>
@@ -755,27 +765,27 @@ const Projects = () => {
                     )}
                   </div>
                   {selectedTask && (
-                    <div className="mt-2 pt-2 border-t space-y-2 flex-none">
+                    <div className="mt-2 pt-2 border-t space-y-2 flex-none" style={{ borderTop: `1px solid ${colors.borderDefault}` }}>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">{t('project:task_name_label')}</label>
+                        <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('project:task_name_label')}</label>
                         <div className="mt-1 flex items-center space-x-2">
-                          <CheckSquare className="w-5 h-5 text-blue-500 flex-none" />
+                          <CheckSquare style={{ width: 20, height: 20, color: colors.accentBlue, flexShrink: 0 }} />
                           <input
                             type="text"
                             value={taskName}
                             onChange={(e) => setTaskName(e.target.value)}
                             placeholder={translateTaskName(selectedTask.name, t)}
-                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            style={{ display: 'block', width: '100%', borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}`, padding: spacing.sm, background: colors.bgCard, fontFamily: fonts.body, fontSize: fontSizes.base }}
                           />
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">{t('project:quantity_label')} ({selectedTask.unit})</label>
+                        <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('project:quantity_label')} ({selectedTask.unit})</label>
                         <input
                           type="number"
                           value={quantity}
                           onChange={(e) => setQuantity(e.target.value)}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          style={{ marginTop: spacing.sm, display: 'block', width: '100%', borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}`, padding: spacing.sm, background: colors.bgCard, fontFamily: fonts.body, fontSize: fontSizes.base }}
                           placeholder={`${t('project:enter_quantity_in')} ${translateUnit(selectedTask.unit, t)}`}
                         />
                       </div>
@@ -791,11 +801,11 @@ const Projects = () => {
                 {/* Main Task Selection UI (inline, not a separate modal) */}
                 <div className="space-y-4 flex-none">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">{t('project:select_main_task_type')}</label>
+                    <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('project:select_main_task_type')}</label>
                     <div className="space-y-4 mt-2">
                       {calculatorGroups.filter(group => group.type !== 'aggregate').map((group) => (
                         <div key={group.type} className="space-y-2">
-                          <h4 className="font-medium text-gray-800">{group.label}</h4>
+                          <h4 style={{ fontWeight: fontWeights.medium, color: colors.textPrimary }}>{group.label}</h4>
                           <div className="pl-4 space-y-2">
                             {group.subTypes.map((subType) => (
                               <button
@@ -804,7 +814,14 @@ const Projects = () => {
                                   setSelectedCalculator(group.type);
                                   setSelectedSubCalculator(subType.type);
                                 }}
-                                className={`w-full text-left p-2 rounded-md ${selectedCalculator === group.type && selectedSubCalculator === subType.type ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'}`}
+                                style={{
+                                  width: '100%', textAlign: 'left', padding: spacing.sm, borderRadius: radii.lg,
+                                  background: selectedCalculator === group.type && selectedSubCalculator === subType.type ? colors.accentBlue : 'transparent',
+                                  color: selectedCalculator === group.type && selectedSubCalculator === subType.type ? colors.textOnAccent : colors.textSubtle,
+                                  fontFamily: fonts.body, fontSize: fontSizes.base,
+                                }}
+                                onMouseEnter={(e) => { if (!(selectedCalculator === group.type && selectedSubCalculator === subType.type)) e.currentTarget.style.background = colors.bgHover; }}
+                                onMouseLeave={(e) => { if (!(selectedCalculator === group.type && selectedSubCalculator === subType.type)) e.currentTarget.style.background = 'transparent'; }}
                               >
                                 {subType.label}
                               </button>
@@ -875,11 +892,11 @@ const Projects = () => {
       <Modal open={showMaterialModal} onClose={() => setShowMaterialModal(false)} title={t('project:add_materials_modal')} width={560}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('project:select_project')}</label>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('project:select_project')}</label>
               <select
                 value={selectedProject}
                 onChange={(e) => setSelectedProject(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                style={{ marginTop: spacing.sm, display: 'block', width: '100%', borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}`, padding: spacing.sm, background: colors.bgCard, fontFamily: fonts.body, fontSize: fontSizes.base }}
               >
                 <option value="">{t('project:please_select_project')}</option>
                 {projects.map((proj) => (
@@ -887,20 +904,20 @@ const Projects = () => {
                 ))}
               </select>
               {!selectedProject && (
-                <p className="mt-2 text-sm text-red-600">{t('project:please_select_project_continue')}</p>
+                <p style={{ marginTop: spacing.sm, fontSize: fontSizes.sm, color: colors.red }}>{t('project:please_select_project_continue')}</p>
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('project:search_materials')}</label>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('project:search_materials')}</label>
               <div className="relative mt-1">
                 <input
                   type="text"
                   value={materialSearch}
                   onChange={(e) => setMaterialSearch(e.target.value)}
-                  className="block w-full rounded-md border-gray-300 pl-10 focus:border-blue-500 focus:ring-blue-500"
+                  style={{ display: 'block', width: '100%', borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}`, paddingLeft: spacing["3xl"], padding: spacing.sm, background: colors.bgCard, fontFamily: fonts.body, fontSize: fontSizes.base }}
                   placeholder={t('project:search_materials_placeholder')}
                 />
-                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                <Search style={{ position: 'absolute', left: spacing.lg, top: 10, width: 20, height: 20, color: colors.textSubtle }} />
               </div>
             </div>
             <div className="mt-4 max-h-60 overflow-y-auto">
@@ -910,10 +927,12 @@ const Projects = () => {
                   setShowMaterialModal(false);
                   setShowUnspecifiedMaterialModal(true);
                 }}
-                className="p-3 hover:bg-gray-50 rounded-lg cursor-pointer mb-2 border-2 border-dashed border-gray-300"
+                style={{ padding: spacing.lg, borderRadius: radii.lg, cursor: 'pointer', marginBottom: spacing.sm, border: `2px dashed ${colors.borderDefault}` }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = colors.bgHover; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
-                <h3 className="font-medium">{t('project:other_custom_material')}</h3>
-                <p className="text-sm text-gray-600">{t('project:add_custom_material_desc')}</p>
+                <h3 style={{ fontWeight: fontWeights.medium, color: colors.textPrimary }}>{t('project:other_custom_material')}</h3>
+                <p style={{ fontSize: fontSizes.sm, color: colors.textSubtle }}>{t('project:add_custom_material_desc')}</p>
               </div>
               
               {/* Existing materials list */}
@@ -921,26 +940,29 @@ const Projects = () => {
                 <div
                   key={material.id}
                   onClick={() => setSelectedMaterial(material)}
-                  className={`p-3 hover:bg-gray-50 rounded-lg cursor-pointer ${
-                    selectedMaterial?.id === material.id ? 'border-4 border-blue-500' : ''
-                  }`}
+                  style={{
+                    padding: spacing.lg, borderRadius: radii.lg, cursor: 'pointer',
+                    border: selectedMaterial?.id === material.id ? `4px solid ${colors.accentBlue}` : `1px solid ${colors.borderDefault}`,
+                  }}
+                  onMouseEnter={(e) => { if (selectedMaterial?.id !== material.id) e.currentTarget.style.background = colors.bgHover; }}
+                  onMouseLeave={(e) => { if (selectedMaterial?.id !== material.id) e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <h3 className="font-medium">{translateMaterialName(material.name, t)}</h3>
-                  <p className="text-sm text-gray-600">{translateMaterialDescription(material.name, material.description, t)}</p>
-                  <p className="text-xs text-gray-500">{t('project:unit_label')}: {translateUnit(material.unit, t)}</p>
+                  <h3 style={{ fontWeight: fontWeights.medium, color: colors.textPrimary }}>{translateMaterialName(material.name, t)}</h3>
+                  <p style={{ fontSize: fontSizes.sm, color: colors.textSubtle }}>{translateMaterialDescription(material.name, material.description, t)}</p>
+                  <p style={{ fontSize: fontSizes.xs, color: colors.textSubtle }}>{t('project:unit_label')}: {translateUnit(material.unit, t)}</p>
                 </div>
               ))}
             </div>
             {selectedMaterial && (
               <div>
-                <label className="block text-sm font-medium text-gray-700">
+                <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>
                   {t('project:quantity_label')} ({selectedMaterial.unit})
                 </label>
                 <input
                   type="number"
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  style={{ marginTop: spacing.sm, display: 'block', width: '100%', borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}`, padding: spacing.sm, background: colors.bgCard, fontFamily: fonts.body, fontSize: fontSizes.base }}
                   placeholder={`${t('project:enter_quantity_in')} ${translateUnit(selectedMaterial.unit, t)}`}
                 />
               </div>
@@ -968,21 +990,23 @@ const Projects = () => {
       {/* Delete Project Modal */}
       <Modal open={showDeleteModal} onClose={() => setShowDeleteModal(false)} title={t('project:delete_project_modal')} width={560}>
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">{t('project:select_project_delete')}:</p>
+            <p style={{ fontSize: fontSizes.sm, color: colors.textSubtle }}>{t('project:select_project_delete')}:</p>
             <div className="max-h-96 overflow-y-auto space-y-2">
               {projects.map((project) => (
                 <div
                   key={project.id}
                   onClick={() => handleDeleteClick(project)}
-                  className="p-4 border border-gray-600 rounded-lg hover:border-red-500 hover:bg-red-900/20 cursor-pointer transition-all"
+                  style={{ padding: spacing.md, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, cursor: 'pointer', transition: 'all 0.2s' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = colors.red; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = colors.borderDefault; e.currentTarget.style.background = 'transparent'; }}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">{project.title}</h3>
-                      <p className="text-sm text-gray-600 mt-1">{project.description}</p>
+                      <h3 style={{ fontWeight: fontWeights.semibold, color: colors.textPrimary }}>{project.title}</h3>
+                      <p style={{ fontSize: fontSizes.sm, color: colors.textSubtle, marginTop: spacing.sm }}>{project.description}</p>
                       <div className="flex items-center gap-4 mt-2">
-                        <div className="flex items-center text-sm text-gray-500">
-                          <Calendar className="w-4 h-4 mr-1" />
+                        <div style={{ display: 'flex', alignItems: 'center', fontSize: fontSizes.sm, color: colors.textSubtle }}>
+                          <Calendar style={{ width: 16, height: 16, marginRight: spacing.xs }} />
                           {project.start_date ? format(parseISO(project.start_date), 'MMM dd, yyyy', { locale: dateLocale }) : t('project:no_date')}
                         </div>
                         <Badge color={getStatusBadgeColor(project.status)}>
@@ -990,12 +1014,12 @@ const Projects = () => {
                         </Badge>
                       </div>
                       {project.tasks && project.tasks.length > 0 && (
-                        <p className="text-xs text-gray-500 mt-2">
+                        <p style={{ fontSize: fontSizes.xs, color: colors.textSubtle, marginTop: spacing.sm }}>
                           {project.tasks.length} {t('project:tasks_hours')} · {project.tasks.reduce((sum, t) => sum + (t.hours_worked || 0), 0).toFixed(2)} {t('project:hours_label')}
                         </p>
                       )}
                     </div>
-                    <Trash2 className="w-5 h-5 text-red-500 ml-2" />
+                    <Trash2 style={{ width: 20, height: 20, color: colors.red, marginLeft: spacing.sm }} />
                   </div>
                 </div>
               ))}

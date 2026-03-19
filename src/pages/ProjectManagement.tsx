@@ -77,73 +77,82 @@ const ProjectManagement = () => {
         />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: spacing["6xl"] }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: spacing["6xl"], alignItems: 'stretch' }}>
         {/* Project Creation */}
-        <Card>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
-            <FolderPlus style={{ width: 24, height: 24, color: colors.accentBlue, marginRight: spacing.base }} />
-            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:create_project_heading')}</h2>
+        <Card style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+              <FolderPlus style={{ width: 24, height: 24, color: colors.accentBlue, marginRight: spacing.base }} />
+              <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:create_project_heading')}</h2>
+            </div>
+            <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"], flex: 1 }}>
+              {t('project:create_project_description')}
+            </p>
           </div>
-          <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"] }}>
-            {t('project:create_project_description')}
-          </p>
           <Button onClick={handleCreateProject} style={{ width: '100%' }}>
             {t('project:create_project_button')}
           </Button>
         </Card>
 
         {/* Plans and Garden Canvases */}
-        <Card>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
-            <FileImage style={{ width: 24, height: 24, color: colors.green, marginRight: spacing.base }} />
-            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:plans_canvases_heading')}</h2>
+        <Card style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+              <FileImage style={{ width: 24, height: 24, color: colors.green, marginRight: spacing.base }} />
+              <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:plans_canvases_heading')}</h2>
+            </div>
+            <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"], flex: 1 }}>
+              {t('project:plans_canvases_description')}
+            </p>
           </div>
-          <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"] }}>
-            {t('project:plans_canvases_description')}
-          </p>
           <Button variant="accent" color={colors.green} onClick={handlePlansList} style={{ width: '100%' }}>
             {t('project:plans_canvases_button')}
           </Button>
         </Card>
 
         {/* Weekly Worker Hours */}
-        <Card>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
-            <Clock style={{ width: 24, height: 24, color: colors.accentBlue, marginRight: spacing.base }} />
-            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:weekly_worker_hours_heading')}</h2>
+        <Card style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+              <Clock style={{ width: 24, height: 24, color: colors.accentBlue, marginRight: spacing.base }} />
+              <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:weekly_worker_hours_heading')}</h2>
+            </div>
+            <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"], flex: 1 }}>
+              {t('project:weekly_worker_hours_description')}
+            </p>
           </div>
-          <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"] }}>
-            {t('project:weekly_worker_hours_description')}
-          </p>
           <Button onClick={handleWorkerHours} style={{ width: '100%' }}>
             {t('project:check_hours_button')}
           </Button>
         </Card>
 
         {/* Project Performance */}
-        <Card>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
-            <BarChart2 style={{ width: 24, height: 24, color: colors.green, marginRight: spacing.base }} />
-            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:project_performance_heading')}</h2>
+        <Card style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+              <BarChart2 style={{ width: 24, height: 24, color: colors.green, marginRight: spacing.base }} />
+              <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:project_performance_heading')}</h2>
+            </div>
+            <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"], flex: 1 }}>
+              {t('project:project_performance_description')}
+            </p>
           </div>
-          <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"] }}>
-            {t('project:project_performance_description')}
-          </p>
           <Button variant="accent" color={colors.green} onClick={handleProjectPerformance} style={{ width: '100%' }}>
             {t('project:view_performance_button')}
           </Button>
         </Card>
 
-
         {/* Removing Records */}
-        <Card>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
-            <Trash2 style={{ width: 24, height: 24, color: colors.red, marginRight: spacing.base }} />
-            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:removing_records_heading')}</h2>
+        <Card style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing["5xl"] }}>
+              <Trash2 style={{ width: 24, height: 24, color: colors.red, marginRight: spacing.base }} />
+              <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('project:removing_records_heading')}</h2>
+            </div>
+            <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"], flex: 1 }}>
+              {t('project:removing_records_description')}
+            </p>
           </div>
-          <p style={{ color: colors.textDim, fontFamily: fonts.body, marginBottom: spacing["5xl"] }}>
-            {t('project:removing_records_description')}
-          </p>
           <Button variant="accent" color={colors.red} onClick={handleRemovingRecords} style={{ width: '100%' }}>
             {t('project:manage_requests_button')}
           </Button>

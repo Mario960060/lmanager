@@ -1,22 +1,32 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  Point, Shape, LayerID, ArcPoint, DragInfo, ShapeDragInfo, RotateInfo, ScaleCornerInfo, ScaleEdgeInfo,
+  Point, Shape, CollinearSnapHit, LayerID, ArcPoint, DragInfo, ShapeDragInfo, RotateInfo, ScaleCornerInfo, ScaleEdgeInfo,
   HitResult, EdgeHitResult, OpenEndHit,
   SelectionRect, DimEdit, ContextMenuInfo, LinkedEntry, isArcEntry,
   PIXELS_PER_METER, GRID_SPACING, POINT_RADIUS, EDGE_HIT_THRESHOLD, GRASS_EDGE_HIT_PX,
   SNAP_TO_START_RADIUS, SNAP_TO_LAST_RADIUS, MIN_ZOOM, MAX_ZOOM, SNAP_MAGNET_PX, PATTERN_SNAP_PX,
   distance, toMeters, toPixels, formatLength, midpoint, angleDeg, areaM2, polylineLengthMeters, rotatePointAround,
-  projectOntoSegment, edgeNormalAngle, readableTextAngle, snapTo45, snapTo45Soft, snapAngleTo45, snapShiftSmart, interiorAngleDir, centroid, labelAnchorInsidePolygon,
+  projectOntoSegment, bestCollinearVertexSnap, edgeNormalAngle, readableTextAngle, snapTo45, snapTo45Soft, snapShiftSmart, interiorAngleDir, centroid, labelAnchorInsidePolygon,
+  snapPatternDirectionToBoundaryAngles,
   constrainLockedEdges,
   snapMagnet, snapMagnetShape, pointInPolygon, pointInOrNearPolygon,
   makeSquare, makeRectangle, makeTriangle, makeTrapezoid, C, C_LIGHT,
+  edgeOutwardRadForL1Edge,
+  outwardUnitNormalForPolygonEdge,
 } from "./geometry";
+import {
+  drawExteriorAlignedDimension,
+  exteriorDimLabelScreenMid,
+  boundaryDimL1ExteriorOffsetScreenPx,
+  GARDEN_EXTERIOR_DIM_LINE_COLOR,
+  GARDEN_EXTERIOR_DIM_TEXT_COLOR,
+} from "./boundaryDimensionDraw";
 import { calcEdgeSlopes, calcShapeGradient, formatSlope, slopeColor, interpolateHeightAtPoint, fillShapeHeightHeatmap, computeGlobalHeightRange } from "./geodesy";
-import { isLinearElement, isGroundworkLinear, isPathElement, isPolygonLinearElement, groundworkLabel, drawLinearElement, drawLinearElementInactive, hitTestLinearElement, hitTestPathElement, computeThickPolyline, getPathPolygon, getLinearElementPath, getPolygonThicknessM, polygonToSegmentLengths, polygonToCenterline, polygonEdgeToSegmentIndex, removeSegmentFromPolygonOutline, computePathPolygonOneSide, computePathOutlineFromSegmentSides, pointSideOfLine } from "./linearElements";
+import { isLinearElement, isGroundworkLinear, isPathElement, isPolygonLinearElement, groundworkLabel, drawLinearElement, drawLinearElementInactive, hitTestLinearElement, hitTestPathElement, computeThickPolyline, computeThickPolylineClosed, getPathPolygon, getLinearElementPath, getPolygonThicknessM, polygonToSegmentLengths, polygonToCenterline, polygonEdgeToSegmentIndex, removeSegmentFromPolygonOutline, computePathPolygonOneSide, computePathOutlineFromSegmentSides, pointSideOfLine } from "./linearElements";
 import { drawShapeObjectLabel, drawExcavationLayers, getPathLabel } from "./canvasRenderers";
 import { drawDeckPattern } from "./visualization/deckBoards";
-import { drawSlabPattern, drawPathSlabPattern, drawPathSlabLabel, drawSlabFrame, computePatternSnap, computeSlabCuts, computePathSlabCuts } from "./visualization/slabPattern";
+import { drawSlabPattern, drawPathSlabPattern, drawPathSlabLabel, drawSlabFrame, computePatternSnap, getPolygonForPatternSnapOutline, computeSlabCuts, computePathSlabCuts } from "./visualization/slabPattern";
 import { drawCobblestonePattern, drawMonoblockFrame, computeCobblestoneCuts } from "./visualization/cobblestonePattern";
 import { drawFencePostMarkers, drawWallSlopeIndicators } from "./visualization/linearMarkers";
 import { drawGeodesyLabels, getGeodesyCardsInfo, hitTestGeodesyCard, findCardForPoint, type GeodesyCardInfo, GEODESY_CARD_PAD, GEODESY_CARD_ROW_H } from "./visualization/geodesyLabels";
@@ -27,14 +37,13 @@ import ObjectCardModal from "./objectCard/ObjectCardModal";
 import StairsCreationModal from "./objectCard/StairsCreationModal";
 import PathCreationModal, { type PathConfig } from "./objectCard/PathCreationModal";
 import ResultsModal from "./objectCard/ResultsModal";
-import WallSegmentHeightModal from "./WallSegmentHeightModal";
 import ProjectSummaryPanel from "./ProjectSummaryPanel";
 import ProjectCardModal from "./ProjectCardModal";
 import { computePreparation } from "./preparationLogic";
 import { computeEmptyAreas, computeOverflowAreas, computeOverlaps, clipShapeToGarden, removeOverlapFromShape, findTouchingElementsForEmptyArea, extendShapeToCoverEmptyArea, extendShapeToGardenEdge, clipSurfaceToOutsideLinear, findSurfacesOverlappingLinear, fitUnionResultToShape } from "./adjustmentLogic";
 import { computeGroundworkLinearResults, isManualExcavation, getFoundationDiggingMethodFromExcavator } from "./GroundworkLinearCalculator";
 import { drawAlternatingLinkedHalf } from "./linkedEdgeDrawing";
-import { drawCurvedEdge, calcEdgeLengthWithArcs, getEffectivePolygon, getEffectivePolygonWithEdgeIndices, drawSmoothPolygonPath, drawSmoothPolygonStroke, projectOntoArcEdge, drawArcHandles, hitTestArcPoint, snapArcPoint, buildArcPointPositionCache, arcPointToWorldOnCurve, worldToArcPoint, worldToArcPointOnCurve, type ArcPointCacheEntry } from "./arcMath";
+import { drawCurvedEdge, calcEdgeLengthWithArcs, getEffectivePolygon, getEffectivePolygonWithEdgeIndices, drawSmoothPolygonPath, drawSmoothPolygonStroke, projectOntoArcEdge, drawArcHandles, hitTestArcPoint, snapArcPoint, buildArcPointPositionCache, arcPointToWorldOnCurve, worldToArcPoint, worldToArcPointOnCurve, collectShapeBoundaryDirectionAnglesDeg, type ArcPointCacheEntry } from "./arcMath";
 import CreatePreviewModal from "./CreatePreviewModal";
 import PlanPdfExportModal from "./PlanPdfExportModal";
 import { submitProject } from "./projectSubmit";
@@ -73,7 +82,337 @@ function passesViewFilter(shape: Shape, viewFilter: ViewFilter, activeLayer: Act
   return false;
 }
 
+const LINE_VERTEX_DRAW_SNAP_PX = 8;
+const LINE_EDGE_DRAW_SNAP_PX = 12;
+
+function drawSnapHalfOffsetM(drawingShape: Shape): number {
+  if (isPolygonLinearElement(drawingShape)) return getPolygonThicknessM(drawingShape) / 2;
+  if (isPathElement(drawingShape)) return (Number(drawingShape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6) / 2;
+  return (drawingShape.thickness ?? 0.10) / 2;
+}
+
+/** Snap X/Y to vertices of current chain + layer 1 & 2; for polygon/path strip, snap to edges of closed refs with half-width offset outside. */
+function snapWorldPointForLinearDrawing(
+  ep: Point,
+  args: {
+    drawingShapeIdx: number;
+    shapes: Shape[];
+    localPtChain: Point[];
+    drawingShape: Shape;
+    zoom: number;
+    viewFilter: ViewFilter;
+    activeLayer: ActiveLayer;
+  },
+): Point {
+  const { drawingShapeIdx, shapes, localPtChain, drawingShape, zoom, viewFilter, activeLayer } = args;
+  const vTh = LINE_VERTEX_DRAW_SNAP_PX / zoom;
+  let bestDx = vTh, bestDy = vTh;
+  let sx: number | null = null, sy: number | null = null;
+  for (let i = 0; i < localPtChain.length; i++) {
+    const p = localPtChain[i];
+    const dx = Math.abs(ep.x - p.x);
+    const dy = Math.abs(ep.y - p.y);
+    if (dx < bestDx) { bestDx = dx; sx = p.x; }
+    if (dy < bestDy) { bestDy = dy; sy = p.y; }
+  }
+  for (let si = 0; si < shapes.length; si++) {
+    if (si === drawingShapeIdx) continue;
+    const sh = shapes[si];
+    if (sh.layer !== 1 && sh.layer !== 2) continue;
+    if (!passesViewFilter(sh, viewFilter, activeLayer)) continue;
+    for (const p of sh.points) {
+      const dx = Math.abs(ep.x - p.x);
+      const dy = Math.abs(ep.y - p.y);
+      if (dx < bestDx) { bestDx = dx; sx = p.x; }
+      if (dy < bestDy) { bestDy = dy; sy = p.y; }
+    }
+  }
+  const out = { x: sx ?? ep.x, y: sy ?? ep.y };
+
+  const useEdgeOutside =
+    isPolygonLinearElement(drawingShape) || isPathElement(drawingShape) || drawingShape.elementType === "fence";
+  if (!useEdgeOutside) return out;
+
+  const halfW = drawSnapHalfOffsetM(drawingShape);
+  const eTh = LINE_EDGE_DRAW_SNAP_PX / zoom;
+  let bestD = eTh;
+  let bestQ: Point | null = null;
+
+  const considerClosedPoly = (poly: Point[]) => {
+    const n = poly.length;
+    if (n < 3) return;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const pr = projectOntoSegment(out, poly[i], poly[j]);
+      if (pr.dist >= bestD) continue;
+      if (pr.t < 0 || pr.t > 1) continue;
+      const nrm = outwardUnitNormalForPolygonEdge(poly[i], poly[j], poly);
+      bestD = pr.dist;
+      bestQ = { x: pr.proj.x + nrm.x * halfW, y: pr.proj.y + nrm.y * halfW };
+    }
+  };
+
+  const considerOpenCenterline = (pts: Point[]) => {
+    const n = pts.length;
+    if (n < 2) return;
+    for (let i = 0; i < n - 1; i++) {
+      const pr = projectOntoSegment(out, pts[i], pts[i + 1]);
+      if (pr.dist >= bestD) continue;
+      if (pr.t < 0 || pr.t > 1) continue;
+      bestD = pr.dist;
+      bestQ = { ...pr.proj };
+    }
+  };
+
+  for (let si = 0; si < shapes.length; si++) {
+    if (si === drawingShapeIdx) continue;
+    const sh = shapes[si];
+    if (sh.layer !== 1 && sh.layer !== 2) continue;
+    if (!passesViewFilter(sh, viewFilter, activeLayer)) continue;
+
+    if (sh.closed && sh.points.length >= 3) {
+      if (isPolygonLinearElement(sh)) considerClosedPoly(sh.points);
+      else if (isPathElement(sh)) considerClosedPoly(getPathPolygon(sh));
+      else if (sh.elementType === "polygon") considerClosedPoly(sh.points);
+    }
+    if (isLinearElement(sh) && !isPolygonLinearElement(sh) && sh.points.length >= 2) {
+      considerOpenCenterline(getLinearElementPath(sh));
+    }
+  }
+
+  return bestQ ?? out;
+}
+
+/** Layer 3: hit-test screen coords on the pattern rotation handle (same 14px box as LMB). Topmost shape wins. */
+function hitTestPatternRotationHandle(
+  shapes: Shape[],
+  screenX: number,
+  screenY: number,
+  worldToScreen: (wx: number, wy: number) => Point,
+  viewFilter: ViewFilter,
+  activeLayer: ActiveLayer,
+): { shapeIdx: number; patternType: "slab" | "cobblestone" | "grass" } | null {
+  if (activeLayer !== 3) return null;
+  for (let si = shapes.length - 1; si >= 0; si--) {
+    const shape = shapes[si];
+    if (shape.layer !== 2 || !shape.closed || shape.points.length < 3) continue;
+    if (!passesViewFilter(shape, viewFilter, activeLayer)) continue;
+    const pts = shape.points;
+    let minY = Infinity;
+    for (const p of pts) {
+      const sp = worldToScreen(p.x, p.y);
+      if (sp.y < minY) minY = sp.y;
+    }
+    const ctr = centroid(pts);
+    const sc = worldToScreen(ctr.x, ctr.y);
+    const handleY = minY - 35;
+    if (Math.abs(screenX - sc.x) >= 14 || Math.abs(screenY - handleY) >= 14) continue;
+    if (shape.calculatorType === "grass" && (shape.calculatorInputs?.vizPieces?.length ?? 0) > 0) {
+      return { shapeIdx: si, patternType: "grass" };
+    }
+    const pavingOk = shape.calculatorType === "paving" && shape.calculatorInputs?.blockLengthCm && shape.calculatorInputs?.blockWidthCm;
+    const slabOk =
+      (shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth;
+    if (pavingOk || slabOk) {
+      return { shapeIdx: si, patternType: shape.calculatorType === "paving" ? "cobblestone" : "slab" };
+    }
+  }
+  return null;
+}
+
+/** Edge-length edit dialog: size estimate (fixed layout) + clearance from the edited segment in screen space. */
+const DIM_EDIT_DIALOG_W = 300;
+const DIM_EDIT_DIALOG_H = 330;
+const OFFSET_ALONG_LINE_DIALOG_W = 300;
+/** Min. height for clamping; real content can be taller — modal uses maxHeight + scroll if needed */
+const OFFSET_ALONG_LINE_DIALOG_H = 268;
+const DIM_EDIT_VERTEX_MARGIN = 42;
+const DIM_EDIT_LINE_PAD = 16;
+
+function pointInClosedRect(px: number, py: number, L: number, T: number, R: number, B: number): boolean {
+  return px >= L && px <= R && py >= T && py <= B;
+}
+
+function distPointToRect(px: number, py: number, L: number, T: number, R: number, B: number): number {
+  const dx = px < L ? L - px : px > R ? px - R : 0;
+  const dy = py < T ? T - py : py > B ? py - B : 0;
+  return Math.hypot(dx, dy);
+}
+
+function orient2(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
+  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+}
+
+function onSeg(ax: number, ay: number, bx: number, by: number, px: number, py: number, eps: number): boolean {
+  return (
+    px >= Math.min(ax, bx) - eps &&
+    px <= Math.max(ax, bx) + eps &&
+    py >= Math.min(ay, by) - eps &&
+    py <= Math.max(ay, by) + eps
+  );
+}
+
+function segmentsIntersect(
+  ax: number, ay: number, bx: number, by: number,
+  cx: number, cy: number, dx: number, dy: number,
+): boolean {
+  const eps = 1e-9;
+  const o1 = orient2(ax, ay, bx, by, cx, cy);
+  const o2 = orient2(ax, ay, bx, by, dx, dy);
+  const o3 = orient2(cx, cy, dx, dy, ax, ay);
+  const o4 = orient2(cx, cy, dx, dy, bx, by);
+  if (Math.abs(o1) < eps && onSeg(ax, ay, bx, by, cx, cy, eps)) return true;
+  if (Math.abs(o2) < eps && onSeg(ax, ay, bx, by, dx, dy, eps)) return true;
+  if (Math.abs(o3) < eps && onSeg(cx, cy, dx, dy, ax, ay, eps)) return true;
+  if (Math.abs(o4) < eps && onSeg(cx, cy, dx, dy, bx, by, eps)) return true;
+  return o1 * o2 < -eps && o3 * o4 < -eps;
+}
+
+function segmentIntersectsRect(ax: number, ay: number, bx: number, by: number, L: number, T: number, R: number, B: number): boolean {
+  if (pointInClosedRect(ax, ay, L, T, R, B) || pointInClosedRect(bx, by, L, T, R, B)) return true;
+  const edges: [number, number, number, number][] = [
+    [L, T, R, T],
+    [R, T, R, B],
+    [R, B, L, B],
+    [L, B, L, T],
+  ];
+  for (const [sx, sy, ex, ey] of edges) {
+    if (segmentsIntersect(ax, ay, bx, by, sx, sy, ex, ey)) return true;
+  }
+  return false;
+}
+
+function dimEditDialogObscuresEdge(
+  left: number, top: number, w: number, h: number,
+  ax: number, ay: number, bx: number, by: number,
+): boolean {
+  const L = left - DIM_EDIT_LINE_PAD;
+  const T = top - DIM_EDIT_LINE_PAD;
+  const R = left + w + DIM_EDIT_LINE_PAD;
+  const B = top + h + DIM_EDIT_LINE_PAD;
+  if (segmentIntersectsRect(ax, ay, bx, by, L, T, R, B)) return true;
+  if (distPointToRect(ax, ay, left, top, left + w, top + h) < DIM_EDIT_VERTEX_MARGIN) return true;
+  if (distPointToRect(bx, by, left, top, left + w, top + h) < DIM_EDIT_VERTEX_MARGIN) return true;
+  return false;
+}
+
+function perpDistToLine(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const lab = Math.hypot(abx, aby);
+  if (lab < 1e-9) return Math.hypot(px - ax, py - ay);
+  return Math.abs((px - ax) * aby - (py - ay) * abx) / lab;
+}
+
+/** Places the dialog in viewport coords beside the edge (perpendicular offset), avoiding the segment and endpoints. */
+function computeDimEditDialogPosition(
+  canvasRect: DOMRect,
+  sAcanvas: Point,
+  sBcanvas: Point,
+  fallbackClientX: number,
+  fallbackClientY: number,
+): { left: number; top: number } {
+  const ax = canvasRect.left + sAcanvas.x;
+  const ay = canvasRect.top + sAcanvas.y;
+  const bx = canvasRect.left + sBcanvas.x;
+  const by = canvasRect.top + sBcanvas.y;
+  const mx = (ax + bx) / 2;
+  const my = (ay + by) / 2;
+  let edx = bx - ax;
+  let edy = by - ay;
+  const elen = Math.hypot(edx, edy);
+  if (elen < 1e-6) {
+    edx = 1;
+    edy = 0;
+  } else {
+    edx /= elen;
+    edy /= elen;
+  }
+  const nx = -edy;
+  const ny = edx;
+  const { left: rL, top: rT, right: rR, bottom: rB } = canvasRect;
+  const margin = 12;
+  const w = DIM_EDIT_DIALOG_W;
+  const h = DIM_EDIT_DIALOG_H;
+
+  const trySide = (sign: 1 | -1): { left: number; top: number } | null => {
+    let dist = h * 0.5 + DIM_EDIT_VERTEX_MARGIN + 10;
+    for (let i = 0; i < 14; i++) {
+      const cx = mx + sign * nx * dist;
+      const cy = my + sign * ny * dist;
+      let left = cx - w / 2;
+      let top = cy - h / 2;
+      left = Math.max(rL + margin, Math.min(rR - w - margin, left));
+      top = Math.max(rT + margin, Math.min(rB - h - margin, top));
+      if (!dimEditDialogObscuresEdge(left, top, w, h, ax, ay, bx, by)) {
+        return { left, top };
+      }
+      dist += 48;
+    }
+    return null;
+  };
+
+  const posA = trySide(1);
+  const posB = trySide(-1);
+  if (posA && posB) {
+    const sA = perpDistToLine(posA.left + w / 2, posA.top + h / 2, ax, ay, bx, by);
+    const sB = perpDistToLine(posB.left + w / 2, posB.top + h / 2, ax, ay, bx, by);
+    return sA >= sB ? posA : posB;
+  }
+  if (posA) return posA;
+  if (posB) return posB;
+
+  let left = Math.max(rL + margin, Math.min(rR - w - margin, fallbackClientX - w / 2));
+  let top = Math.max(rT + margin, Math.min(rB - h - margin, fallbackClientY - h / 2));
+  if (dimEditDialogObscuresEdge(left, top, w, h, ax, ay, bx, by)) {
+    left = Math.max(rL + margin, rR - w - margin);
+    top = Math.max(rT + margin, Math.min(rB - h - margin, rT + margin + 8));
+  }
+  return { left, top };
+}
+
 const EDGE_MATCH_TOL = 5;
+
+/** Maps shape.calculatorType to project.json key suffix (ctx menu / summaries). */
+const CALCULATOR_TYPE_I18N_SUFFIX: Record<string, string> = {
+  slab: "calculator_type_slab",
+  paving: "calculator_type_paving",
+  concreteSlabs: "calculator_type_concrete_slabs",
+  grass: "calculator_type_grass",
+  turf: "calculator_type_turf",
+  deck: "calculator_type_deck",
+  wall: "calculator_type_wall",
+  fence: "calculator_type_fence",
+  foundation: "calculator_type_foundation",
+  groundwork: "calculator_type_groundwork",
+  steps: "calculator_type_steps",
+};
+
+function translateCalculatorTypeLabel(calculatorType: string, t: (key: string) => string): string {
+  if (!calculatorType) return "";
+  const suffix = CALCULATOR_TYPE_I18N_SUFFIX[calculatorType];
+  if (suffix) {
+    const fullKey = `project:${suffix}`;
+    const tr = t(fullKey);
+    if (tr && tr !== fullKey) return tr;
+  }
+  return calculatorType;
+}
+
+function labelEditObjectCard(calculatorType: string | undefined, t: (key: string, opts?: Record<string, string>) => string): string {
+  if (!calculatorType) return `✏️ ${t("project:ctx_edit_object_card")}`;
+  const typeLabel = translateCalculatorTypeLabel(calculatorType, t);
+  return `✏️ ${t("project:ctx_edit_object_card_with_type", { type: typeLabel })}`;
+}
+
+/** List label for shapes in adjustment / pick dialogs */
+function shapeDisplayName(s: Shape | undefined, si: number, t: (key: string, opts?: Record<string, string | number>) => string): string {
+  if (!s) return t("project:summary_element_n", { n: si + 1 });
+  if (s.label) return s.label;
+  if (s.calculatorType) return translateCalculatorTypeLabel(s.calculatorType, t as (key: string) => string);
+  if (s.elementType) return s.elementType;
+  return t("project:summary_element_n", { n: si + 1 });
+}
 
 /** Check if two edges are the same (within tolerance). */
 function edgesMatch(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
@@ -135,6 +474,17 @@ function clampContextMenuPosition(clickX: number, clickY: number, menuWidth: num
   x = Math.max(padding, Math.min(vw - menuWidth - padding, x));
   y = Math.max(padding, Math.min(vh - menuHeight - padding, y));
   return { x, y };
+}
+
+/** Centered fixed dialog clamped to the browser viewport (avoids clipping at canvas or screen edge). */
+function clampCenteredFixedDialog(clientX: number, clientY: number, dialogW: number, dialogH: number, padding = 12): { left: number; top: number } {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  let left = clientX - dialogW / 2;
+  let top = clientY - dialogH / 2;
+  left = Math.max(padding, Math.min(vw - dialogW - padding, left));
+  top = Math.max(padding, Math.min(vh - dialogH - padding, top));
+  return { left, top };
 }
 
 export default function MasterProject() {
@@ -215,8 +565,17 @@ export default function MasterProject() {
   const [patternDragPreview, setPatternDragPreview] = useState<Point | null>(null);
   const [pathPatternLongOffsetPreview, setPathPatternLongOffsetPreview] = useState<{ segmentIdx: number; value: number } | null>(null);
   const [patternAlignedEdges, setPatternAlignedEdges] = useState<number[]>([]);
-  const [patternRotateInfo, setPatternRotateInfo] = useState<{ shapeIdx: number; type: "slab" | "cobblestone" | "grass"; center: Point; startAngle: number; startDirectionDeg: number } | null>(null);
+  const [patternRotateInfo, setPatternRotateInfo] = useState<{
+    shapeIdx: number;
+    type: "slab" | "cobblestone" | "grass";
+    center: Point;
+    startAngle: number;
+    startDirectionDeg: number;
+    boundaryAnglesDeg: number[];
+  } | null>(null);
   const [patternRotatePreview, setPatternRotatePreview] = useState<number | null>(null);
+  /** One saveHistory() per "burst" of Shift+wheel pattern rotation (undo as single step). */
+  const patternWheelHistorySavedRef = useRef(false);
   const [showRestoredToast, setShowRestoredToast] = useState(false);
   const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
   const modeDropdownRef = useRef<HTMLDivElement>(null);
@@ -241,10 +600,22 @@ export default function MasterProject() {
   /** Path shapeIdx that was just drawn – triggers auto-calculate when PathCreationModal opens */
   const [pathJustFinishedForAutoCalc, setPathJustFinishedForAutoCalc] = useState<number | null>(null);
   const [shapeCreationModal, setShapeCreationModal] = useState<{ type: "square" | "rectangle" | "triangle" | "trapezoid" } | null>(null);
-  const [segmentHeightModal, setSegmentHeightModal] = useState<{ shapeIdx: number } | null>(null);
   const [setAngleModal, setSetAngleModal] = useState<{ shapeIdx: number; pointIdx: number } | null>(null);
   const [setAngleTargetValue, setSetAngleTargetValue] = useState("");
   const [setAngleMode, setSetAngleMode] = useState<"a" | "b" | "split">("split");
+  /** PPM on vertex → choose second vertex: move first along line through both, to set distance from anchor */
+  const [pointOffsetAlongLinePick, setPointOffsetAlongLinePick] = useState<{ moveShapeIdx: number; movePointIdx: number } | null>(null);
+  const [pointOffsetAlongLineModal, setPointOffsetAlongLineModal] = useState<{
+    moveShapeIdx: number;
+    movePointIdx: number;
+    anchorShapeIdx: number;
+    anchorPointIdx: number;
+    screenX: number;
+    screenY: number;
+  } | null>(null);
+  const [pointOffsetAlongLineValue, setPointOffsetAlongLineValue] = useState("");
+  /** Drives rAF repaint for orange pick highlights */
+  const [offsetAlongLinePickPulse, setOffsetAlongLinePickPulse] = useState(0);
   const [measureStart, setMeasureStart] = useState<Point | null>(null);
   const [measureEnd, setMeasureEnd] = useState<Point | null>(null);
   const [resultsModalShapeIdx, setResultsModalShapeIdx] = useState<number | null>(null);
@@ -295,6 +666,18 @@ export default function MasterProject() {
     if (activeLayer === 5) return shapes[si]?.layer === 1 || shapes[si]?.layer === 2;
     return shapes[si]?.layer === activeLayer;
   }, [shapes, activeLayer]);
+
+  useEffect(() => {
+    if (!pointOffsetAlongLinePick) return;
+    setOffsetAlongLinePickPulse(0);
+    let id = 0;
+    const loop = () => {
+      setOffsetAlongLinePickPulse(n => n + 1);
+      id = requestAnimationFrame(loop);
+    };
+    id = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(id);
+  }, [pointOffsetAlongLinePick]);
 
   /** Layer 5 Adjustment: empty areas, overflow, overlaps (computed when shapes change) */
   const adjustmentData = useMemo(() => ({
@@ -666,6 +1049,16 @@ export default function MasterProject() {
     ctx.fillStyle = CC.bg;
     ctx.fillRect(0, 0, W, H);
 
+    if (pointOffsetAlongLinePick && !isExportingRef.current) {
+      ctx.save();
+      ctx.font = "600 13px system-ui,sans-serif";
+      ctx.fillStyle = "#27ae60";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(t("project:offset_along_line_pick_hint"), W / 2, 10);
+      ctx.restore();
+    }
+
     // Grid
     const gridPx = GRID_SPACING * PIXELS_PER_METER * zoom;
     if (gridPx > 8) {
@@ -699,25 +1092,45 @@ export default function MasterProject() {
       return isPathElement(s) ? snapTo45Soft(pts[pts.length - 1], mouseWorld) : snapTo45(pts[pts.length - 1], mouseWorld);
     })();
 
-    // Smart guides: snap to aligned X/Y of existing points in drawing shape
+    // Smart guides: free polygon = only current chain; fence/wall/kerb/foundation/path = L1+L2 vertices + edge snap (outside) on closed refs
     const SMART_GUIDE_SNAP_PX = 8;
     const smartGuides: { axis: "x" | "y"; worldValue: number; ptIdx: number }[] = [];
     let eMouse = { ...eMouseRaw };
     if (drawingShapeIdx !== null && shapes[drawingShapeIdx]) {
       const drawPts = shapes[drawingShapeIdx].points;
+      const ds = shapes[drawingShapeIdx];
       if (drawPts.length > 0) {
-        const sgThreshold = SMART_GUIDE_SNAP_PX / zoom;
-        let bestDx = sgThreshold, bestDy = sgThreshold;
-        let snapXVal: number | null = null, snapYVal: number | null = null;
-        let snapXIdx = -1, snapYIdx = -1;
-        for (let i = 0; i < drawPts.length; i++) {
-          const dx = Math.abs(eMouseRaw.x - drawPts[i].x);
-          const dy = Math.abs(eMouseRaw.y - drawPts[i].y);
-          if (dx < bestDx) { bestDx = dx; snapXVal = drawPts[i].x; snapXIdx = i; }
-          if (dy < bestDy) { bestDy = dy; snapYVal = drawPts[i].y; snapYIdx = i; }
+        if (isLinearElement(ds) || isPathElement(ds)) {
+          eMouse = snapWorldPointForLinearDrawing(eMouseRaw, {
+            drawingShapeIdx,
+            shapes,
+            localPtChain: drawPts,
+            drawingShape: ds,
+            zoom,
+            viewFilter,
+            activeLayer,
+          });
+        } else {
+          const sgThreshold = SMART_GUIDE_SNAP_PX / zoom;
+          let bestDx = sgThreshold, bestDy = sgThreshold;
+          let snapXVal: number | null = null, snapYVal: number | null = null;
+          let snapXIdx = -1, snapYIdx = -1;
+          for (let i = 0; i < drawPts.length; i++) {
+            const dx = Math.abs(eMouseRaw.x - drawPts[i].x);
+            const dy = Math.abs(eMouseRaw.y - drawPts[i].y);
+            if (dx < bestDx) { bestDx = dx; snapXVal = drawPts[i].x; snapXIdx = i; }
+            if (dy < bestDy) { bestDy = dy; snapYVal = drawPts[i].y; snapYIdx = i; }
+          }
+          if (snapXVal !== null) { eMouse.x = snapXVal; smartGuides.push({ axis: "x", worldValue: snapXVal, ptIdx: snapXIdx }); }
+          if (snapYVal !== null) { eMouse.y = snapYVal; smartGuides.push({ axis: "y", worldValue: snapYVal, ptIdx: snapYIdx }); }
         }
-        if (snapXVal !== null) { eMouse.x = snapXVal; smartGuides.push({ axis: "x", worldValue: snapXVal, ptIdx: snapXIdx }); }
-        if (snapYVal !== null) { eMouse.y = snapYVal; smartGuides.push({ axis: "y", worldValue: snapYVal, ptIdx: snapYIdx }); }
+        if (isLinearElement(ds) || isPathElement(ds)) {
+          const sgThreshold = SMART_GUIDE_SNAP_PX / zoom;
+          for (let i = 0; i < drawPts.length; i++) {
+            if (Math.abs(eMouse.x - drawPts[i].x) < sgThreshold) smartGuides.push({ axis: "x", worldValue: drawPts[i].x, ptIdx: i });
+            if (Math.abs(eMouse.y - drawPts[i].y) < sgThreshold) smartGuides.push({ axis: "y", worldValue: drawPts[i].y, ptIdx: i });
+          }
+        }
       }
     }
 
@@ -744,6 +1157,19 @@ export default function MasterProject() {
         }
         if (snapXVal !== null) dragAlignGuides.push({ axis: "x", worldValue: snapXVal, shapeIdx: snapXSi, ptIdx: snapXPi });
         if (snapYVal !== null) dragAlignGuides.push({ axis: "y", worldValue: snapYVal, shapeIdx: snapYSi, ptIdx: snapYPi });
+      }
+    }
+
+    // Collinear (180°) guide: dragged vertex aligns with extension of the line through two neighbors on the boundary
+    const dragCollinearGuides: CollinearSnapHit[] = [];
+    if (dragInfo) {
+      const ds = shapes[dragInfo.shapeIdx];
+      const dpts = ds?.points;
+      const dpi = dragInfo.pointIdx;
+      if (ds && dpts && dpts.length >= 3) {
+        const draggedPt = dpts[dpi];
+        const colHit = bestCollinearVertexSnap(draggedPt, ds.closed, dpts, dpi, DRAG_GUIDE_SNAP_PX / zoom);
+        if (colHit) dragCollinearGuides.push(colHit);
       }
     }
 
@@ -832,6 +1258,22 @@ export default function MasterProject() {
           const len = calcEdgeLengthWithArcs(pts[i], pts[j], arcs);
           const edgeAngle = Math.atan2(sb.y - sa.y, sb.x - sa.x);
           const textAngle = readableTextAngle(edgeAngle);
+          if (!arcs?.length) {
+            const out = edgeOutwardRadForL1Edge(shapes, si, i);
+            if (out != null) {
+              drawExteriorAlignedDimension(
+                ctx,
+                sa,
+                sb,
+                out,
+                boundaryDimL1ExteriorOffsetScreenPx(zoom),
+                formatLength(len),
+                GARDEN_EXTERIOR_DIM_LINE_COLOR,
+                GARDEN_EXTERIOR_DIM_TEXT_COLOR
+              );
+              continue;
+            }
+          }
           const lx = mid.x - Math.cos(norm) * edgeLabelOffset;
           const ly = mid.y - Math.sin(norm) * edgeLabelOffset;
           ctx.save();
@@ -956,8 +1398,8 @@ export default function MasterProject() {
         const si = patternDragInfo.shapeIdx;
         const shape = shapes[si];
         if (shape?.closed && shape.points.length >= 3) {
-          const pts = isPathElement(shape) ? getPathPolygon(shape) : getEffectivePolygon(shape);
-          if (pts.length >= 3) {
+          const pts = getPolygonForPatternSnapOutline(shape);
+          if (pts && pts.length >= 3) {
           const alignedSet = new Set(patternAlignedEdges);
           ctx.strokeStyle = "#27ae60";
           ctx.lineWidth = 3;
@@ -1430,10 +1872,30 @@ export default function MasterProject() {
         const edgeLabelOffset = 28;
         const slopeLabelOffset = 42;
         const hideDimInAdjustment = activeLayer === 5 && shape.layer === 1;
-        const showEdgeLabel = !hideDimInAdjustment && !(editingDim && editingDim.shapeIdx === si && editingDim.edgeIdx === i) && !(isL2 && !isSel);
-        if (showEdgeLabel) {
+        const showEdgeLabel = !hideDimInAdjustment && !(editingDim && editingDim.shapeIdx === si && editingDim.edgeIdx === i);
+        const isL1StraightGardenDim =
+          !isL2 && shape.layer === 1 && shape.closed && !(arcs && arcs.length > 0);
+        if (showEdgeLabel && isL1StraightGardenDim) {
+          const out = edgeOutwardRadForL1Edge(shapes, si, i);
+          if (out != null) {
+            const lineC = isLockedEdge ? CC.locked : isHov ? "#ffffff" : GARDEN_EXTERIOR_DIM_LINE_COLOR;
+            const textC = isLockedEdge ? CC.locked : isHov ? "#ffffff" : GARDEN_EXTERIOR_DIM_TEXT_COLOR;
+            drawExteriorAlignedDimension(ctx, sa, sb, out, boundaryDimL1ExteriorOffsetScreenPx(zoom), formatLength(len), lineC, textC);
+          } else {
+            const lx = mid.x - Math.cos(norm) * edgeLabelOffset;
+            const ly = mid.y - Math.sin(norm) * edgeLabelOffset;
+            ctx.save();
+            ctx.translate(lx, ly);
+            ctx.rotate(textAngle);
+            ctx.font = "12px 'JetBrains Mono','Fira Code',monospace";
+            ctx.fillStyle = isLockedEdge ? CC.locked : isHov ? edgeHovColor : CC.text;
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            ctx.fillText(formatLength(len), 0, 0);
+            ctx.restore();
+          }
+        } else if (showEdgeLabel) {
           let lx: number, ly: number;
-          if (isL2 && isSel && shape.closed) {
+          if (isL2 && shape.closed) {
             const effPts = hasArcsForStroke ? getEffectivePolygon(shape) : pts;
             const ctr = effPts.length >= 3 ? labelAnchorInsidePolygon(effPts) : midpoint(pts[0], pts[1] ?? pts[0]);
             const edgeMidWorld = midpoint(pts[i], pts[j]);
@@ -1804,6 +2266,30 @@ export default function MasterProject() {
       }
     }
 
+    if (dragInfo && dragCollinearGuides.length > 0) {
+      const ext = 5000;
+      for (const hit of dragCollinearGuides) {
+        const { lineA, lineB } = hit;
+        const dx = lineB.x - lineA.x;
+        const dy = lineB.y - lineA.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        const midx = (lineA.x + lineB.x) * 0.5;
+        const midy = (lineA.y + lineB.y) * 0.5;
+        const sA = worldToScreen(midx - ux * ext, midy - uy * ext);
+        const sB = worldToScreen(midx + ux * ext, midy + uy * ext);
+        ctx.strokeStyle = "#27ae60";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(sA.x, sA.y);
+        ctx.lineTo(sB.x, sB.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
     // Geodesy labels with leader lines — avoids overlap when multiple points share position
     if (showGeodesy) {
       const geodesyFilter = (s: Shape) => {
@@ -1873,6 +2359,96 @@ export default function MasterProject() {
       }
     });
 
+    // Offset-along-line: anchors — orange halos; moving vertex — same size, full green glow
+    if (pointOffsetAlongLinePick && !isExportingRef.current) {
+      const pick = pointOffsetAlongLinePick;
+      const phase = offsetAlongLinePickPulse * 0.09;
+      const pulse = 0.88 + 0.12 * Math.sin(phase);
+      const drawPickHalo = (sp: Point, isMove: boolean) => {
+        const rCore = (POINT_RADIUS + 2) * pulse;
+        const rGlow = rCore + 16;
+        if (isMove) {
+          const g = ctx.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, rGlow);
+          g.addColorStop(0, "rgba(46,204,113,0.55)");
+          g.addColorStop(0.4, "rgba(46,204,113,0.28)");
+          g.addColorStop(0.75, "rgba(46,204,113,0.08)");
+          g.addColorStop(1, "rgba(46,204,113,0)");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(sp.x, sp.y, rGlow, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(sp.x, sp.y, rCore, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(46,204,113,0.88)";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(39,174,96,0.95)";
+          ctx.lineWidth = 1.35;
+          ctx.setLineDash([5, 4]);
+          ctx.beginPath();
+          ctx.arc(sp.x, sp.y, rCore + 4, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(sp.x, sp.y, rCore + 8, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          const nRay = 12;
+          const inner = rCore * 0.35;
+          const outer = rGlow + 6 + 5 * Math.sin(phase * 1.1);
+          ctx.strokeStyle = "rgba(46,204,113,0.35)";
+          ctx.lineWidth = 1;
+          for (let i = 0; i < nRay; i++) {
+            const ang = (i / nRay) * Math.PI * 2 + phase * 0.35;
+            ctx.beginPath();
+            ctx.moveTo(sp.x + Math.cos(ang) * inner, sp.y + Math.sin(ang) * inner);
+            ctx.lineTo(sp.x + Math.cos(ang) * outer, sp.y + Math.sin(ang) * outer);
+            ctx.stroke();
+          }
+          return;
+        }
+        const g = ctx.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, rGlow);
+        g.addColorStop(0, "rgba(230,126,34,0.22)");
+        g.addColorStop(0.45, "rgba(230,126,34,0.08)");
+        g.addColorStop(1, "rgba(230,126,34,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, rGlow, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(230,126,34,0.55)";
+        ctx.lineWidth = 1.35;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, rCore + 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, rCore + 8, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const nRay = 12;
+        const inner = rCore * 0.35;
+        const outer = rGlow + 6 + 5 * Math.sin(phase * 1.1);
+        ctx.strokeStyle = "rgba(230,126,34,0.32)";
+        ctx.lineWidth = 1;
+        for (let i = 0; i < nRay; i++) {
+          const ang = (i / nRay) * Math.PI * 2 + phase * 0.35;
+          ctx.beginPath();
+          ctx.moveTo(sp.x + Math.cos(ang) * inner, sp.y + Math.sin(ang) * inner);
+          ctx.lineTo(sp.x + Math.cos(ang) * outer, sp.y + Math.sin(ang) * outer);
+          ctx.stroke();
+        }
+      };
+      for (let si = 0; si < shapes.length; si++) {
+        if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
+        const pts = shapes[si].points;
+        for (let pi = 0; pi < pts.length; pi++) {
+          if (si === pick.moveShapeIdx && pi === pick.movePointIdx) continue;
+          const sp = worldToScreen(pts[pi].x, pts[pi].y);
+          drawPickHalo(sp, false);
+        }
+      }
+      const mv = shapes[pick.moveShapeIdx]?.points[pick.movePointIdx];
+      if (mv) drawPickHalo(worldToScreen(mv.x, mv.y), true);
+    }
+
     // Selection rectangle
     if (selectionRect) {
       const x = Math.min(selectionRect.startX, selectionRect.endX);
@@ -1899,9 +2475,10 @@ export default function MasterProject() {
     else if (mode === "drawPathMonoblock") hud += pathSegmentSideSelection ? "  |  PATH: click green or orange side for each segment" : "  |  PATH (Monoblock): click points (like wall), snap to start to finish, then pick sides";
     if (mode === "scale") hud += "  |  SCALE: corner = proportional, edge = move";
     if (mode === "move") hud += "  |  MOVE: left click anywhere to pan";
-    const canStartMeasure = selectedShapeIdx === null && !hoveredPoint && !hoveredEdge && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
+    const canStartMeasure = selectedShapeIdx === null && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
+    const measureAllowed = activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5;
     if (measureStart !== null) hud += "  |  MEASURE: click point 2; click again to clear";
-    else if (shiftHeld && canStartMeasure) hud += "  |  SHIFT + click to start measure";
+    else if (shiftHeld && canStartMeasure && measureAllowed) hud += "  |  SHIFT + click to start measure";
     if (geodesyEnabled) hud += "  |  GEODESY: click point → set height, click area → show height";
     ctx.fillText(hud, 10, H - 10);
 
@@ -1943,6 +2520,46 @@ export default function MasterProject() {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(toMeters(lenM).toFixed(3) + " m", mid.x, mid.y - 12);
+    }
+
+    // Edge hover: distance labels on line (A→cursor, cursor→B)
+    if (hoveredEdge) {
+      const s = shapes[hoveredEdge.shapeIdx];
+      const pts = s?.points;
+      if (pts && pts.length >= 2) {
+        const i = hoveredEdge.edgeIdx;
+        const j = (i + 1) % pts.length;
+        const arcs = s.edgeArcs?.[i];
+        const totalLen = calcEdgeLengthWithArcs(pts[i], pts[j], arcs);
+        const distToA = hoveredEdge.t * totalLen;
+        const distToB = (1 - hoveredEdge.t) * totalLen;
+        const sA = worldToScreen(pts[i].x, pts[i].y);
+        const sProj = worldToScreen(hoveredEdge.pos.x, hoveredEdge.pos.y);
+        const sB = worldToScreen(pts[j].x, pts[j].y);
+        const mid1 = midpoint(sA, sProj);
+        const mid2 = midpoint(sProj, sB);
+        const norm = edgeNormalAngle(sA, sB);
+        const labelOffset = 18;
+        const lx1 = mid1.x - Math.cos(norm) * labelOffset;
+        const ly1 = mid1.y - Math.sin(norm) * labelOffset;
+        const lx2 = mid2.x - Math.cos(norm) * labelOffset;
+        const ly2 = mid2.y - Math.sin(norm) * labelOffset;
+        const textAngle = readableTextAngle(Math.atan2(sB.y - sA.y, sB.x - sA.x));
+        ctx.font = "bold 11px 'JetBrains Mono','Fira Code',monospace";
+        ctx.fillStyle = GARDEN_EXTERIOR_DIM_TEXT_COLOR;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.save();
+        ctx.translate(lx1, ly1);
+        ctx.rotate(textAngle);
+        ctx.fillText(formatLength(distToA), 0, 0);
+        ctx.restore();
+        ctx.save();
+        ctx.translate(lx2, ly2);
+        ctx.rotate(textAngle);
+        ctx.fillText(formatLength(distToB), 0, 0);
+        ctx.restore();
+      }
     }
 
     // Set angle overlay: dim canvas, show only edited shape with A/B labels and angle arc
@@ -2038,7 +2655,7 @@ export default function MasterProject() {
         ctx.fillText(t("project:dim_edit_point_b"), offBx, offBy);
       }
     }
-  }, [shapes, selectedShapeIdx, selectedPattern, patternDragInfo, patternDragPreview, pathPatternLongOffsetPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id, measureStart, measureEnd, pathSegmentSideSelection, shapeDragInfo, edgeDragInfo]);
+  }, [shapes, selectedShapeIdx, selectedPattern, patternDragInfo, patternDragPreview, pathPatternLongOffsetPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id, measureStart, measureEnd, pathSegmentSideSelection, shapeDragInfo, edgeDragInfo, pointOffsetAlongLinePick, offsetAlongLinePickPulse, isOnActiveLayer]);
 
   // Clear height tooltip when disabling geodesy or switching away from layer 1
   useEffect(() => {
@@ -2309,7 +2926,7 @@ export default function MasterProject() {
   /** Pending right-click scale: activate only on drag (not on single click). Single click = context menu. */
   const RIGHT_CLICK_SCALE_DRAG_THRESHOLD_PX = 5;
   const EDGE_CLICK_DRAG_THRESHOLD_PX = 5;
-  /** Pending edge add for linear elements: add point only on mouseup if no drag. Drag = move whole shape. */
+  /** Pending edge drag (linear + closed/open polygons except paths): click without drag = select only; drag = move that edge (Shift = along edge axis). */
   const pendingEdgeAddRef = useRef<{
     shapeIdx: number;
     edgeIdx: number;
@@ -2421,8 +3038,11 @@ export default function MasterProject() {
 
     // Shift-measure: Shift + click to start; then click 2, click 3 to clear (when not drawing)
     // Nie włączaj pomiaru gdy coś jest zaznaczone (punkt, linia, kształt) — Shift służy tam do blokady kąta (np. 180°)
-    const canStartMeasure = selectedShapeIdx === null && !hoveredPoint && !hoveredEdge && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
-    if (drawingShapeIdx === null) {
+    // Działa przy kliknięciu na punkt, linię lub pustą przestrzeń — getPointFromClick() zwraca punkt/rzut na krawędź
+    // Działa w Layer 1, 2, 3, 5 (Preparation/Layer 4 jest read-only)
+    const canStartMeasure = selectedShapeIdx === null && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
+    const measureAllowed = activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5;
+    if (drawingShapeIdx === null && measureAllowed) {
       const getPointFromClick = (): Point => {
         const pt = hitTestPoint(world);
         if (pt) return shapes[pt.shapeIdx].points[pt.pointIdx];
@@ -2515,17 +3135,28 @@ export default function MasterProject() {
       const snapFn = isPathElement(s) ? snapTo45Soft : snapTo45;
       let ep = shiftHeld && pts.length > 0 ? snapFn(pts[pts.length - 1], world) : world;
 
-      // Smart guide alignment snap for placed point
-      const sgThreshold = 8 / zoom;
-      let bestSgDx = sgThreshold, bestSgDy = sgThreshold;
-      let sgSnapX: number | null = null, sgSnapY: number | null = null;
-      for (let i = 0; i < pts.length; i++) {
-        const dx = Math.abs(ep.x - pts[i].x);
-        const dy = Math.abs(ep.y - pts[i].y);
-        if (dx < bestSgDx) { bestSgDx = dx; sgSnapX = pts[i].x; }
-        if (dy < bestSgDy) { bestSgDy = dy; sgSnapY = pts[i].y; }
+      if (isLinearElement(s) || isPathElement(s)) {
+        ep = snapWorldPointForLinearDrawing(ep, {
+          drawingShapeIdx,
+          shapes,
+          localPtChain: pts,
+          drawingShape: s,
+          zoom,
+          viewFilter,
+          activeLayer,
+        });
+      } else {
+        const sgThreshold = 8 / zoom;
+        let bestSgDx = sgThreshold, bestSgDy = sgThreshold;
+        let sgSnapX: number | null = null, sgSnapY: number | null = null;
+        for (let i = 0; i < pts.length; i++) {
+          const dx = Math.abs(ep.x - pts[i].x);
+          const dy = Math.abs(ep.y - pts[i].y);
+          if (dx < bestSgDx) { bestSgDx = dx; sgSnapX = pts[i].x; }
+          if (dy < bestSgDy) { bestSgDy = dy; sgSnapY = pts[i].y; }
+        }
+        if (sgSnapX !== null || sgSnapY !== null) ep = { x: sgSnapX ?? ep.x, y: sgSnapY ?? ep.y };
       }
-      if (sgSnapX !== null || sgSnapY !== null) ep = { x: sgSnapX ?? ep.x, y: sgSnapY ?? ep.y };
 
       if (pts.length >= 3 && !isLinearElement(shapes[drawingShapeIdx])) {
         const ss = worldToScreen(pts[0].x, pts[0].y);
@@ -2575,10 +3206,8 @@ export default function MasterProject() {
             });
           } else if (isPolygonLinearElement(s)) {
             saveHistory();
-            // Use path without closing point — closing [A,B,A] would add a return segment and double/wrong lengths
-            const pathPts = pts;
             const thicknessM = getPolygonThicknessM(s);
-            const outline = computeThickPolyline(pathPts, toPixels(thicknessM));
+            const outline = computeThickPolylineClosed(pts, toPixels(thicknessM));
             if (outline.length >= 3) {
               const segLengths = polygonToSegmentLengths(outline);
               setShapes(p => {
@@ -2610,6 +3239,42 @@ export default function MasterProject() {
         n[drawingShapeIdx] = sh; return n;
       });
       return;
+    }
+
+    // Pick anchor vertex for "offset along line" (must run before geodesy / select so the second click is not swallowed)
+    if (
+      pointOffsetAlongLinePick &&
+      mode === "select" &&
+      drawingShapeIdx === null &&
+      e.button === 0 &&
+      (activeLayer === 1 || activeLayer === 2 || activeLayer === 5)
+    ) {
+      const ptHit = hitTestPoint(world);
+      if (ptHit) {
+        const pick = pointOffsetAlongLinePick;
+        if (ptHit.shapeIdx === pick.moveShapeIdx && ptHit.pointIdx === pick.movePointIdx) {
+          return;
+        }
+        const moveShape = shapes[pick.moveShapeIdx];
+        const move = moveShape?.points[pick.movePointIdx];
+        const anchor = shapes[ptHit.shapeIdx]?.points[ptHit.pointIdx];
+        if (move && anchor) {
+          const distM = toMeters(distance(move, anchor));
+          setPointOffsetAlongLineModal({
+            moveShapeIdx: pick.moveShapeIdx,
+            movePointIdx: pick.movePointIdx,
+            anchorShapeIdx: ptHit.shapeIdx,
+            anchorPointIdx: ptHit.pointIdx,
+            screenX: e.clientX,
+            screenY: e.clientY,
+          });
+          setPointOffsetAlongLineValue(distM.toFixed(3));
+          setPointOffsetAlongLinePick(null);
+          return;
+        }
+      } else {
+        setPointOffsetAlongLinePick(null);
+      }
     }
 
     // Geodesy (toggle): click card or point → edit heights in card; click L1 interior → show interpolated height.
@@ -2709,7 +3374,7 @@ export default function MasterProject() {
         if (rect) {
           const screenX = e.clientX - rect.left;
           const screenY = e.clientY - rect.top;
-          for (let si = 0; si < shapes.length; si++) {
+          for (let si = shapes.length - 1; si >= 0; si--) {
             const shape = shapes[si];
             if (shape.layer !== 2 || !shape.closed || shape.points.length < 3) continue;
             if (!passesViewFilter(shape, viewFilter, activeLayer)) continue;
@@ -2720,20 +3385,87 @@ export default function MasterProject() {
             const sc = worldToScreen(ctr.x, ctr.y);
             const handleY = minY - 35;
             if (Math.abs(screenX - sc.x) < 14 && Math.abs(screenY - handleY) < 14) {
+              const angleLocked = !!shape.calculatorInputs?.vizPatternAngleLocked;
               if (shape.calculatorType === "grass" && (shape.calculatorInputs?.vizPieces?.length ?? 0) > 0) {
+                if (angleLocked) {
+                  saveHistory();
+                  setSelectedPattern({ shapeIdx: si, type: "grass" });
+                  setSelectedShapeIdx(si);
+                  return;
+                }
                 saveHistory();
                 const dirDeg = Number(shape.calculatorInputs?.grassVizDirection ?? shape.calculatorInputs?.vizDirection ?? 0);
-                setPatternRotateInfo({ shapeIdx: si, type: "grass", center: { ...ctr }, startAngle: Math.atan2(world.y - ctr.y, world.x - ctr.x), startDirectionDeg: dirDeg });
+                setPatternRotateInfo({
+                  shapeIdx: si,
+                  type: "grass",
+                  center: { ...ctr },
+                  startAngle: Math.atan2(world.y - ctr.y, world.x - ctr.x),
+                  startDirectionDeg: dirDeg,
+                  boundaryAnglesDeg: collectShapeBoundaryDirectionAnglesDeg(shape),
+                });
                 setPatternRotatePreview(null);
                 setSelectedPattern({ shapeIdx: si, type: "grass" });
                 setSelectedShapeIdx(si);
                 return;
               }
-              if ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs" || shape.calculatorType === "paving") && shape.calculatorInputs?.vizSlabWidth) {
+              const pavingOk = shape.calculatorType === "paving" && shape.calculatorInputs?.blockLengthCm && shape.calculatorInputs?.blockWidthCm;
+              const slabOk =
+                (shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth;
+              if (pavingOk || slabOk) {
+                const patType = shape.calculatorType === "paving" ? "cobblestone" : "slab";
+                if (angleLocked) {
+                  saveHistory();
+                  const inp = shape.calculatorInputs ?? {};
+                  if (isPathElement(shape)) {
+                    const pathCenterline = inp.pathCenterline as Point[] | undefined;
+                    if (pathCenterline && pathCenterline.length >= 2) {
+                      const rawBySeg = inp.pathPatternLongOffsetMBySegment as number[] | undefined;
+                      const nSeg = pathCenterline.length - 1;
+                      const fallbackM = Number(inp.pathPatternLongOffsetM ?? 0) || 0;
+                      const startPathPatternLongOffsetMBySegment = Array.isArray(rawBySeg) && rawBySeg.length === nSeg
+                        ? rawBySeg.map(v => Number(v ?? 0) || 0)
+                        : Array.from({ length: nSeg }, () => fallbackM);
+                      let bestSegIdx = 0;
+                      let bestDist = Infinity;
+                      for (let i = 0; i < nSeg; i++) {
+                        const A = pathCenterline[i]!;
+                        const B = pathCenterline[i + 1]!;
+                        const pr = projectOntoSegment(world, A, B);
+                        const d = distance(world, pr.proj);
+                        if (d < bestDist) {
+                          bestDist = d;
+                          bestSegIdx = i;
+                        }
+                      }
+                      setPatternDragInfo({ shapeIdx: si, type: patType, startMouse: { ...world }, startOffset: { x: 0, y: 0 }, isPath: true, startPathSegmentIdx: bestSegIdx, startPathPatternLongOffsetMBySegment });
+                      setPathPatternLongOffsetPreview(null);
+                      setPatternAlignedEdges([]);
+                      setSelectedPattern({ shapeIdx: si, type: patType });
+                      setSelectedShapeIdx(si);
+                      return;
+                    }
+                  }
+                  const startOffset = {
+                    x: Number(inp.vizOriginOffsetX ?? 0),
+                    y: Number(inp.vizOriginOffsetY ?? 0),
+                  };
+                  setPatternDragInfo({ shapeIdx: si, type: patType, startMouse: { ...world }, startOffset });
+                  setPatternDragPreview(null);
+                  setPatternAlignedEdges([]);
+                  setSelectedPattern({ shapeIdx: si, type: patType });
+                  setSelectedShapeIdx(si);
+                  return;
+                }
                 saveHistory();
                 const dirDeg = Number(shape.calculatorInputs?.vizDirection ?? 0);
-                const patType = shape.calculatorType === "paving" ? "cobblestone" : "slab";
-                setPatternRotateInfo({ shapeIdx: si, type: patType, center: { ...ctr }, startAngle: Math.atan2(world.y - ctr.y, world.x - ctr.x), startDirectionDeg: dirDeg });
+                setPatternRotateInfo({
+                  shapeIdx: si,
+                  type: patType,
+                  center: { ...ctr },
+                  startAngle: Math.atan2(world.y - ctr.y, world.x - ctr.x),
+                  startDirectionDeg: dirDeg,
+                  boundaryAnglesDeg: collectShapeBoundaryDirectionAnglesDeg(shape),
+                });
                 setPatternRotatePreview(null);
                 setSelectedPattern({ shapeIdx: si, type: patType });
                 setSelectedShapeIdx(si);
@@ -2776,11 +3508,20 @@ export default function MasterProject() {
               const screenX = e.clientX - rect.left;
               const screenY = e.clientY - rect.top;
               if (Math.abs(screenX - sc.x) < 14 && Math.abs(screenY - handleY) < 14) {
-                saveHistory();
-                const dirDeg = Number(shape.calculatorInputs?.vizDirection ?? 0);
-                setPatternRotateInfo({ shapeIdx: patternHit.shapeIdx, type: patternHit.type, center: { ...ctr }, startAngle: Math.atan2(world.y - ctr.y, world.x - ctr.x), startDirectionDeg: dirDeg });
-                setPatternRotatePreview(null);
-                return;
+                if (!shape.calculatorInputs?.vizPatternAngleLocked) {
+                  saveHistory();
+                  const dirDeg = Number(shape.calculatorInputs?.vizDirection ?? 0);
+                  setPatternRotateInfo({
+                    shapeIdx: patternHit.shapeIdx,
+                    type: patternHit.type,
+                    center: { ...ctr },
+                    startAngle: Math.atan2(world.y - ctr.y, world.x - ctr.x),
+                    startDirectionDeg: dirDeg,
+                    boundaryAnglesDeg: collectShapeBoundaryDirectionAnglesDeg(shape),
+                  });
+                  setPatternRotatePreview(null);
+                  return;
+                }
               }
             }
             saveHistory();
@@ -2892,50 +3633,22 @@ export default function MasterProject() {
       const edgeHit = hitTestEdge(world);
       if (edgeHit) {
         const hitShape = shapes[edgeHit.shapeIdx];
-        // Paths: don't add point to outline (would corrupt pathIsOutline/pathCenterline). Use path continuation instead.
+        // Paths: don't move outline vertices from edge hit (would corrupt pathIsOutline/pathCenterline).
         if (isPathElement(hitShape)) {
           setSelectedShapeIdx(edgeHit.shapeIdx);
           return;
         }
-        if (isLinearElement(hitShape)) {
-          const r = canvasRef.current!.getBoundingClientRect();
-          const startScreen = { x: e.clientX - r.left, y: e.clientY - r.top };
-          pendingEdgeAddRef.current = {
-            shapeIdx: edgeHit.shapeIdx,
-            edgeIdx: edgeHit.edgeIdx,
-            pos: { ...edgeHit.pos },
-            edgeT: edgeHit.t,
-            startScreen,
-            startWorld: { ...world },
-          };
-          setSelectedShapeIdx(edgeHit.shapeIdx);
-          return;
-        }
-        // Left click on edge: select element (like shape hit), don't add point — SquarePoints only via right-click "Dodaj SquarePoint"
+        const r = canvasRef.current!.getBoundingClientRect();
+        const startScreen = { x: e.clientX - r.left, y: e.clientY - r.top };
+        pendingEdgeAddRef.current = {
+          shapeIdx: edgeHit.shapeIdx,
+          edgeIdx: edgeHit.edgeIdx,
+          pos: { ...edgeHit.pos },
+          edgeT: edgeHit.t,
+          startScreen,
+          startWorld: { ...world },
+        };
         setSelectedShapeIdx(edgeHit.shapeIdx);
-        saveHistory();
-        setShapeDragInfo({ shapeIdx: edgeHit.shapeIdx, startMouse: { ...world }, startPoints: shapes[edgeHit.shapeIdx].points.map(p => ({ ...p })) });
-        const hitShapeForDrag = shapes[edgeHit.shapeIdx];
-        transformStartVizPiecesRef.current = hitShapeForDrag.calculatorInputs?.vizPieces
-          ? (hitShapeForDrag.calculatorInputs.vizPieces as GrassPiece[]).map(p => ({ ...p })) : null;
-        if (hitShapeForDrag.layer === 1 && hitShapeForDrag.closed && hitShapeForDrag.points.length >= 3) {
-          const children: typeof gardenDragChildrenRef.current = [];
-          for (let ci = 0; ci < shapes.length; ci++) {
-            if (ci === edgeHit.shapeIdx || shapes[ci].layer !== 2) continue;
-            const c = centroid(shapes[ci].points);
-            if (pointInPolygon(c, hitShapeForDrag.points)) {
-              children.push({
-                idx: ci,
-                startPoints: shapes[ci].points.map(p => ({ ...p })),
-                startVizPieces: shapes[ci].calculatorInputs?.vizPieces
-                  ? (shapes[ci].calculatorInputs!.vizPieces as GrassPiece[]).map(p => ({ ...p })) : null,
-              });
-            }
-          }
-          gardenDragChildrenRef.current = children;
-        } else {
-          gardenDragChildrenRef.current = [];
-        }
         return;
       }
 
@@ -3011,7 +3724,7 @@ export default function MasterProject() {
       const newIdx = shapes.length;
       setShapes(p => [...p, {
         points: [{ ...world }], closed: false,
-        label: mode === "drawPathSlabs" ? "Path Slabs" : mode === "drawPathConcreteSlabs" ? "Path Concrete Slabs" : "Path Monoblock",
+        label: mode === "drawPathSlabs" ? t("project:results_path_slabs") : mode === "drawPathConcreteSlabs" ? t("project:results_path_concrete_slabs") : t("project:results_path_monoblock"),
         layer: 2 as LayerID,
         lockedEdges: [], lockedAngles: [], heights: [0],
         elementType: elementType as "pathSlabs" | "pathConcreteSlabs" | "pathMonoblock",
@@ -3042,7 +3755,17 @@ export default function MasterProject() {
         layer: 2 as LayerID,
         lockedEdges: [], lockedAngles: [], heights: [0],
         elementType: elementType as "fence" | "wall" | "kerb" | "foundation",
-        thickness: 0.10,
+        thickness: elementType === "foundation" ? 0.30 : 0.10,
+        ...(elementType === "wall" ? {
+          calculatorType: "wall" as const,
+          calculatorSubType: "block4",
+          calculatorInputs: { layingMethod: "standing" as const, height: "1" },
+        } : {}),
+        ...(elementType === "kerb" ? {
+          calculatorType: "kerbs" as const,
+          calculatorSubType: "kl",
+          calculatorInputs: {},
+        } : {}),
       }]);
       setDrawingShapeIdx(newIdx); setSelectedShapeIdx(newIdx);
     }
@@ -3135,7 +3858,7 @@ export default function MasterProject() {
       setSelectedShapeIdx(null);
       setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
-  }, [mode, shapes, drawingShapeIdx, pathSegmentSideSelection, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, worldToScreen, saveHistory, selectedShapeIdx, isOnActiveLayer, activeLayer, editingGeodesyCard, measureStart, measureEnd, hoveredPoint, hoveredEdge, selectedPoints, selectionRect, editingDim, rotateInfo, patternDragInfo, patternRotateInfo, shapeDragInfo, edgeDragInfo]);
+  }, [mode, shapes, drawingShapeIdx, pathSegmentSideSelection, pathConfig, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, worldToScreen, saveHistory, selectedShapeIdx, isOnActiveLayer, activeLayer, editingGeodesyCard, measureStart, measureEnd, hoveredPoint, hoveredEdge, selectedPoints, selectionRect, editingDim, rotateInfo, patternDragInfo, patternRotateInfo, shapeDragInfo, edgeDragInfo, t, pointOffsetAlongLinePick, viewFilter]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const world = getWorldPos(e);
@@ -3145,7 +3868,7 @@ export default function MasterProject() {
       setMouseWorld(world);
     });
 
-    // Activate edge drag from pending edge add (linear elements): drag = move only that edge, click = add point
+    // Activate edge drag from pending edge hit (polygons + linear, not paths): drag = move that edge only
     const pendingEdge = pendingEdgeAddRef.current;
     if (pendingEdge && (e.buttons & 1)) {
       const r = canvasRef.current!.getBoundingClientRect();
@@ -3153,10 +3876,12 @@ export default function MasterProject() {
       const dist = Math.sqrt((screenX - pendingEdge.startScreen.x) ** 2 + (screenY - pendingEdge.startScreen.y) ** 2);
       if (dist >= EDGE_CLICK_DRAG_THRESHOLD_PX) {
         const si = pendingEdge.shapeIdx;
-        const pts = shapes[si].points;
+        const shape = shapes[si];
+        const pts = shape.points;
         const ei = pendingEdge.edgeIdx;
+        const endIdx = shape.closed ? (ei + 1) % pts.length : ei + 1;
         const p0 = pts[ei];
-        const p1 = pts[ei + 1];
+        const p1 = pts[endIdx];
         if (p0 && p1) {
           saveHistory();
           setEdgeDragInfo({
@@ -3378,31 +4103,52 @@ export default function MasterProject() {
 
     if (patternRotateInfo) {
       const currAngle = Math.atan2(world.y - patternRotateInfo.center.y, world.x - patternRotateInfo.center.x);
-      const deltaDeg = ((currAngle - patternRotateInfo.startAngle) * 180) / Math.PI;
-      let newDir = patternRotateInfo.startDirectionDeg + deltaDeg;
+      let deltaRad = currAngle - patternRotateInfo.startAngle;
+      if (deltaRad > Math.PI) deltaRad -= 2 * Math.PI;
+      if (deltaRad < -Math.PI) deltaRad += 2 * Math.PI;
+      let newDir = patternRotateInfo.startDirectionDeg + (deltaRad * 180) / Math.PI;
       newDir = ((newDir % 360) + 360) % 360;
-      setPatternRotatePreview(snapAngleTo45(newDir));
+      newDir = snapPatternDirectionToBoundaryAngles(newDir, patternRotateInfo.boundaryAnglesDeg);
+      setPatternRotatePreview(newDir);
       return;
     }
 
-    // Linear element edge drag: move only the two endpoints of the edge, connected segments stretch/rotate
+    // Edge drag (linear + polygon outlines): move only the two endpoints of that edge; adjacent edges follow.
+    // Shift: slide along the edge axis (same length & direction as at drag start); no perpendicular motion.
     if (edgeDragInfo) {
-      const dx = world.x - edgeDragInfo.startMouse.x;
-      const dy = world.y - edgeDragInfo.startMouse.y;
+      let dx = world.x - edgeDragInfo.startMouse.x;
+      let dy = world.y - edgeDragInfo.startMouse.y;
+      const tx0 = edgeDragInfo.startP1.x - edgeDragInfo.startP0.x;
+      const ty0 = edgeDragInfo.startP1.y - edgeDragInfo.startP0.y;
+      const len0 = Math.sqrt(tx0 * tx0 + ty0 * ty0);
+      if (shiftHeld && len0 > 1e-6) {
+        const ux = tx0 / len0;
+        const uy = ty0 / len0;
+        const dot = dx * ux + dy * uy;
+        dx = dot * ux;
+        dy = dot * uy;
+      }
       const newP0 = { x: edgeDragInfo.startP0.x + dx, y: edgeDragInfo.startP0.y + dy };
       const newP1 = { x: edgeDragInfo.startP1.x + dx, y: edgeDragInfo.startP1.y + dy };
       const magThreshold = SNAP_MAGNET_PX / zoom;
       const edgeMid = midpoint(newP0, newP1);
       const snap = snapMagnet(edgeMid, shapes, edgeDragInfo.shapeIdx, magThreshold);
-      const off = snap.didSnap ? { x: snap.snapped.x - edgeMid.x, y: snap.snapped.y - edgeMid.y } : { x: 0, y: 0 };
+      let off = snap.didSnap ? { x: snap.snapped.x - edgeMid.x, y: snap.snapped.y - edgeMid.y } : { x: 0, y: 0 };
+      if (shiftHeld && len0 > 1e-6) {
+        const ux = tx0 / len0;
+        const uy = ty0 / len0;
+        const offDot = off.x * ux + off.y * uy;
+        off = { x: offDot * ux, y: offDot * uy };
+      }
       const finalP0 = { x: newP0.x + off.x, y: newP0.y + off.y };
       const finalP1 = { x: newP1.x + off.x, y: newP1.y + off.y };
       setShapes(p => {
         const n = [...p];
         const s = { ...n[edgeDragInfo.shapeIdx] };
         const np = [...s.points];
+        const endIdx = s.closed ? (edgeDragInfo.edgeIdx + 1) % np.length : edgeDragInfo.edgeIdx + 1;
         np[edgeDragInfo.edgeIdx] = finalP0;
-        np[edgeDragInfo.edgeIdx + 1] = finalP1;
+        np[endIdx] = finalP1;
         s.points = np;
         n[edgeDragInfo.shapeIdx] = s;
         if (s.linkedShapeIdx != null && n[s.linkedShapeIdx]) n[s.linkedShapeIdx] = { ...n[s.linkedShapeIdx], points: [...np] };
@@ -3646,9 +4392,15 @@ export default function MasterProject() {
         }
       }
 
-      // Alignment snap: snap X/Y to closest aligned point when within threshold (horizontal/vertical guides)
+      // Collinear snap: 180° with the line through two consecutive neighbors on the same boundary chain
       const ALIGNMENT_SNAP_PX = 10;
       const alignThreshold = ALIGNMENT_SNAP_PX / zoom;
+      if (pts.length >= 3) {
+        const colHit = bestCollinearVertexSnap(target, shape.closed, pts, pi, alignThreshold);
+        if (colHit) target = { ...colHit.proj };
+      }
+
+      // Alignment snap: snap X/Y to closest aligned point when within threshold (horizontal/vertical guides)
       let bestDx = alignThreshold, bestDy = alignThreshold;
       let snapXVal: number | null = null, snapYVal: number | null = null;
       for (let si = 0; si < shapes.length; si++) {
@@ -3717,7 +4469,7 @@ export default function MasterProject() {
   const handleMouseUp = useCallback(() => {
     pendingRightClickScaleRef.current = null; // Clear pending if user released without dragging
 
-    // Pending edge add (linear elements): click without drag = just select (no point added); drag = move edge
+    // Pending edge: click without drag = select only; drag = move that edge
     const pendingEdge = pendingEdgeAddRef.current;
     if (pendingEdge) {
       pendingEdgeAddRef.current = null;
@@ -3905,7 +4657,7 @@ export default function MasterProject() {
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
       const t0 = e.touches[0], t1 = e.touches[1];
       const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
       const centerX = (t0.clientX + t1.clientX) / 2;
@@ -3914,7 +4666,7 @@ export default function MasterProject() {
       return;
     }
     if (e.touches.length !== 1) return;
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     const t = e.touches[0];
     if (isMobile) {
       longPressStartRef.current = { clientX: t.clientX, clientY: t.clientY };
@@ -3934,7 +4686,7 @@ export default function MasterProject() {
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
       const pinch = pinchRef.current;
       if (!pinch) return;
       const t0 = e.touches[0], t1 = e.touches[1];
@@ -3956,7 +4708,7 @@ export default function MasterProject() {
       return;
     }
     if (e.touches.length !== 1) return;
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     if (isMobile && longPressTimerRef.current && longPressStartRef.current) {
       const t = e.touches[0];
       const dx = t.clientX - longPressStartRef.current.clientX;
@@ -3976,14 +4728,14 @@ export default function MasterProject() {
     }
     if (e.touches.length === 1) {
       pinchRef.current = null;
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
       const t = e.touches[0];
       handleMouseDown(touchToMouseEvent({ clientX: t.clientX, clientY: t.clientY }, 0, 1));
       return;
     }
     const t = e.changedTouches[0];
     if (!t) return;
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     pinchRef.current = null;
     if (isMobile && longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
@@ -3994,7 +4746,7 @@ export default function MasterProject() {
 
   const handleTouchCancel = useCallback((e: React.TouchEvent) => {
     if (!e.changedTouches[0]) return;
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     pinchRef.current = null;
     if (isMobile && longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
@@ -4003,6 +4755,27 @@ export default function MasterProject() {
     handleMouseUp();
   }, [handleMouseUp, isMobile]);
 
+  /** React's delegated touch listeners are passive; non-passive listeners allow preventDefault for drawing/pinch. */
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const opts: AddEventListenerOptions = { passive: false };
+    const onStart = (ev: TouchEvent) => { handleTouchStart(ev as unknown as React.TouchEvent); };
+    const onMove = (ev: TouchEvent) => { handleTouchMove(ev as unknown as React.TouchEvent); };
+    const onEnd = (ev: TouchEvent) => { handleTouchEnd(ev as unknown as React.TouchEvent); };
+    const onCancel = (ev: TouchEvent) => { handleTouchCancel(ev as unknown as React.TouchEvent); };
+    canvas.addEventListener("touchstart", onStart, opts);
+    canvas.addEventListener("touchmove", onMove, opts);
+    canvas.addEventListener("touchend", onEnd, opts);
+    canvas.addEventListener("touchcancel", onCancel, opts);
+    return () => {
+      canvas.removeEventListener("touchstart", onStart, opts);
+      canvas.removeEventListener("touchmove", onMove, opts);
+      canvas.removeEventListener("touchend", onEnd, opts);
+      canvas.removeEventListener("touchcancel", onCancel, opts);
+    };
+  }, [handleTouchStart, handleTouchMove, handleTouchEnd, handleTouchCancel]);
+
   useEffect(() => () => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
@@ -4010,11 +4783,73 @@ export default function MasterProject() {
     }
   }, []);
 
+  useEffect(() => {
+    patternWheelHistorySavedRef.current = false;
+  }, [selectedPattern?.shapeIdx, selectedPattern?.type]);
+
   const handleWheel = useCallback((e: WheelEvent) => {
-    e.preventDefault();
     if (e.buttons & 4) return; // Środkowy przycisk wciśnięty – nie zoomuj podczas panowania
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    if (e.shiftKey && mode === "select" && activeLayer === 3 && selectedPattern) {
+      const si = selectedPattern.shapeIdx;
+      const shape = shapes[si];
+      if (shape && shape.layer === 2 && shape.closed) {
+        const step = e.altKey ? 0.5 : 1;
+        const deltaDeg = (e.deltaY < 0 ? 1 : -1) * step;
+        if (selectedPattern.type === "grass" && shape.calculatorType === "grass" && (shape.calculatorInputs?.vizPieces?.length ?? 0) > 0) {
+          if (!shape.calculatorInputs?.vizPatternAngleLocked) {
+            e.preventDefault();
+            const cur = Number(shape.calculatorInputs?.grassVizDirection ?? shape.calculatorInputs?.vizDirection ?? 0);
+            let next = cur + deltaDeg;
+            next = ((next % 360) + 360) % 360;
+            next = snapPatternDirectionToBoundaryAngles(next, collectShapeBoundaryDirectionAnglesDeg(shape));
+            if (!patternWheelHistorySavedRef.current) {
+              saveHistory();
+              patternWheelHistorySavedRef.current = true;
+            }
+            setShapes(p => {
+              const n = [...p];
+              const s = { ...n[si] };
+              s.calculatorInputs = { ...s.calculatorInputs, grassVizDirection: next };
+              n[si] = s;
+              return n;
+            });
+            return;
+          }
+        }
+        if (
+          (selectedPattern.type === "slab" || selectedPattern.type === "cobblestone") &&
+          (shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs" || shape.calculatorType === "paving") &&
+          (shape.calculatorType === "paving"
+            ? shape.calculatorInputs?.blockLengthCm && shape.calculatorInputs?.blockWidthCm
+            : shape.calculatorInputs?.vizSlabWidth)
+        ) {
+          if (!shape.calculatorInputs?.vizPatternAngleLocked) {
+            e.preventDefault();
+            const cur = Number(shape.calculatorInputs?.vizDirection ?? 0);
+            let next = cur + deltaDeg;
+            next = ((next % 360) + 360) % 360;
+            next = snapPatternDirectionToBoundaryAngles(next, collectShapeBoundaryDirectionAnglesDeg(shape));
+            if (!patternWheelHistorySavedRef.current) {
+              saveHistory();
+              patternWheelHistorySavedRef.current = true;
+            }
+            setShapes(p => {
+              const n = [...p];
+              const s = { ...n[si] };
+              s.calculatorInputs = { ...s.calculatorInputs, vizDirection: next };
+              n[si] = s;
+              return n;
+            });
+            return;
+          }
+        }
+      }
+    }
+
+    e.preventDefault();
     const r = canvas.getBoundingClientRect();
     const sx = e.clientX - r.left, sy = e.clientY - r.top;
     const f = e.deltaY < 0 ? 1.1 : 0.9;
@@ -4024,7 +4859,7 @@ export default function MasterProject() {
       setPan(p => ({ x: sx - ratio * (sx - p.x), y: sy - ratio * (sy - p.y) }));
       return nz;
     });
-  }, []);
+  }, [activeLayer, selectedPattern, shapes, mode, saveHistory, setShapes]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -4079,7 +4914,7 @@ export default function MasterProject() {
           saveHistory();
           const pathPts = getLinearElementPath(s);
           const thicknessM = getPolygonThicknessM(s);
-          const outline = computeThickPolyline(pathPts, toPixels(thicknessM));
+          const outline = computeThickPolylineClosed(pathPts, toPixels(thicknessM));
           if (outline.length >= 3) {
             const segLengths = polygonToSegmentLengths(outline);
             setShapes(p => {
@@ -4154,6 +4989,28 @@ export default function MasterProject() {
       return;
     }
     if (activeLayer === 3) {
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      if (canvasRect) {
+        const rotHit = hitTestPatternRotationHandle(
+          shapes,
+          e.clientX - canvasRect.left,
+          e.clientY - canvasRect.top,
+          worldToScreen,
+          viewFilter,
+          activeLayer,
+        );
+        if (rotHit) {
+          setContextMenu({
+            x: e.clientX,
+            y: e.clientY,
+            shapeIdx: rotHit.shapeIdx,
+            pointIdx: -1,
+            edgeIdx: -1,
+            patternRotationHandle: { patternType: rotHit.patternType },
+          });
+          return;
+        }
+      }
       // Same hit order as Layer 2: arc point, point, edge, shape — then linear/pattern
       const arcHit = hitTestArcPointGlobal(w);
       if (arcHit) {
@@ -4325,7 +5182,7 @@ export default function MasterProject() {
         setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: shapeHit, pointIdx: -1, edgeIdx: -1, interiorWorldPos: w });
       }
     }
-  }, [getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestArcPointGlobal, hitTestEdge, hitTestShape, hitTestPattern, shapes, drawingShapeIdx, activeLayer, zoom, viewFilter, pathSegmentSideSelection]);
+  }, [getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestArcPointGlobal, hitTestEdge, hitTestShape, hitTestPattern, shapes, drawingShapeIdx, activeLayer, zoom, viewFilter, pathSegmentSideSelection, worldToScreen]);
 
   useEffect(() => { contextMenuHandlerRef.current = handleContextMenu; }, [handleContextMenu]);
 
@@ -4338,7 +5195,7 @@ export default function MasterProject() {
     if (!r) return;
     const clickX = e.clientX - r.left, clickY = e.clientY - r.top;
     const hitW = 55, hitH = 22; // hit area around label (label text can be ~50px wide)
-    for (let si = 0; si < shapes.length; si++) {
+    for (let si = shapes.length - 1; si >= 0; si--) {
       if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
       const shape = shapes[si];
       const pts = shape.points;
@@ -4360,7 +5217,7 @@ export default function MasterProject() {
             const edgeIdx = i + 1; // segment i maps to outline edge i+1 (the "length" edge)
             const j = (edgeIdx + 1) % pts.length;
             setEditingDim({ shapeIdx: si, edgeIdx, x: e.clientX, y: e.clientY });
-            setEditValue(toMeters(distance(pts[edgeIdx], pts[j])).toFixed(3));
+            setEditValue(toMeters(calcEdgeLengthWithArcs(pts[edgeIdx], pts[j], shape.edgeArcs?.[edgeIdx])).toFixed(3));
             setEditingDimMode("b");
             return;
           }
@@ -4379,31 +5236,57 @@ export default function MasterProject() {
           const ly = sm.y + Math.sin(norm) * linearOffset;
           if (Math.abs(clickX - lx) < hitW && Math.abs(clickY - ly) < hitH) {
             setEditingDim({ shapeIdx: si, edgeIdx: i, x: e.clientX, y: e.clientY });
-            setEditValue(toMeters(distance(pts[i], pts[i + 1])).toFixed(3));
+            setEditValue(toMeters(calcEdgeLengthWithArcs(pts[i], pts[i + 1], shape.edgeArcs?.[i])).toFixed(3));
             setEditingDimMode("b");
             return;
           }
         }
         continue;
       }
-      // Regular shapes: label at mid - norm * 28 (same as render loop at ~L1229)
+      // Regular shapes: label at mid - norm * 28 (L2 closed: inward toward centroid, same as render ~L1477)
       const edgeLabelOffset = 28;
+      const hasArcsForDimHit = !!(shape.edgeArcs?.some(a => a && a.length > 0));
       const ec = shape.closed ? pts.length : pts.length - 1;
       for (let i = 0; i < ec; i++) {
         const j = (i + 1) % pts.length;
         const sa = worldToScreen(pts[i].x, pts[i].y), sb = worldToScreen(pts[j].x, pts[j].y);
         const mid = midpoint(sa, sb), norm = edgeNormalAngle(sa, sb);
-        const lx = mid.x - Math.cos(norm) * edgeLabelOffset;
-        const ly = mid.y - Math.sin(norm) * edgeLabelOffset;
+        if (shape.layer === 1 && shape.closed && !(shape.edgeArcs?.[i]?.length)) {
+          const out = edgeOutwardRadForL1Edge(shapes, si, i);
+          if (out != null) {
+            const lm = exteriorDimLabelScreenMid(sa, sb, out, boundaryDimL1ExteriorOffsetScreenPx(zoom));
+            if (Math.abs(clickX - lm.x) < hitW && Math.abs(clickY - lm.y) < hitH) {
+              setEditingDim({ shapeIdx: si, edgeIdx: i, x: e.clientX, y: e.clientY });
+              setEditValue(toMeters(calcEdgeLengthWithArcs(pts[i], pts[j], shape.edgeArcs?.[i])).toFixed(3));
+              setEditingDimMode("b");
+              return;
+            }
+          }
+          continue;
+        }
+        let lx: number, ly: number;
+        if (shape.layer === 2 && shape.closed) {
+          const effPts = hasArcsForDimHit ? getEffectivePolygon(shape) : pts;
+          const ctr = effPts.length >= 3 ? labelAnchorInsidePolygon(effPts) : midpoint(pts[0], pts[1] ?? pts[0]);
+          const edgeMidWorld = midpoint(pts[i], pts[j]);
+          const frac = 0.92;
+          const labelWorld = { x: ctr.x + frac * (edgeMidWorld.x - ctr.x), y: ctr.y + frac * (edgeMidWorld.y - ctr.y) };
+          const sl = worldToScreen(labelWorld.x, labelWorld.y);
+          lx = sl.x;
+          ly = sl.y;
+        } else {
+          lx = mid.x - Math.cos(norm) * edgeLabelOffset;
+          ly = mid.y - Math.sin(norm) * edgeLabelOffset;
+        }
         if (Math.abs(clickX - lx) < hitW && Math.abs(clickY - ly) < hitH) {
           setEditingDim({ shapeIdx: si, edgeIdx: i, x: e.clientX, y: e.clientY });
-          setEditValue(toMeters(distance(pts[i], pts[j])).toFixed(3));
+          setEditValue(toMeters(calcEdgeLengthWithArcs(pts[i], pts[j], shape.edgeArcs?.[i])).toFixed(3));
           setEditingDimMode("b");
           return;
         }
       }
     }
-  }, [shapes, worldToScreen, isOnActiveLayer, activeLayer, selectedPattern, viewFilter]);
+  }, [shapes, worldToScreen, isOnActiveLayer, activeLayer, selectedPattern, viewFilter, zoom]);
 
   // ── Keyboard ───────────────────────────────────────────
   useEffect(() => {
@@ -4411,7 +5294,12 @@ export default function MasterProject() {
       // Don't intercept when typing in an input
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") {
-        if (e.key === "Escape") { setEditingDim(null); setEditingGeodesyCard(null); }
+        if (e.key === "Escape") {
+          setEditingDim(null);
+          setEditingGeodesyCard(null);
+          setPointOffsetAlongLinePick(null);
+          setPointOffsetAlongLineModal(null);
+        }
         return;
       }
       // Layer shortcuts: 1–5 → switch layer
@@ -4453,6 +5341,7 @@ export default function MasterProject() {
           setDrawingShapeIdx(null); setMode("select"); return;
         }
         setEditingDim(null); setEditingGeodesyCard(null); setContextMenu(null); setProjectSummaryContextMenu(null);
+        setPointOffsetAlongLinePick(null); setPointOffsetAlongLineModal(null);
         if (measureStart !== null) { setMeasureStart(null); setMeasureEnd(null); }
       }
       if (e.key === "z" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); undo(); return; }
@@ -4532,6 +5421,17 @@ export default function MasterProject() {
   const removePoint = (si: number, pi: number) => {
     removeEntryAndLinked({ si, pi });
   };
+
+  /** Usuwa cały kształt warstwy 2 — jak Delete przy zaznaczonym elemencie w warstwie 2. */
+  const deleteLayer2ElementFromContext = useCallback((si: number) => {
+    saveHistory();
+    setShapes(p => p.filter((_, i) => i !== si));
+    setSelectedShapeIdx(null);
+    setSelectedPattern(prev => (prev?.shapeIdx === si ? null : prev));
+    setObjectCardShapeIdx(prev => (prev === si ? null : prev));
+    setResultsModalShapeIdx(prev => (prev === si ? null : prev));
+    setContextMenu(null);
+  }, [saveHistory]);
 
   /** Remove an entry and all its linked entries (vertices + arc points). */
   const removeEntryAndLinked = (entry: LinkedEntry) => {
@@ -5327,6 +6227,75 @@ export default function MasterProject() {
     setEditingDim(null);
   };
 
+  const applyPointOffsetAlongLine = () => {
+    const m = pointOffsetAlongLineModal;
+    if (!m) return;
+    const val = parseFloat(pointOffsetAlongLineValue);
+    if (isNaN(val) || val <= 0) {
+      setPointOffsetAlongLineModal(null);
+      return;
+    }
+    saveHistory();
+    setShapes(p => {
+      const n = [...p];
+      const si = m.moveShapeIdx;
+      const pi = m.movePointIdx;
+      const s = { ...n[si] };
+      const np = [...s.points];
+      const anchor = p[m.anchorShapeIdx]?.points[m.anchorPointIdx];
+      const cur = np[pi];
+      if (!anchor || !cur) return p;
+      const vx = cur.x - anchor.x;
+      const vy = cur.y - anchor.y;
+      const L = Math.hypot(vx, vy);
+      if (L < 1e-9) return p;
+      const ux = vx / L;
+      const uy = vy / L;
+      const newPxLen = toPixels(val);
+      const newPos = { x: anchor.x + ux * newPxLen, y: anchor.y + uy * newPxLen };
+      np[pi] = newPos;
+      const dragEntry: LinkedEntry = { si, pi };
+      const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
+      if (group) {
+        for (const lp of group) {
+          if (linkedEntriesMatch(lp, dragEntry)) continue;
+          if (!n[lp.si]) continue;
+          if (lp.si === si && !isArcEntry(lp)) {
+            np[lp.pi] = { ...newPos };
+            continue;
+          }
+          const ls = { ...n[lp.si] };
+          if (isArcEntry(lp)) {
+            const lea = ls.edgeArcs ? [...ls.edgeArcs] : [];
+            const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
+            const li = lArcs.findIndex(a => a.id === lp.arcId);
+            if (li >= 0) {
+              const lA = ls.points[lp.edgeIdx];
+              const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
+              const { t: lt, offset: lo } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, newPos);
+              lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
+              lea[lp.edgeIdx] = lArcs;
+              ls.edgeArcs = lea;
+              n[lp.si] = ls;
+            }
+          } else {
+            const lpts = [...ls.points];
+            lpts[lp.pi] = { ...newPos };
+            ls.points = lpts;
+            n[lp.si] = ls;
+          }
+        }
+      }
+      s.points = np;
+      n[si] = s;
+      if (s.linkedShapeIdx != null && n[s.linkedShapeIdx]) {
+        n[s.linkedShapeIdx] = { ...n[s.linkedShapeIdx], points: [...np] };
+      }
+      return n;
+    });
+    setPointOffsetAlongLineModal(null);
+  };
+
   const applyHeightEdit = (fromBlur = false) => {
     if (fromBlur && skipBlurRef.current) return;
     if (!editingGeodesyCard) return;
@@ -5492,8 +6461,9 @@ export default function MasterProject() {
 
   let cursor = "default";
   if (mode === "freeDraw" || drawingShapeIdx !== null) cursor = "crosshair";
-  const canStartMeasure = selectedShapeIdx === null && !hoveredPoint && !hoveredEdge && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
-  if ((shiftHeld && measureStart === null && canStartMeasure) || (measureStart !== null && drawingShapeIdx === null)) cursor = "crosshair";
+  const canStartMeasure = selectedShapeIdx === null && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
+  const measureAllowed = activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5;
+  if (((shiftHeld && measureStart === null && canStartMeasure) || (measureStart !== null && drawingShapeIdx === null)) && measureAllowed) cursor = "crosshair";
   else if (mode === "move") cursor = isPanning ? "grabbing" : "grab";
   else if (scaleCorner) {
     const dx = mouseWorld.x - scaleCorner.anchor.x;
@@ -5894,8 +6864,7 @@ export default function MasterProject() {
       <div ref={containerRef} style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden" }}>
         <canvas ref={canvasRef} style={{ width: canvasSize.w, height: canvasSize.h, cursor, display: "block", touchAction: "none" }}
           onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp} onContextMenu={handleContextMenu} onDoubleClick={handleDoubleClick}
-          onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} onTouchCancel={handleTouchCancel} />
+          onMouseLeave={handleMouseUp} onContextMenu={handleContextMenu} onDoubleClick={handleDoubleClick} />
 
         {/* Porada + Skróty */}
         <div style={{ position: "absolute", bottom: 12, right: 12, zIndex: 40, display: "flex", gap: 6, alignItems: "center" }}>
@@ -5972,7 +6941,37 @@ export default function MasterProject() {
           )}
         </div>
 
-        {contextMenu && (
+        {contextMenu && contextMenu.patternRotationHandle && (
+          <div ref={contextMenuRef} style={{ position: "fixed", left: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).x, top: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", minWidth: 160 }}>
+            <div style={{ fontSize: 11, color: CC.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${CC.panelBorder}`, marginBottom: 4 }}>
+              {t("project:pattern_rotation_ctx_title")}
+            </div>
+            <CtxItem
+              label={shapes[contextMenu.shapeIdx]?.calculatorInputs?.vizPatternAngleLocked ? t("project:pattern_angle_unlock") : t("project:pattern_angle_lock")}
+              color={CC.accent}
+              onClick={() => {
+                const si = contextMenu.shapeIdx;
+                saveHistory();
+                setShapes(p => {
+                  const n = [...p];
+                  const s = { ...n[si] };
+                  const locked = !!s.calculatorInputs?.vizPatternAngleLocked;
+                  s.calculatorInputs = { ...s.calculatorInputs, vizPatternAngleLocked: !locked };
+                  n[si] = s;
+                  return n;
+                });
+                setContextMenu(null);
+              }}
+            />
+            {shapes[contextMenu.shapeIdx]?.layer === 2 && (
+              <>
+                <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
+                <CtxItem label={t("project:ctx_remove_element")} color={CC.danger} onClick={() => deleteLayer2ElementFromContext(contextMenu.shapeIdx)} />
+              </>
+            )}
+          </div>
+        )}
+        {contextMenu && !contextMenu.patternRotationHandle && (
           <div ref={contextMenuRef} style={{ position: "fixed", left: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).x, top: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", minWidth: 160 }}>
             <div style={{ fontSize: 11, color: CC.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${CC.panelBorder}`, marginBottom: 4 }}>
               {contextMenu.adjustmentEmpty && t("project:adjustment_empty_area")}
@@ -6191,7 +7190,7 @@ export default function MasterProject() {
                   })).filter(g => g.length >= 2));
                   setContextMenu(null);
                 }} />
-                <CtxItem label="✕ Remove arc point" color={CC.danger} onClick={() => {
+                <CtxItem label={t("project:ctx_remove_arc_point")} color={CC.danger} onClick={() => {
                   const si = contextMenu.shapeIdx, ei = contextMenu.edgeIdx, ap = contextMenu.arcPoint!;
                   removeEntryAndLinked({ si, pi: -1 as const, edgeIdx: ei, arcId: ap.id });
                 }} />
@@ -6201,7 +7200,7 @@ export default function MasterProject() {
                   const ap = contextMenu.arcPoint!;
                   const isLinked = isArcPointLinked(si, ei, ap.id);
                   if (isLinked) {
-                    return <CtxItem label="🔗 Unlink arc point" color={CC.text} onClick={() => {
+                    return <CtxItem label={t("project:ctx_unlink_arc_point")} color={CC.text} onClick={() => {
                       unlinkEntry({ si, pi: -1 as const, edgeIdx: ei, arcId: ap.id });
                     }} />;
                   }
@@ -6212,7 +7211,7 @@ export default function MasterProject() {
                   const nearby = findNearbyLinkableEntries(worldPos, ap.id);
                   const edges = findAllEdgesPositionTouches(worldPos, si);
                   if (nearby.length === 0 && edges.length === 0) return null;
-                  return <CtxItem label="🔗 Link arc point" color={CC.accent} onClick={() => {
+                  return <CtxItem label={t("project:ctx_link_arc_point")} color={CC.accent} onClick={() => {
                     linkArcPoint(si, ei, ap);
                   }} />;
                 })()}
@@ -6292,8 +7291,17 @@ export default function MasterProject() {
             )}
             {/* Point menu */}
             {contextMenu.pointIdx >= 0 && (<>
-              {shapes[contextMenu.shapeIdx]?.points.length > 3 && (
-                <CtxItem label="✕ Remove point" color={CC.danger} onClick={() => { removePoint(contextMenu.shapeIdx, contextMenu.pointIdx); }} />
+              {(shapes[contextMenu.shapeIdx]?.layer === 1 || shapes[contextMenu.shapeIdx]?.layer === 2) &&
+                (shapes[contextMenu.shapeIdx]?.points.length ?? 0) >= 2 && (
+                <CtxItem
+                  label={t("project:ctx_offset_along_line")}
+                  color={CC.accent}
+                  onClick={() => {
+                    setPointOffsetAlongLinePick({ moveShapeIdx: contextMenu.shapeIdx, movePointIdx: contextMenu.pointIdx });
+                    setSelectedShapeIdx(contextMenu.shapeIdx);
+                    setContextMenu(null);
+                  }}
+                />
               )}
               {shapes[contextMenu.shapeIdx] && (shapes[contextMenu.shapeIdx].layer === 1 || shapes[contextMenu.shapeIdx].layer === 2) && shapes[contextMenu.shapeIdx].points.length > 3 && (
                 <CtxItem label="〰 Zmiana na arc point" color={CC.accent} onClick={() => {
@@ -6377,25 +7385,43 @@ export default function MasterProject() {
                 </>
               )}
               {isPointLinked(contextMenu.shapeIdx, contextMenu.pointIdx) ? (
-                <CtxItem label="🔗 Unlink point" color={CC.text} onClick={() => unlinkPoint(contextMenu.shapeIdx, contextMenu.pointIdx)} />
+                <CtxItem label={t("project:ctx_unlink_point")} color={CC.text} onClick={() => unlinkPoint(contextMenu.shapeIdx, contextMenu.pointIdx)} />
               ) : (() => {
                 const nearby = findAllNearbyPoints(contextMenu.shapeIdx, contextMenu.pointIdx);
                 const edges = findAllEdgesPointTouches(contextMenu.shapeIdx, contextMenu.pointIdx);
                 if (nearby.length > 0 || edges.length > 0) {
-                  return <CtxItem label="🔗 Link all at point" color={CC.accent} onClick={() => linkAllAtPoint(contextMenu.shapeIdx, contextMenu.pointIdx)} />;
+                  return <CtxItem label={t("project:ctx_link_all_at_point")} color={CC.accent} onClick={() => linkAllAtPoint(contextMenu.shapeIdx, contextMenu.pointIdx)} />;
                 }
                 return null;
               })()}
               {shapes[contextMenu.shapeIdx]?.layer === 2 && (
                 <>
                   <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
-                  {shapes[contextMenu.shapeIdx]?.elementType === "wall" && (
-                    <CtxItem label="↕ Ustaw wysokości segmentu" color={CC.accent} onClick={() => { setSegmentHeightModal({ shapeIdx: contextMenu.shapeIdx }); setContextMenu(null); }} />
-                  )}
                   {shapes[contextMenu.shapeIdx]?.calculatorResults && (
                     <CtxItem label={`📊 ${t("project:path_view_results")}`} color="#a29bfe" onClick={() => { setResultsModalShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
                   )}
-                  <CtxItem label={shapes[contextMenu.shapeIdx]?.calculatorType ? `✏️ Edit Object Card (${shapes[contextMenu.shapeIdx].calculatorType})` : "✏️ Edit Object Card"} color={CC.accent} onClick={() => { setObjectCardShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
+                  <CtxItem label={labelEditObjectCard(shapes[contextMenu.shapeIdx]?.calculatorType, t)} color={CC.accent} onClick={() => { setObjectCardShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
+                </>
+              )}
+              {(() => {
+                const s = shapes[contextMenu.shapeIdx];
+                if (!s) return null;
+                const n = s.points.length;
+                const showRemove =
+                  isPolygonLinearElement(s) && s.closed ? n > 3
+                  : isLinearElement(s) ? n > 2
+                  : n > 3;
+                if (!showRemove) return null;
+                return <CtxItem label={t("project:ctx_remove_point")} color={CC.danger} onClick={() => { removePoint(contextMenu.shapeIdx, contextMenu.pointIdx); }} />;
+              })()}
+              {contextMenu.shapeIdx >= 0 &&
+                shapes[contextMenu.shapeIdx]?.layer === 2 &&
+                !contextMenu.adjustmentEmpty &&
+                !contextMenu.adjustmentOverflow &&
+                !contextMenu.adjustmentOverlap && (
+                <>
+                  <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
+                  <CtxItem label={t("project:ctx_remove_element")} color={CC.danger} onClick={() => deleteLayer2ElementFromContext(contextMenu.shapeIdx)} />
                 </>
               )}
             </>)}
@@ -6442,12 +7468,6 @@ export default function MasterProject() {
                   />
                 );
               })()}
-              {isLinearElement(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx].points.length >= 3 && (
-                <CtxItem label="✕ Usuń segment" color={CC.danger} onClick={() => { saveHistory(); removeLinearSegment(contextMenu.shapeIdx, contextMenu.edgeIdx); setContextMenu(null); setSelectedShapeIdx(null); }} />
-              )}
-              {isGroundworkLinear(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx].points.length === 2 && (
-                <CtxItem label="✕ Usuń element" color={CC.danger} onClick={() => { saveHistory(); setShapes(p => p.filter((_, i) => i !== contextMenu.shapeIdx)); setContextMenu(null); setSelectedShapeIdx(null); }} />
-              )}
               {isLinearElement(shapes[contextMenu.shapeIdx]) && (() => {
                 const et = shapes[contextMenu.shapeIdx].elementType;
                 const target = et === "fence" || et === "foundation" ? "wall" : et === "wall" ? "kerb" : "polygon";
@@ -6455,12 +7475,12 @@ export default function MasterProject() {
                 return <CtxItem label={label} color={CC.accent} onClick={() => alignLinearSegmentTo(contextMenu.shapeIdx, contextMenu.edgeIdx, target)} />;
               })()}
               <CtxItem
-                label={shapes[contextMenu.shapeIdx]?.lockedEdges.some(e => e.idx === contextMenu.edgeIdx) ? "🔓 Unlock length" : "🔒 Lock length"}
+                label={shapes[contextMenu.shapeIdx]?.lockedEdges.some(e => e.idx === contextMenu.edgeIdx) ? t("project:ctx_unlock_length") : t("project:ctx_lock_length")}
                 color={shapes[contextMenu.shapeIdx]?.lockedEdges.some(e => e.idx === contextMenu.edgeIdx) ? CC.locked : CC.text}
                 onClick={() => { toggleLockEdge(contextMenu.shapeIdx, contextMenu.edgeIdx); setContextMenu(null); }}
               />
               {contextMenu.pathCenterlineEdgeIdx !== undefined && contextMenu.edgePos !== undefined && (
-                <CtxItem label="〰 Arc Point" color={CC.accent} onClick={() => {
+                <CtxItem label={t("project:ctx_arc_point")} color={CC.accent} onClick={() => {
                   saveHistory();
                   const si = contextMenu.shapeIdx;
                   const ei = contextMenu.pathCenterlineEdgeIdx!;
@@ -6512,13 +7532,23 @@ export default function MasterProject() {
               {shapes[contextMenu.shapeIdx]?.layer === 2 && (
                 <>
                   <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
-                  {shapes[contextMenu.shapeIdx]?.elementType === "wall" && (
-                    <CtxItem label="↕ Ustaw wysokości segmentu" color={CC.accent} onClick={() => { setSegmentHeightModal({ shapeIdx: contextMenu.shapeIdx }); setContextMenu(null); }} />
-                  )}
                   {shapes[contextMenu.shapeIdx]?.calculatorResults && (
                     <CtxItem label={`📊 ${t("project:path_view_results")}`} color="#a29bfe" onClick={() => { setResultsModalShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
                   )}
-                  <CtxItem label={shapes[contextMenu.shapeIdx]?.calculatorType ? `✏️ Edit Object Card (${shapes[contextMenu.shapeIdx].calculatorType})` : "✏️ Edit Object Card"} color={CC.accent} onClick={() => { setObjectCardShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
+                  <CtxItem label={labelEditObjectCard(shapes[contextMenu.shapeIdx]?.calculatorType, t)} color={CC.accent} onClick={() => { setObjectCardShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }} />
+                </>
+              )}
+              {((shapes[contextMenu.shapeIdx]?.elementType === "wall" && isLinearElement(shapes[contextMenu.shapeIdx])) ||
+                (isLinearElement(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx].points.length >= 3)) && (
+                <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
+              )}
+              {isLinearElement(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx].points.length >= 3 && (
+                <CtxItem label="✕ Usuń segment" color={CC.danger} onClick={() => { saveHistory(); removeLinearSegment(contextMenu.shapeIdx, contextMenu.edgeIdx); setContextMenu(null); setSelectedShapeIdx(null); }} />
+              )}
+              {isLinearElement(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx].layer === 2 && (
+                <>
+                  <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
+                  <CtxItem label={t("project:ctx_remove_element")} color={CC.danger} onClick={() => deleteLayer2ElementFromContext(contextMenu.shapeIdx)} />
                 </>
               )}
             </>)}
@@ -6552,12 +7582,6 @@ export default function MasterProject() {
             {contextMenu.pointIdx === -1 && contextMenu.edgeIdx === -1 && shapes[contextMenu.shapeIdx]?.layer === 2 && (
               <>
                 <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
-                {isGroundworkLinear(shapes[contextMenu.shapeIdx]) && (
-                  <CtxItem label="✕ Usuń element" color={CC.danger} onClick={() => { saveHistory(); setShapes(p => p.filter((_, i) => i !== contextMenu.shapeIdx)); setContextMenu(null); setSelectedShapeIdx(null); }} />
-                )}
-                {shapes[contextMenu.shapeIdx]?.elementType === "wall" && !isGroundworkLinear(shapes[contextMenu.shapeIdx]) && (
-                  <CtxItem label="↕ Ustaw wysokości segmentu" color={CC.accent} onClick={() => { setSegmentHeightModal({ shapeIdx: contextMenu.shapeIdx }); setContextMenu(null); }} />
-                )}
                 {isPolygonLinearElement(shapes[contextMenu.shapeIdx]) && findSurfacesOverlappingLinear(shapes, contextMenu.shapeIdx).length > 0 && (
                   <CtxItem label={t("project:align_surfaces_to_linear")} color={CC.accent} onClick={() => {
                     const linearIdx = contextMenu.shapeIdx;
@@ -6615,12 +7639,12 @@ export default function MasterProject() {
                   );
                 })()}
                 <CtxItem
-                  label={shapes[contextMenu.shapeIdx]?.calculatorType ? `✏️ Edit Object Card (${shapes[contextMenu.shapeIdx].calculatorType})` : "✏️ Edit Object Card"}
+                  label={labelEditObjectCard(shapes[contextMenu.shapeIdx]?.calculatorType, t)}
                   color={CC.accent}
                   onClick={() => { setObjectCardShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }}
                 />
                 {shapes[contextMenu.shapeIdx]?.calculatorType && !isGroundworkLinear(shapes[contextMenu.shapeIdx]) && (
-                  <CtxItem label="Remove Calculator" color={CC.danger} onClick={() => {
+                  <CtxItem label={t("project:remove_calculator")} color={CC.danger} onClick={() => {
                     setShapes(p => {
                       const n = [...p]; const s = { ...n[contextMenu.shapeIdx] };
                       s.calculatorType = undefined; s.calculatorSubType = undefined;
@@ -6638,12 +7662,12 @@ export default function MasterProject() {
         {projectSummaryContextMenu !== null && shapes[projectSummaryContextMenu.shapeIdx] && (
           <div ref={projectSummaryMenuRef} style={{ position: "fixed", left: (projectSummaryDisplayPos ?? { x: projectSummaryContextMenu.x, y: projectSummaryContextMenu.y }).x, top: (projectSummaryDisplayPos ?? { x: projectSummaryContextMenu.x, y: projectSummaryContextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", minWidth: 160 }}>
             <div style={{ fontSize: 11, color: CC.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${CC.panelBorder}`, marginBottom: 4 }}>
-              {shapes[projectSummaryContextMenu.shapeIdx].label || shapes[projectSummaryContextMenu.shapeIdx].calculatorType || "Element"}
+              {shapes[projectSummaryContextMenu.shapeIdx].label || translateCalculatorTypeLabel(shapes[projectSummaryContextMenu.shapeIdx].calculatorType ?? "", t) || t("project:summary_fallback_element")}
             </div>
             {shapes[projectSummaryContextMenu.shapeIdx]?.calculatorResults && (
               <CtxItem label={`📊 ${t("project:path_view_results")}`} color="#a29bfe" onClick={() => { setResultsModalShapeIdx(projectSummaryContextMenu.shapeIdx); setProjectSummaryContextMenu(null); }} />
             )}
-            <CtxItem label="✕ Usuń element" color={CC.danger} onClick={() => {
+            <CtxItem label={t("project:ctx_remove_element")} color={CC.danger} onClick={() => {
               saveHistory();
               setShapes(p => p.filter((_, i) => i !== projectSummaryContextMenu.shapeIdx));
               setSelectedShapeIdx(null);
@@ -6658,10 +7682,37 @@ export default function MasterProject() {
 
         {editingDim && (() => {
           const rect = canvasRef.current?.getBoundingClientRect();
-          const dialogLeft = rect ? Math.max(rect.left + 20, Math.min(rect.right - 280, rect.left + rect.width * 0.6)) : editingDim.x - 140;
-          const dialogTop = rect ? Math.max(rect.top + 20, Math.min(rect.bottom - 260, rect.top + rect.height * 0.4)) : editingDim.y - 120;
+          const dimShape = shapes[editingDim.shapeIdx];
+          let dialogLeft: number;
+          let dialogTop: number;
+          if (rect && dimShape && dimShape.points.length >= 2) {
+            const ei = editingDim.edgeIdx;
+            const j = (ei + 1) % dimShape.points.length;
+            const pA = dimShape.points[ei];
+            const pB = dimShape.points[j];
+            if (pA && pB) {
+              const pos = computeDimEditDialogPosition(
+                rect,
+                worldToScreen(pA.x, pA.y),
+                worldToScreen(pB.x, pB.y),
+                editingDim.x,
+                editingDim.y,
+              );
+              dialogLeft = pos.left;
+              dialogTop = pos.top;
+            } else {
+              dialogLeft = Math.max(rect.left + 12, Math.min(rect.right - DIM_EDIT_DIALOG_W - 12, editingDim.x - DIM_EDIT_DIALOG_W / 2));
+              dialogTop = Math.max(rect.top + 12, Math.min(rect.bottom - DIM_EDIT_DIALOG_H - 12, editingDim.y - DIM_EDIT_DIALOG_H / 2));
+            }
+          } else if (rect) {
+            dialogLeft = Math.max(rect.left + 12, Math.min(rect.right - DIM_EDIT_DIALOG_W - 12, editingDim.x - DIM_EDIT_DIALOG_W / 2));
+            dialogTop = Math.max(rect.top + 12, Math.min(rect.bottom - DIM_EDIT_DIALOG_H - 12, editingDim.y - DIM_EDIT_DIALOG_H / 2));
+          } else {
+            dialogLeft = editingDim.x - DIM_EDIT_DIALOG_W / 2;
+            dialogTop = editingDim.y - DIM_EDIT_DIALOG_H / 2;
+          }
           return (
-            <div style={{ position: "fixed", left: dialogLeft, top: dialogTop, zIndex: 200, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, boxShadow: "0 8px 32px rgba(0,0,0,0.5)", minWidth: 260 }} onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === "Enter") applyDimEdit(); if (e.key === "Escape") setEditingDim(null); }}>
+            <div style={{ position: "fixed", left: dialogLeft, top: dialogTop, zIndex: 200, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, boxShadow: "0 8px 32px rgba(0,0,0,0.5)", width: DIM_EDIT_DIALOG_W, boxSizing: "border-box" }} onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === "Enter") applyDimEdit(); if (e.key === "Escape") setEditingDim(null); }}>
               <div style={{ fontWeight: 600, marginBottom: 16, color: CC.text }}>{t("project:dim_edit_title")}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
                 <span style={{ fontSize: 13, color: CC.text }}>{t("project:dim_edit_length")}:</span>
@@ -6694,6 +7745,69 @@ export default function MasterProject() {
               <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
                 <button onClick={() => setEditingDim(null)} style={{ padding: "8px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13 }}>{t("project:set_angle_cancel")}</button>
                 <button onClick={applyDimEdit} style={{ padding: "8px 16px", background: CC.accent, border: "none", borderRadius: 6, color: CC.bg, cursor: "pointer", fontSize: 13 }}>{t("project:set_angle_apply")}</button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {pointOffsetAlongLineModal && (() => {
+          const m = pointOffsetAlongLineModal;
+          const pad = 12;
+          const vh = typeof window !== "undefined" ? window.innerHeight : 640;
+          const viewportBudget = Math.max(160, vh - pad * 2);
+          const placeH = Math.min(OFFSET_ALONG_LINE_DIALOG_H, viewportBudget);
+          const { left: dialogLeft, top: dialogTop } = clampCenteredFixedDialog(
+            m.screenX,
+            m.screenY,
+            OFFSET_ALONG_LINE_DIALOG_W,
+            placeH,
+            pad
+          );
+          return (
+            <div
+              style={{
+                position: "fixed",
+                left: dialogLeft,
+                top: dialogTop,
+                zIndex: 200,
+                background: CC.panel,
+                border: `1px solid ${CC.panelBorder}`,
+                borderRadius: 8,
+                padding: 20,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                width: OFFSET_ALONG_LINE_DIALOG_W,
+                maxHeight: viewportBudget,
+                overflowY: "auto",
+                boxSizing: "border-box",
+              }}
+              onClick={e => e.stopPropagation()}
+              onKeyDown={e => {
+                if (e.key === "Enter") applyPointOffsetAlongLine();
+                if (e.key === "Escape") setPointOffsetAlongLineModal(null);
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:offset_along_line_modal_title")}</div>
+              <div style={{ fontSize: 12, color: CC.textDim, marginBottom: 12 }}>{t("project:offset_along_line_modal_hint")}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                <span style={{ fontSize: 13, color: CC.text }}>{t("project:offset_along_line_distance")}</span>
+                <input
+                  autoFocus
+                  type="number"
+                  min={0.001}
+                  step={0.001}
+                  value={pointOffsetAlongLineValue}
+                  onChange={e => setPointOffsetAlongLineValue(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") applyPointOffsetAlongLine();
+                    if (e.key === "Escape") setPointOffsetAlongLineModal(null);
+                  }}
+                  style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }}
+                />
+                <span style={{ color: CC.textDim }}>m</span>
+              </div>
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button type="button" onClick={() => setPointOffsetAlongLineModal(null)} style={{ padding: "8px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13 }}>{t("project:set_angle_cancel")}</button>
+                <button type="button" onClick={applyPointOffsetAlongLine} style={{ padding: "8px 16px", background: CC.accent, border: "none", borderRadius: 6, color: CC.bg, cursor: "pointer", fontSize: 13 }}>{t("project:set_angle_apply")}</button>
               </div>
             </div>
           );
@@ -6919,24 +8033,6 @@ export default function MasterProject() {
               saveHistory();
               setShapes(p => { const n = [...p]; n[resultsModalShapeIdx] = { ...n[resultsModalShapeIdx], label: newLabel }; return n; });
             }}
-          />
-        )}
-
-        {segmentHeightModal && shapes[segmentHeightModal.shapeIdx]?.elementType === "wall" && (
-          <WallSegmentHeightModal
-            shape={shapes[segmentHeightModal.shapeIdx]}
-            onSave={(segHeights) => {
-              saveHistory();
-              setShapes(p => {
-                const n = [...p];
-                const s = { ...n[segmentHeightModal.shapeIdx] };
-                s.calculatorInputs = { ...s.calculatorInputs, segmentHeights: segHeights };
-                n[segmentHeightModal.shapeIdx] = s;
-                return n;
-              });
-              setSegmentHeightModal(null);
-            }}
-            onClose={() => setSegmentHeightModal(null)}
           />
         )}
 
@@ -7195,7 +8291,7 @@ export default function MasterProject() {
                   }}
                   style={{ padding: "8px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13 }}
                 >
-                  Zostaw całą szerokość
+                  {t("project:grass_trim_keep_full_width")}
                 </button>
               </div>
             </div>
@@ -7209,7 +8305,7 @@ export default function MasterProject() {
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
                 {findTouchingElementsForEmptyArea(shapes, adjustmentData.emptyAreas[adjustmentFillModal.emptyAreaIdx] ?? []).map(si => {
                   const s = shapes[si];
-                  const name = s?.label || s?.calculatorType || s?.elementType || `Element ${si + 1}`;
+                  const name = shapeDisplayName(s, si, t);
                   return (
                     <button
                       key={si}
@@ -7321,7 +8417,7 @@ export default function MasterProject() {
           <PathCreationModal
             mode="edit"
             subType={shapes[objectCardShapeIdx].elementType === "pathSlabs" ? "slabs" : shapes[objectCardShapeIdx].elementType === "pathConcreteSlabs" ? "concreteSlabs" : "monoblock"}
-            label={shapes[objectCardShapeIdx].label ?? (shapes[objectCardShapeIdx].elementType === "pathSlabs" ? "Path Slabs" : shapes[objectCardShapeIdx].elementType === "pathConcreteSlabs" ? "Path Concrete Slabs" : "Path Monoblock")}
+            label={shapes[objectCardShapeIdx].label ?? (shapes[objectCardShapeIdx].elementType === "pathSlabs" ? t("project:results_path_slabs") : shapes[objectCardShapeIdx].elementType === "pathConcreteSlabs" ? t("project:results_path_concrete_slabs") : t("project:results_path_monoblock"))}
             shape={shapes[objectCardShapeIdx]}
             shapeIdx={objectCardShapeIdx}
             shapes={shapes}

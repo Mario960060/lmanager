@@ -44,7 +44,6 @@ vi.mock("../../../lib/store", () => ({
 }));
 
 vi.mock("../../../components/Calculator/WallCalculator", () => ({ default: createMockCalculator }));
-vi.mock("../../../components/Calculator/SleeperWallCalculator", () => ({ default: createMockCalculator }));
 vi.mock("../../../components/Calculator/KerbsEdgesAndSetsCalculator", () => ({ default: createMockCalculator }));
 vi.mock("../../../components/Calculator/FenceCalculator", () => ({ default: createMockCalculator }));
 vi.mock("../../../components/Calculator/SlabCalculator", () => ({ default: createMockCalculator }));

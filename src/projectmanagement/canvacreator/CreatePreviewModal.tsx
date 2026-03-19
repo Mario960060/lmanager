@@ -11,31 +11,32 @@ import { translateTaskName, translateMaterialName, translateUnit } from "../../l
 import { Shape } from "./geometry";
 import { ProjectSettings } from "./types";
 import { isGroundworkLinear } from "./linearElements";
+import { colors, radii, shadows } from "../../themes/designTokens";
 
-// Design tokens from preview modal spec
+// Map design tokens for CreatePreviewModal
 const D = {
-  bgOverlay: "rgba(8, 14, 24, 0.75)",
-  bgModal: "#141c2b",
-  bgCard: "#1a2536",
-  bgRowEven: "rgba(255, 255, 255, 0.025)",
-  bgRowHover: "rgba(255, 255, 255, 0.045)",
-  bgSectionHeader: "rgba(45, 65, 95, 0.25)",
-  border: "#253350",
-  borderSubtle: "#1e2d44",
-  borderTable: "rgba(255, 255, 255, 0.04)",
-  textPrimary: "#e4e9f0",
-  textSecondary: "#8a9ab5",
-  textMuted: "#556680",
-  textSection: "#c8d4e4",
-  accent: "#22c55e",
-  accentDim: "rgba(34, 197, 94, 0.12)",
-  teal: "#2dd4bf",
-  tealDim: "rgba(45, 212, 191, 0.1)",
-  blue: "#3b82f6",
-  blueDim: "rgba(59, 130, 246, 0.1)",
-  radius: 12,
-  radiusSm: 8,
-  radiusXs: 6,
+  bgOverlay: colors.bgModalBackdrop,
+  bgModal: colors.bgElevated,
+  bgCard: colors.bgCardInner,
+  bgRowEven: colors.bgTableRowAlt,
+  bgRowHover: colors.bgHover,
+  bgSectionHeader: colors.bgOverlay,
+  border: colors.borderDefault,
+  borderSubtle: colors.borderSubtle,
+  borderTable: colors.borderLight,
+  textPrimary: colors.textPrimary,
+  textSecondary: colors.textSecondary,
+  textMuted: colors.textMuted,
+  textSection: colors.textCool,
+  accent: colors.green,
+  accentDim: colors.greenBg,
+  teal: colors.teal,
+  tealDim: colors.tealBg,
+  blue: colors.accentBlue,
+  blueDim: colors.accentBlueBg,
+  radius: radii["2xl"],
+  radiusSm: radii.lg,
+  radiusXs: radii.md,
 } as const;
 
 interface CreatePreviewModalProps {
@@ -194,8 +195,7 @@ export default function CreatePreviewModal({
           border: `1px solid ${D.border}`,
           display: "flex",
           flexDirection: "column",
-          boxShadow:
-            "0 24px 80px rgba(0,0,0,0.5), 0 8px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.03)",
+          boxShadow: shadows.modal,
           overflow: "hidden",
           fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
         }}
@@ -271,8 +271,8 @@ export default function CreatePreviewModal({
                 gap: 12,
                 padding: 16,
                 marginBottom: 20,
-                background: "rgba(255, 159, 67, 0.12)",
-                border: "1px solid rgba(255, 159, 67, 0.35)",
+                background: colors.amberBg,
+                border: `1px solid ${hexToRgba(accentColorsHex.orange, 0.35)}`,
                 borderRadius: D.radius,
               }}
             >
@@ -294,9 +294,9 @@ export default function CreatePreviewModal({
                       fontSize: "0.9rem",
                       fontWeight: 600,
                       cursor: "pointer",
-                      border: "1px solid rgba(255, 159, 67, 0.5)",
-                      background: "rgba(255, 159, 67, 0.2)",
-                      color: "#ff9f43",
+                      border: `1px solid ${hexToRgba(accentColorsHex.orange, 0.5)}`,
+                      background: hexToRgba(accentColorsHex.orange, 0.2),
+                      color: colors.orange,
                     }}
                   >
                     {t("project:create_preview_open_project_card")}
@@ -415,7 +415,7 @@ export default function CreatePreviewModal({
                             fontSize: "0.75rem",
                             fontWeight: 600,
                             color: D.textMuted,
-                            background: "rgba(255,255,255,0.04)",
+                            background: colors.bgHover,
                             padding: "1px 7px",
                             borderRadius: 10,
                             marginLeft: 2,
@@ -464,7 +464,7 @@ export default function CreatePreviewModal({
                         justifyContent: "space-between",
                         alignItems: "center",
                         padding: "6px 16px 8px",
-                        borderTop: "1px dashed rgba(255,255,255,0.06)",
+                        borderTop: `1px dashed ${colors.borderDefault}`,
                       }}
                     >
                       <span style={{ fontSize: "0.82rem", color: D.textMuted, fontWeight: 600, fontStyle: "italic" }}>
@@ -591,7 +591,7 @@ export default function CreatePreviewModal({
               fontWeight: 600,
               cursor: isCardComplete ? "pointer" : "default",
               border: "none",
-              background: isCardComplete ? D.accent : "rgba(255,255,255,0.1)",
+              background: isCardComplete ? D.accent : colors.borderHover,
               color: isCardComplete ? "#fff" : D.textMuted,
               opacity: isCardComplete ? 1 : 0.7,
             }}

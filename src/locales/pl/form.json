@@ -296,7 +296,7 @@
   "free_count": "{{count}} wolne",
   "total_count": "/ {{count}} razem",
   "no_equipment_found": "Nie znaleziono {{title}} pasujących do wyszukiwania.",
-  "equipment_creation_warning": "Nie twórz tutaj Kopaków i Przewoźników. Będą tworzone automatycznie w Kreatorze Zadań Maszyn. Utwórz tutaj tylko INNE urządzenie które posiadasz (zagęszczarki, taczki, itp.)",
+  "equipment_creation_warning": "Nie twórz tutaj Koparek ani wozideł ani taczek. Będą tworzone automatycznie w Kreatorze Zadań Maszyn. Utwórz tutaj tylko INNE urządzenia które posiadasz (zagęszczarki, narzędzia elektryczne, itp.)",
   "status_free_to_use_option": "Wolne do użytku",
   "status_in_use_option": "W użyciu",
   "status_broken_option": "Uszkodzony",

@@ -48,7 +48,7 @@ function RichText({ text }: { text: string }) {
             return (
               <div key={j} className={isBullet ? 'flex gap-2' : ''}>
                 {isBullet && <span className="text-blue-400 flex-shrink-0">•</span>}
-                <span className="text-gray-300 text-sm leading-relaxed">{rendered}</span>
+                <span className="text-sm leading-relaxed" style={{ color: colors.textMuted }}>{rendered}</span>
               </div>
             );
           })}
@@ -132,9 +132,8 @@ const PageInfoModal: React.FC<PageInfoModalProps> = ({
           onClick={() => setIsOpen(false)}
         >
           <div
-            className={`bg-gray-800 dark:bg-[#2c2e3a] rounded-lg shadow-xl w-full max-h-[90vh] flex flex-col border border-gray-700 ${
-              isLongContent ? 'max-w-[95vw] sm:max-w-2xl lg:max-w-4xl' : 'max-w-md'
-            }`}
+            className={`rounded-lg shadow-xl w-full max-h-[90vh] flex flex-col border ${isLongContent ? 'max-w-[95vw] sm:max-w-2xl lg:max-w-4xl' : 'max-w-md'}`}
+            style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header - fixed */}
@@ -170,7 +169,7 @@ const PageInfoModal: React.FC<PageInfoModalProps> = ({
                   </h4>
                   <ul className="space-y-2">
                     {quickTips.map((tip, i) => (
-                      <li key={i} className="flex gap-2 text-sm text-gray-300">
+                      <li key={i} className="flex gap-2 text-sm" style={{ color: colors.textMuted }}>
                         <span className="text-blue-400 mt-1">•</span>
                         <span>{tip}</span>
                       </li>
@@ -181,7 +180,7 @@ const PageInfoModal: React.FC<PageInfoModalProps> = ({
             </div>
 
             {/* Footer - fixed */}
-            <p className="text-center text-gray-500 text-xs p-6 pt-4 flex-shrink-0">
+            <p className="text-center text-xs p-6 pt-4 flex-shrink-0" style={{ color: colors.textSubtle }}>
               {t('click_anywhere_close')}
             </p>
           </div>

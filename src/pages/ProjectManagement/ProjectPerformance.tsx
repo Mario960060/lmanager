@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../../themes/designTokens';
 import { translateTaskName } from '../../lib/translationMap';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
@@ -292,18 +293,18 @@ const ProjectPerformance = () => {
 
   const selectedProject_data = selectedProject ? projects.find(p => p.id === selectedProject) : null;
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): React.CSSProperties => {
     switch (status) {
       case 'planned':
-        return 'bg-gray-600 text-white';
+        return { backgroundColor: colors.bgElevated, color: colors.textOnAccent };
       case 'scheduled':
-        return 'bg-blue-600 text-white';
+        return { backgroundColor: colors.accentBlue, color: colors.textOnAccent };
       case 'in_progress':
-        return 'bg-amber-600 text-white';
+        return { backgroundColor: colors.amber, color: colors.textOnAccent };
       case 'finished':
-        return 'bg-green-600 text-white';
+        return { backgroundColor: colors.green, color: colors.textOnAccent };
       default:
-        return 'bg-gray-600 text-white';
+        return { backgroundColor: colors.bgElevated, color: colors.textOnAccent };
     }
   };
 
@@ -353,22 +354,23 @@ const ProjectPerformance = () => {
     <div className="container mx-auto p-6 space-y-6">
       <BackButton />
       <div className="flex items-center">
-        <h1 className="text-3xl font-bold text-gray-900">{t('project:project_performance_title')}</h1>
+        <h1 className="text-3xl font-bold" style={{ color: colors.textPrimary }}>{t('project:project_performance_title')}</h1>
         <PageInfoModal description="" quickTips={[]} />
       </div>
 
       {/* Project Selection */}
-      <div className="bg-white p-6 rounded-lg shadow-lg">
-        <label className="block text-sm font-medium text-gray-700">{t('project:search_project_label')}</label>
+      <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
+        <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:search_project_label')}</label>
         <div className="mt-1 relative">
           <input
             type="text"
             value={projectSearch}
             onChange={(e) => setProjectSearch(e.target.value)}
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+            className="block w-full rounded-md shadow-sm"
+            style={{ borderColor: colors.borderDefault }}
             placeholder={t('project:enter_project_name')}
           />
-          <Search className="absolute right-3 top-2.5 h-5 w-5 text-blue-500" />
+          <Search className="absolute right-3 top-2.5 h-5 w-5" style={{ color: colors.accentBlue }} />
         </div>
 
         {projects.length > 0 && (
@@ -378,18 +380,19 @@ const ProjectPerformance = () => {
                 <div
                   key={project.id}
                   onClick={() => setSelectedProject(project.id)}
-                  className={`p-4 hover:bg-gray-50 cursor-pointer rounded-lg border transition-all ${
-                    selectedProject === project.id ? 'bg-gray-700 border-gray-800 text-white' : 'border-gray-200'
-                  }`}
+                  className="p-4 cursor-pointer rounded-lg border transition-all"
+                  style={selectedProject === project.id
+                    ? { backgroundColor: colors.bgElevated, borderColor: colors.bgCard, color: colors.textOnAccent }
+                    : { borderColor: colors.borderLight }}
                 >
                   <div className="flex justify-between items-start">
                     <div>
                       <h3 className="font-medium">{project.title}</h3>
-                      <p className={`text-sm ${selectedProject === project.id ? 'text-gray-300' : 'text-gray-600'}`}>
+                      <p className="text-sm" style={{ color: selectedProject === project.id ? colors.textMuted : colors.textMuted }}>
                         {format(parseISO(project.start_date), 'MMM d, yyyy', { locale: dateLocale })} - {format(parseISO(project.end_date), 'MMM d, yyyy', { locale: dateLocale })}
                       </p>
                     </div>
-                    <span className={`px-2 py-1 text-sm rounded-full ${getStatusColor(project.status)}`}>
+                    <span className="px-2 py-1 text-sm rounded-full" style={getStatusColor(project.status)}>
                       {formatStatus(project.status)}
                     </span>
                   </div>
@@ -403,7 +406,7 @@ const ProjectPerformance = () => {
       {selectedProject && (
         <>
           {/* Time Range Selection */}
-          <div className="bg-white p-6 rounded-lg shadow-lg">
+          <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex space-x-4 mb-6">
               <button
                 onClick={() => {
@@ -411,9 +414,8 @@ const ProjectPerformance = () => {
                   setSelectedWeek('');
                   setDateRange({ start: '', end: '' });
                 }}
-                className={`px-4 py-2 rounded-lg ${
-                  selectedTimeRange === 'single' ? 'bg-gray-700 text-white' : 'bg-gray-100'
-                }`}
+                className="px-4 py-2 rounded-lg"
+                style={selectedTimeRange === 'single' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
               >
                 {t('project:single_day')}
               </button>
@@ -423,9 +425,8 @@ const ProjectPerformance = () => {
                   setSelectedDate('');
                   setDateRange({ start: '', end: '' });
                 }}
-                className={`px-4 py-2 rounded-lg ${
-                  selectedTimeRange === 'weekly' ? 'bg-gray-700 text-white' : 'bg-gray-100'
-                }`}
+                className="px-4 py-2 rounded-lg"
+                style={selectedTimeRange === 'weekly' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
               >
                 {t('project:weekly')}
               </button>
@@ -435,9 +436,8 @@ const ProjectPerformance = () => {
                   setSelectedDate('');
                   setSelectedWeek('');
                 }}
-                className={`px-4 py-2 rounded-lg ${
-                  selectedTimeRange === 'range' ? 'bg-gray-700 text-white' : 'bg-gray-100'
-                }`}
+                className="px-4 py-2 rounded-lg"
+                style={selectedTimeRange === 'range' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
               >
                 {t('project:date_range')}
               </button>
@@ -446,7 +446,7 @@ const ProjectPerformance = () => {
             {/* Date Selection based on time range */}
             {selectedTimeRange === 'single' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('project:select_date_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:select_date_label')}</label>
                 <DatePicker
                   value={selectedDate}
                   onChange={setSelectedDate}
@@ -459,23 +459,18 @@ const ProjectPerformance = () => {
 
             {selectedTimeRange === 'weekly' && (
               <div className="max-h-48 overflow-y-auto">
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('project:select_week_label')}</label>
+                <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('project:select_week_label')}</label>
                 {weeks.map((week, index) => (
                   <div
                     key={index}
                     onClick={() => setSelectedWeek(`${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}`)}
-                    className={`p-2 rounded-lg cursor-pointer hover:bg-gray-50 ${
-                      selectedWeek === `${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}`
-                        ? 'bg-gray-700 border border-gray-800 text-white'
-                        : ''
-                    }`}
+                    className="p-2 rounded-lg cursor-pointer"
+                    style={selectedWeek === `${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}`
+                      ? { backgroundColor: colors.bgElevated, borderWidth: 1, borderStyle: 'solid', borderColor: colors.borderDefault, color: colors.textOnAccent }
+                      : {}}
                   >
                     <div className="flex items-center">
-                      <CalendarIcon className={`w-4 h-4 mr-2 ${
-                        selectedWeek === `${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}`
-                          ? 'text-gray-300'
-                          : 'text-gray-500'
-                      }`} />
+                      <CalendarIcon className="w-4 h-4 mr-2" style={{ color: selectedWeek === `${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}` ? colors.textMuted : colors.textSubtle }} />
                       <span>
                         {format(week.start, 'MMM d')} - {format(week.end, 'MMM d, yyyy')}
                       </span>
@@ -488,7 +483,7 @@ const ProjectPerformance = () => {
             {selectedTimeRange === 'range' && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('project:start_date_label')}</label>
+                  <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:start_date_label')}</label>
                   <DatePicker
                     value={dateRange.start}
                     onChange={(v) => setDateRange(prev => ({ ...prev, start: v }))}
@@ -498,7 +493,7 @@ const ProjectPerformance = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('project:end_date_label')}</label>
+                  <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:end_date_label')}</label>
                   <DatePicker
                     value={dateRange.end}
                     onChange={(v) => setDateRange(prev => ({ ...prev, end: v }))}
@@ -514,14 +509,15 @@ const ProjectPerformance = () => {
                       id="allowOutOfRangeSelection"
                       checked={allowOutOfRangeSelection}
                       onChange={(e) => setAllowOutOfRangeSelection(e.target.checked)}
-                      className="h-4 w-4 text-gray-600 rounded border-gray-300 focus:ring-gray-500"
+                      className="h-4 w-4 rounded"
+                      style={{ color: colors.textMuted, borderColor: colors.borderDefault }}
                     />
-                    <label htmlFor="allowOutOfRangeSelection" className="ml-2 text-sm text-gray-600">
+                    <label htmlFor="allowOutOfRangeSelection" className="ml-2 text-sm" style={{ color: colors.textMuted }}>
                       {t('project:allow_dates_outside_range')}
                     </label>
                   </div>
                   {allowOutOfRangeSelection && (
-                    <div className="mt-1 p-2 bg-gray-100 rounded-md text-xs text-gray-600">
+                    <div className="mt-1 p-2 rounded-md text-xs" style={{ backgroundColor: colors.bgSubtle, color: colors.textMuted }}>
                       <p>{t('common:project_date_range')}: {selectedProject_data ? format(parseISO(selectedProject_data.start_date), 'MMM d, yyyy', { locale: dateLocale }) : ''} - {selectedProject_data ? format(parseISO(selectedProject_data.end_date), 'MMM d, yyyy', { locale: dateLocale }) : ''}</p>
                     </div>
                   )}
@@ -533,10 +529,10 @@ const ProjectPerformance = () => {
           {performanceData && (
             <>
               {/* Hours Overview Section */}
-              <div className="bg-white p-6 rounded-lg shadow-lg">
+              <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
                 <h2 className="text-xl font-semibold mb-4">{t('project:hours_overview')}</h2>
                 {/* Total Project Hours collapsible row */}
-                <div className="bg-gray-700 text-white rounded-lg mb-4">
+                <div className="rounded-lg mb-4" style={{ backgroundColor: colors.bgElevated, color: colors.textOnAccent }}>
                   <button
                     className="w-full flex items-center justify-between px-6 py-4 focus:outline-none"
                     onClick={() => setTotalOpen(open => !open)}
@@ -549,11 +545,11 @@ const ProjectPerformance = () => {
                     <ChevronRight className={`w-6 h-6 ml-4 transform transition-transform ${totalOpen ? 'rotate-90' : ''}`} />
                   </button>
                   {totalOpen && (
-                    <div className="bg-gray-800 p-4 rounded-b-lg">
+                    <div className="p-4 rounded-b-lg" style={{ backgroundColor: colors.bgCard }}>
                       {Object.entries(getCombinedTaskHours(performanceData))
                         .sort(([, a], [, b]) => b - a)
                         .map(([task, hours]) => (
-                          <div key={task} className="flex justify-between text-sm py-1 border-b border-gray-700 last:border-b-0">
+                          <div key={task} className="flex justify-between text-sm py-1 border-b last:border-b-0" style={{ borderColor: colors.borderDefault }}>
                             <span>{task}</span>
                             <span>{hours.toFixed(2)} {t('project:hours_unit')}</span>
                           </div>
@@ -566,7 +562,7 @@ const ProjectPerformance = () => {
                   {Object.entries(performanceData.byUser)
                     .sort(([, a]: any, [, b]: any) => b.totalHours - a.totalHours)
                     .map(([userId, userData]: [string, any]) => (
-                      <div key={userId} className="bg-gray-700 text-white rounded-lg">
+                      <div key={userId} className="rounded-lg" style={{ backgroundColor: colors.bgElevated, color: colors.textOnAccent }}>
                         <button
                           className="w-full flex items-center justify-between px-6 py-4 focus:outline-none"
                           onClick={() => setUserOpen(prev => ({ ...prev, [userId]: !prev[userId] }))}
@@ -579,11 +575,11 @@ const ProjectPerformance = () => {
                           <ChevronRight className={`w-5 h-5 ml-4 transform transition-transform ${userOpen[userId] ? 'rotate-90' : ''}`} />
                         </button>
                         {userOpen[userId] && (
-                          <div className="bg-gray-800 p-4 rounded-b-lg">
+                          <div className="p-4 rounded-b-lg" style={{ backgroundColor: colors.bgCard }}>
                             {Object.entries(userData.taskHours)
                               .sort(([, a], [, b]) => b - a)
                               .map(([taskName, hours]: [string, any]) => (
-                                <div key={taskName} className="flex justify-between text-sm py-1 border-b border-gray-700 last:border-b-0">
+                                <div key={taskName} className="flex justify-between text-sm py-1 border-b last:border-b-0" style={{ borderColor: colors.borderDefault }}>
                             <span>{translateTaskName(taskName, t)}</span>
                             <span>{hours.toFixed(2)} {t('project:hours_unit')}</span>
                           </div>
@@ -596,7 +592,7 @@ const ProjectPerformance = () => {
               </div>
 
               {/* Materials Delivered Section */}
-              <div className="bg-white p-6 rounded-lg shadow-lg mt-6">
+              <div className="p-6 rounded-lg shadow-lg mt-6" style={{ backgroundColor: colors.bgCard }}>
                 <button
                   className="w-full flex items-center justify-between focus:outline-none"
                   onClick={() => setMaterialsOpen(open => !open)}
@@ -608,15 +604,15 @@ const ProjectPerformance = () => {
                 {materialsOpen && (
                   <div className="mt-6">
                     {isMaterialsLoading ? (
-                      <div className="text-center text-gray-500">{t('project:loading_data')}</div>
+                      <div className="text-center" style={{ color: colors.textSubtle }}>{t('project:loading_data')}</div>
                     ) : deliveredMaterials.length === 0 ? (
-                      <div className="text-center text-gray-500">{t('project:no_materials_delivered')}</div>
+                      <div className="text-center" style={{ color: colors.textSubtle }}>{t('project:no_materials_delivered')}</div>
                     ) : (
                       <div className="space-y-3">
                         {deliveredMaterials.map((mat, idx) => (
-                          <div key={mat.name + idx} className="flex justify-between items-center bg-gray-50 rounded p-3">
-                            <span className="font-medium text-gray-900">{mat.name}</span>
-                            <span className="text-gray-700">{mat.total.toFixed(2)} {mat.unit}</span>
+                          <div key={mat.name + idx} className="flex justify-between items-center rounded p-3" style={{ backgroundColor: colors.bgSubtle }}>
+                            <span className="font-medium" style={{ color: colors.textPrimary }}>{mat.name}</span>
+                            <span style={{ color: colors.textSecondary }}>{mat.total.toFixed(2)} {mat.unit}</span>
                           </div>
                         ))}
                       </div>
@@ -628,18 +624,18 @@ const ProjectPerformance = () => {
               {/* Additional Tasks and Materials Section */}
               <div className="grid grid-cols-2 gap-6">
                 {/* Additional Tasks */}
-                <div className="bg-white p-6 rounded-lg shadow-lg">
+                <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
                   <h2 className="text-xl font-semibold mb-4">{t('project:additional_tasks_title')}</h2>
                   <div className="space-y-4">
                     {performanceData.additionalTasks.map((task: any) => (
-                      <div key={task.id} className="bg-gray-50 p-4 rounded-lg">
+                      <div key={task.id} className="p-4 rounded-lg" style={{ backgroundColor: colors.bgSubtle }}>
                         <h3 className="font-medium">{translateTaskName(task.description ?? '', t)}</h3>
                         <div className="mt-2 text-sm">
-                          <p className="text-gray-700">
+                          <p style={{ color: colors.textSecondary }}>
                             Hours worked: {getAdditionalTaskHoursWorked(task.id, performanceData.additionalProgressData || []).toFixed(2)}
                           </p>
                           {task.materials_needed && (
-                            <p className="mt-1 text-gray-600">
+                            <p className="mt-1" style={{ color: colors.textMuted }}>
                               Materials: {task.materials_needed}
                             </p>
                           )}
@@ -647,7 +643,7 @@ const ProjectPerformance = () => {
                       </div>
                     ))}
                     {performanceData.additionalTasks.length === 0 && (
-                      <p className="text-center text-gray-600 py-4">
+                      <p className="text-center py-4" style={{ color: colors.textMuted }}>
                         {t('project:no_additional_tasks_period')}
                       </p>
                     )}
@@ -655,16 +651,16 @@ const ProjectPerformance = () => {
                 </div>
 
                 {/* Additional Materials */}
-                <div className="bg-white p-6 rounded-lg shadow-lg">
+                <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
                   <h2 className="text-xl font-semibold mb-4">{t('project:additional_materials_title')}</h2>
                   <div className="space-y-4">
                     {performanceData?.additionalMaterials?.map((material: any) => (
-                      <div key={material.id} className="bg-gray-50 p-4 rounded-lg">
+                      <div key={material.id} className="p-4 rounded-lg" style={{ backgroundColor: colors.bgSubtle }}>
                         <div className="flex justify-between items-start">
                           <div>
                             <h3 className="font-medium">{material.material}</h3>
                             <div className="mt-2 text-sm">
-                              <p className="text-gray-700">
+                              <p style={{ color: colors.textSecondary }}>
                                 Quantity: {material.quantity} {material.unit}
                               </p>
                             </div>
@@ -673,7 +669,7 @@ const ProjectPerformance = () => {
                       </div>
                     ))}
                     {(!performanceData?.additionalMaterials || performanceData.additionalMaterials.length === 0) && (
-                      <p className="text-center text-gray-600 py-4">
+                      <p className="text-center py-4" style={{ color: colors.textMuted }}>
                         {t('project:no_additional_materials_period')}
                       </p>
                     )}

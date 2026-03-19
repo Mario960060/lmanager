@@ -23,6 +23,7 @@
   "tiles": "Płytki",
   "paving": "Kostka brukowa",
   "grass": "Trawa",
+  "artificial_grass": "Sztuczna trawa",
   "10x10_sets": "Zestawy 10x10",
   "1200_fence_slats": "Sztachety 1200",
   "1800_fence_slats": "Sztachety 1800",
@@ -72,5 +73,14 @@
   "joist": "Łata",
   "joists": "Łaty",
   "bearers": "Belki nośne",
-  "frame_slabs": "Płyty ramowe"
+  "frame_slabs": "Płyty ramowe",
+  "composite_posts": "Słupy kompozytowe",
+  "composite_slats": "Panele kompozytowe",
+  "venetian_slats": "Sztachety weneckie",
+  "tile_adhesive": "Klej do płytek",
+  "natural_turf_rolls": "Rolki trawy naturalnej",
+  "sleepers": "Podkłady",
+  "posts": "Słupy",
+  "frame_boards": "Deski ramowe",
+  "fence_slats": "Sztachety ogrodzeniowe"
 }

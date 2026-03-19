@@ -5,6 +5,9 @@ import {
   drawSlabPattern,
   drawSlabFrame,
   computeSlabCuts,
+  computePatternAlignToStraightEdge,
+  isLogicalEdgeStraight,
+  patternOriginOnOutline,
 } from "../../../projectmanagement/canvacreator/visualization/slabPattern";
 import { makeRectangle, makeTriangle } from "../../../projectmanagement/canvacreator/geometry";
 
@@ -93,6 +96,75 @@ describe("shrinkPolygon", () => {
     result.forEach((p) => {
       expect(Number.isFinite(p.x) && Number.isFinite(p.y)).toBe(true);
     });
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// patternOriginOnOutline
+// ══════════════════════════════════════════════════════════════
+describe("patternOriginOnOutline", () => {
+  it("uses same index when outline length matches logical", () => {
+    const logical = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+      { x: 0, y: 10 },
+    ];
+    const outline = logical.map(p => ({ x: p.x + 1, y: p.y + 1 }));
+    const p = patternOriginOnOutline(logical, outline, 1);
+    expect(p).toEqual(outline[1]);
+  });
+
+  it("picks nearest outline vertex when outline is densified", () => {
+    const logical = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+    ];
+    const outline = [
+      { x: 0, y: 0 },
+      { x: 50, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 50 },
+      { x: 100, y: 100 },
+    ];
+    const p = patternOriginOnOutline(logical, outline, 1);
+    expect(p).toEqual({ x: 100, y: 0 });
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// computePatternAlignToStraightEdge
+// ══════════════════════════════════════════════════════════════
+describe("computePatternAlignToStraightEdge", () => {
+  it("returns null for curved logical edge", () => {
+    const shape = makeRectangle(0, 0, 1);
+    shape.edgeArcs = [[{ id: "a", t: 0.5, offset: 10 }]];
+    expect(isLogicalEdgeStraight(shape, 0)).toBe(false);
+    expect(
+      computePatternAlignToStraightEdge(shape, 0, { vizSlabWidth: 60, vizSlabLength: 90 }, "slab")
+    ).toBeNull();
+  });
+
+  it("sets direction along top edge of CCW rectangle and start corner", () => {
+    const shape = makeRectangle(0, 0, 1);
+    shape.closed = true;
+    const r = computePatternAlignToStraightEdge(shape, 0, { vizSlabWidth: 60, vizSlabLength: 90 }, "slab", "parallel");
+    expect(r).not.toBeNull();
+    expect(r!.vizStartCorner).toBe(0);
+    expect(Math.abs(r!.vizDirection - 0)).toBeLessThan(1e-6);
+  });
+
+  it("perpendicular mode adds 90° to parallel direction", () => {
+    const shape = makeRectangle(0, 0, 1);
+    shape.closed = true;
+    const par = computePatternAlignToStraightEdge(shape, 0, { vizSlabWidth: 60, vizSlabLength: 90 }, "slab", "parallel");
+    const perp = computePatternAlignToStraightEdge(shape, 0, { vizSlabWidth: 60, vizSlabLength: 90 }, "slab", "perpendicular");
+    expect(par).not.toBeNull();
+    expect(perp).not.toBeNull();
+    const diff = Math.abs((((perp!.vizDirection - par!.vizDirection) % 360) + 360) % 360);
+    const diffAlt = 360 - diff;
+    expect(Math.min(diff, diffAlt)).toBeCloseTo(90, 5);
   });
 });
 

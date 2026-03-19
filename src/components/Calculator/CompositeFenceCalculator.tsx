@@ -5,6 +5,8 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii, gradients } from '../../themes/designTokens';
+import { Card, DataTable, TextInput, SelectDropdown, Checkbox, CalculatorInputGrid, Button } from '../../themes/uiComponents';
 
 interface CompositeFenceCalculatorProps {
   onResultsChange?: (results: any) => void;
@@ -453,238 +455,181 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
   }, [totalHours, materials]);
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold">{t('calculator:composite_fence_calculator_title')}</h2>
-      <p className="text-sm text-gray-600">
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display, letterSpacing: '0.3px', margin: `${spacing.md}px 0 ${spacing.sm}px` }}>
+        {t('calculator:composite_fence_calculator_title')}
+      </h2>
+      <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, lineHeight: 1.5 }}>
         Calculate materials, time, and costs for composite fence installation projects.
       </p>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:fence_length_m_label')}</label>
-        <input
-          type="number"
-          value={length}
-          onChange={(e) => setLength(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder={t('calculator:enter_length_meters')}
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:fence_height_m_label')}</label>
-        <input
-          type="number"
-          value={height}
-          onChange={(e) => setHeight(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder={t('calculator:enter_height_meters')}
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:composite_slat_width_cm_label')}</label>
-        <input
-          type="number"
-          value={compositeSlatWidth}
-          onChange={(e) => setCompositeSlatWidth(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder={t('calculator:enter_composite_slat_width')}
-          min="0"
-          step="0.1"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:composite_slat_length_cm_label')}</label>
-        <select
-          value={slatLength}
-          onChange={(e) => setSlatLength(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        >
-          <option value="180">180 cm</option>
-          <option value="360">360 cm</option>
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:postmix_per_post_label')}</label>
-        <input
-          type="number"
-          value={postmixPerPost}
-          onChange={(e) => setPostmixPerPost(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          placeholder={t('calculator:enter_postmix_per_post')}
-          min="0"
-          step="0.1"
-        />
-      </div>
-
-      {!isInProjectCreating && (
-        <label className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            checked={calculateTransport}
-            onChange={(e) => setCalculateTransport(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
+        <CalculatorInputGrid columns={2}>
+          <TextInput
+            label={t('calculator:fence_length_m_label')}
+            value={length}
+            onChange={setLength}
+            placeholder={t('calculator:enter_length_meters')}
+            unit="m"
           />
-          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-        </label>
-      )}
+          <TextInput
+            label={t('calculator:fence_height_m_label')}
+            value={height}
+            onChange={setHeight}
+            placeholder={t('calculator:enter_height_meters')}
+            unit="m"
+          />
+        </CalculatorInputGrid>
 
-      {/* Transport Carrier Selection */}
-      {!isInProjectCreating && calculateTransport && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier_label')}</label>
-          <div className="space-y-2">
-            <div 
-              className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded"
-              onClick={() => setSelectedTransportCarrier(null)}
-            >
-              <div className={`w-4 h-4 rounded-full border mr-2 ${
-                selectedTransportCarrier === null 
-                  ? 'border-gray-400' 
-                  : 'border-gray-400'
-              }`}>
-                <div className={`w-2 h-2 rounded-full m-0.5 ${
-                  selectedTransportCarrier === null 
-                    ? 'bg-gray-400' 
-                    : 'bg-transparent'
-                }`}></div>
-              </div>
-              <div>
-                <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
-              </div>
-            </div>
-            {carriers.length > 0 && carriers.map((carrier) => (
-              <div 
-                key={carrier.id}
-                className="flex items-center p-2 cursor-pointer"
-                onClick={() => setSelectedTransportCarrier(carrier)}
-              >
-                <div className={`w-4 h-4 rounded-full border mr-2 ${
-                  selectedTransportCarrier?.id === carrier.id 
-                    ? 'border-gray-400' 
-                    : 'border-gray-400'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full m-0.5 ${
-                    selectedTransportCarrier?.id === carrier.id 
-                      ? 'bg-gray-400' 
-                      : 'bg-transparent'
-                  }`}></div>
-                </div>
-                <div>
-                  <span className="text-gray-800">{carrier.name}</span>
-                  <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
-                </div>
-              </div>
-            ))}
-            </div>
+        <CalculatorInputGrid columns={2}>
+          <TextInput
+            label={t('calculator:composite_slat_width_cm_label')}
+            value={compositeSlatWidth}
+            onChange={setCompositeSlatWidth}
+            placeholder={t('calculator:enter_composite_slat_width')}
+            unit="cm"
+          />
+          <SelectDropdown
+            label={t('calculator:composite_slat_length_cm_label')}
+            value={slatLength + ' cm'}
+            options={['180 cm', '360 cm']}
+            onChange={(v) => setSlatLength(v.replace(/\s*cm\s*$/, ''))}
+            placeholder={t('calculator:composite_slat_length_cm_label')}
+          />
+        </CalculatorInputGrid>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
-              <input
-                type="number"
-                value={transportDistance}
-                onChange={(e) => setTransportDistance(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:enter_transport_distance')}
-                min="0"
-                step="1"
-              />
-            </div>
-          </div>
+        <TextInput
+          label={t('calculator:postmix_per_post_label')}
+          value={postmixPerPost}
+          onChange={setPostmixPerPost}
+          placeholder={t('calculator:enter_postmix_per_post')}
+          unit="bags"
+        />
+
+        {!isInProjectCreating && (
+          <Checkbox label={t('calculator:calculate_transport_time_label')} checked={calculateTransport} onChange={setCalculateTransport} />
         )}
 
-      <button
-        onClick={calculate}
-        disabled={isLoading}
-        className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors disabled:bg-blue-300"
-      >
-        {isLoading ? t('calculator:loading_in_progress') : t('calculator:calculate_button')}
-      </button>
+        {!isInProjectCreating && calculateTransport && (
+          <>
+            <div>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:transport_carrier')}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: !selectedTransportCarrier ? colors.bgHover : 'transparent', border: `1px solid ${!selectedTransportCarrier ? colors.accentBlueBorder : colors.borderLight}` }}
+                  onClick={() => setSelectedTransportCarrier(null)}
+                >
+                  <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${!selectedTransportCarrier ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {!selectedTransportCarrier && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                  </div>
+                  <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{t('calculator:default_wheelbarrow')}</span>
+                </div>
+                {carriers.length > 0 && carriers.map((carrier) => (
+                  <div
+                    key={carrier.id}
+                    style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: selectedTransportCarrier?.id === carrier.id ? colors.bgHover : 'transparent', border: `1px solid ${selectedTransportCarrier?.id === carrier.id ? colors.accentBlueBorder : colors.borderLight}` }}
+                    onClick={() => setSelectedTransportCarrier(carrier)}
+                  >
+                    <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedTransportCarrier?.id === carrier.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {selectedTransportCarrier?.id === carrier.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                    </div>
+                    <div>
+                      <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{carrier.name}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({carrier["size (in tones)"]} tons)</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <TextInput
+              label={t('calculator:transport_distance_label')}
+              value={transportDistance}
+              onChange={setTransportDistance}
+              placeholder={t('calculator:placeholder_enter_transport_distance')}
+              unit="m"
+              helperText={t('calculator:set_to_zero_no_transport')}
+            />
+          </>
+        )}
+
+        <Button variant="accent" color={colors.accentBlue} onClick={calculate} disabled={isLoading}>
+          {isLoading ? t('calculator:loading_in_progress') : t('calculator:calculate_button')}
+        </Button>
 
       {calculationError && (
-        <div className="mt-4 p-4 bg-red-900/90 border border-red-600 rounded-lg text-white">
+        <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: colors.red, border: `1px solid ${colors.redLight}`, color: colors.textOnAccent }}>
           {calculationError}
         </div>
       )}
 
       {totalHours !== null && (
-        <div className="mt-6 space-y-4" ref={resultsRef}>
-          <div>
-            <h3 className="text-lg font-medium">{t('calculator:total_labor_hours_label')} <span className="text-blue-600">{totalHours.toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
-            
-            <div className="mt-2">
-              <h4 className="font-medium text-gray-700 mb-2">{t('calculator:task_breakdown_label')}</h4>
-              <ul className="space-y-1 pl-5 list-disc">
+        <div style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }} ref={resultsRef}>
+          <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg }}>
+              <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                {t('calculator:total_labor_hours_label')}
+              </span>
+              <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                {totalHours.toFixed(2)}
+              </span>
+              <span style={{ fontSize: fontSizes.md, color: colors.accentBlue, fontFamily: fonts.body, fontWeight: fontWeights.medium }}>
+                {t('calculator:hours_abbreviation')}
+              </span>
+            </div>
+          </Card>
+          <Card>
+            <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+              {t('calculator:task_breakdown_label')}
+            </h3>
+            <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
               {taskBreakdown.map((task, index) => (
-                  <li key={index} className="text-sm">
-                    <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}
-                  </li>
-                ))}
-              </ul>
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                    background: index % 2 === 1 ? colors.bgTableRowAlt : undefined,
+                    borderBottom: index < taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
+                  }}
+                >
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName(task.task, t)}</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                    <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{task.hours.toFixed(2)}</span>
+                    <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-
-          <div>
-            <h3 className="font-medium mb-2">{t('calculator:materials_required_label')}</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                    <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_material_header')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_quantity_header')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_unit_header')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_price_per_unit_header')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_total_header')}
-                    </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {materials.map((material, index) => (
-                    <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {translateMaterialName(material.name, t)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {material.amount.toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {translateUnit(material.unit, t)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}
-                        </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.total_price ? `£${material.total_price.toFixed(2)}` : 'N/A'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              
-              {/* Add total price row */}
-              <div className="mt-4 text-right pr-6">
-                <p className="text-sm font-medium">
-                  {t('calculator:total_cost_colon')}{' '}
-                  {materials.some(m => m.total_price !== null) 
-                    ? `£${materials.reduce((sum: number, m: Material) => sum + (m.total_price || 0), 0).toFixed(2)}`
-                    : t('calculator:not_available')}
-                </p>
+          </Card>
+          <DataTable
+            columns={[
+              { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+              { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+              { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+              { key: 'price', label: t('calculator:table_price_per_unit_header'), width: '1fr' },
+              { key: 'total', label: t('calculator:table_total_header'), width: '1fr' },
+            ]}
+            rows={materials.map((m) => ({
+              name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName(m.name, t)}</span>,
+              quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.amount.toFixed(2)}</span>,
+              unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
+              price: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : 'N/A'}</span>,
+              total: <span style={{ fontSize: fontSizes.md, fontWeight: fontWeights.bold, color: colors.textSecondary }}>{m.total_price ? `£${m.total_price.toFixed(2)}` : 'N/A'}</span>,
+            }))}
+            footer={
+              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: spacing.md }}>
+                <span style={{ fontSize: fontSizes.base, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>{t('calculator:total_cost_colon')}</span>
+                <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display }}>
+                  {materials.some(m => m.total_price !== null) ? `£${materials.reduce((sum: number, m: Material) => sum + (m.total_price || 0), 0).toFixed(2)}` : t('calculator:not_available')}
+                </span>
               </div>
-            </div>
-          </div>
+            }
+          />
         </div>
       )}
+      </Card>
     </div>
   );
 };

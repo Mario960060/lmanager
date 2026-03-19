@@ -7,6 +7,7 @@
 import React, { useMemo, useCallback } from "react";
 import type { Point } from "../geometry";
 import { toPixels } from "../geometry";
+import { colors, radii } from "../../../themes/designTokens";
 
 interface WallTileSidesSelectorProps {
   points: Point[];
@@ -288,7 +289,7 @@ export const WallTileSidesSelector: React.FC<WallTileSidesSelectorProps> = ({
 
   if (points.length < 2) {
     return (
-      <div style={{ padding: 12, background: "#1a2536", border: "1px solid #1e2d44", borderRadius: 8, fontSize: "0.75rem", color: "#556680" }}>
+      <div style={{ padding: 12, background: colors.bgDeep, border: `1px solid ${colors.bgDeepBorder}`, borderRadius: radii.lg, fontSize: "0.75rem", color: colors.textLabel }}>
         Wall has too few points.
       </div>
     );
@@ -298,36 +299,36 @@ export const WallTileSidesSelector: React.FC<WallTileSidesSelectorProps> = ({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "#556680", textTransform: "uppercase" }}>
+      <div style={{ fontSize: "0.72rem", fontWeight: 600, color: colors.textLabel, textTransform: "uppercase" }}>
         {sidesCount} sides selected for tiling
       </div>
       <svg
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
-        style={{ background: "#131b28", border: "1px solid #1e2d44", borderRadius: 8, cursor: "pointer" }}
+        style={{ background: colors.bgInputDark, border: `1px solid ${colors.bgDeepBorder}`, borderRadius: radii.lg, cursor: "pointer" }}
         onClick={handleClick}
       >
         <path
           d={centerlinePath}
           fill="none"
-          stroke="rgba(255,255,255,0.12)"
+          stroke={colors.borderMedium}
           strokeWidth={strokeWidthView}
           strokeLinecap="butt"
           strokeLinejoin="miter"
         />
-        <path d={centerlinePath} fill="none" stroke="#253350" strokeWidth={1} strokeLinecap="butt" strokeLinejoin="miter" />
+        <path d={centerlinePath} fill="none" stroke={colors.bgDeepBorderLight} strokeWidth={1} strokeLinecap="butt" strokeLinejoin="miter" />
         {viewPolys.map(({ segIdx, sideIdx, outerEdgePath }) => {
           const selected = segmentTileSides[segIdx]?.[sideIdx] ?? false;
           return selected ? (
-            <path key={`${segIdx}-${sideIdx}`} d={outerEdgePath} fill="none" stroke="#22c55e" strokeWidth={4} strokeLinecap="butt" strokeLinejoin="miter" />
+            <path key={`${segIdx}-${sideIdx}`} d={outerEdgePath} fill="none" stroke={colors.green} strokeWidth={4} strokeLinecap="butt" strokeLinejoin="miter" />
           ) : null;
         })}
         {frontLines.map(({ faceIdx, path }) => {
           const selected = frontFacesTiled[faceIdx] ?? false;
           return (
             <g key={`front-${faceIdx}`}>
-              <path d={path} fill="none" stroke={selected ? "#22c55e" : "#253350"} strokeWidth={selected ? 4 : 2} strokeLinecap="butt" />
+              <path d={path} fill="none" stroke={selected ? colors.green : colors.bgDeepBorderLight} strokeWidth={selected ? 4 : 2} strokeLinecap="butt" />
             </g>
           );
         })}

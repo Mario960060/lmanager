@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../themes/designTokens';
 import { translateTaskName, translateMaterialName, translateUnit } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import { Plus, X, CheckSquare, Clock, Package } from 'lucide-react';
@@ -503,126 +504,136 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
     setShowUnspecifiedMaterialModal(false);
   };
 
-  return (
-    <div className="grid grid-cols-2 gap-6">
-      {/* Additional Tasks Section */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex flex-col gap-4">
-          <h2 className="text-xl font-semibold">{t('event:additional_tasks_title')}</h2>
-          <button
-            onClick={() => setShowTaskModal(true)}
-            className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 w-full sm:w-auto"
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            {t('event:add_task_button')}
-          </button>
-        </div>
+  const AddButtonStyle = ({ label, color, onClick }: { label: string; color: string; onClick: () => void }) => {
+    const [hover, setHover] = useState(false);
+    return (
+      <button
+        onClick={onClick}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          width: "100%", padding: "10px 0", borderRadius: 10,
+          border: `1px dashed ${color}40`,
+          background: hover ? `${color}12` : "transparent",
+          color, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+          transition: "all 0.15s ease",
+        }}
+      >
+        <Plus style={{ width: 14, height: 14 }} />
+        {label}
+      </button>
+    );
+  };
 
-        {/* Display Additional Tasks */}
-        <div className="space-y-4 mt-4">
-          {additionalTasks.map(task => (
-            <div key={task.id} className="border p-4 rounded-lg bg-gray-50">
-              <div className="flex justify-between items-start">
+  const ProgressBarStyle = ({ value, color, height = 3 }: { value: number; color: string; height?: number }) => (
+    <div style={{ width: "100%", height, borderRadius: height, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
+      <div style={{ width: `${Math.min(100, Math.max(0, value))}%`, height: "100%", borderRadius: height, background: color, transition: "width 0.4s ease" }} />
+    </div>
+  );
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      {/* Additional Tasks Section */}
+      <div style={{
+        background: colors.bgCard,
+        borderRadius: 14,
+        border: `1px solid ${colors.borderDefault}`,
+        padding: 18,
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: colors.textPrimary, marginBottom: 14 }}>
+          {t('event:additional_tasks_title')}
+        </div>
+        <AddButtonStyle label={t('event:add_task_button')} color={colors.accentBlue} onClick={() => setShowTaskModal(true)} />
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+          {additionalTasks.map(task => {
+            const hoursNeeded = parseFloat(task.hours_needed?.toString() || "0");
+            const hoursPercent = hoursNeeded > 0 ? (task.hours_spent / hoursNeeded) * 100 : 0;
+            return (
+            <div key={task.id} style={{
+              padding: "12px 14px", borderRadius: 10,
+              background: "rgba(255,255,255,0.015)",
+              border: `1px solid ${colors.borderDefault}`,
+            }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: colors.textPrimary, marginBottom: 3 }}>{task.description}</div>
+              <div style={{ fontSize: 11.5, color: colors.textDim, marginBottom: 8 }}>
+                {t('event:added_by')} {task.profiles?.full_name}
+              </div>
+              <div style={{ display: "flex", gap: 16, fontSize: 12, color: colors.textMuted, marginBottom: 8 }}>
+                <span><Clock style={{ width: 12, height: 12, display: "inline", verticalAlign: "middle", marginRight: 4 }} />{task.hours_spent} / {task.hours_needed} {t('event:hours_label')}</span>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div>
-                  <h4 className="font-medium">{task.description}</h4>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {t('event:added_by')} {task.profiles?.full_name}
-                  </p>
-                  <div className="flex items-center mt-2 space-x-4 text-sm text-gray-600">
-                    <div className="flex items-center">
-                      <Clock className="w-4 h-4 mr-1" />
-                      {task.hours_spent} / {task.hours_needed} hours
-                    </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                    <span style={{ fontSize: 11, color: colors.textMuted }}>{t('event:progress_label')}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: colors.orange }}>{task.progress || 0}%</span>
                   </div>
-                  {task.materials && task.materials.length > 0 && (
-                    <p className="text-sm text-gray-600 mt-2">
-                      <Package className="w-4 h-4 inline mr-1" />
-                      {t('event:materials_label_colon')} {task.materials.map(m => `${translateMaterialName(m.material, t)} (${m.quantity} ${translateUnit(m.unit, t)})`).join(', ')}
-                    </p>
-                  )}
-                  <div className="mt-3 space-y-3">
-                    {/* Progress Bar */}
-                    <div>
-                      <div className="flex justify-between items-center text-sm text-gray-600 mb-1">
-                        <span>{t('event:progress_label_with_percent')} {task.progress}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full transition-all"
-                          style={{ width: `${task.progress || 0}%` }}
-                        />
-                      </div>
-                    </div>
-                    {/* Hours Progress Bar */}
-                    <div>
-                      <div className="flex justify-between items-center text-sm text-gray-600 mb-1">
-                        <span>{t('event:hours_progress_label')} {((task.hours_spent / parseFloat(task.hours_needed.toString())) * 100).toFixed(1)}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-green-600 h-2 rounded-full transition-all"
-                          style={{ width: `${Math.min((task.hours_spent / parseFloat(task.hours_needed.toString())) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                    {/* Update Progress Button */}
-                    <button
-                      onClick={() => {
-                        setSelectedTask(task);
-                        setProgressDetails({
-                          progress: '',
-                          hoursWorked: '',
-                          notes: ''
-                        });
-                        setShowProgressModal(true);
-                      }}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-1.5 px-3 rounded-md transition-colors text-sm"
-                    >
-                      {t('event:update_progress_button')}
-                    </button>
+                  <ProgressBarStyle value={task.progress || 0} color={colors.orange} />
+                </div>
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                    <span style={{ fontSize: 11, color: colors.textMuted }}>{t('event:hours_label')}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: colors.orange }}>{hoursPercent.toFixed(0)}%</span>
                   </div>
+                  <ProgressBarStyle value={hoursPercent} color={colors.orange} />
                 </div>
               </div>
+              <button
+                onClick={() => {
+                  setSelectedTask(task);
+                  setProgressDetails({ progress: '', hoursWorked: '', notes: '' });
+                  setShowProgressModal(true);
+                }}
+                style={{
+                  marginTop: 10, padding: "6px 14px", borderRadius: 7,
+                  background: "rgba(99,140,255,0.12)", border: "1px solid rgba(99,140,255,0.2)",
+                  color: colors.accentBlue, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                }}
+              >
+                {t('event:update_progress')}
+              </button>
             </div>
-          ))}
+          );
+          })}
           {additionalTasks.length === 0 && (
-            <p className="text-center text-gray-500 py-4">{t('event:no_additional_tasks_yet')}</p>
+            <div style={{ textAlign: "center", padding: 16, fontSize: 12.5, color: colors.textDim }}>
+              {t('event:no_additional_tasks_yet')}
+            </div>
           )}
         </div>
       </div>
 
       {/* Additional Materials Section */}
-      <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex flex-col gap-4">
-          <h2 className="text-xl font-semibold">{t('event:additional_materials_title')}</h2>
-          <button
-            onClick={() => setShowMaterialModal(true)}
-            className="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 w-full sm:w-auto"
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            {t('event:add_material_button')}
-          </button>
+      <div style={{
+        background: colors.bgCard,
+        borderRadius: 14,
+        border: `1px solid ${colors.borderDefault}`,
+        padding: 18,
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: colors.textPrimary, marginBottom: 14 }}>
+          {t('event:additional_materials_title')}
         </div>
-
-        {/* Display Additional Materials */}
-        <div className="space-y-4 mt-4">
+        <AddButtonStyle label={t('event:add_material_button')} color={colors.green} onClick={() => setShowMaterialModal(true)} />
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
           {additionalMaterials.map(material => (
-            <div key={material.id} className="border p-4 rounded-lg bg-gray-50">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-medium">{material.material}</h4>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {t('event:quantity_label_parentheses')}: {material.quantity} {material.unit}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {t('event:added_by')} {material.profiles?.full_name}
-                  </p>
+            <div key={material.id} style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "12px 14px", borderRadius: 10,
+              background: "rgba(255,255,255,0.015)",
+              border: `1px solid ${colors.borderDefault}`,
+            }}>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: colors.textPrimary }}>{material.material}</div>
+                <div style={{ fontSize: 11.5, color: colors.textDim, marginTop: 2 }}>
+                  {t('event:quantity_label')}: {material.quantity} {material.unit} · {t('event:added_by')} {material.profiles?.full_name}
                 </div>
               </div>
             </div>
           ))}
           {additionalMaterials.length === 0 && (
-            <p className="text-center text-gray-500 py-4">{t('event:no_additional_materials_yet')}</p>
+            <div style={{ textAlign: "center", padding: 16, fontSize: 12.5, color: colors.textDim }}>
+              {t('event:no_additional_materials_yet')}
+            </div>
           )}
         </div>
       </div>
@@ -632,11 +643,12 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
         <Modal title={t('event:add_additional_task_modal_title')} onClose={() => setShowTaskModal(false)}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:task_type_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:task_type_label')}</label>
               <select
                 value={selectedTaskTemplate}
                 onChange={(e) => handleTaskTemplateChange(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
               >
                 <option value="">{t('event:select_task_type')}</option>
                 {taskTemplates.map(template => (
@@ -649,11 +661,12 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:task_description_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:task_description_label')}</label>
               <textarea
                 value={taskDetails.description}
                 onChange={(e) => setTaskDetails({ ...taskDetails, description: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                 rows={3}
                 placeholder={t('event:describe_task_placeholder')}
               />
@@ -661,7 +674,7 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('event:start_date_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:start_date_label')}</label>
                 <DatePicker
                   value={taskDetails.start_date}
                   onChange={(v) => setTaskDetails({ ...taskDetails, start_date: v })}
@@ -670,7 +683,7 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('event:end_date_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:end_date_label')}</label>
                 <DatePicker
                   value={taskDetails.end_date}
                   onChange={(v) => setTaskDetails({ ...taskDetails, end_date: v })}
@@ -681,7 +694,7 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>
                 {t('event:quantity_label_parentheses')} {selectedTaskTemplate && taskTemplates.find(t => t.id === selectedTaskTemplate)?.unit ? 
                   `(${translateUnit(taskTemplates.find(t => t.id === selectedTaskTemplate)?.unit || '', t)})` : ''}
               </label>
@@ -689,7 +702,8 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                 type="number"
                 value={taskDetails.quantity}
                 onChange={(e) => handleQuantityChange(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('event:enter_quantity_placeholder')}
                 min="0"
                 step="0.5"
@@ -697,23 +711,25 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:hours_needed_auto_calculated')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:hours_needed_auto_calculated')}</label>
               <input
                 type="number"
                 value={taskDetails.hours_needed}
                 readOnly
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgSubtle }}
                 placeholder={t('event:hours_calculated_based_on_quantity')}
               />
             </div>
 
             <div>
               <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-gray-700">{t('event:materials_needed_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:materials_needed_label')}</label>
                 <button
                   type="button"
                   onClick={handleAddMaterial}
-                  className="text-sm text-blue-600 hover:text-blue-700"
+                  className="text-sm"
+                  style={{ color: colors.accentBlue }}
                 >
                   {t('event:add_material_link')}
                 </button>
@@ -732,10 +748,11 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                           }
                           handleMaterialChange(index, 'material', e.target.value);
                         }}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                       >
                         <option value="">{t('calculator:select_material_placeholder')}</option>
-                        <option value="other" className="font-medium text-blue-600">{t('common:other_custom_material')}</option>
+                        <option value="other" className="font-medium" style={{ color: colors.accentBlue }}>{t('common:other_custom_material')}</option>
                         {materialTemplates.map(template => (
                           <option key={template.id} value={template.name}>
                             {translateMaterialName(template.name, t)} ({template.unit})
@@ -748,7 +765,8 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                         type="number"
                         value={material.quantity}
                         onChange={(e) => handleMaterialChange(index, 'quantity', e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                         placeholder={t('calculator:qty_placeholder')}
                         min="0"
                         step="0.01"
@@ -759,7 +777,8 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                         type="text"
                         value={material.unit}
                         onChange={(e) => handleMaterialChange(index, 'unit', e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                        className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                         placeholder={t('calculator:unit_placeholder')}
                         readOnly={!!material.material && material.material !== 'other'}
                       />
@@ -767,7 +786,8 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                     <button
                       type="button"
                       onClick={() => handleRemoveMaterial(index)}
-                      className="mt-1 text-red-600 hover:text-red-700"
+                      className="mt-1"
+                      style={{ color: colors.red }}
                     >
                       <X className="w-5 h-5" />
                     </button>
@@ -779,7 +799,8 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
             <button
               onClick={handleTaskSubmit}
               disabled={addTaskMutation.isPending}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="w-full py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+              style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
             >
               {addTaskMutation.isPending ? `${t('event:saving_action')}...` : t('event:add_task_button')}
             </button>
@@ -792,11 +813,12 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
         <Modal title={t('event:add_additional_material_modal_title')} onClose={() => setShowMaterialModal(false)}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:material_type_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:material_type_label')}</label>
               <select
                 value={selectedMaterialTemplate}
                 onChange={(e) => handleMaterialTemplateChange(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
               >
                 <option value="">{t('event:select_material_placeholder')}</option>
                 {materialTemplates.map(template => (
@@ -810,24 +832,26 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
 
             {selectedMaterialTemplate === 'other' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('event:material_name_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:material_name_label')}</label>
                 <input
                   type="text"
                   value={materialDetails.material}
                   onChange={(e) => setMaterialDetails({ ...materialDetails, material: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                   placeholder={t('event:enter_material_name_placeholder')}
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:material_quantity_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:material_quantity_label')}</label>
               <input
                 type="number"
                 value={materialDetails.quantity}
                 onChange={(e) => setMaterialDetails({ ...materialDetails, quantity: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('event:enter_quantity_placeholder')}
                 min="0"
                 step="0.01"
@@ -836,12 +860,13 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
 
             {selectedMaterialTemplate === 'other' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('event:material_unit_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:material_unit_label')}</label>
                 <input
                   type="text"
                   value={materialDetails.unit}
                   onChange={(e) => setMaterialDetails({ ...materialDetails, unit: e.target.value })}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                   placeholder={t('event:unit_placeholder_example')}
                 />
               </div>
@@ -850,7 +875,8 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
             <button
               onClick={handleMaterialSubmit}
               disabled={addMaterialMutation.isPending}
-              className="w-full bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+              className="w-full py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+              style={{ backgroundColor: colors.green, color: colors.textOnAccent }}
             >
               {addMaterialMutation.isPending ? `${t('event:saving_action')}...` : t('event:add_material_button')}
             </button>
@@ -867,17 +893,17 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
         }}>
           <div className="space-y-4">
             {/* Current Progress Information */}
-            <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-              <div className="text-sm text-gray-600">
+            <div className="p-4 rounded-lg space-y-2" style={{ backgroundColor: colors.bgSubtle }}>
+              <div className="text-sm" style={{ color: colors.textMuted }}>
                 <span className="font-medium">{t('event:current_progress_label')}</span> {selectedTask.progress}%
               </div>
-              <div className="text-sm text-gray-600">
-                <span className="font-medium">{t('event:hours_worked_label')}</span> {selectedTask.hours_spent} / {selectedTask.hours_needed} hours
+              <div className="text-sm" style={{ color: colors.textMuted }}>
+                <span className="font-medium">{t('event:hours_worked_label')}</span> {selectedTask.hours_spent} / {selectedTask.hours_needed} {t('event:hours_label')}
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:progress_percentage_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:progress_percentage_label')}</label>
               <input
                 type="number"
                 value={progressDetails.progress}
@@ -887,13 +913,14 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                 }))}
                 min="0"
                 max="100"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('event:enter_progress_percentage')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:hours_worked_input_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:hours_worked_input_label')}</label>
               <input
                 type="number"
                 value={progressDetails.hoursWorked}
@@ -903,13 +930,14 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                 }))}
                 min="0"
                 step="0.5"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('event:enter_hours_worked')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('event:notes_optional_label')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:notes_optional_label')}</label>
               <textarea
                 value={progressDetails.notes}
                 onChange={(e) => setProgressDetails(prev => ({
@@ -917,7 +945,8 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
                   notes: e.target.value
                 }))}
                 rows={3}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="mt-1 block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('event:add_notes_about_progress')}
               />
             </div>
@@ -925,7 +954,8 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
             <button
               onClick={handleProgressSubmit}
               disabled={addProgressMutation.isPending || !progressDetails.progress || !progressDetails.hoursWorked}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="w-full py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+              style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
             >
               {addProgressMutation.isPending ? `${t('event:updating_action')}...` : t('event:update_progress_button')}
             </button>

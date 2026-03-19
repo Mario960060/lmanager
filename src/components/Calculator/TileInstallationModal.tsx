@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
-import { translateUnit, translateMaterialName } from '../../lib/translationMap';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
+import { colors, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
 
 interface TaskTemplate {
   id: string;
@@ -529,43 +530,32 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     }
   }, [results]);
 
+  const inputStyle: React.CSSProperties = { marginTop: spacing.sm, display: 'block', width: '100%', borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: '8px 12px', outline: 'none' };
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted };
+
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-4">{t('calculator:tile_installation_calculator')}</h2>
-      <div className="grid grid-cols-2 gap-4">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: spacing['6xl'] }}>
+      <h2 style={{ fontSize: fontSizes['2xl'], fontWeight: fontWeights.bold, color: colors.textPrimary, marginBottom: spacing['4xl'] }}>{t('calculator:tile_installation_calculator')}</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing['4xl'] }}>
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:wall_length_m')}</label>
-          <input
-            type="number"
-            value={wallLength}
-            onChange={(e) => setWallLength(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder={t('calculator:enter_wall_length')}
-            step="0.01"
-          />
+          <label style={labelStyle}>{t('calculator:wall_length_m')}</label>
+          <input type="number" value={wallLength} onChange={(e) => setWallLength(e.target.value)} style={inputStyle} placeholder={t('calculator:enter_wall_length')} step="0.01" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:wall_height_m')}</label>
-          <input
-            type="number"
-            value={wallHeight}
-            onChange={(e) => setWallHeight(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-            placeholder={t('calculator:enter_wall_height')}
-            step="0.01"
-          />
+          <label style={labelStyle}>{t('calculator:wall_height_m')}</label>
+          <input type="number" value={wallHeight} onChange={(e) => setWallHeight(e.target.value)} style={inputStyle} placeholder={t('calculator:enter_wall_height')} step="0.01" />
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:slab_dimensions')}</label>
+        <label style={labelStyle}>{t('calculator:slab_dimensions')}</label>
         <select
           value={selectedSlab.label}
           onChange={(e) => {
             const selected = SLAB_DIMENSIONS.find(dim => dim.label === e.target.value);
             if (selected) setSelectedSlab(selected);
           }}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          style={inputStyle}
         >
           {SLAB_DIMENSIONS.map((dim) => (
             <option key={dim.label} value={dim.label}>
@@ -576,38 +566,22 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:slab_orientation_label')}</label>
-        <div className="mt-2 grid grid-cols-1 gap-2">
-          <label className="inline-flex items-center p-2 rounded-md hover:bg-gray-50">
-            <input
-              type="radio"
-              value="long"
-              checked={slabOrientation === 'long'}
-              onChange={(e) => setSlabOrientation(e.target.value as 'long' | 'side')}
-              className="text-blue-600 focus:ring-blue-500"
-            />
-            <span className="ml-2">{t('calculator:slabs_long_way')}</span>
+        <label style={labelStyle}>{t('calculator:slab_orientation_label')}</label>
+        <div style={{ marginTop: spacing['2xl'], display: 'grid', gridTemplateColumns: '1fr', gap: spacing['2xl'] }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', padding: spacing['2xl'], borderRadius: radii.md }}>
+            <input type="radio" value="long" checked={slabOrientation === 'long'} onChange={(e) => setSlabOrientation(e.target.value as 'long' | 'side')} style={{ accentColor: colors.accentBlue }} />
+            <span style={{ marginLeft: spacing['2xl'] }}>{t('calculator:slabs_long_way')}</span>
           </label>
-          <label className="inline-flex items-center p-2 rounded-md hover:bg-gray-50">
-            <input
-              type="radio"
-              value="side"
-              checked={slabOrientation === 'side'}
-              onChange={(e) => setSlabOrientation(e.target.value as 'long' | 'side')}
-              className="text-blue-600 focus:ring-blue-500"
-            />
-            <span className="ml-2">{t('calculator:slabs_side_ways')}</span>
+          <label style={{ display: 'inline-flex', alignItems: 'center', padding: spacing['2xl'], borderRadius: radii.md }}>
+            <input type="radio" value="side" checked={slabOrientation === 'side'} onChange={(e) => setSlabOrientation(e.target.value as 'long' | 'side')} style={{ accentColor: colors.accentBlue }} />
+            <span style={{ marginLeft: spacing['2xl'] }}>{t('calculator:slabs_side_ways')}</span>
           </label>
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:gaps_label')}</label>
-        <select
-          value={selectedGap}
-          onChange={(e) => setSelectedGap(Number(e.target.value))}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-        >
+        <label style={labelStyle}>{t('calculator:gaps_label')}</label>
+        <select value={selectedGap} onChange={(e) => setSelectedGap(Number(e.target.value))} style={inputStyle}>
           {GAP_OPTIONS.map((gap) => (
             <option key={gap} value={gap}>
               {gap}{t('calculator:mm_suffix')}
@@ -616,275 +590,154 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
         </select>
       </div>
 
-      <div className="space-y-4">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: spacing['4xl'] }}>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:slab_cutting_length')}</label>
-          <div className="grid grid-cols-1 gap-2">
-            <label className="inline-flex items-center p-2 rounded-md hover:bg-gray-50">
-              <input
-                type="radio"
-                value="1cut"
-                checked={lengthCutType === '1cut'}
-                onChange={(e) => setLengthCutType(e.target.value as '1cut' | '2cuts')}
-                className="text-blue-600 focus:ring-blue-500"
-              />
-              <span className="ml-2">{t('calculator:cut_at_end')}</span>
+          <label style={{ ...labelStyle, marginBottom: spacing['2xl'] }}>{t('calculator:slab_cutting_length')}</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: spacing['2xl'] }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', padding: spacing['2xl'], borderRadius: radii.md }}>
+              <input type="radio" value="1cut" checked={lengthCutType === '1cut'} onChange={(e) => setLengthCutType(e.target.value as '1cut' | '2cuts')} style={{ accentColor: colors.accentBlue }} />
+              <span style={{ marginLeft: spacing['2xl'] }}>{t('calculator:cut_at_end')}</span>
             </label>
-            <label className="inline-flex items-center p-2 rounded-md hover:bg-gray-50">
-              <input
-                type="radio"
-                value="2cuts"
-                checked={lengthCutType === '2cuts'}
-                onChange={(e) => setLengthCutType(e.target.value as '1cut' | '2cuts')}
-                className="text-blue-600 focus:ring-blue-500"
-              />
-              <span className="ml-2">{t('calculator:cuts_beginning_end')}</span>
+            <label style={{ display: 'inline-flex', alignItems: 'center', padding: spacing['2xl'], borderRadius: radii.md }}>
+              <input type="radio" value="2cuts" checked={lengthCutType === '2cuts'} onChange={(e) => setLengthCutType(e.target.value as '1cut' | '2cuts')} style={{ accentColor: colors.accentBlue }} />
+              <span style={{ marginLeft: spacing['2xl'] }}>{t('calculator:cuts_beginning_end')}</span>
             </label>
           </div>
         </div>
-
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:slab_cutting_height')}</label>
-          <div className="grid grid-cols-1 gap-2">
-            <label className="inline-flex items-center p-2 rounded-md hover:bg-gray-50">
-              <input
-                type="radio"
-                value="1cut"
-                checked={heightCutType === '1cut'}
-                onChange={(e) => setHeightCutType(e.target.value as '1cut' | '2cuts')}
-                className="text-blue-600 focus:ring-blue-500"
-              />
-              <span className="ml-2">{t('calculator:cut_on_top')}</span>
+          <label style={{ ...labelStyle, marginBottom: spacing['2xl'] }}>{t('calculator:slab_cutting_height')}</label>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: spacing['2xl'] }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', padding: spacing['2xl'], borderRadius: radii.md }}>
+              <input type="radio" value="1cut" checked={heightCutType === '1cut'} onChange={(e) => setHeightCutType(e.target.value as '1cut' | '2cuts')} style={{ accentColor: colors.accentBlue }} />
+              <span style={{ marginLeft: spacing['2xl'] }}>{t('calculator:cut_on_top')}</span>
             </label>
-            <label className="inline-flex items-center p-2 rounded-md hover:bg-gray-50">
-              <input
-                type="radio"
-                value="2cuts"
-                checked={heightCutType === '2cuts'}
-                onChange={(e) => setHeightCutType(e.target.value as '1cut' | '2cuts')}
-                className="text-blue-600 focus:ring-blue-500"
-              />
-              <span className="ml-2">{t('calculator:cuts_bottom_top')}</span>
+            <label style={{ display: 'inline-flex', alignItems: 'center', padding: spacing['2xl'], borderRadius: radii.md }}>
+              <input type="radio" value="2cuts" checked={heightCutType === '2cuts'} onChange={(e) => setHeightCutType(e.target.value as '1cut' | '2cuts')} style={{ accentColor: colors.accentBlue }} />
+              <span style={{ marginLeft: spacing['2xl'] }}>{t('calculator:cuts_bottom_top')}</span>
             </label>
           </div>
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:adhesive_thickness')}</label>
-        <input
-          type="number"
-          value={adhesiveThickness}
-          onChange={(e) => setAdhesiveThickness(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
-          placeholder={t('calculator:cm_placeholder')}
-          min="0"
-          step="0.1"
-        />
-        <p className="text-xs text-gray-500 mt-1">
-          {t('calculator:consumption_label')} {((parseFloat(adhesiveThickness) || 0.5) * 12).toFixed(1)} {t('calculator:kg_m2_suffix')}
-        </p>
+        <label style={labelStyle}>{t('calculator:adhesive_thickness')}</label>
+        <input type="number" value={adhesiveThickness} onChange={(e) => setAdhesiveThickness(e.target.value)} style={inputStyle} placeholder={t('calculator:cm_placeholder')} min="0" step="0.1" />
+        <p style={{ fontSize: fontSizes.xs, color: colors.textDim, marginTop: spacing.sm }}>{t('calculator:consumption_label')} {((parseFloat(adhesiveThickness) || 0.5) * 12).toFixed(1)} {t('calculator:kg_m2_suffix')}</p>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:type_of_slabs')}</label>
-        <div className="mt-2 grid grid-cols-1 gap-2">
-          <label className="inline-flex items-center p-2 rounded-md hover:bg-gray-50">
-            <input
-              type="radio"
-              value="porcelain"
-              checked={slabType === 'porcelain'}
-              onChange={() => setSlabType('porcelain')}
-              className="text-blue-600 focus:ring-blue-500"
-            />
-            <span className="ml-2">{t('calculator:porcelain_option')}</span>
+        <label style={labelStyle}>{t('calculator:type_of_slabs')}</label>
+        <div style={{ marginTop: spacing['2xl'], display: 'grid', gridTemplateColumns: '1fr', gap: spacing['2xl'] }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', padding: spacing['2xl'], borderRadius: radii.md }}>
+            <input type="radio" value="porcelain" checked={slabType === 'porcelain'} onChange={() => setSlabType('porcelain')} style={{ accentColor: colors.accentBlue }} />
+            <span style={{ marginLeft: spacing['2xl'] }}>{t('calculator:porcelain_option')}</span>
           </label>
-          <label className="inline-flex items-center p-2 rounded-md hover:bg-gray-50">
-            <input
-              type="radio"
-              value="sandstones"
-              checked={slabType === 'sandstones'}
-              onChange={() => setSlabType('sandstones')}
-              className="text-blue-600 focus:ring-blue-500"
-            />
-            <span className="ml-2">{t('calculator:sandstones_option')}</span>
+          <label style={{ display: 'inline-flex', alignItems: 'center', padding: spacing['2xl'], borderRadius: radii.md }}>
+            <input type="radio" value="sandstones" checked={slabType === 'sandstones'} onChange={() => setSlabType('sandstones')} style={{ accentColor: colors.accentBlue }} />
+            <span style={{ marginLeft: spacing['2xl'] }}>{t('calculator:sandstones_option')}</span>
           </label>
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:grouting_method')}</label>
-        <select
-          value={selectedGroutingId}
-          onChange={e => setSelectedGroutingId(e.target.value)}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-select"
-          disabled={isLoadingGrouting}
-        >
+        <label style={labelStyle}>{t('calculator:grouting_method')}</label>
+        <select value={selectedGroutingId} onChange={e => setSelectedGroutingId(e.target.value)} style={inputStyle} disabled={isLoadingGrouting}>
           <option value="">{t('calculator:select_grouting_method')}</option>
           {groutingMethods.map((method: { id: string; name: string }) => (
             <option key={method.id} value={method.id}>{method.name}</option>
           ))}
         </select>
-        {isLoadingGrouting && <p className="text-sm text-gray-500 mt-1">{t('calculator:loading_grouting_methods')}</p>}
-        <p className="text-xs text-red-600 mt-1">{t('calculator:grouting_note')}</p>
+        {isLoadingGrouting && <p style={{ fontSize: fontSizes.sm, color: colors.textDim, marginTop: spacing.sm }}>{t('calculator:loading_grouting_methods')}</p>}
+        <p style={{ fontSize: fontSizes.xs, color: colors.red, marginTop: spacing.sm }}>{t('calculator:grouting_note')}</p>
       </div>
 
       {!isInProjectCreating && (
-        <label className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            checked={calculateTransport}
-            onChange={(e) => setCalculateTransport(e.target.checked)}
-            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time')}</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: spacing['2xl'] }}>
+          <input type="checkbox" checked={calculateTransport} onChange={(e) => setCalculateTransport(e.target.checked)} style={{ accentColor: colors.accentBlue }} />
+          <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:calculate_transport_time')}</span>
         </label>
       )}
 
       {/* Transport Carrier Selection */}
       {!isInProjectCreating && calculateTransport && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier_label')}</label>
-          <div className="space-y-2">
-            <div 
-              className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded"
-              onClick={() => setSelectedTransportCarrier(null)}
-            >
-              <div className={`w-4 h-4 rounded-full border mr-2 ${
-                selectedTransportCarrier === null 
-                  ? 'border-gray-400' 
-                  : 'border-gray-400'
-              }`}>
-                <div className={`w-2 h-2 rounded-full m-0.5 ${
-                  selectedTransportCarrier === null 
-                    ? 'bg-gray-400' 
-                    : 'bg-transparent'
-                }`}></div>
+        <>
+          <div>
+            <label style={{ ...labelStyle, marginBottom: spacing.lg }}>{t('calculator:transport_carrier_label')}</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing['2xl'] }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: spacing['2xl'], cursor: 'pointer', border: `2px dashed ${colors.borderDefault}`, borderRadius: radii.md }} onClick={() => setSelectedTransportCarrier(null)}>
+                <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${colors.textSubtle}`, marginRight: spacing['2xl'] }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', margin: 2, background: selectedTransportCarrier === null ? colors.textSubtle : 'transparent' }}></div>
+                </div>
+                <div><span style={{ color: colors.textPrimary }}>{t('calculator:default_wheelbarrow')}</span></div>
               </div>
-              <div>
-                <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
-              </div>
+              {carrierSpeeds && carrierSpeeds.length > 0 && carrierSpeeds.map((carrier) => (
+                <div key={carrier.size} style={{ display: 'flex', alignItems: 'center', padding: spacing['2xl'], cursor: 'pointer' }} onClick={() => setSelectedTransportCarrier({ id: carrier.size.toString(), name: `${carrier.size}t`, 'size (in tones)': carrier.size })}>
+                  <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${colors.textSubtle}`, marginRight: spacing['2xl'] }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', margin: 2, background: selectedTransportCarrier?.['size (in tones)'] === carrier.size ? colors.textSubtle : 'transparent' }}></div>
+                  </div>
+                  <div><span style={{ color: colors.textPrimary }}>{carrier.size}{t('calculator:carrier_suffix')}</span></div>
+                </div>
+              ))}
             </div>
-            {carrierSpeeds && carrierSpeeds.length > 0 && carrierSpeeds.map((carrier) => (
-              <div 
-                key={carrier.size}
-                className="flex items-center p-2 cursor-pointer"
-                onClick={() => setSelectedTransportCarrier({ id: carrier.size.toString(), name: `${carrier.size}t`, 'size (in tones)': carrier.size })}
-              >
-                <div className={`w-4 h-4 rounded-full border mr-2 ${
-                  selectedTransportCarrier?.['size (in tones)'] === carrier.size 
-                    ? 'border-gray-400' 
-                    : 'border-gray-400'
-                }`}>
-                  <div className={`w-2 h-2 rounded-full m-0.5 ${
-                    selectedTransportCarrier?.['size (in tones)'] === carrier.size 
-                      ? 'bg-gray-400' 
-                      : 'bg-transparent'
-                  }`}></div>
-                </div>
-                <div>
-                  <span className="text-gray-800">{carrier.size}{t('calculator:carrier_suffix')}</span>
-                </div>
-              </div>
-            ))}
           </div>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance')}</label>
-          <input
-            type="number"
-            value={transportDistance}
-            onChange={(e) => setTransportDistance(e.target.value)}
-            className="w-full p-2 border rounded-md"
-            placeholder={t('calculator:enter_transport_distance')}
-            min="0"
-            step="1"
-          />
-        </div>
+          <div style={{ marginBottom: spacing['4xl'] }}>
+            <label style={{ ...labelStyle, marginBottom: spacing['2xl'] }}>{t('calculator:transport_distance')}</label>
+            <input type="number" value={transportDistance} onChange={(e) => setTransportDistance(e.target.value)} style={{ width: '100%', padding: spacing['2xl'], border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }} placeholder={t('calculator:enter_transport_distance')} min="0" step="1" />
+          </div>
+        </>
       )}
 
-      <div className="flex justify-center">
-        <button
-          onClick={calculateResults}
-          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <button onClick={calculateResults} style={{ padding: `${spacing['2xl']}px ${spacing['6xl']}px`, background: colors.accentBlue, color: colors.textPrimary, borderRadius: radii.md, border: 'none', cursor: 'pointer', fontWeight: fontWeights.medium }}>
           {t('calculator:calculate_button')}
         </button>
       </div>
 
       {results && (
-        <div className="mt-6 space-y-4" ref={resultsRef}>
-          {/* Estimated Time Breakdown (styled as in screenshot) */}
-          <div className="bg-transparent p-0">
-            <div className="text-lg font-semibold mb-1">
-              <span className="text-gray-100">{t('calculator:total_labor_hours')}</span>
-              <span className="text-blue-400 text-2xl align-middle font-bold">{(results.labor).toFixed(2)} {t('calculator:hours_suffix')}</span>
+        <div style={{ marginTop: spacing['6xl'], display: 'flex', flexDirection: 'column', gap: spacing['4xl'] }} ref={resultsRef}>
+          <div style={{ background: 'transparent', padding: 0 }}>
+            <div style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, marginBottom: spacing.sm }}>
+              <span style={{ color: colors.textMuted }}>{t('calculator:total_labor_hours')}</span>
+              <span style={{ color: colors.accentBlue, fontSize: fontSizes['2xl'], verticalAlign: 'middle', fontWeight: fontWeights.bold }}> {(results.labor).toFixed(2)} {t('calculator:hours_suffix')}</span>
             </div>
-            <div className="text-base font-medium text-gray-100 mb-1">{t('calculator:task_breakdown_heading')}</div>
-            <ul className="list-disc ml-6 text-gray-100">
+            <div style={{ fontSize: fontSizes.base, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.sm }}>{t('calculator:task_breakdown_heading')}</div>
+            <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
               {results.taskBreakdown.map((task, index) => (
-                <li key={index}>
-                  <span className="font-bold">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_suffix')}
-                </li>
+                <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: `${spacing.lg}px ${spacing['4xl']}px`, background: index % 2 === 1 ? colors.bgTableRowAlt : undefined, borderBottom: index < results.taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none' }}>
+                  <span style={{ color: colors.textPrimary, fontSize: fontSizes.sm, fontWeight: fontWeights.medium }}>{translateTaskName(task.task, t)}</span>
+                  <span style={{ color: colors.textSecondary, fontSize: fontSizes.sm }}>{task.hours.toFixed(2)} {t('calculator:hours_suffix')}</span>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
 
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">{t('calculator:slab_cutting_breakdown')}</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+          <div style={{ background: colors.bgCard, padding: spacing['4xl'], borderRadius: radii.lg }}>
+            <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing['4xl'] }}>{t('calculator:slab_cutting_breakdown')}</h3>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ minWidth: '100%', borderCollapse: 'collapse', borderBottom: `1px solid ${colors.borderDefault}` }}>
+                <thead style={{ background: colors.bgCard }}>
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_type_header')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_length_cm')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_height_cm')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_quantity_header')}
-                    </th>
+                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_type_header')}</th>
+                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_length_cm')}</th>
+                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_height_cm')}</th>
+                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_quantity_header')}</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {/* Only show Full Slabs row if quantity > 0 */}
+                <tbody style={{ background: colors.bgInput }}>
                   {results.cuttingBreakdown.fullSlabs > 0 && (
-                    <tr>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {t('calculator:full_slabs_row')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {slabOrientation === 'long' ? selectedSlab.width : selectedSlab.height}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {slabOrientation === 'long' ? selectedSlab.height : selectedSlab.width}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {results.cuttingBreakdown.fullSlabs}
-                      </td>
+                    <tr style={{ borderTop: `1px solid ${colors.borderDefault}` }}>
+                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{t('calculator:full_slabs_row')}</td>
+                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{slabOrientation === 'long' ? selectedSlab.width : selectedSlab.height}</td>
+                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{slabOrientation === 'long' ? selectedSlab.height : selectedSlab.width}</td>
+                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{results.cuttingBreakdown.fullSlabs}</td>
                     </tr>
                   )}
-                  {/* Only show cut slabs with quantity > 0 */}
                   {results.cuttingBreakdown.cutSlabs.filter(cut => cut.quantity > 0).map((cut, index) => (
-                    <tr key={index}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {cut.width === selectedSlab.width ? t('calculator:height_cut_type') : 
-                         cut.height === selectedSlab.height ? t('calculator:length_cut_type') : t('calculator:corner_cut_type')}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {cut.width.toFixed(1)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {cut.height.toFixed(1)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                        {cut.quantity}
-                      </td>
+                    <tr key={index} style={{ borderTop: `1px solid ${colors.borderDefault}`, background: ((results.cuttingBreakdown.fullSlabs > 0 ? 1 : 0) + index) % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
+                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.width === selectedSlab.width ? t('calculator:height_cut_type') : cut.height === selectedSlab.height ? t('calculator:length_cut_type') : t('calculator:corner_cut_type')}</td>
+                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.width.toFixed(1)}</td>
+                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.height.toFixed(1)}</td>
+                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.quantity}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -892,30 +745,23 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
             </div>
           </div>
 
-          {/* Materials Breakdown Table */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">{t('calculator:materials_breakdown_heading')}</h3>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+          <div style={{ background: colors.bgCard, padding: spacing['4xl'], borderRadius: radii.lg }}>
+            <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing['4xl'] }}>{t('calculator:materials_breakdown_heading')}</h3>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ minWidth: '100%', borderCollapse: 'collapse', borderBottom: `1px solid ${colors.borderDefault}` }}>
+                <thead style={{ background: colors.bgCard }}>
                   <tr>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_material_header')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_quantity_header')}
-                    </th>
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      {t('calculator:table_unit_header')}
-                    </th>
+                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_material_header')}</th>
+                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_quantity_header')}</th>
+                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_unit_header')}</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody style={{ background: colors.bgInput }}>
                   {results.materials.map((material, idx) => (
-                    <tr key={idx}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{translateMaterialName(material.name, t)}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{material.amount}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{translateUnit(material.unit, t)}</td>
+                    <tr key={idx} style={{ borderTop: `1px solid ${colors.borderDefault}`, background: idx % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
+                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{translateMaterialName(material.name, t)}</td>
+                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{material.amount}</td>
+                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{translateUnit(material.unit, t)}</td>
                     </tr>
                   ))}
                 </tbody>

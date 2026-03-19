@@ -30,7 +30,13 @@ import {
   HelperText,
   DataTable,
 } from '../../themes/uiComponents';
-import { computeSlabCuts, computePathSlabCuts, groupCutsByLength } from '../../projectmanagement/canvacreator/visualization/slabPattern';
+import {
+  computeSlabCuts,
+  computePathSlabCuts,
+  groupCutsByLength,
+  parseSlabDimensions,
+  type SlabCutsResult,
+} from '../../projectmanagement/canvacreator/visualization/slabPattern';
 import { distance, PIXELS_PER_METER } from '../../projectmanagement/canvacreator/geometry';
 import { isPathElement, getPathPolygon } from '../../projectmanagement/canvacreator/linearElements';
 import { getEffectivePolygon, getEffectivePolygonWithEdgeIndices } from '../../projectmanagement/canvacreator/arcMath';
@@ -81,6 +87,68 @@ interface Shape {
   points: { x: number; y: number }[];
   closed: boolean;
   calculatorInputs?: Record<string, any>;
+}
+
+const SLAB_GROUT_OPTIONS_MM = [1, 2, 3, 4, 5, 10, 20] as const;
+
+function snapGroutMmToOption(mm: number): number {
+  let best: number = SLAB_GROUT_OPTIONS_MM[0];
+  let bestD = Math.abs(mm - best);
+  for (const x of SLAB_GROUT_OPTIONS_MM) {
+    const d = Math.abs(mm - x);
+    if (d < bestD) {
+      best = x;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+function mergedSlabVizInputs(
+  shape: Shape | undefined,
+  savedInputs: Record<string, any>,
+  vizGroutWidthMm: number,
+  selectedSlabTypeName?: string
+): Record<string, any> {
+  const base = { ...(shape?.calculatorInputs ?? {}), ...savedInputs, vizGroutWidthMm };
+  const w = Number(base.vizSlabWidth);
+  const l = Number(base.vizSlabLength);
+  if (w && l) return base;
+  const dims = selectedSlabTypeName ? parseSlabDimensions(selectedSlabTypeName) : null;
+  if (dims) {
+    base.vizSlabWidth = dims.widthCm;
+    base.vizSlabLength = dims.lengthCm;
+  }
+  return base;
+}
+
+function computeSlabPurchaseFromShape(
+  shape: Shape | undefined,
+  inputs: Record<string, any>
+): Pick<SlabCutsResult, 'cuts' | 'cutSlabCount' | 'fullSlabCount'> & {
+  slabsForCuts: number;
+  slabsToBuy: number;
+  slabAreaM2: number;
+} | null {
+  if (!shape?.closed || shape.points.length < 3) return null;
+  const w = Number(inputs.vizSlabWidth);
+  const l = Number(inputs.vizSlabLength);
+  if (!w || !l) return null;
+  const slabResult = inputs.pathCenterline
+    ? computePathSlabCuts(shape as any, inputs)
+    : computeSlabCuts(shape as any, inputs);
+  const wasteN = Array.isArray(slabResult.wasteSatisfiedPositions) ? slabResult.wasteSatisfiedPositions.length : 0;
+  const slabsForCuts = Math.max(0, slabResult.cutSlabCount - wasteN);
+  const slabsToBuy = slabResult.fullSlabCount + slabsForCuts;
+  const slabAreaM2 = (w / 100) * (l / 100);
+  return {
+    cuts: slabResult.cuts,
+    cutSlabCount: slabResult.cutSlabCount,
+    fullSlabCount: slabResult.fullSlabCount,
+    slabsForCuts,
+    slabsToBuy,
+    slabAreaM2,
+  };
 }
 
 interface SlabCalculatorProps {
@@ -143,6 +211,28 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
   const [taskBreakdown, setTaskBreakdown] = useState<{task: string, hours: number, amount: number | string, unit: string, normalizedHours?: number}[]>([]);
   const [selectedGroutingId, setSelectedGroutingId] = useState<string>(savedInputs?.selectedGroutingId ?? '');
 
+  const externalGroutMm = useMemo(() => {
+    const legacy = savedInputs?.vizGroutWidth != null ? Math.round(Number(savedInputs.vizGroutWidth) * 10) : undefined;
+    const raw = Number(
+      savedInputs?.vizGroutWidthMm ??
+      shape?.calculatorInputs?.vizGroutWidthMm ??
+      legacy ??
+      5
+    );
+    const n = Number.isFinite(raw) && raw > 0 ? raw : 5;
+    return snapGroutMmToOption(n);
+  }, [
+    savedInputs?.vizGroutWidthMm,
+    savedInputs?.vizGroutWidth,
+    shape?.calculatorInputs?.vizGroutWidthMm,
+    shape?.calculatorInputs?.vizGroutWidth,
+  ]);
+
+  const [vizGroutWidthMm, setVizGroutWidthMm] = useState<number>(externalGroutMm);
+  useEffect(() => {
+    setVizGroutWidthMm(externalGroutMm);
+  }, [externalGroutMm]);
+
   // Fetch task templates early (needed by onInputsChange useEffect below)
   const { data: taskTemplatesData, isLoading, error: fetchError }: UseQueryResult<SlabType[]> = useQuery({
     queryKey: ['task_templates', companyId || 'no-company'],
@@ -191,9 +281,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
 
   // Ref to avoid infinite loop: only call onInputsChange when payload actually changed
   const lastInputsPayloadRef = useRef<string>('');
+  const onInputsChangeRef = useRef(onInputsChange);
+  onInputsChangeRef.current = onInputsChange;
 
   useEffect(() => {
-    if (onInputsChange && isInProjectCreating) {
+    const fn = onInputsChangeRef.current;
+    if (fn && isInProjectCreating) {
       const selectedSlab = taskTemplates?.find((t: SlabType) => t.id?.toString() === selectedSlabId);
       const selectedSlabName = selectedSlab?.name ?? "";
       const payload = {
@@ -211,32 +304,41 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         framePieceWidthCm: addFrameBoard ? framePieceWidthCm : undefined,
         frameJointType: addFrameBoard ? frameJointType : undefined,
         frameSidesEnabled: addFrameBoard ? frameSidesEnabled : undefined,
+        pathCornerType: savedInputs?.pathCornerType,
+        vizGroutWidthMm,
       };
       const payloadStr = JSON.stringify(payload);
       if (payloadStr !== lastInputsPayloadRef.current) {
         lastInputsPayloadRef.current = payloadStr;
-        onInputsChange(payload);
+        fn(payload);
       }
     }
-  }, [area, tape1ThicknessCm, mortarThicknessCm, slabThicknessCm, selectedSlabId, canvasCutSlabs, soilExcessCm, selectedGroutingId, addFrameBoard, framePieceLengthCm, framePieceWidthCm, frameJointType, frameSidesEnabled, onInputsChange, isInProjectCreating, taskTemplates?.length]);
+  }, [area, tape1ThicknessCm, mortarThicknessCm, slabThicknessCm, selectedSlabId, canvasCutSlabs, soilExcessCm, selectedGroutingId, addFrameBoard, framePieceLengthCm, framePieceWidthCm, frameJointType, frameSidesEnabled, savedInputs?.pathCornerType, isInProjectCreating, taskTemplates?.length, vizGroutWidthMm]);
 
   useEffect(() => {
     if (!isInProjectCreating || !shape?.closed || shape.points.length < 3) {
-      setCanvasCutSlabs(null);
-      setCanvasCutGroups([]);
+      setCanvasCutSlabs((prev) => (prev !== null ? null : prev));
+      setCanvasCutGroups((prev) => (prev.length > 0 ? [] : prev));
       return;
     }
-    const inputs = { ...shape.calculatorInputs };
+    const selectedSlab = taskTemplates?.find((t: SlabType) => t.id?.toString() === selectedSlabId);
+    const inputs = mergedSlabVizInputs(shape, savedInputs, vizGroutWidthMm, selectedSlab?.name);
     if (!inputs.vizSlabWidth) {
-      setCanvasCutSlabs(null);
-      setCanvasCutGroups([]);
+      setCanvasCutSlabs((prev) => (prev !== null ? null : prev));
+      setCanvasCutGroups((prev) => (prev.length > 0 ? [] : prev));
       return;
     }
     const slabResult = inputs?.pathCenterline ? computePathSlabCuts(shape as any, inputs) : computeSlabCuts(shape as any, inputs);
     const { cuts, cutSlabCount, fullSlabCount, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = slabResult;
-    setCanvasCutSlabs(cutSlabCount);
-    setCanvasCutGroups(cuts.length > 0 ? groupCutsByLength(cuts) : []);
-    if (onInputsChange) {
+    const newGroups = cuts.length > 0 ? groupCutsByLength(cuts) : [];
+    setCanvasCutSlabs((prev) => (prev === cutSlabCount ? prev : cutSlabCount));
+    setCanvasCutGroups((prev) => {
+      if (prev.length !== newGroups.length) return newGroups;
+      const same = prev.every((p, i) => newGroups[i] && p.lengthCm === newGroups[i].lengthCm && p.count === newGroups[i].count);
+      return same ? prev : newGroups;
+    });
+    const fn = onInputsChangeRef.current;
+    if (fn) {
       const prev = shape.calculatorInputs ?? {};
       const next = {
         vizWasteSatisfied: wasteSatisfiedPositions ?? [],
@@ -251,10 +353,35 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         && prev.cutSlabs === next.cutSlabs
         && JSON.stringify(prev.vizWasteSatisfied ?? []) === JSON.stringify(next.vizWasteSatisfied);
       if (!same) {
-        onInputsChange(next);
+        fn(next);
       }
     }
-  }, [isInProjectCreating, shape?.calculatorInputs?.vizSlabWidth, shape?.calculatorInputs?.vizSlabLength, shape?.calculatorInputs?.vizDirection, shape?.calculatorInputs?.vizStartCorner, shape?.calculatorInputs?.vizPattern, shape?.calculatorInputs?.vizGroutWidthMm, shape?.calculatorInputs?.vizOriginOffsetX, shape?.calculatorInputs?.vizOriginOffsetY, shape?.calculatorInputs?.framePieceWidthCm, shape?.calculatorInputs?.pathCenterline, shape?.calculatorInputs?.pathIsOutline, shape?.calculatorInputs?.slabOrientation, JSON.stringify(shape?.points), shape?.closed, onInputsChange]);
+  }, [
+    isInProjectCreating,
+    shape?.calculatorInputs?.vizSlabWidth,
+    shape?.calculatorInputs?.vizSlabLength,
+    shape?.calculatorInputs?.vizDirection,
+    shape?.calculatorInputs?.vizStartCorner,
+    shape?.calculatorInputs?.vizPattern,
+    shape?.calculatorInputs?.vizGroutWidthMm,
+    shape?.calculatorInputs?.vizOriginOffsetX,
+    shape?.calculatorInputs?.vizOriginOffsetY,
+    shape?.calculatorInputs?.framePieceWidthCm,
+    shape?.calculatorInputs?.pathCenterline,
+    shape?.calculatorInputs?.pathIsOutline,
+    shape?.calculatorInputs?.slabOrientation,
+    savedInputs?.vizSlabWidth,
+    savedInputs?.vizSlabLength,
+    savedInputs?.vizPattern,
+    savedInputs?.vizDirection,
+    savedInputs?.vizStartCorner,
+    savedInputs?.selectedSlabName,
+    JSON.stringify(shape?.points),
+    shape?.closed,
+    vizGroutWidthMm,
+    selectedSlabId,
+    taskTemplates?.length,
+  ]);
 
   // Fetch time estimates for cutting tasks (needed by frame auto-compute below)
   const { data: cuttingTasksData } = useQuery({
@@ -297,30 +424,36 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     [selectedSlabId, taskTemplates]
   );
 
+  // Ref to avoid setState loop when shape reference changes but frame result is unchanged
+  const lastFrameResultsRef = useRef<{ totalFrameSlabs: number; totalHours: number; totalFrameAreaM2: number } | null>(null);
+
   // Auto-compute frame sides from polygon edges when in canvas mode
   useEffect(() => {
     if (!isInProjectCreating || !addFrameBoard) {
+      lastFrameResultsRef.current = null;
       return;
     }
     let pts: Point[];
     let edgeIndices: number[];
     if (shape && isPathElement(shape)) {
       const pathPts = getPathPolygon(shape);
-      if (!pathPts || pathPts.length < 3 || !shape.closed) { setFrameResults(null); return; }
+      if (!pathPts || pathPts.length < 3 || !shape.closed) { lastFrameResultsRef.current = null; setFrameResults(null); return; }
       pts = pathPts;
       edgeIndices = pathPts.map((_, i) => i);
     } else if (shape) {
       const eff = getEffectivePolygonWithEdgeIndices(shape);
-      if (!eff.points.length || eff.points.length < 3 || !shape.closed) { setFrameResults(null); return; }
+      if (!eff.points.length || eff.points.length < 3 || !shape.closed) { lastFrameResultsRef.current = null; setFrameResults(null); return; }
       pts = eff.points;
       edgeIndices = eff.edgeIndices;
     } else {
+      lastFrameResultsRef.current = null;
       setFrameResults(null);
       return;
     }
     const pieceLen = parseFloat(framePieceLengthCm);
     const pieceWid = parseFloat(framePieceWidthCm);
     if (isNaN(pieceLen) || isNaN(pieceWid) || pieceLen <= 0 || pieceWid <= 0) {
+      lastFrameResultsRef.current = null;
       setFrameResults(null);
       return;
     }
@@ -387,12 +520,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       cuttingTaskName,
       cutting_task_id: cuttingTaskId,
     };
-    setFrameResults((prev) => {
-      if (!prev || prev.totalFrameSlabs !== nextResults.totalFrameSlabs || prev.totalHours !== nextResults.totalHours || prev.totalFrameAreaM2 !== nextResults.totalFrameAreaM2) {
-        return nextResults;
-      }
-      return prev;
-    });
+    const prevRef = lastFrameResultsRef.current;
+    const changed = !prevRef || prevRef.totalFrameSlabs !== nextResults.totalFrameSlabs || prevRef.totalHours !== nextResults.totalHours || prevRef.totalFrameAreaM2 !== nextResults.totalFrameAreaM2;
+    if (changed) {
+      lastFrameResultsRef.current = { totalFrameSlabs: nextResults.totalFrameSlabs, totalHours: nextResults.totalHours, totalFrameAreaM2: nextResults.totalFrameAreaM2 };
+      setFrameResults(nextResults);
+    }
   }, [isInProjectCreating, addFrameBoard, shape, frameSidesEnabled, shape?.calculatorInputs?.vizGroutWidthMm, shape?.calculatorInputs?.vizGroutWidth, framePieceLengthCm, framePieceWidthCm, frameTaskTemplates, cuttingTasks, taskTemplates, selectedSlabId]);
 
   const [calculateDigging, setCalculateDigging] = useState<boolean>(false);
@@ -660,6 +793,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
   // Define loading sand time estimates (same as preparation digger estimates)
   const loadingSandDiggerTimeEstimates = [
     { equipment: 'Shovel (1 Person)', sizeInTons: 0.02, timePerTon: 0.5 },
+    { equipment: 'Digger 0.5T', sizeInTons: 0.5, timePerTon: 0.36 },
     { equipment: 'Digger 1T', sizeInTons: 1, timePerTon: 0.18 },
     { equipment: 'Digger 2T', sizeInTons: 2, timePerTon: 0.12 },
     { equipment: 'Digger 3-5T', sizeInTons: 3, timePerTon: 0.08 },
@@ -723,12 +857,18 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     
     try {
       const areaNum = parseFloat(area);
+      const vizInputs = mergedSlabVizInputs(shape, savedInputs, vizGroutWidthMm, selectedSlabType.name);
+      const purchase = computeSlabPurchaseFromShape(shape, vizInputs);
+      const cutGroupsForHours =
+        purchase && purchase.cuts.length > 0 ? groupCutsByLength(purchase.cuts) : canvasCutGroups;
       // Convert cm to meters for calculations
       const tape1ThicknessM = parseFloat(tape1ThicknessCm) / 100; // cm to meters
       const mortarThicknessM = parseFloat(mortarThicknessCm) / 100; // cm to meters
       const slabThicknessM = parseFloat(slabThicknessCm) / 100; // cm to meters
       const soilExcessM = soilExcessCm ? parseFloat(soilExcessCm) / 100 : 0; // cm to meters
-      const cutSlabsNum = isInProjectCreating ? (canvasCutSlabs ?? 0) : (cutSlabs ? parseInt(cutSlabs) : 0);
+      const cutSlabsNum = isInProjectCreating
+        ? (purchase?.cutSlabCount ?? canvasCutSlabs ?? 0)
+        : (cutSlabs ? parseInt(cutSlabs) : 0);
       
       // Calculate effective area for regular slabs (subtract frame area if applicable)
       const frameAreaM2 = addFrameBoard && frameResults ? frameResults.totalFrameAreaM2 : 0;
@@ -761,8 +901,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
 
       let cuttingHours = 0;
       const cuttingBreakdownEntries: { task: string; hours: number; amount: number; unit: string; event_task_id?: string }[] = [];
-      if (canvasCutGroups.length > 0) {
-        for (const g of canvasCutGroups) {
+      if (cutGroupsForHours.length > 0) {
+        for (const g of cutGroupsForHours) {
           const h = g.count * hoursPerCut;
           cuttingHours += h;
           cuttingBreakdownEntries.push({
@@ -1205,8 +1345,28 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         }
       }
       
-      // Prepare materials list (excluding slab type)
+      // Slab material in m²: full slabs + slabs needed for cuts (same as canvas label), else floor area
+      const slabAreaM2 =
+        purchase?.slabAreaM2 ??
+        ((savedInputs?.vizSlabWidth != null && savedInputs?.vizSlabLength != null)
+          ? (Number(savedInputs.vizSlabWidth) / 100) * (Number(savedInputs.vizSlabLength) / 100)
+          : slabSizeM2);
+      const slabMaterialM2 =
+        purchase && purchase.slabsToBuy > 0 ? purchase.slabsToBuy * purchase.slabAreaM2 : effectiveAreaM2;
+      const getSlabMaterialName = (name: string) => {
+        const n = (name || '').toLowerCase();
+        const sizeMatch = n.match(/(\d+)\s*x\s*(\d+)/i);
+        const size = sizeMatch ? `${sizeMatch[1]}×${sizeMatch[2]}` : '90×60';
+        if (n.includes('porcelain')) return `Porcelain ${size}`;
+        if (n.includes('sandstone') || n.includes('piaskow')) return `Sandstone ${size}`;
+        if (n.includes('granite') || n.includes('granit')) return `Granite ${size}`;
+        return `Slabs ${size}`;
+      };
+      const slabMaterialName = getSlabMaterialName(selectedSlabType.name);
+
+      // Prepare materials list (slab first, then others)
       const materialsList: Material[] = [
+        { name: slabMaterialName, amount: Number(slabMaterialM2.toFixed(2)), unit: 'm²', price_per_unit: null, total_price: null },
         { name: 'Soil excavation', amount: Number(soilTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null },
         { name: selectedSandMaterial?.name || 'Sand', amount: Number(sandTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: selectedSandMaterial?.price || null, total_price: null },
         { name: 'tape1', amount: Number(tape1Tonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null },
@@ -1373,30 +1533,70 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         )}
         
         {!compactForPath && (
-          <CalculatorInputGrid columns={2}>
+          <>
+            <CalculatorInputGrid columns={2}>
+              <SelectDropdown
+                label={t('calculator:slab_type_label')}
+                value={selectedSlabName}
+                options={slabTypeOptions.map((type: SlabType) => ({
+                  value: type.name,
+                  label: translateTaskName(type.name, t),
+                }))}
+                onChange={(name) => {
+                  const slab = slabTypeOptions.find((x: SlabType) => x.name === name);
+                  setSelectedSlabId(slab?.id?.toString() ?? '');
+                }}
+                placeholder={t('calculator:select_slab_type_placeholder')}
+                helperText={isLoading ? t('calculator:loading_slab_types') : fetchError ? t('calculator:error_loading_slab_types') : undefined}
+              />
+              <SelectDropdown
+                label={t('calculator:grouting_method')}
+                value={selectedGroutingName}
+                options={groutingMethods.map((m: { name?: string }) => ({
+                  value: m.name || 'Unknown',
+                  label: translateTaskName(m.name, t),
+                }))}
+                onChange={(name) => {
+                  const method = groutingMethods.find((x: { name?: string }) => (x.name || '') === name);
+                  setSelectedGroutingId(method?.id?.toString() ?? '');
+                }}
+                placeholder={t('calculator:select_grouting_method_placeholder')}
+                helperText={t('calculator:grouting_method_note_info')}
+              />
+            </CalculatorInputGrid>
+            {isInProjectCreating && shape?.closed && shape.points.length >= 3 && (
+              <div style={{ marginTop: spacing.xl, maxWidth: 400 }}>
+                <SelectDropdown
+                  label={t('calculator:slab_grout_joint_mm')}
+                  value={String(vizGroutWidthMm)}
+                  options={[...SLAB_GROUT_OPTIONS_MM].map((mm) => ({ value: String(mm), label: `${mm} mm` }))}
+                  onChange={(val) => {
+                    const n = parseInt(String(val), 10);
+                    if (!Number.isFinite(n)) return;
+                    if (!(SLAB_GROUT_OPTIONS_MM as readonly number[]).includes(n)) return;
+                    setVizGroutWidthMm(n);
+                  }}
+                  helperText={t('calculator:slab_grout_joint_mm_hint')}
+                />
+              </div>
+            )}
+          </>
+        )}
+        {compactForPath && isInProjectCreating && shape?.closed && shape.points.length >= 3 && (
+          <div style={{ marginBottom: spacing.lg, maxWidth: 400 }}>
             <SelectDropdown
-              label={t('calculator:slab_type_label')}
-              value={selectedSlabName}
-              options={slabTypeOptions.map((type: SlabType) => type.name)}
-              onChange={(name) => {
-                const t = slabTypeOptions.find((x: SlabType) => x.name === name);
-                setSelectedSlabId(t?.id?.toString() ?? '');
+              label={t('calculator:slab_grout_joint_mm')}
+              value={String(vizGroutWidthMm)}
+              options={[...SLAB_GROUT_OPTIONS_MM].map((mm) => ({ value: String(mm), label: `${mm} mm` }))}
+              onChange={(val) => {
+                const n = parseInt(String(val), 10);
+                if (!Number.isFinite(n)) return;
+                if (!(SLAB_GROUT_OPTIONS_MM as readonly number[]).includes(n)) return;
+                setVizGroutWidthMm(n);
               }}
-              placeholder={t('calculator:select_slab_type_placeholder')}
-              helperText={isLoading ? t('calculator:loading_slab_types') : fetchError ? t('calculator:error_loading_slab_types') : undefined}
+              helperText={t('calculator:slab_grout_joint_mm_hint')}
             />
-            <SelectDropdown
-              label={t('calculator:grouting_method')}
-              value={selectedGroutingName}
-              options={groutingMethods.map((m: { name?: string }) => m.name || 'Unknown')}
-              onChange={(name) => {
-                const m = groutingMethods.find((x: { name?: string }) => (x.name || '') === name);
-                setSelectedGroutingId(m?.id?.toString() ?? '');
-              }}
-              placeholder={t('calculator:select_grouting_method_placeholder')}
-              helperText={t('calculator:grouting_method_note_info')}
-            />
-          </CalculatorInputGrid>
+          </div>
         )}
         
         {/* Compactor Type Selection - hidden in project mode (set in project card) and path mode */}
@@ -1418,32 +1618,32 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
             <div className="mt-2 space-y-2">
               <div className="flex flex-wrap gap-3 items-center">
                 <label className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">{t('calculator:piece_length_cm_label') || 'Piece length (cm)'}</span>
+                  <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{t('calculator:piece_length_cm_label') || 'Piece length (cm)'}</span>
                   <input
                     type="number"
                     min={1}
                     value={framePieceLengthCm}
                     onChange={(e) => setFramePieceLengthCm(e.target.value)}
-                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
+                    style={{ width: 80, padding: '4px 8px', fontSize: fontSizes.sm, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }}
                   />
                 </label>
                 <label className="flex items-center gap-2">
-                  <span className="text-sm text-gray-600">{t('calculator:piece_width_cm_label') || 'Piece width (cm)'}</span>
+                  <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{t('calculator:piece_width_cm_label') || 'Piece width (cm)'}</span>
                   <input
                     type="number"
                     min={1}
                     value={framePieceWidthCm}
                     onChange={(e) => setFramePieceWidthCm(e.target.value)}
-                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded"
+                    style={{ width: 80, padding: '4px 8px', fontSize: fontSizes.sm, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }}
                   />
                 </label>
               </div>
               <div>
-                <label className="block text-sm text-gray-600">{t('calculator:frame_joint_type_label')}</label>
+                <label style={{ display: 'block', fontSize: fontSizes.sm, color: colors.textDim }}>{t('calculator:frame_joint_type_label')}</label>
                 <select
                   value={frameJointType}
                   onChange={(e) => setFrameJointType(e.target.value as 'butt' | 'miter45')}
-                  className="mt-1 block w-full max-w-xs rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                  style={{ marginTop: spacing.sm, display: 'block', maxWidth: 320, borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: '8px 12px', fontSize: fontSizes.sm, outline: 'none' }}
                 >
                   <option value="butt">{t('calculator:frame_joint_butt')}</option>
                   <option value="miter45">{t('calculator:frame_joint_miter45')}</option>
@@ -1490,7 +1690,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
           {frameResults && (
             <div style={{ marginTop: spacing.md, padding: spacing.base, background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>
               <p style={{ fontSize: fontSizes.base, color: colors.textSecondary, fontFamily: fonts.body }}>
-                <strong>{t('calculator:frame_slabs_format', { length: frameResults.framePieceLengthCm ?? framePieceLengthCm, width: frameResults.framePieceWidthCm ?? framePieceWidthCm })}:</strong> {frameResults.totalFrameSlabs} pieces, {frameResults.totalHours.toFixed(2)} {t('calculator:hours_label')}
+                <strong>{t('calculator:frame_slabs_format', { length: frameResults.framePieceLengthCm ?? framePieceLengthCm, width: frameResults.framePieceWidthCm ?? framePieceWidthCm })}:</strong> {frameResults.totalFrameSlabs} {t('units:pieces')}, {frameResults.totalHours.toFixed(2)} {t('calculator:hours_label')}
                 <br />
                 <strong>{t('calculator:frame_area_label')}:</strong> {frameResults.totalFrameAreaM2.toFixed(2)} m²
               </p>
@@ -1510,10 +1710,10 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         {!compactForPath && calculateDigging && (
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:excavation_machinery')}</label>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:excavation_machinery')}</label>
               <div className="space-y-2">
                 {excavators.length === 0 ? (
-                  <p className="text-gray-500">{t('calculator:no_excavators_found')}</p>
+                  <p style={{ color: colors.textDim }}>{t('calculator:no_excavators_found')}</p>
                 ) : (
                   excavators.map((excavator) => (
                     <div 
@@ -1521,20 +1721,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
                       className="flex items-center p-2 cursor-pointer"
                       onClick={() => setSelectedExcavator(excavator)}
                     >
-                      <div className={`w-4 h-4 rounded-full border mr-2 ${
-                        selectedExcavator?.id === excavator.id 
-                          ? 'border-gray-400' 
-                          : 'border-gray-400'
-                      }`}>
-                        <div className={`w-2 h-2 rounded-full m-0.5 ${
-                          selectedExcavator?.id === excavator.id 
-                            ? 'bg-gray-400' 
-                            : 'bg-transparent'
-                        }`}></div>
+                      <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${colors.textSubtle}`, marginRight: spacing['2xl'] }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', margin: 2, background: selectedExcavator?.id === excavator.id ? colors.textSubtle : 'transparent' }}></div>
                       </div>
                       <div>
-                        <span className="text-gray-800">{excavator.name}</span>
-                        <span className="text-sm text-gray-600 ml-2">({excavator["size (in tones)"]} tons)</span>
+                        <span style={{ color: colors.textPrimary }}>{excavator.name}</span>
+                        <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing['2xl'] }}>({excavator["size (in tones)"]} tons)</span>
                       </div>
                     </div>
                   ))
@@ -1543,10 +1735,10 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:carrier_machinery')}</label>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:carrier_machinery')}</label>
               <div className="space-y-2">
                 {carriers.length === 0 ? (
-                  <p className="text-gray-500">{t('calculator:no_carriers_found')}</p>
+                  <p style={{ color: colors.textDim }}>{t('calculator:no_carriers_found')}</p>
                 ) : (
                   carriers.map((carrier) => (
                     <div 
@@ -1554,20 +1746,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
                       className="flex items-center p-2 cursor-pointer"
                       onClick={() => setSelectedCarrier(carrier)}
                     >
-                      <div className={`w-4 h-4 rounded-full border mr-2 ${
-                        selectedCarrier?.id === carrier.id 
-                          ? 'border-gray-400' 
-                          : 'border-gray-400'
-                      }`}>
-                        <div className={`w-2 h-2 rounded-full m-0.5 ${
-                          selectedCarrier?.id === carrier.id 
-                            ? 'bg-gray-400' 
-                            : 'bg-transparent'
-                        }`}></div>
+                      <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${colors.textSubtle}`, marginRight: spacing['2xl'] }}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', margin: 2, background: selectedCarrier?.id === carrier.id ? colors.textSubtle : 'transparent' }}></div>
                       </div>
                       <div>
-                        <span className="text-gray-800">{carrier.name}</span>
-                        <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
+                        <span style={{ color: colors.textPrimary }}>{carrier.name}</span>
+                        <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing['2xl'] }}>({carrier["size (in tones)"]} tons)</span>
                       </div>
                     </div>
                   ))
@@ -1580,7 +1764,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         {/* Transport Distance for Soil and Tape1 */}
         {!isInProjectCreating && !compactForPath && calculateDigging && selectedCarrier && (
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
+            <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing['2xl'] }}>{t('calculator:transport_distance_label')}</label>
             <input
               type="number"
               value={soilTransportDistance}
@@ -1593,7 +1777,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
               min="0"
               step="1"
             />
-            <p className="text-xs text-gray-500 mt-1">{t('calculator:set_to_zero_no_transport')}</p>
+            <p style={{ fontSize: fontSizes.xs, color: colors.textDim, marginTop: spacing.sm }}>{t('calculator:set_to_zero_no_transport')}</p>
           </div>
         )}
 
@@ -1601,25 +1785,17 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         {!isInProjectCreating && calculateTransport && (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier')}</label>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:transport_carrier')}</label>
               <div className="space-y-2">
                 <div 
-                  className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded"
+                  style={{ display: 'flex', alignItems: 'center', padding: spacing['2xl'], cursor: 'pointer', border: `2px dashed ${colors.borderDefault}`, borderRadius: radii.md }}
                   onClick={() => setSelectedTransportCarrier(null)}
                 >
-                  <div className={`w-4 h-4 rounded-full border mr-2 ${
-                    selectedTransportCarrier === null 
-                      ? 'border-gray-400' 
-                      : 'border-gray-400'
-                  }`}>
-                    <div className={`w-2 h-2 rounded-full m-0.5 ${
-                      selectedTransportCarrier === null 
-                        ? 'bg-gray-400' 
-                        : 'bg-transparent'
-                    }`}></div>
+                  <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${colors.textSubtle}`, marginRight: spacing['2xl'] }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', margin: 2, background: selectedTransportCarrier === null ? colors.textSubtle : 'transparent' }}></div>
                   </div>
                   <div>
-                    <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
+                    <span style={{ color: colors.textPrimary }}>{t('calculator:default_wheelbarrow')}</span>
                   </div>
                 </div>
                 {carriers.length > 0 && carriers.map((carrier) => (
@@ -1628,20 +1804,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
                     className="flex items-center p-2 cursor-pointer"
                     onClick={() => setSelectedTransportCarrier(carrier)}
                   >
-                    <div className={`w-4 h-4 rounded-full border mr-2 ${
-                      selectedTransportCarrier?.id === carrier.id 
-                        ? 'border-gray-400' 
-                        : 'border-gray-400'
-                    }`}>
-                      <div className={`w-2 h-2 rounded-full m-0.5 ${
-                        selectedTransportCarrier?.id === carrier.id 
-                          ? 'bg-gray-400' 
-                          : 'bg-transparent'
-                      }`}></div>
+                    <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${colors.textSubtle}`, marginRight: spacing['2xl'] }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', margin: 2, background: selectedTransportCarrier?.id === carrier.id ? colors.textSubtle : 'transparent' }}></div>
                     </div>
                     <div>
-                      <span className="text-gray-800">{carrier.name}</span>
-                      <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
+                      <span style={{ color: colors.textPrimary }}>{carrier.name}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing['2xl'] }}>({carrier["size (in tones)"]} tons)</span>
                     </div>
                   </div>
                 ))}
@@ -1653,7 +1821,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         {/* Material Transport Distance */}
         {!isInProjectCreating && calculateTransport && (
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
+            <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing['2xl'] }}>{t('calculator:transport_distance_label')}</label>
             <input
               type="number"
               value={materialTransportDistance}
@@ -1663,7 +1831,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
               min="0"
               step="1"
             />
-            <p className="text-xs text-gray-500 mt-1">{t('calculator:distance_transporting_materials')}</p>
+            <p style={{ fontSize: fontSizes.xs, color: colors.textDim, marginTop: spacing.sm }}>{t('calculator:distance_transporting_materials')}</p>
           </div>
         )}
         
@@ -1702,7 +1870,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
               <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
                 {t('calculator:task_breakdown_label')}
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+              <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
                 {taskBreakdown.map((task: { task: string; hours: number }, index: number) => (
                   <div
                     key={index}
@@ -1711,9 +1879,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: `${spacing.lg}px ${spacing["2xl"]}px`,
-                      background: colors.bgSubtle,
-                      borderRadius: radii.lg,
-                      border: `1px solid ${colors.borderLight}`,
+                      background: index % 2 === 1 ? colors.bgTableRowAlt : undefined,
+                      borderBottom: index < taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
                     }}
                   >
                     <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>

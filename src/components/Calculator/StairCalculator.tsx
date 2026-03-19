@@ -1385,22 +1385,23 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
               
               <div style={{ marginTop: spacing.md }}>
                 <h4 style={{ fontWeight: fontWeights.medium, marginBottom: spacing.md, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:task_breakdown_label')}</h4>
-                <ul style={{ paddingLeft: spacing.xl, listStyle: 'disc', margin: 0, display: 'flex', flexDirection: 'column', gap: spacing.xs }}>
+                <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
                   {taskBreakdown && taskBreakdown.length > 0 ? (
                     taskBreakdown.map((task: any, index: number) => (
-                      <li key={index} style={{ fontSize: fontSizes.sm, color: colors.textMuted, fontFamily: fonts.body }}>
-                        <span style={{ fontWeight: fontWeights.medium }}>{translateTaskName(task.task, t)}</span> x {task.amount} {translateUnit(task.unit, t)} = {task.hours.toFixed(2)} {t('calculator:hours_label')}
-                      </li>
+                      <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: `${spacing.lg}px ${spacing['4xl']}px`, background: index % 2 === 1 ? colors.bgTableRowAlt : undefined, borderBottom: index < taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none', fontSize: fontSizes.sm, color: colors.textMuted, fontFamily: fonts.body }}>
+                        <span style={{ fontWeight: fontWeights.medium }}>{translateTaskName(task.task, t)}</span>
+                        <span>x {task.amount} {translateUnit(task.unit, t)} = {task.hours.toFixed(2)} {t('calculator:hours_label')}</span>
+                      </div>
                     ))
                   ) : (
-                    <li style={{ fontSize: fontSizes.sm, color: colors.textSubtle }}>{t('calculator:no_tasks_label')}</li>
+                    <div style={{ padding: `${spacing.lg}px ${spacing['4xl']}px`, fontSize: fontSizes.sm, color: colors.textSubtle }}>{t('calculator:no_tasks_label')}</div>
                   )}
-                </ul>
+                </div>
               </div>
             </div>
             
             <div className="w-full">
-              <h4 className="font-medium mb-2 text-white">{t('calculator:total_materials_needed_label')}</h4>
+              <h4 className="font-medium mb-2" style={{ color: colors.textPrimary }}>{t('calculator:total_materials_needed_label')}</h4>
               <div className="overflow-x-auto" style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii["2xl"] }}>
                 <table className="w-full" style={{ backgroundColor: colors.bgCardInner }}>
                   <thead style={{ borderBottom: `1px solid ${colors.borderDefault}`, background: colors.bgOverlay }}>

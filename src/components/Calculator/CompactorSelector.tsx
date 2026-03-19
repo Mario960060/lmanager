@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { colors, fontSizes, fontWeights, radii } from '../../themes/designTokens';
 
 interface CompactorOption {
   id: string;
@@ -99,7 +100,7 @@ const CompactorSelector: React.FC<CompactorSelectorProps> = ({
   const { t } = useTranslation(['calculator']);
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700">{t('calculator:compactor_type_label')}</label>
+      <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:compactor_type_label')}</label>
       <select
         value={selectedCompactor?.id || ''}
         onChange={(e) => {
@@ -108,7 +109,7 @@ const CompactorSelector: React.FC<CompactorSelectorProps> = ({
             onCompactorChange(compactor);
           }
         }}
-        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-select"
+        style={{ marginTop: 4, display: "block", width: "100%", borderRadius: radii.md, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, color: colors.textPrimary, padding: "8px 12px", fontSize: fontSizes.base, outline: "none" }}
       >
         <option value="">{t('calculator:select_compactor_type')}</option>
         {COMPACTORS.map((compactor) => (

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../themes/designTokens';
 import { translateMaterialName, translateMaterialDescription, translateUnit } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
@@ -142,46 +143,48 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-[1100] flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full">
-        <div className="flex justify-between items-center p-6 border-b">
+      <div className="rounded-lg max-w-2xl w-full" style={{ backgroundColor: colors.bgCard }}>
+        <div className="flex justify-between items-center p-6 border-b" style={{ borderColor: colors.borderDefault }}>
           <div>
             <h2 className="text-xl font-semibold">{t('event:add_material_needed')}</h2>
-            <p className="text-sm text-gray-600 mt-1">
+            <p className="text-sm mt-1" style={{ color: colors.textMuted }}>
               {t('event:for_label')}: {format(date, 'MMMM d, yyyy', { locale: dateLocale })}
             </p>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 rounded-full transition-colors hover:opacity-80"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" style={{ color: colors.textSubtle }} />
           </button>
         </div>
 
         <div className="p-6 space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700">{t('event:search_materials')}</label>
+            <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:search_materials')}</label>
             <div className="relative mt-1">
               <input
                 type="text"
                 value={materialSearch}
                 onChange={(e) => setMaterialSearch(e.target.value)}
-                className="block w-full rounded-md border-gray-300 pl-10 focus:border-gray-600 focus:ring-gray-600"
+                className="block w-full rounded-md pl-10"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('event:search_materials_placeholder')}
               />
-              <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+              <Search className="absolute left-3 top-2.5 h-5 w-5" style={{ color: colors.textSubtle }} />
             </div>
           </div>
 
-          <div className="max-h-60 overflow-y-auto border rounded-lg">
+          <div className="max-h-60 overflow-y-auto rounded-lg" style={{ border: `1px solid ${colors.borderDefault}` }}>
             {/* Add Unspecified Material Option - only when event is selected */}
             {hasEvent && (
               <div
                 onClick={() => setShowUnspecifiedModal(true)}
-                className="p-4 hover:bg-gray-50 cursor-pointer border-b"
+                className="p-4 cursor-pointer border-b"
+                style={{ backgroundColor: 'transparent' }}
               >
-                <h3 className="font-medium text-blue-600">+ {t('event:other_custom_item')}</h3>
-                <p className="text-sm text-gray-600 mt-1">{t('event:add_custom_item_details')}</p>
+                <h3 className="font-medium" style={{ color: colors.accentBlue }}>+ {t('event:other_custom_item')}</h3>
+                <p className="text-sm mt-1" style={{ color: colors.textMuted }}>{t('event:add_custom_item_details')}</p>
               </div>
             )}
 
@@ -190,12 +193,14 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
                 setSelectedMaterial({ id: 'custom', name: '', unit: '', description: '' });
                 setUnit('');
               }}
-              className={`p-4 hover:bg-gray-50 cursor-pointer border-b ${
-                selectedMaterial?.id === 'custom' ? 'border-2 border-blue-500' : ''
-              }`}
+              className="p-4 cursor-pointer border-b"
+              style={{
+                backgroundColor: 'transparent',
+                ...(selectedMaterial?.id === 'custom' ? { borderWidth: 2, borderColor: colors.accentBlue } : {})
+              }}
             >
               <h3 className="font-medium">{t('event:other_custom_material')}</h3>
-              <p className="text-sm text-gray-600 mt-1">{t('event:add_custom_material_not_list')}</p>
+              <p className="text-sm mt-1" style={{ color: colors.textMuted }}>{t('event:add_custom_material_not_list')}</p>
             </div>
 
             {materials.map(material => (
@@ -205,15 +210,17 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
                   setSelectedMaterial(material);
                   setUnit(material.unit);
                 }}
-                className={`p-4 hover:bg-gray-50 cursor-pointer border-b last:border-b-0 ${
-                  selectedMaterial?.id === material.id ? 'border-2 border-blue-500' : ''
-                }`}
+                className="p-4 cursor-pointer border-b last:border-b-0"
+                style={{
+                  backgroundColor: 'transparent',
+                  ...(selectedMaterial?.id === material.id ? { borderWidth: 2, borderColor: colors.accentBlue } : {})
+                }}
               >
                 <h3 className="font-medium">{translateMaterialName(material.name, t)}</h3>
                 {translateMaterialDescription(material.name, material.description, t) && (
-                  <p className="text-sm text-gray-600 mt-1">{translateMaterialDescription(material.name, material.description, t)}</p>
+                  <p className="text-sm mt-1" style={{ color: colors.textMuted }}>{translateMaterialDescription(material.name, material.description, t)}</p>
                 )}
-                <p className="text-xs text-gray-500 mt-1">{t('event:unit_label')}: {translateUnit(material.unit, t)}</p>
+                <p className="text-xs mt-1" style={{ color: colors.textSubtle }}>{t('event:unit_label')}: {translateUnit(material.unit, t)}</p>
               </div>
             ))}
           </div>
@@ -222,7 +229,7 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
             <>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('event:material_name')}</label>
+                  <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:material_name')}</label>
                   <input
                     type="text"
                     value={selectedMaterial.id === 'custom' ? selectedMaterial.name : selectedMaterial.name}
@@ -237,48 +244,54 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
                       }
                     }}
                     readOnly={selectedMaterial.id !== 'custom'}
-                    className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600 ${
-                      selectedMaterial.id !== 'custom' ? 'bg-gray-50' : ''
-                    }`}
+                    className="mt-1 block w-full rounded-md shadow-sm"
+                    style={{
+                      borderColor: colors.borderDefault,
+                      ...(selectedMaterial.id !== 'custom' ? { backgroundColor: colors.bgSubtle } : {})
+                    }}
                     placeholder={selectedMaterial.id === 'custom' ? t('event:enter_material_name') : ''}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t('event:quantity_label')}</label>
+                  <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:quantity_label')}</label>
                   <input
                     type="number"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
                     min="0.01"
                     step="0.01"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600"
+                    className="mt-1 block w-full rounded-md shadow-sm"
+                    style={{ borderColor: colors.borderDefault }}
                     placeholder={t('event:enter_quantity')}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('event:unit_label')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:unit_label')}</label>
                 <input
                   type="text"
                   value={unit}
                   onChange={(e) => setUnit(e.target.value)}
                   readOnly={selectedMaterial.id !== 'custom'}
-                  className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600 ${
-                    selectedMaterial.id !== 'custom' ? 'bg-gray-50' : ''
-                  }`}
+                  className="mt-1 block w-full rounded-md shadow-sm"
+                  style={{
+                    borderColor: colors.borderDefault,
+                    ...(selectedMaterial.id !== 'custom' ? { backgroundColor: colors.bgSubtle } : {})
+                  }}
                   placeholder={selectedMaterial.id === 'custom' ? t('event:enter_unit_eg') : ''}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('event:notes_optional')}</label>
+                <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:notes_optional')}</label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   rows={3}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-600 focus:ring-gray-600"
+                  className="mt-1 block w-full rounded-md shadow-sm"
+                  style={{ borderColor: colors.borderDefault }}
                   placeholder={t('event:add_notes_material')}
                 />
               </div>
@@ -286,11 +299,12 @@ const CalendarMaterialModal: React.FC<CalendarMaterialModalProps> = ({ eventId, 
           )}
         </div>
 
-        <div className="p-6 border-t bg-gray-50">
+        <div className="p-6 border-t" style={{ backgroundColor: colors.bgSubtle }}>
           <button
             onClick={handleSubmit}
             disabled={!selectedMaterial || !quantity || !unit || (selectedMaterial.id === 'custom' && !selectedMaterial.name.trim()) || addMaterialMutation.isPending}
-            className="w-full bg-gray-700 text-white py-2 px-4 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
+            className="w-full py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+            style={{ backgroundColor: colors.bgElevated, color: colors.textOnAccent }}
           >
             {addMaterialMutation.isPending ? t('event:adding') : t('event:add_material')}
           </button>

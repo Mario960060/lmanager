@@ -6,6 +6,7 @@ import { useAuthStore } from '../lib/store';
 import { Search, X, Package, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Spinner, Button } from '../themes/uiComponents';
+import { colors } from '../themes/designTokens';
 
 interface AdditionalMaterialsModalProps {
   eventId: string;
@@ -30,11 +31,11 @@ const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
   t = (key) => key
 }) => {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full">
+    <div className="fixed inset-0 flex items-center justify-center z-[60] p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="rounded-lg shadow-xl p-6 max-w-md w-full" style={{ backgroundColor: colors.bgCard }}>
         <h3 className="text-lg font-semibold mb-4">{t('common:confirm_deletion')}</h3>
         <p className="mb-6">{t('common:want_delete_record')}</p>
-        <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
+        <p className="mb-6 text-sm" style={{ color: colors.textSubtle }}>
           <strong>{t('common:type_label')}:</strong> {recordType}<br />
           <strong>{t('common:name_label')}:</strong> {recordName}
         </p>
@@ -150,30 +151,34 @@ const AdditionalMaterialsModal: React.FC<AdditionalMaterialsModalProps> = ({ eve
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
           {/* Header */}
-          <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
+          <div className="p-4 border-b flex justify-between items-center sticky top-0 z-10" style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard }}>
             <h2 className="text-xl font-semibold flex items-center">
-              <Package className="w-5 h-5 mr-2 text-blue-500" />
+              <Package className="w-5 h-5 mr-2" style={{ color: colors.accentBlue }} />
               {t('event:additional_materials')}
             </h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              className="p-1 rounded-full transition-colors"
+              style={{ backgroundColor: 'transparent' }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
             >
               <X className="w-6 h-6" />
             </button>
           </div>
 
           {/* Search */}
-          <div className="p-4 border-b dark:border-gray-700">
+          <div className="p-4 border-b" style={{ borderColor: colors.borderDefault }}>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: colors.textMuted }} />
               <input
                 type="text"
                 placeholder={t('event:search_materials_project')}
-                className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg dark:bg-gray-700"
+                className="w-full pl-10 pr-4 py-2 border rounded-lg"
+                style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated }}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -189,16 +194,16 @@ const AdditionalMaterialsModal: React.FC<AdditionalMaterialsModalProps> = ({ eve
             ) : filteredMaterials.length > 0 ? (
               <div className="space-y-4">
                 {filteredMaterials.map((material) => (
-                  <div key={material.id} className="border dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-750">
+                  <div key={material.id} className="border rounded-lg p-4" style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard }}>
                     <div className="flex justify-between">
                       <div className="flex-1">
-                        <h3 className="font-medium text-lg text-gray-900 dark:text-gray-100 mb-2">
+                        <h3 className="font-medium text-lg mb-2" style={{ color: colors.textPrimary }}>
                           {material.material || t('event:unknown_material')}
                         </h3>
-                        <p className="text-gray-700 dark:text-gray-300 mb-1">
+                        <p className="mb-1" style={{ color: colors.textMuted }}>
                           {t('event:project_label')}: <span className="font-medium">{material.events?.title || t('event:unknown_project')}</span>
                         </p>
-                        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        <p className="mt-2 text-xs" style={{ color: colors.textSubtle }}>
                           {t('event:added_on')} {new Date(material.created_at).toLocaleDateString()} {t('event:at_time')} {new Date(material.created_at).toLocaleTimeString()}
                         </p>
                       </div>
@@ -207,7 +212,8 @@ const AdditionalMaterialsModal: React.FC<AdditionalMaterialsModalProps> = ({ eve
                           material.id, 
                           material.material || t('event:unknown_material')
                         )}
-                        className="text-red-600 hover:text-red-800 font-medium flex items-center h-fit"
+                        className="font-medium flex items-center h-fit"
+                        style={{ color: colors.red }}
                       >
                         <Trash2 className="w-4 h-4 mr-1" />
                         {t('event:delete_button')}
@@ -217,7 +223,7 @@ const AdditionalMaterialsModal: React.FC<AdditionalMaterialsModalProps> = ({ eve
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <div className="text-center py-8" style={{ color: colors.textSubtle }}>
                 {searchTerm ? t('event:no_materials_match_search') : t('event:no_additional_materials_yet')}
               </div>
             )}
@@ -238,25 +244,28 @@ const AdditionalMaterialsModal: React.FC<AdditionalMaterialsModalProps> = ({ eve
       )}
 
       {showRequestSent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full">
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="rounded-lg shadow-xl p-6 max-w-sm w-full" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium flex items-center">
-                <svg className="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg className="w-5 h-5 mr-2" style={{ color: colors.green }} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {t('event:success')}
               </h3>
               <button
                 onClick={() => setShowRequestSent(false)}
-                className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="p-1 rounded-full transition-colors"
+                style={{ backgroundColor: 'transparent' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <p className="text-gray-700 dark:text-gray-300 mb-4">
+            <p className="mb-4" style={{ color: colors.textMuted }}>
               {t('event:deletion_request_sent')}
             </p>
             <div className="flex justify-end">

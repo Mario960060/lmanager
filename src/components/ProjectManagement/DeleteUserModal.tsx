@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../../themes/designTokens';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { X, Search, AlertCircle, Info } from 'lucide-react';
@@ -121,12 +122,12 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
-        <div className="flex justify-between items-center p-6 border-b dark:border-slate-700 flex-none">
-          <h2 className="text-xl font-semibold dark:text-white">{t('event:delete_user_title')}</h2>
+      <div className="rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
+        <div className="flex justify-between items-center p-6 border-b flex-none" style={{ borderColor: colors.borderDefault }}>
+          <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{t('event:delete_user_title')}</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-full transition-colors"
+            className="p-2 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -134,10 +135,10 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ onClose }) => {
 
         <div className="p-6 overflow-y-auto">
           {/* Search - Sticky at top */}
-          <div className="sticky top-0 bg-white dark:bg-slate-800 z-10 pb-4 mb-4 border-b dark:border-slate-700">
+          <div className="sticky top-0 z-10 pb-4 mb-4 border-b" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}>
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">{t('event:search_user')}</label>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:search_user')}</label>
+              <p className="text-sm" style={{ color: colors.textSubtle }}>
                 {t('event:total_users')} {members.length}
               </p>
             </div>
@@ -146,19 +147,20 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ onClose }) => {
                 type="text"
                 value={userSearch}
                 onChange={(e) => setUserSearch(e.target.value)}
-                className="block w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgInput, color: colors.textPrimary }}
                 placeholder={t('event:enter_user_name')}
               />
-              <Search className="absolute right-3 top-2.5 h-5 w-5 text-gray-400" />
+              <Search className="absolute right-3 top-2.5 h-5 w-5" style={{ color: colors.textSubtle }} />
             </div>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            <p className="mt-2 text-sm" style={{ color: colors.textSubtle }}>
               {t('event:delete_user_note')}
             </p>
           </div>
 
           {/* Error message */}
           {deleteError && (
-            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-md flex items-center">
+            <div className="mb-4 p-3 rounded-md flex items-center" style={{ backgroundColor: colors.redLight, color: colors.red }}>
               <AlertCircle className="w-5 h-5 mr-2" />
               {deleteError}
             </div>
@@ -166,7 +168,7 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ onClose }) => {
 
           {/* Info message */}
           {infoMessage && (
-            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-md flex items-center">
+            <div className="mb-4 p-3 rounded-md flex items-center" style={{ backgroundColor: colors.accentBlueBg, color: colors.accentBlue }}>
               <Info className="w-5 h-5 mr-2" />
               {infoMessage}
             </div>
@@ -175,28 +177,30 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ onClose }) => {
           {/* User List - Scrollable */}
           <div className="space-y-4">
             {isLoading ? (
-              <p className="text-center py-4 dark:text-gray-400">{t('event:loading_users')}</p>
+              <p className="text-center py-4" style={{ color: colors.textSubtle }}>{t('event:loading_users')}</p>
             ) : members.length === 0 ? (
-              <p className="text-center py-4 dark:text-gray-400">{t('event:no_users_found')}</p>
+              <p className="text-center py-4" style={{ color: colors.textSubtle }}>{t('event:no_users_found')}</p>
             ) : (
               members.map((member: any) => (
-                <div key={member.userId} className="bg-gray-50 dark:bg-slate-700 p-4 rounded-lg">
+                <div key={member.userId} className="p-4 rounded-lg" style={{ backgroundColor: colors.bgSubtle }}>
                   <div className="flex justify-between items-center">
                     <div>
-                      <h3 className="font-medium dark:text-white">{member.full_name}</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{t('event:role_label')} {member.role}</p>
+                      <h3 className="font-medium" style={{ color: colors.textPrimary }}>{member.full_name}</h3>
+                      <p className="text-sm" style={{ color: colors.textSubtle }}>{t('event:role_label')} {member.role}</p>
                     </div>
                     {confirmDelete === member.userId ? (
                       <div className="flex space-x-2">
                         <button
                           onClick={() => setConfirmDelete(null)}
-                          className="px-3 py-1 bg-gray-100 dark:bg-slate-600 text-gray-800 dark:text-gray-200 rounded hover:bg-gray-200 dark:hover:bg-slate-500"
+                          className="px-3 py-1 rounded"
+                          style={{ backgroundColor: colors.bgSubtle, color: colors.textSecondary }}
                         >
                           {t('common:cancel')}
                         </button>
                         <button
                           onClick={confirmDeleteUser}
-                          className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                          className="px-3 py-1 rounded"
+                          style={{ backgroundColor: colors.red, color: colors.textOnAccent }}
                           disabled={deleteUserMutation.isPending}
                         >
                           {deleteUserMutation.isPending ? t('event:processing') : t('event:confirm_button')}
@@ -205,7 +209,8 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ onClose }) => {
                     ) : (
                       <button
                         onClick={() => handleDeleteClick(member.userId)}
-                        className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 rounded hover:bg-red-200 dark:hover:bg-red-900/50"
+                        className="px-3 py-1 rounded"
+                        style={{ backgroundColor: colors.redLight, color: colors.red }}
                       >
                         {t('event:delete_button')}
                       </button>

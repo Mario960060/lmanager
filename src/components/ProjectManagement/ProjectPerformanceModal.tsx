@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../../themes/designTokens';
 import { translateTaskName } from '../../lib/translationMap';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
@@ -214,12 +215,12 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
+      <div className="rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
         <div className="flex justify-between items-center p-6 border-b flex-none">
           <h2 className="text-xl font-semibold">{t('event:project_performance_title')}</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -228,16 +229,17 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
         <div className="p-6 flex flex-col h-full">
           {/* Project Search */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700">{t('event:search_project')}</label>
+            <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:search_project')}</label>
             <div className="mt-1 relative">
               <input
                 type="text"
                 value={projectSearch}
                 onChange={(e) => setProjectSearch(e.target.value)}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                className="block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('event:enter_project_name')}
               />
-              <Search className="absolute right-3 top-2.5 h-5 w-5 text-gray-400" />
+              <Search className="absolute right-3 top-2.5 h-5 w-5" style={{ color: colors.textSubtle }} />
             </div>
           </div>
 
@@ -248,12 +250,13 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                 <div
                   key={project.id}
                   onClick={() => setSelectedProject(project.id)}
-                  className={`p-3 hover:bg-gray-50 cursor-pointer rounded-lg ${
-                    selectedProject === project.id ? 'bg-blue-50 border border-blue-200' : ''
-                  }`}
+                  className="p-3 cursor-pointer rounded-lg"
+                  style={selectedProject === project.id
+                    ? { backgroundColor: colors.accentBlueBg, borderWidth: 1, borderStyle: 'solid', borderColor: colors.accentBlueBorder }
+                    : {}}
                 >
                   <h3 className="font-medium">{project.title}</h3>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm" style={{ color: colors.textMuted }}>
                     {format(parseISO(project.start_date), 'MMM d, yyyy')} - {format(parseISO(project.end_date), 'MMM d, yyyy')}
                   </p>
                 </div>
@@ -264,7 +267,7 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
           {selectedProject && (
             <div className="flex-1 flex flex-col min-h-0">
               {/* Controls - Fixed position */}
-              <div className="bg-white border-b pb-4 mb-4">
+              <div className="border-b pb-4 mb-4" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}>
                 {/* Time Range Selection */}
                 <div className="flex space-x-4 mb-4">
                   <button
@@ -273,9 +276,8 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                       setSelectedWeek('');
                       setDateRange({ start: '', end: '' });
                     }}
-                    className={`px-4 py-2 rounded-lg ${
-                      selectedTimeRange === 'single' ? 'bg-blue-600 text-white' : 'bg-gray-100'
-                    }`}
+                    className="px-4 py-2 rounded-lg"
+                    style={selectedTimeRange === 'single' ? { backgroundColor: colors.accentBlue, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
                   >
                     {t('event:single_day')}
                   </button>
@@ -285,9 +287,8 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                       setSelectedDate('');
                       setDateRange({ start: '', end: '' });
                     }}
-                    className={`px-4 py-2 rounded-lg ${
-                      selectedTimeRange === 'weekly' ? 'bg-blue-600 text-white' : 'bg-gray-100'
-                    }`}
+                    className="px-4 py-2 rounded-lg"
+                    style={selectedTimeRange === 'weekly' ? { backgroundColor: colors.accentBlue, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
                   >
                     {t('event:weekly_button')}
                   </button>
@@ -297,9 +298,8 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                       setSelectedDate('');
                       setSelectedWeek('');
                     }}
-                    className={`px-4 py-2 rounded-lg ${
-                      selectedTimeRange === 'range' ? 'bg-blue-600 text-white' : 'bg-gray-100'
-                    }`}
+                    className="px-4 py-2 rounded-lg"
+                    style={selectedTimeRange === 'range' ? { backgroundColor: colors.accentBlue, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
                   >
                     {t('event:date_range_button')}
                   </button>
@@ -308,7 +308,7 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                 {/* Date Selection */}
                 {selectedTimeRange === 'single' && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">{t('event:select_date')}</label>
+                    <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:select_date')}</label>
                     <DatePicker
                       value={selectedDate}
                       onChange={setSelectedDate}
@@ -321,19 +321,18 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
 
                 {selectedTimeRange === 'weekly' && (
                   <div className="max-h-48 overflow-y-auto">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:select_week')}</label>
+                    <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('event:select_week')}</label>
                     {weeks.map((week, index) => (
                       <div
                         key={index}
                         onClick={() => setSelectedWeek(`${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}`)}
-                        className={`p-2 rounded-lg cursor-pointer hover:bg-gray-50 ${
-                          selectedWeek === `${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}`
-                            ? 'bg-blue-50 border border-blue-200'
-                            : ''
-                        }`}
+                        className="p-2 rounded-lg cursor-pointer"
+                        style={selectedWeek === `${format(week.start, 'yyyy-MM-dd')}|${format(week.end, 'yyyy-MM-dd')}`
+                          ? { backgroundColor: colors.accentBlueBg, borderWidth: 1, borderStyle: 'solid', borderColor: colors.accentBlueBorder }
+                          : {}}
                       >
                         <div className="flex items-center">
-                          <CalendarIcon className="w-4 h-4 mr-2 text-gray-500" />
+                          <CalendarIcon className="w-4 h-4 mr-2" style={{ color: colors.textSubtle }} />
                           <span>
                             {format(week.start, 'MMM d')} - {format(week.end, 'MMM d, yyyy')}
                           </span>
@@ -346,7 +345,7 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                 {selectedTimeRange === 'range' && (
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">{t('event:start_date_label')}</label>
+                      <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:start_date_label')}</label>
                       <DatePicker
                         value={dateRange.start}
                         onChange={(v) => setDateRange(prev => ({ ...prev, start: v }))}
@@ -356,7 +355,7 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">{t('event:end_date_label')}</label>
+                      <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:end_date_label')}</label>
                       <DatePicker
                         value={dateRange.end}
                         onChange={(v) => setDateRange(prev => ({ ...prev, end: v }))}
@@ -372,25 +371,22 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                 <div className="flex space-x-4 mt-4">
                   <button
                     onClick={() => setSelectedDataType('tasks')}
-                    className={`px-4 py-2 rounded-lg ${
-                      selectedDataType === 'tasks' ? 'bg-green-600 text-white' : 'bg-gray-100'
-                    }`}
+                    className="px-4 py-2 rounded-lg"
+                    style={selectedDataType === 'tasks' ? { backgroundColor: colors.green, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
                   >
                     {t('event:tasks_button')}
                   </button>
                   <button
                     onClick={() => setSelectedDataType('hours')}
-                    className={`px-4 py-2 rounded-lg ${
-                      selectedDataType === 'hours' ? 'bg-green-600 text-white' : 'bg-gray-100'
-                    }`}
+                    className="px-4 py-2 rounded-lg"
+                    style={selectedDataType === 'hours' ? { backgroundColor: colors.green, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
                   >
                     {t('event:hours_button')}
                   </button>
                   <button
                     onClick={() => setSelectedDataType('additionalTasks')}
-                    className={`px-4 py-2 rounded-lg ${
-                      selectedDataType === 'additionalTasks' ? 'bg-green-600 text-white' : 'bg-gray-100'
-                    }`}
+                    className="px-4 py-2 rounded-lg"
+                    style={selectedDataType === 'additionalTasks' ? { backgroundColor: colors.green, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
                   >
                     {t('event:additional_tasks_button')}
                   </button>
@@ -406,7 +402,8 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                         performanceData.map((item: any) => (
                           <div 
                             key={`task-${item.userId}-${item.taskName}-${item.totalAmount}`} 
-                            className="bg-gray-50 p-4 rounded-lg"
+                            className="p-4 rounded-lg"
+                            style={{ backgroundColor: colors.bgSubtle }}
                           >
                             <div className="flex justify-between items-start">
                               <div>
@@ -414,11 +411,11 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                                 <p className="text-sm text-gray-600 mt-1">
                                   {t('event:by_prefix')} {item.userName}
                                 </p>
-                                <p className="text-sm text-gray-600">
+                                <p className="text-sm" style={{ color: colors.textMuted }}>
                                   {t('event:progress_label')} {item.totalAmount} {item.unit}
                                 </p>
                               </div>
-                              <p className="text-sm font-medium text-blue-600">
+                              <p className="text-sm font-medium" style={{ color: colors.accentBlue }}>
                                 {item.totalHours} {t('event:hours_spent')}
                               </p>
                             </div>
@@ -428,20 +425,21 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
 
                       {selectedDataType === 'hours' && (
                         <div className="space-y-4">
-                          <div className="bg-blue-50 p-4 rounded-lg">
-                            <h3 className="font-medium text-blue-900">{t('event:total_project_hours')}</h3>
-                            <p className="text-2xl font-bold text-blue-600 mt-1">
+                          <div className="p-4 rounded-lg" style={{ backgroundColor: colors.accentBlueBg }}>
+                            <h3 className="font-medium" style={{ color: colors.textPrimary }}>{t('event:total_project_hours')}</h3>
+                            <p className="text-2xl font-bold mt-1" style={{ color: colors.accentBlue }}>
                               {performanceData.total} {t('event:hours_suffix')}
                             </p>
                           </div>
                           {performanceData.byUser.map((user: any) => (
                             <div 
                               key={`hours-${user.userId}-${user.totalHours}`} 
-                              className="bg-gray-50 p-4 rounded-lg"
+                              className="p-4 rounded-lg"
+                            style={{ backgroundColor: colors.bgSubtle }}
                             >
                               <div className="flex justify-between items-center">
                                 <h3 className="font-medium">{user.userName}</h3>
-                                <p className="text-sm font-medium text-blue-600">
+                                <p className="text-sm font-medium" style={{ color: colors.accentBlue }}>
                                   {user.totalHours} {t('event:hours_suffix')}
                                 </p>
                               </div>
@@ -454,7 +452,8 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                         performanceData.map((item: any) => (
                           <div 
                             key={`additional-${item.id}-${item.created_at}`} 
-                            className="bg-gray-50 p-4 rounded-lg"
+                            className="p-4 rounded-lg"
+                            style={{ backgroundColor: colors.bgSubtle }}
                           >
                             <div className="flex justify-between items-start">
                               <div>
@@ -463,11 +462,11 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                                   {t('event:added_by')} {item.profiles?.full_name}
                                 </p>
                               </div>
-                              <p className="text-sm font-medium text-blue-600">
+                              <p className="text-sm font-medium" style={{ color: colors.accentBlue }}>
                                 {item.hours_needed} {t('event:hours_needed')}
                               </p>
                             </div>
-                            <div className="mt-2 text-sm text-gray-600">
+                            <div className="mt-2 text-sm" style={{ color: colors.textMuted }}>
                               <p>{t('event:period_label')} {format(parseISO(item.start_date), 'MMM d')} - {format(parseISO(item.end_date), 'MMM d, yyyy')}</p>
                               {item.materials_needed && (
                                 <p className="mt-1">{t('event:materials_label')} {item.materials_needed}</p>
@@ -478,7 +477,7 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
                       )}
                     </>
                   ) : (
-                    <p className="text-center text-gray-600 py-4">
+                    <p className="text-center py-4" style={{ color: colors.textMuted }}>
                       {t('event:no_data_available')}
                     </p>
                   )}

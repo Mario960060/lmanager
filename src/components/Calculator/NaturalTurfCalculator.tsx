@@ -7,8 +7,8 @@ import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapa
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
-import { colors } from '../../themes/designTokens';
-import { Spinner, Button } from '../../themes/uiComponents';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii, gradients } from '../../themes/designTokens';
+import { Spinner, Button, Card, DataTable, TextInput, Checkbox, CalculatorInputGrid } from '../../themes/uiComponents';
 
 interface Material {
   name: string;
@@ -54,6 +54,7 @@ interface DiggingEquipment {
 
 const loadingSoilDiggerTimeEstimates = [
   { equipment: 'Shovel (1 Person)', sizeInTons: 0.02, timePerTon: 0.5 },
+  { equipment: 'Digger 0.5T', sizeInTons: 0.5, timePerTon: 0.36 },
   { equipment: 'Digger 1T', sizeInTons: 1, timePerTon: 0.18 },
   { equipment: 'Digger 2T', sizeInTons: 2, timePerTon: 0.12 },
   { equipment: 'Digger 3-5T', sizeInTons: 3, timePerTon: 0.08 },
@@ -463,79 +464,54 @@ const NaturalTurfCalculator: React.FC<NaturalTurfCalculatorProps> = ({
   }
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold">{t('calculator:natural_turf_calculator_title')}</h2>
-      <p className="text-sm text-gray-600">
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display, letterSpacing: '0.3px', margin: `${spacing.md}px 0 ${spacing.sm}px` }}>
+        {t('calculator:natural_turf_calculator_title')}
+      </h2>
+      <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, lineHeight: 1.5 }}>
         {t('calculator:natural_turf_calculator_description')}
       </p>
 
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_area_m2')}</label>
-          <input
-            type="number"
-            value={area}
-            onChange={(e) => setArea(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_area_m2')}
-            min="0"
-            step="0.01"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_type1_thickness_cm')}</label>
-          <input
-            type="number"
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
+        <TextInput
+          label={t('calculator:input_area_m2')}
+          value={area}
+          onChange={setArea}
+          placeholder={t('calculator:placeholder_enter_area_m2')}
+          unit="m²"
+        />
+        <CalculatorInputGrid columns={2}>
+          <TextInput
+            label={t('calculator:input_type1_thickness_cm')}
             value={tape1ThicknessCm}
-            onChange={(e) => setTape1ThicknessCm(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
+            onChange={setTape1ThicknessCm}
             placeholder={t('calculator:placeholder_enter_thickness')}
-            min="0"
-            step="0.5"
+            unit="cm"
           />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_soil_thickness_cm')}</label>
-          <input
-            type="number"
+          <TextInput
+            label={t('calculator:input_soil_thickness_cm')}
             value={soilThicknessCm}
-            onChange={(e) => setSoilThicknessCm(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
+            onChange={setSoilThicknessCm}
             placeholder={t('calculator:placeholder_enter_thickness')}
-            min="0"
-            step="0.5"
+            unit="cm"
           />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_additional_soil_depth_cm')}</label>
-          <input
-            type="number"
-            value={soilExcessCm}
-            onChange={(e) => setSoilExcessCm(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_depth_cm')}
-            min="0"
-            step="0.5"
-          />
-          <p className="text-xs text-gray-500 mt-1">{t('calculator:additional_soil_depth_desc')}</p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_grass_roll_thickness_cm')}</label>
-          <input
-            type="number"
-            value={grassRollThicknessCm}
-            onChange={(e) => setGrassRollThicknessCm(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder="2"
-            min="0"
-            step="0.5"
-          />
-          <p className="text-xs text-gray-500 mt-1">{t('calculator:grass_roll_thickness_desc')}</p>
-        </div>
+        </CalculatorInputGrid>
+        <TextInput
+          label={t('calculator:input_additional_soil_depth_cm')}
+          value={soilExcessCm}
+          onChange={setSoilExcessCm}
+          placeholder={t('calculator:placeholder_enter_depth_cm')}
+          unit="cm"
+          helperText={t('calculator:additional_soil_depth_desc')}
+        />
+        <TextInput
+          label={t('calculator:input_grass_roll_thickness_cm')}
+          value={grassRollThicknessCm}
+          onChange={setGrassRollThicknessCm}
+          placeholder="2"
+          unit="cm"
+          helperText={t('calculator:grass_roll_thickness_desc')}
+        />
 
         {/* Compactor — only when tape1 has value (for compacting tape1) */}
         {parseFloat(tape1ThicknessCm || '0') > 0 && !isInProjectCreating && (
@@ -546,52 +522,50 @@ const NaturalTurfCalculator: React.FC<NaturalTurfCalculatorProps> = ({
         )}
 
         {!isInProjectCreating && (
-          <div className="mt-4">
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={calculateDigging}
-                onChange={(e) => setCalculateDigging(e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_digging_prep')}</span>
-            </label>
-          </div>
+          <Checkbox label={t('calculator:calculate_digging_prep')} checked={calculateDigging} onChange={setCalculateDigging} />
         )}
 
         {calculateDigging && (
-          <div className="grid grid-cols-2 gap-6">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:excavation_machinery')}</label>
-              <div className="space-y-2">
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:excavation_machinery')}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
                 {excavators.length === 0 ? (
-                  <p className="text-gray-500">{t('calculator:no_excavators_found')}</p>
+                  <p style={{ color: colors.textDim }}>{t('calculator:no_excavators_found')}</p>
                 ) : (
                   excavators.map((exc) => (
-                    <div key={exc.id} className="flex items-center p-2 cursor-pointer" onClick={() => setSelectedExcavator(exc)}>
-                      <div className={`w-4 h-4 rounded-full border mr-2 ${selectedExcavator?.id === exc.id ? 'border-gray-400' : 'border-gray-400'}`}>
-                        <div className={`w-2 h-2 rounded-full m-0.5 ${selectedExcavator?.id === exc.id ? 'bg-gray-400' : 'bg-transparent'}`}></div>
+                    <div
+                      key={exc.id}
+                      style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: selectedExcavator?.id === exc.id ? colors.bgHover : 'transparent', border: `1px solid ${selectedExcavator?.id === exc.id ? colors.accentBlueBorder : colors.borderLight}` }}
+                      onClick={() => setSelectedExcavator(exc)}
+                    >
+                      <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedExcavator?.id === exc.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {selectedExcavator?.id === exc.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
                       </div>
-                      <span className="text-gray-800">{exc.name}</span>
-                      <span className="text-sm text-gray-600 ml-2">({exc["size (in tones)"]} tons)</span>
+                      <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{exc.name}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({exc["size (in tones)"]} tons)</span>
                     </div>
                   ))
                 )}
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:carrier_machinery')}</label>
-              <div className="space-y-2">
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:carrier_machinery')}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
                 {carriers.length === 0 ? (
-                  <p className="text-gray-500">{t('calculator:no_carriers_found')}</p>
+                  <p style={{ color: colors.textDim }}>{t('calculator:no_carriers_found')}</p>
                 ) : (
                   carriers.map((car) => (
-                    <div key={car.id} className="flex items-center p-2 cursor-pointer" onClick={() => setSelectedCarrier(car)}>
-                      <div className={`w-4 h-4 rounded-full border mr-2 ${selectedCarrier?.id === car.id ? 'border-gray-400' : 'border-gray-400'}`}>
-                        <div className={`w-2 h-2 rounded-full m-0.5 ${selectedCarrier?.id === car.id ? 'bg-gray-400' : 'bg-transparent'}`}></div>
+                    <div
+                      key={car.id}
+                      style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: selectedCarrier?.id === car.id ? colors.bgHover : 'transparent', border: `1px solid ${selectedCarrier?.id === car.id ? colors.accentBlueBorder : colors.borderLight}` }}
+                      onClick={() => setSelectedCarrier(car)}
+                    >
+                      <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedCarrier?.id === car.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {selectedCarrier?.id === car.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
                       </div>
-                      <span className="text-gray-800">{car.name}</span>
-                      <span className="text-sm text-gray-600 ml-2">({car["size (in tones)"]} tons)</span>
+                      <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{car.name}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({car["size (in tones)"]} tons)</span>
                     </div>
                   ))
                 )}
@@ -601,71 +575,57 @@ const NaturalTurfCalculator: React.FC<NaturalTurfCalculatorProps> = ({
         )}
 
         {!isInProjectCreating && calculateDigging && selectedCarrier && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
-            <input
-              type="number"
-              value={soilTransportDistance}
-              onChange={(e) => {
-                setSoilTransportDistance(e.target.value);
-                setTape1TransportDistance(e.target.value);
-              }}
-              className="w-full p-2 border rounded-md"
-              placeholder={t('calculator:placeholder_enter_transport_distance')}
-              min="0"
-              step="1"
-            />
-            <p className="text-xs text-gray-500 mt-1">{t('calculator:set_to_zero_no_transporting')}</p>
-          </div>
+          <TextInput
+            label={t('calculator:transport_distance_label')}
+            value={soilTransportDistance}
+            onChange={(v) => { setSoilTransportDistance(v); setTape1TransportDistance(v); }}
+            placeholder={t('calculator:placeholder_enter_transport_distance')}
+            unit="m"
+            helperText={t('calculator:set_to_zero_no_transporting')}
+          />
         )}
 
         {!isInProjectCreating && (
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={calculateTransport}
-              onChange={(e) => setCalculateTransport(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-          </label>
+          <Checkbox label={t('calculator:calculate_transport_time_label')} checked={calculateTransport} onChange={setCalculateTransport} />
         )}
 
         {!isInProjectCreating && calculateTransport && (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier_label')}</label>
-              <div className="space-y-2">
-                <div className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded" onClick={() => setSelectedTransportCarrier(null)}>
-                  <div className={`w-4 h-4 rounded-full border mr-2 ${selectedTransportCarrier === null ? 'border-gray-400' : 'border-gray-400'}`}>
-                    <div className={`w-2 h-2 rounded-full m-0.5 ${selectedTransportCarrier === null ? 'bg-gray-400' : 'bg-transparent'}`}></div>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:transport_carrier')}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: !selectedTransportCarrier ? colors.bgHover : 'transparent', border: `1px solid ${!selectedTransportCarrier ? colors.accentBlueBorder : colors.borderLight}` }}
+                  onClick={() => setSelectedTransportCarrier(null)}
+                >
+                  <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${!selectedTransportCarrier ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {!selectedTransportCarrier && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
                   </div>
-                  <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
+                  <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{t('calculator:default_wheelbarrow')}</span>
                 </div>
                 {carriers.map((car) => (
-                  <div key={car.id} className="flex items-center p-2 cursor-pointer" onClick={() => setSelectedTransportCarrier(car)}>
-                    <div className={`w-4 h-4 rounded-full border mr-2 ${selectedTransportCarrier?.id === car.id ? 'border-gray-400' : 'border-gray-400'}`}>
-                      <div className={`w-2 h-2 rounded-full m-0.5 ${selectedTransportCarrier?.id === car.id ? 'bg-gray-400' : 'bg-transparent'}`}></div>
+                  <div
+                    key={car.id}
+                    style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: selectedTransportCarrier?.id === car.id ? colors.bgHover : 'transparent', border: `1px solid ${selectedTransportCarrier?.id === car.id ? colors.accentBlueBorder : colors.borderLight}` }}
+                    onClick={() => setSelectedTransportCarrier(car)}
+                  >
+                    <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedTransportCarrier?.id === car.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {selectedTransportCarrier?.id === car.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
                     </div>
-                    <span className="text-gray-800">{car.name}</span>
-                    <span className="text-sm text-gray-600 ml-2">({car["size (in tones)"]} tons)</span>
+                    <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{car.name}</span>
+                    <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({car["size (in tones)"]} tons)</span>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
-              <input
-                type="number"
-                value={materialTransportDistance}
-                onChange={(e) => setMaterialTransportDistance(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:placeholder_enter_material_transport')}
-                min="0"
-                step="1"
-              />
-              <p className="text-xs text-gray-500 mt-1">{t('calculator:distance_transporting_materials')}</p>
-            </div>
+            <TextInput
+              label={t('calculator:transport_distance_label')}
+              value={materialTransportDistance}
+              onChange={setMaterialTransportDistance}
+              placeholder={t('calculator:placeholder_enter_material_transport')}
+              unit="m"
+              helperText={t('calculator:distance_transporting_materials')}
+            />
           </>
         )}
 
@@ -674,52 +634,73 @@ const NaturalTurfCalculator: React.FC<NaturalTurfCalculatorProps> = ({
         </Button>
 
         {calculationError && (
-          <div className="p-3 bg-red-900/90 border border-red-600 rounded-lg text-white">
+          <div className="p-3 rounded-lg" style={{ background: `${colors.red}15`, border: `1px solid ${colors.red}40`, color: colors.textPrimary }}>
             {calculationError}
           </div>
         )}
 
         {(totalHours !== null || materials.length > 0) && (
-          <div className="mt-6 space-y-4" ref={resultsRef}>
-            <div>
-              <h3 className="text-lg font-medium">{t('calculator:total_labor_hours_label')} <span className="text-blue-600">{totalHours?.toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
-              <div className="mt-2">
-                <h4 className="font-medium text-gray-700 mb-2">{t('calculator:task_breakdown_label')}</h4>
-                <ul className="space-y-1 pl-5 list-disc">
-                  {taskBreakdown.map((task, index) => (
-                    <li key={index} className="text-sm">
-                      <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-            <div>
-              <h3 className="font-medium mb-2">{t('calculator:materials_required_label')}</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('calculator:material_label')}</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('calculator:quantity_label')}</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">{t('calculator:unit_label')}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {materials.map((m, i) => (
-                      <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-6 py-4 text-sm text-gray-900">{translateMaterialName(m.name, t)}</td>
-                        <td className="px-6 py-4 text-sm text-gray-900">{m.unit === 'rolls' ? m.amount : m.amount.toFixed(2)}</td>
-                        <td className="px-6 py-4 text-sm text-gray-900">{translateUnit(m.unit, t)}</td>
-                      </tr>
+          <div style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }} ref={resultsRef}>
+            {totalHours !== null && (
+              <>
+                <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg }}>
+                    <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                      {t('calculator:total_labor_hours_label')}
+                    </span>
+                    <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                      {totalHours.toFixed(2)}
+                    </span>
+                    <span style={{ fontSize: fontSizes.md, color: colors.accentBlue, fontFamily: fonts.body, fontWeight: fontWeights.medium }}>
+                      {t('calculator:hours_abbreviation')}
+                    </span>
+                  </div>
+                </Card>
+                <Card>
+                  <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+                    {t('calculator:task_breakdown_label')}
+                  </h3>
+                  <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
+                    {taskBreakdown.map((task, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                          background: index % 2 === 1 ? colors.bgTableRowAlt : undefined,
+                          borderBottom: index < taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
+                        }}
+                      >
+                        <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName(task.task, t)}</span>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                          <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{task.hours.toFixed(2)}</span>
+                          <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  </div>
+                </Card>
+              </>
+            )}
+            {materials.length > 0 && (
+              <DataTable
+                columns={[
+                  { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+                  { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+                  { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+                ]}
+                rows={materials.map((m) => ({
+                  name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName(m.name, t)}</span>,
+                  quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.unit === 'rolls' ? m.amount : m.amount.toFixed(2)}</span>,
+                  unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
+                }))}
+              />
+            )}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 };

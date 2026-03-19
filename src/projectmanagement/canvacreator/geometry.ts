@@ -156,12 +156,16 @@ export interface ContextMenuInfo {
   arcPoint?: ArcPoint;
   /** When path edge hit: centerline segment index for Arc Point (outline edgeIdx -> centerline segment) */
   pathCenterlineEdgeIdx?: number;
+  /** When path end-cap edge hit: which end for "Kontynuuj rysowanie ścieżki" */
+  pathContinuationEnd?: "first" | "last";
   /** Layer 5: PPM on empty area (no coverage from L2) */
   adjustmentEmpty?: { emptyAreaIdx: number };
   /** Layer 5: PPM on overflow (L2 element outside L1) */
   adjustmentOverflow?: { shapeIdx: number };
   /** Layer 5: PPM on overlap (surface vs surface or surface vs linear) */
   adjustmentOverlap?: { shapeIdxA: number; shapeIdxB: number; overlapIdx: number };
+  /** Layer 3: right-click on pattern rotation handle (slab / cobble / grass) */
+  patternRotationHandle?: { patternType: "slab" | "cobblestone" | "grass" };
 }
 
 export interface SnapResult {
@@ -289,6 +293,93 @@ export function projectOntoSegment(p: Point, a: Point, b: Point): Projection {
   return { t, proj, dist: distance(p, proj) };
 }
 
+/** Closest point on the infinite line through A–B (not clamped to the segment). */
+export function projectOntoLine(p: Point, a: Point, b: Point): Point {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq < 1e-18) return { ...a };
+  const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
+  return { x: a.x + t * dx, y: a.y + t * dy };
+}
+
+export type CollinearSnapHit = { proj: Point; dist: number; lineA: Point; lineB: Point };
+
+/**
+ * When dragging polygon vertex `pi`, snap to collinearity with the two vertices
+ * along the boundary on the "prev" chain (…, lineA, lineB, dragged) or "next" chain (…, lineA, lineB, dragged).
+ * `threshold` is max perpendicular distance in world units to activate snap.
+ */
+export function bestCollinearVertexSnap(
+  target: Point,
+  closed: boolean,
+  pts: readonly Point[],
+  pi: number,
+  threshold: number
+): CollinearSnapHit | null {
+  const n = pts.length;
+  if (n < 3) return null;
+  let best: CollinearSnapHit | null = null;
+
+  const tryLine = (a: Point, b: Point) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    if (dx * dx + dy * dy < 1e-14) return;
+    const proj = projectOntoLine(target, a, b);
+    const dist = distance(target, proj);
+    if (dist >= threshold) return;
+    if (!best || dist < best.dist) best = { proj, dist, lineA: a, lineB: b };
+  };
+
+  if (closed) {
+    const prevI = (pi - 1 + n) % n;
+    const prev2 = (pi - 2 + n) % n;
+    tryLine(pts[prev2], pts[prevI]);
+    const nextI = (pi + 1) % n;
+    const next2 = (pi + 2) % n;
+    tryLine(pts[next2], pts[nextI]);
+  } else {
+    if (pi >= 2) tryLine(pts[pi - 2], pts[pi - 1]);
+    if (pi <= n - 3) tryLine(pts[pi + 2], pts[pi + 1]);
+  }
+
+  return best;
+}
+
+/**
+ * Unit perpendicular to edge A→B pointing **outward** from a polygon when `interiorRef` is any point inside that polygon.
+ */
+export function outwardPerpendicularRad(a: Point, b: Point, interiorRef: Point): number {
+  const midx = (a.x + b.x) * 0.5;
+  const midy = (a.y + b.y) * 0.5;
+  const norm = Math.atan2(b.y - a.y, b.x - a.x) + Math.PI / 2;
+  const vx = interiorRef.x - midx;
+  const vy = interiorRef.y - midy;
+  const nx = Math.cos(norm);
+  const ny = Math.sin(norm);
+  return nx * vx + ny * vy > 0 ? norm + Math.PI : norm;
+}
+
+export function edgeOutwardRadForL1Edge(shapes: readonly Shape[], l1Si: number, edgeIdx: number): number | null {
+  const s = shapes[l1Si];
+  if (!s || s.layer !== 1 || !s.closed || s.points.length < 3) return null;
+  const pts = s.points;
+  const n = pts.length;
+  const a = pts[edgeIdx];
+  const b = pts[(edgeIdx + 1) % n];
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (Math.hypot(dx, dy) < 1e-9) return null;
+  const sa = signedArea(pts);
+  if (Math.abs(sa) < 1e-20) return null;
+  // CCW: interior is to the left of each directed edge → outward = right normal (dy, -dx).
+  // CW: flip. Avoids mis-placing both parallel edge dims on one side when labelAnchorInsidePolygon
+  // or centroid lies outside a thin/concave region (dot test with interior ref becomes unreliable).
+  let rad = Math.atan2(-dx, dy);
+  if (sa < 0) rad += Math.PI;
+  return rad;
+}
+
 export function edgeNormalAngle(a: Point, b: Point): number {
   return Math.atan2(b.y - a.y, b.x - a.x) + Math.PI / 2;
 }
@@ -336,6 +427,58 @@ export function snapAngleTo45(angleDeg: number): number {
     if (diff < bestDiff) { bestDiff = diff; bestAngle = sa; }
   }
   return bestAngle;
+}
+
+/** Shortest signed distance between two directions on the circle, degrees in [0, 180]. */
+export function smallestAngleDiffDeg(a: number, b: number): number {
+  let d = Math.abs((((a - b) % 360) + 360) % 360);
+  if (d > 180) d = 360 - d;
+  return d;
+}
+
+/**
+ * Distance between undirected line directions (parallel lines = 0°), degrees in [0, 90].
+ * Matches slab vizDirection convention: angle of the long-axis direction in world space (same as atan2 along edge).
+ */
+export function undirectedLineAngleDistanceDeg(a: number, b: number): number {
+  let d = Math.abs((((a - b) % 360) + 360) % 360);
+  if (d > 180) d = 360 - d;
+  return Math.min(d, 180 - d);
+}
+
+/** ~1.5% of full circle — snap pattern rotation to boundary when this close (parallel). */
+export const PATTERN_BOUNDARY_SNAP_THRESHOLD_DEG = 360 * 0.015;
+
+/**
+ * Snap pattern long-axis direction to boundary geometry: for each straight (or sampled arc) tangent b,
+ * considers b, b+90°, b+180°, b+270° as valid axes — so rotation can lock **parallel** or **perpendicular**
+ * to every edge. Uses directed angular distance (not undirected line distance), otherwise parallel and
+ * perpendicular to the same edge would be indistinguishable at 90° spacing.
+ */
+export function snapPatternDirectionToBoundaryAngles(
+  directionDeg: number,
+  boundaryAnglesDeg: readonly number[],
+  thresholdDeg: number = PATTERN_BOUNDARY_SNAP_THRESHOLD_DEG
+): number {
+  if (boundaryAnglesDeg.length === 0) return directionDeg;
+  const normDir = ((directionDeg % 360) + 360) % 360;
+  let bestDist = thresholdDeg + 1;
+  let bestPick = normDir;
+
+  for (const b of boundaryAnglesDeg) {
+    const bNorm = ((b % 360) + 360) % 360;
+    for (const off of [0, 90, 180, 270]) {
+      const cand = (bNorm + off) % 360;
+      const dist = smallestAngleDiffDeg(normDir, cand);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestPick = cand;
+      }
+    }
+  }
+
+  if (bestDist <= thresholdDeg) return ((bestPick % 360) + 360) % 360;
+  return directionDeg;
 }
 
 export function snapToLine(prev: Point, next: Point, target: Point): Point {
@@ -403,7 +546,7 @@ export function interiorAngleDir(pts: Point[], idx: number): number {
 }
 
 // Signed area: positive = CCW, negative = CW
-function signedArea(pts: Point[]): number {
+export function signedArea(pts: Point[]): number {
   let area = 0;
   const n = pts.length;
   for (let i = 0; i < n; i++) {
@@ -412,6 +555,22 @@ function signedArea(pts: Point[]): number {
     area -= pts[j].x * pts[i].y;
   }
   return area / 2;
+}
+
+/** Unit normal pointing outside a simple closed polygon (uses winding; same convention as edgeOutwardRadForL1Edge). */
+export function outwardUnitNormalForPolygonEdge(a: Point, b: Point, polygonPts: Point[]): Point {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-12) return { x: 0, y: 0 };
+  const sa = signedArea(polygonPts);
+  let nx = dy / len;
+  let ny = -dx / len;
+  if (sa < 0) {
+    nx = -nx;
+    ny = -ny;
+  }
+  return { x: nx, y: ny };
 }
 
 export function centroid(points: Point[]): Point {

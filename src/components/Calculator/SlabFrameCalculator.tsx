@@ -4,6 +4,7 @@
   import { supabase } from '../../lib/supabase';
   import { useAuthStore } from '../../lib/store';
   import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+  import { colors, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
 
   interface SlabFrameCalculatorProps {
     isOpen: boolean;
@@ -256,40 +257,40 @@
     if (!isOpen) return null;
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold">{t('calculator:slab_frame_calculator_title')}</h2>
+      <div style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
+        <div style={{ background: colors.bgCard, borderRadius: radii.lg, padding: spacing["6xl"], width: "100%", maxWidth: 672, maxHeight: "80vh", overflowY: "auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: spacing["6xl"] }}>
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary }}>{t('calculator:slab_frame_calculator_title')}</h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl"
+              style={{ color: colors.textSubtle, fontSize: fontSizes["2xl"], background: "none", border: "none", cursor: "pointer" }}
             >
               ×
             </button>
           </div>
 
-          <div className="space-y-4">
+          <div style={{ display: "flex", flexDirection: "column", gap: spacing["3xl"] }}>
             {/* Piece Dimensions */}
-            <div className="grid grid-cols-2 gap-4">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: spacing["3xl"] }}>
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('calculator:piece_length_cm_label')}</label>
+                <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:piece_length_cm_label')}</label>
                 <input
                   type="number"
                   value={pieceLengthCm}
                   onChange={(e) => setPieceLengthCm(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  style={{ marginTop: spacing.xs, display: "block", width: "100%", borderRadius: radii.md, border: `1px solid ${colors.borderInput}`, padding: `${spacing.sm}px ${spacing.xl}px`, background: colors.bgInput, color: colors.textPrimary, fontSize: fontSizes.base, outline: "none" }}
                   placeholder={t('calculator:enter_length_cm')}
                   min="0"
                   step="0.1"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700">{t('calculator:piece_width_cm_label')}</label>
+                <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:piece_width_cm_label')}</label>
                 <input
                   type="number"
                   value={pieceWidthCm}
                   onChange={(e) => setPieceWidthCm(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  style={{ marginTop: spacing.xs, display: "block", width: "100%", borderRadius: radii.md, border: `1px solid ${colors.borderInput}`, padding: `${spacing.sm}px ${spacing.xl}px`, background: colors.bgInput, color: colors.textPrimary, fontSize: fontSizes.base, outline: "none" }}
                   placeholder={t('calculator:enter_width_cm')}
                   min="0"
                   step="0.1"
@@ -299,14 +300,14 @@
 
             {/* Side Length Input */}
             <div>
-              <label className="block text-sm font-medium text-gray-700">{t('calculator:add_side_length_label')}</label>
-              <p className="text-xs text-gray-500 mb-2">{t('calculator:add_separate_every_single_side')}</p>
-              <div className="flex gap-2">
+              <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:add_side_length_label')}</label>
+              <p style={{ fontSize: fontSizes.xs, color: colors.textDim, marginBottom: spacing.xs }}>{t('calculator:add_separate_every_single_side')}</p>
+              <div style={{ display: "flex", gap: spacing.xs }}>
                 <input
                   type="number"
                   value={sideLength}
                   onChange={(e) => setSideLength(e.target.value)}
-                  className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  style={{ flex: 1, borderRadius: radii.md, border: `1px solid ${colors.borderInput}`, padding: `${spacing.sm}px ${spacing.xl}px`, background: colors.bgInput, color: colors.textPrimary, fontSize: fontSizes.base, outline: "none" }}
                   placeholder={t('calculator:enter_side_length_meters')}
                   min="0"
                   step="0.01"
@@ -314,7 +315,7 @@
                 <button
                   onClick={addSide}
                   disabled={!sideLength || !pieceLengthCm}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300"
+                  style={{ padding: `${spacing.xs}px ${spacing["3xl"]}px`, background: colors.accentBlue, color: colors.textOnAccent, borderRadius: radii.md, border: "none", cursor: "pointer", fontWeight: fontWeights.medium, opacity: (!sideLength || !pieceLengthCm) ? 0.5 : 1 }}
                 >
                   {t('calculator:confirm_button')}
                 </button>
@@ -324,16 +325,16 @@
             {/* Added Sides List */}
             {sides.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-2">{t('calculator:added_sides_label')}</h3>
-                <div className="space-y-2">
+                <h3 style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.xs }}>{t('calculator:added_sides_label')}</h3>
+                <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
                   {sides.map((side, index) => (
-                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                      <span className="text-sm">
+                    <div key={index} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: spacing.xs, background: colors.bgSubtle, borderRadius: radii.md }}>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textMuted }}>
                         {t('calculator:side_n_format', { n: index + 1 })}: {side.length}m → {side.slabs} {t('calculator:frame_slabs_label')}
                       </span>
                       <button
                         onClick={() => removeSide(index)}
-                        className="text-red-600 hover:text-red-800 text-sm"
+                        style={{ color: colors.red, fontSize: fontSizes.sm, background: "none", border: "none", cursor: "pointer" }}
                       >
                         {t('calculator:remove_button')}
                       </button>
@@ -345,13 +346,13 @@
 
             {/* Transport Distance */}
             {calculateTransport && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
+              <div style={{ marginBottom: spacing["3xl"] }}>
+                <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.xs }}>{t('calculator:transport_distance_label')}</label>
                 <input
                   type="number"
                   value={transportDistance}
                   onChange={(e) => setTransportDistance(e.target.value)}
-                  className="w-full p-2 border rounded-md"
+                  style={{ width: "100%", padding: spacing.xs, border: `1px solid ${colors.borderInput}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }}
                   placeholder={t('calculator:placeholder_enter_transport_distance')}
                   min="0"
                   step="1"
@@ -359,21 +360,21 @@
               </div>
             )}
 
-            <div className="mb-4">
-              <label className="inline-flex items-center">
+            <div style={{ marginBottom: spacing["3xl"] }}>
+              <label style={{ display: "inline-flex", alignItems: "center" }}>
                 <input
                   type="checkbox"
                   checked={calculateTransport}
                   onChange={(e) => setCalculateTransport(e.target.checked)}
-                  className="rounded border-gray-300"
+                  style={{ borderRadius: radii.sm, border: `1px solid ${colors.borderInput}` }}
                 />
-                <span className="ml-2 text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
+                <span style={{ marginLeft: spacing.xs, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:calculate_transport_time_label')}</span>
               </label>
             </div>
 
             {calculateTransport && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_carrier_label')}</label>
+              <div style={{ marginBottom: spacing["3xl"] }}>
+                <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.xs }}>{t('calculator:transport_carrier_label')}</label>
                 <select
                   value={selectedTransportCarrier?.id || ''}
                   onChange={(e) => {
@@ -390,7 +391,7 @@
                       }
                     }
                   }}
-                  className="w-full p-2 border rounded-md"
+                  style={{ width: "100%", padding: spacing.xs, border: `1px solid ${colors.borderInput}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }}
                 >
                   <option value="">-- {t('calculator:select_carrier_label')} --</option>
                   <option value="default">{t('calculator:default_wheelbarrow')}</option>
@@ -404,17 +405,17 @@
             )}
 
             {/* Action Buttons */}
-            <div className="flex gap-2">
+            <div style={{ display: "flex", gap: spacing.xs }}>
               <button
                 onClick={calculate}
                 disabled={!pieceLengthCm || !pieceWidthCm || sides.length === 0}
-                className="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:bg-gray-300"
+                style={{ flex: 1, background: colors.green, color: colors.textOnAccent, padding: `${spacing.xs}px ${spacing["3xl"]}px`, borderRadius: radii.md, border: "none", cursor: "pointer", fontWeight: fontWeights.medium, opacity: (!pieceLengthCm || !pieceWidthCm || sides.length === 0) ? 0.5 : 1 }}
               >
                 {t('calculator:calculate_frame_slabs_button')}
               </button>
               <button
                 onClick={clearAll}
-                className="bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700"
+                style={{ background: colors.bgElevated, color: colors.textPrimary, padding: `${spacing.xs}px ${spacing["3xl"]}px`, borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, cursor: "pointer", fontWeight: fontWeights.medium }}
               >
                 {t('calculator:clear_all_button')}
               </button>
@@ -422,19 +423,19 @@
 
             {/* Results */}
             {results && (
-              <div ref={resultsRef} className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">{t('calculator:frame_slab_results_title')}</h3>
-                <div className="space-y-2 text-sm">
-                  <p><strong>{t('calculator:frame_slabs_format', { length: results.framePieceLengthCm ?? pieceLengthCm, width: results.framePieceWidthCm ?? pieceWidthCm })} {t('calculator:needed_label')}:</strong> {results.totalFrameSlabs}</p>
-                  <p><strong>{t('calculator:total_labor_hours_label')}:</strong> {results.totalHours.toFixed(2)} {t('calculator:hours_label')}</p>
-                  <p><strong>{t('calculator:total_frame_area_label')}:</strong> {results.totalFrameAreaM2.toFixed(2)} m²</p>
+              <div ref={resultsRef} style={{ marginTop: spacing["6xl"], padding: spacing["3xl"], background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>
+                <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.xs }}>{t('calculator:frame_slab_results_title')}</h3>
+                <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs, fontSize: fontSizes.sm }}>
+                  <p style={{ color: colors.textMuted }}><strong style={{ color: colors.textPrimary }}>{t('calculator:frame_slabs_format', { length: results.framePieceLengthCm ?? pieceLengthCm, width: results.framePieceWidthCm ?? pieceWidthCm })} {t('calculator:needed_label')}:</strong> {results.totalFrameSlabs}</p>
+                  <p style={{ color: colors.textMuted }}><strong style={{ color: colors.textPrimary }}>{t('calculator:total_labor_hours_label')}:</strong> {results.totalHours.toFixed(2)} {t('calculator:hours_label')}</p>
+                  <p style={{ color: colors.textMuted }}><strong style={{ color: colors.textPrimary }}>{t('calculator:total_frame_area_label')}:</strong> {results.totalFrameAreaM2.toFixed(2)} m²</p>
                   {calculateTransport && results && results.transportTime !== undefined && results.transportTime > 0 && (
-                    <p><strong>{t('calculator:transport_time_label')}:</strong> {results.transportTime?.toFixed(2) || 0} {t('calculator:hours_label')} ({t('calculator:normalised_to_30m')}: {results.normalizedTransportTime?.toFixed(2) || 0} {t('calculator:hours_label')})</p>
+                    <p style={{ color: colors.textMuted }}><strong style={{ color: colors.textPrimary }}>{t('calculator:transport_time_label')}:</strong> {results.transportTime?.toFixed(2) || 0} {t('calculator:hours_label')} ({t('calculator:normalised_to_30m')}: {results.normalizedTransportTime?.toFixed(2) || 0} {t('calculator:hours_label')})</p>
                   )}
                   
-                  <div className="mt-3">
-                    <p className="font-medium">{t('calculator:side_breakdown')}:</p>
-                    <ul className="list-disc list-inside ml-2">
+                  <div style={{ marginTop: spacing.lg }}>
+                    <p style={{ fontWeight: fontWeights.medium, color: colors.textPrimary }}>{t('calculator:side_breakdown')}:</p>
+                    <ul style={{ listStyle: "disc", listStylePosition: "inside", marginLeft: spacing.xs, color: colors.textMuted }}>
                       {sides.map((side, index) => (
                         <li key={index}>
                           {t('calculator:side_length_slabs_format', { side: t('calculator:side_n_format', { n: index + 1 }), length: side.length, count: side.slabs })}
@@ -444,10 +445,10 @@
                   </div>
                 </div>
                 
-                <div className="mt-4 flex justify-end">
+                <div style={{ marginTop: spacing["3xl"], display: "flex", justifyContent: "flex-end" }}>
                   <button
                     onClick={onClose}
-                    className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                    style={{ padding: `${spacing.xs}px ${spacing["6xl"]}px`, background: colors.green, color: colors.textOnAccent, borderRadius: radii.md, border: "none", cursor: "pointer", fontWeight: fontWeights.medium }}
                   >
                     {t('calculator:accept_button')}
                   </button>

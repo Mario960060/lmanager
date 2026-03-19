@@ -14,7 +14,13 @@ import { C } from "../geometry";
 import { ProjectSettings } from "../types";
 import { computeAutoFill } from "./autoFill";
 import { getGroupsForElement, type CalcGroup, type CalcSubType } from "./calculatorGroups";
-import { parseSlabDimensions } from "../visualization/slabPattern";
+import {
+  parseSlabDimensions,
+  computePatternAlignToStraightEdge,
+  type PatternAlignMaterialKind,
+  type PatternEdgeAlignMode,
+} from "../visualization/slabPattern";
+import { PatternAlignToLineSelector } from "./PatternAlignToLineSelector";
 import { autoLayoutGrassPieces, autoJoinAdjacentPieces, validateCoverage, getEffectiveTotalArea, getEffectivePieceDimensionsForInput, type GrassPiece } from "../visualization/grassRolls";
 import { computePreparation } from "../preparationLogic";
 import { getCalculatorInputDefaults } from "../../../lib/materialUsageDefaults";
@@ -22,7 +28,6 @@ import { translateUnit, translateMaterialName, translateTaskName } from "../../.
 import { colors, spacing, radii, shadows } from "../../../themes/designTokens";
 
 import WallCalculator from "../../../components/Calculator/WallCalculator";
-import SleeperWallCalculator from "../../../components/Calculator/SleeperWallCalculator";
 import KerbsEdgesAndSetsCalculator from "../../../components/Calculator/KerbsEdgesAndSetsCalculator";
 import FenceCalculator from "../../../components/Calculator/FenceCalculator";
 import SlabCalculator from "../../../components/Calculator/SlabCalculator";
@@ -40,6 +45,21 @@ import GroundworkLinearCalculator from "../../../components/Calculator/Groundwor
 import { getFoundationDiggingMethodFromExcavator } from "../GroundworkLinearCalculator";
 import VenetianFenceCalculator from "../../../components/Calculator/VenetianFenceCalculator";
 import CompositeFenceCalculator from "../../../components/Calculator/CompositeFenceCalculator";
+
+const SLAB_VIZ_GROUT_OPTIONS_MM = [1, 2, 3, 4, 5, 10, 20] as const;
+
+function snapSlabGroutMm(mm: number): number {
+  let best: number = SLAB_VIZ_GROUT_OPTIONS_MM[0];
+  let bestD = Math.abs(mm - best);
+  for (const x of SLAB_VIZ_GROUT_OPTIONS_MM) {
+    const d = Math.abs(mm - x);
+    if (d < bestD) {
+      best = x;
+      bestD = d;
+    }
+  }
+  return best;
+}
 
 interface ObjectCardModalProps {
   shapes: Shape[];
@@ -195,6 +215,10 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
         merged.pathCornerType = lastInputsRef.current?.pathCornerType;
         merged.frameJointType = lastInputsRef.current?.frameJointType;
         merged.frameSidesEnabled = lastInputsRef.current?.frameSidesEnabled;
+        if (vizPatternAlignEdge != null) {
+          merged.vizPatternAlignEdge = vizPatternAlignEdge;
+          merged.vizPatternAlignMode = vizPatternAlignMode;
+        }
       }
       if (calculatorType === "concreteSlabs" || (calculatorType === "slab" && calculatorSubType === "concreteSlabs")) {
         merged.vizPattern = vizPattern;
@@ -206,6 +230,10 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
         merged.vizSlabWidth = dims.widthCm;
         merged.vizSlabLength = dims.lengthCm;
         merged.slabSizeKey = slabSizeKey;
+        if (vizPatternAlignEdge != null) {
+          merged.vizPatternAlignEdge = vizPatternAlignEdge;
+          merged.vizPatternAlignMode = vizPatternAlignMode;
+        }
       }
       if (calculatorType === "paving") {
         merged.vizPattern = vizPattern;
@@ -220,6 +248,10 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
         merged.frameSidesEnabled = lastInputsRef.current?.frameSidesEnabled;
         merged.pathCornerType = lastInputsRef.current?.pathCornerType;
         merged.frameJointType = lastInputsRef.current?.frameJointType;
+        if (vizPatternAlignEdge != null) {
+          merged.vizPatternAlignEdge = vizPatternAlignEdge;
+          merged.vizPatternAlignMode = vizPatternAlignMode;
+        }
       }
       const updates: Partial<Shape> & { _createLinkedFoundation?: boolean } = {
         calculatorType,
@@ -282,7 +314,20 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
   const [vizDirection, setVizDirection] = useState<number>(() => normDir(Number(savedInputsSnapshot.vizDirection ?? 0)));
   const [vizStartCorner, setVizStartCorner] = useState<number>(Number(savedInputsSnapshot.vizStartCorner ?? 0));
   const legacyGroutMm = savedInputsSnapshot.vizGroutWidth != null ? Math.round(Number(savedInputsSnapshot.vizGroutWidth) * 10) : undefined;
-  const [vizGroutWidthMm, setVizGroutWidthMm] = useState<number>(Number(savedInputsSnapshot.vizGroutWidthMm ?? legacyGroutMm ?? 5));
+  const [vizGroutWidthMm, setVizGroutWidthMm] = useState<number>(() =>
+    snapSlabGroutMm(Number(savedInputsSnapshot.vizGroutWidthMm ?? legacyGroutMm ?? 5))
+  );
+  const [patternAlignPanelOpen, setPatternAlignPanelOpen] = useState(false);
+  const [vizPatternAlignEdge, setVizPatternAlignEdge] = useState<number | null>(() => {
+    const v = savedInputsSnapshot.vizPatternAlignEdge;
+    if (v == null || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  });
+  const [vizPatternAlignMode, setVizPatternAlignMode] = useState<PatternEdgeAlignMode>(() => {
+    const m = savedInputsSnapshot.vizPatternAlignMode;
+    return m === "perpendicular" ? "perpendicular" : "parallel";
+  });
   const grassLivePreviewInProgressRef = useRef(false);
   const [grassPieces, setGrassPieces] = useState<GrassPiece[]>(() => {
     const p = savedInputsSnapshot.vizPieces;
@@ -297,7 +342,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
     setVizDirection(normDir(Number(savedInputsSnapshot.vizDirection ?? 0)));
     setVizStartCorner(Number(savedInputsSnapshot.vizStartCorner ?? 0));
     const legacyMm = savedInputsSnapshot.vizGroutWidth != null ? Math.round(Number(savedInputsSnapshot.vizGroutWidth) * 10) : undefined;
-    setVizGroutWidthMm(Number(savedInputsSnapshot.vizGroutWidthMm ?? legacyMm ?? 5));
+    setVizGroutWidthMm(snapSlabGroutMm(Number(savedInputsSnapshot.vizGroutWidthMm ?? legacyMm ?? 5)));
     const p = savedInputsSnapshot.vizPieces;
     // For grass: never overwrite grassPieces from vizPieces — layout modifies dimensions to fit shape,
     // but user's nominal dimensions (lengthM, widthM) must stay as entered
@@ -306,7 +351,51 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
     }
     grassLivePreviewInProgressRef.current = false;
     setGrassVizDirection(normDir(Number(savedInputsSnapshot.grassVizDirection ?? savedInputsSnapshot.vizDirection ?? 0)));
-  }, [savedInputsSnapshot.vizPattern, savedInputsSnapshot.vizDirection, savedInputsSnapshot.vizStartCorner, savedInputsSnapshot.vizGroutWidthMm, savedInputsSnapshot.vizPieces, savedInputsSnapshot.grassVizDirection]);
+    {
+      const v = savedInputsSnapshot.vizPatternAlignEdge;
+      if (v == null || v === "") setVizPatternAlignEdge(null);
+      else {
+        const n = Number(v);
+        setVizPatternAlignEdge(Number.isFinite(n) ? n : null);
+      }
+    }
+    setVizPatternAlignMode(savedInputsSnapshot.vizPatternAlignMode === "perpendicular" ? "perpendicular" : "parallel");
+  }, [
+    savedInputsSnapshot.vizPattern,
+    savedInputsSnapshot.vizDirection,
+    savedInputsSnapshot.vizStartCorner,
+    savedInputsSnapshot.vizGroutWidthMm,
+    savedInputsSnapshot.vizPieces,
+    savedInputsSnapshot.grassVizDirection,
+    savedInputsSnapshot.vizPatternAlignEdge,
+    savedInputsSnapshot.vizPatternAlignMode,
+  ]);
+
+  useEffect(() => {
+    setPatternAlignPanelOpen(false);
+  }, [calculatorType, calculatorSubType]);
+
+  const applyPatternAlign = useCallback(
+    (edgeIdx: number, kind: PatternAlignMaterialKind, alignMode: PatternEdgeAlignMode, extras: Record<string, any>) => {
+      const merged = { ...(shape.calculatorInputs ?? {}), ...extras };
+      const r = computePatternAlignToStraightEdge(shape, edgeIdx, merged, kind, alignMode);
+      if (!r) return;
+      setVizPatternAlignMode(alignMode);
+      setVizDirection((((r.vizDirection % 360) + 360) % 360));
+      setVizStartCorner(r.vizStartCorner);
+      setVizPatternAlignEdge(edgeIdx);
+      stableOnInputsChange({
+        vizDirection: r.vizDirection,
+        vizOriginOffsetX: r.vizOriginOffsetX,
+        vizOriginOffsetY: r.vizOriginOffsetY,
+        vizStartCorner: r.vizStartCorner,
+        vizPatternAlignEdge: edgeIdx,
+        vizPatternAlignMode: alignMode,
+      });
+    },
+    [shape, stableOnInputsChange]
+  );
+
   useEffect(() => {
     if (calculatorType !== "grass" || !onCalculatorInputsChange || !shape.closed || shape.points.length < 3) return;
     grassLivePreviewInProgressRef.current = true;
@@ -330,6 +419,45 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- shape excluded to avoid loop: onCalculatorInputsChange updates parent -> new shape -> re-run
   }, [calculatorType, grassVizDirection, grassPieces, shapeIdx, onCalculatorInputsChange]);
+
+  useEffect(() => {
+    if (calculatorType !== "slab" || calculatorSubType === "concreteSlabs" || !slabDims || !shape.closed || shape.points.length < 3) return;
+    const next = {
+      vizPattern,
+      vizDirection,
+      vizStartCorner,
+      vizGroutWidthMm,
+      vizSlabWidth: slabDims.widthCm,
+      vizSlabLength: slabDims.lengthCm,
+    };
+    const cur = shape.calculatorInputs ?? {};
+    const curGroutLegacy =
+      cur.vizGroutWidth != null ? Math.round(Number(cur.vizGroutWidth) * 10) : undefined;
+    const curGroutSnapped = snapSlabGroutMm(Number(cur.vizGroutWidthMm ?? curGroutLegacy ?? 5));
+    const same =
+      cur.vizPattern === next.vizPattern &&
+      normDir(Number(cur.vizDirection ?? 0)) === normDir(next.vizDirection) &&
+      Number(cur.vizStartCorner ?? 0) === next.vizStartCorner &&
+      curGroutSnapped === next.vizGroutWidthMm &&
+      Number(cur.vizSlabWidth) === next.vizSlabWidth &&
+      Number(cur.vizSlabLength) === next.vizSlabLength;
+    if (same) return;
+    stableOnInputsChange(next);
+  }, [
+    calculatorType,
+    calculatorSubType,
+    slabDims?.widthCm,
+    slabDims?.lengthCm,
+    shape.closed,
+    shape.points.length,
+    vizPattern,
+    vizDirection,
+    vizStartCorner,
+    vizGroutWidthMm,
+    stableOnInputsChange,
+    shape.calculatorInputs,
+  ]);
+
   const materialCarrier = projectSettings.selectedMaterialCarrier ?? projectSettings.selectedCarrier;
   const projectCompactor = mapProjectCompactorToOption(projectSettings.selectedCompactor);
   const effectiveCalcTypeForDefaults = (calculatorType === "slab" && calculatorSubType === "concreteSlabs") ? "concreteSlabs" : calculatorType;
@@ -412,8 +540,12 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
         if (calculatorSubType === "concreteSlabs") return <ConcreteSlabsCalculator {...areaProps} shape={shape} />;
         return <SlabCalculator {...areaProps} shape={shape} />;
       case "wall":
-        if (calculatorSubType === "sleeper") return <SleeperWallCalculator {...lengthProps} />;
-        return <WallCalculator type={calculatorSubType as "brick" | "block4" | "block7"} {...lengthProps} />;
+        return (
+          <WallCalculator
+            type={calculatorSubType as "brick" | "block4" | "block7" | "sleeper"}
+            {...lengthProps}
+          />
+        );
       case "kerbs":
         return <KerbsEdgesAndSetsCalculator type={calculatorSubType as "kl" | "rumbled" | "flat" | "sets"} {...lengthProps} />;
       case "fence":
@@ -563,78 +695,140 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
             <div style={{ marginTop: 16, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 6 }}>
               <div style={{ fontWeight: 600, marginBottom: 10, color: C.text }}>{t("project:object_card_pattern_viz")}</div>
               <div style={{ marginBottom: 8, fontSize: 12, color: C.textDim }}>{t("project:object_card_detected_slab")} {slabDims.widthCm} × {slabDims.lengthCm} cm</div>
-              <div style={{ marginBottom: 8 }}>
-                <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {(["grid", "brick", "onethird"] as const).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setVizPattern(p)}
+              <div style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", gap: 12, alignItems: "flex-start", marginBottom: 8 }}>
+                <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {(["grid", "brick", "onethird"] as const).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setVizPattern(p)}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: 6,
+                            border: `1px solid ${vizPattern === p ? C.accent : C.panelBorder}`,
+                            background: vizPattern === p ? C.accent + "22" : C.button,
+                            color: vizPattern === p ? C.accent : C.text,
+                            cursor: "pointer",
+                            fontSize: 12,
+                            textTransform: "capitalize",
+                          }}
+                        >
+                          {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    {([0, 45, 90] as const).map((deg) => (
+                      <button
+                        key={deg}
+                        onClick={() => setVizDirection(deg)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: 6,
+                          border: `1px solid ${vizDirection === deg ? C.accent : C.panelBorder}`,
+                          background: vizDirection === deg ? C.accent + "22" : C.button,
+                          color: vizDirection === deg ? C.accent : C.text,
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        {deg}°
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      min={0}
+                      max={359}
+                      step={1}
+                      value={vizDirection}
+                      onChange={(e) => setVizDirection(normDir(parseFloat(e.target.value) || 0))}
                       style={{
-                        padding: "6px 12px",
+                        width: 70,
+                        padding: "6px 8px",
+                        background: C.bg,
+                        border: `1px solid ${C.panelBorder}`,
                         borderRadius: 6,
-                        border: `1px solid ${vizPattern === p ? C.accent : C.panelBorder}`,
-                        background: vizPattern === p ? C.accent + "22" : C.button,
-                        color: vizPattern === p ? C.accent : C.text,
-                        cursor: "pointer",
+                        color: C.text,
                         fontSize: 12,
-                        textTransform: "capitalize",
+                      }}
+                      title={t("project:custom_rotation_title")}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVizPatternAlignMode("parallel");
+                        setPatternAlignPanelOpen(true);
+                      }}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 6,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.panelBorder}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent + "22" : C.button,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.text,
+                        cursor: "pointer",
+                        fontSize: 11,
                       }}
                     >
-                      {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
+                      {t("project:object_card_align_parallel")}
                     </button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ marginBottom: 8 }}>
-                <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  {([0, 45, 90] as const).map((deg) => (
                     <button
-                      key={deg}
-                      onClick={() => setVizDirection(deg)}
+                      type="button"
+                      onClick={() => {
+                        setVizPatternAlignMode("perpendicular");
+                        setPatternAlignPanelOpen(true);
+                      }}
                       style={{
-                        padding: "6px 12px",
+                        padding: "6px 10px",
                         borderRadius: 6,
-                        border: `1px solid ${vizDirection === deg ? C.accent : C.panelBorder}`,
-                        background: vizDirection === deg ? C.accent + "22" : C.button,
-                        color: vizDirection === deg ? C.accent : C.text,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.panelBorder}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent + "22" : C.button,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.text,
                         cursor: "pointer",
-                        fontSize: 12,
+                        fontSize: 11,
                       }}
                     >
-                      {deg}°
+                      {t("project:object_card_align_perpendicular")}
                     </button>
-                  ))}
-                  <input
-                    type="number"
-                    min={0}
-                    max={359}
-                    step={1}
-                    value={vizDirection}
-                    onChange={(e) => setVizDirection(normDir(parseFloat(e.target.value) || 0))}
-                    style={{
-                      width: 70,
-                      padding: "6px 8px",
-                      background: C.bg,
-                      border: `1px solid ${C.panelBorder}`,
-                      borderRadius: 6,
-                      color: C.text,
-                      fontSize: 12,
-                    }}
-                    title={t("project:custom_rotation_title")}
-                  />
+                    {patternAlignPanelOpen && (
+                      <button
+                        type="button"
+                        onClick={() => setPatternAlignPanelOpen(false)}
+                        style={{ padding: "4px 8px", fontSize: 11, color: C.textDim, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                      >
+                        {t("project:object_card_align_hide_preview")}
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {patternAlignPanelOpen && (
+                  <div style={{ flex: "0 0 auto", alignSelf: "flex-start" }}>
+                    <PatternAlignToLineSelector
+                      alignMode={vizPatternAlignMode}
+                      shape={shape}
+                      selectedEdgeIdx={vizPatternAlignEdge}
+                      onSelectStraightEdge={(ei) =>
+                        applyPatternAlign(ei, "slab", vizPatternAlignMode, {
+                          vizPattern,
+                          vizGroutWidthMm,
+                          vizSlabWidth: slabDims.widthCm,
+                          vizSlabLength: slabDims.lengthCm,
+                        })
+                      }
+                    />
+                  </div>
+                )}
               </div>
               <div style={{ marginBottom: 8 }}>
                 <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_grout_width")}</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={30}
-                  step={1}
+                <select
                   value={vizGroutWidthMm}
-                  onChange={(e) => setVizGroutWidthMm(Math.max(1, Math.min(30, parseInt(e.target.value, 10) || 5)))}
+                  onChange={(e) => setVizGroutWidthMm(snapSlabGroutMm(parseInt(e.target.value, 10) || 5))}
                   style={{
                     width: "100%",
                     padding: "6px 10px",
@@ -644,7 +838,13 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                     color: C.text,
                     fontSize: 13,
                   }}
-                />
+                >
+                  {SLAB_VIZ_GROUT_OPTIONS_MM.map((mm) => (
+                    <option key={mm} value={mm}>
+                      {mm} mm
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_starting_corner")}</label>
@@ -679,68 +879,137 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                   return k === "40x40" ? "40 × 40" : k === "90x60" ? "90 × 60" : "60 × 60";
                 })()} cm ({t("project:object_card_slab_no_grout")})
               </div>
-              <div style={{ marginBottom: 8 }}>
-                <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {(["grid", "brick", "onethird"] as const).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setVizPattern(p)}
+              <div style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", gap: 12, alignItems: "flex-start", marginBottom: 8 }}>
+                <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {(["grid", "brick", "onethird"] as const).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setVizPattern(p)}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: 6,
+                            border: `1px solid ${vizPattern === p ? C.accent : C.panelBorder}`,
+                            background: vizPattern === p ? C.accent + "22" : C.button,
+                            color: vizPattern === p ? C.accent : C.text,
+                            cursor: "pointer",
+                            fontSize: 12,
+                            textTransform: "capitalize",
+                          }}
+                        >
+                          {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    {([0, 45, 90] as const).map((deg) => (
+                      <button
+                        key={deg}
+                        onClick={() => setVizDirection(deg)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: 6,
+                          border: `1px solid ${vizDirection === deg ? C.accent : C.panelBorder}`,
+                          background: vizDirection === deg ? C.accent + "22" : C.button,
+                          color: vizDirection === deg ? C.accent : C.text,
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        {deg}°
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      min={0}
+                      max={359}
+                      step={1}
+                      value={vizDirection}
+                      onChange={(e) => setVizDirection(normDir(parseFloat(e.target.value) || 0))}
                       style={{
-                        padding: "6px 12px",
+                        width: 70,
+                        padding: "6px 8px",
+                        background: C.bg,
+                        border: `1px solid ${C.panelBorder}`,
                         borderRadius: 6,
-                        border: `1px solid ${vizPattern === p ? C.accent : C.panelBorder}`,
-                        background: vizPattern === p ? C.accent + "22" : C.button,
-                        color: vizPattern === p ? C.accent : C.text,
-                        cursor: "pointer",
+                        color: C.text,
                         fontSize: 12,
-                        textTransform: "capitalize",
+                      }}
+                      title={t("project:custom_rotation_title")}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVizPatternAlignMode("parallel");
+                        setPatternAlignPanelOpen(true);
+                      }}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 6,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.panelBorder}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent + "22" : C.button,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.text,
+                        cursor: "pointer",
+                        fontSize: 11,
                       }}
                     >
-                      {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
+                      {t("project:object_card_align_parallel")}
                     </button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ marginBottom: 8 }}>
-                <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  {([0, 45, 90] as const).map((deg) => (
                     <button
-                      key={deg}
-                      onClick={() => setVizDirection(deg)}
+                      type="button"
+                      onClick={() => {
+                        setVizPatternAlignMode("perpendicular");
+                        setPatternAlignPanelOpen(true);
+                      }}
                       style={{
-                        padding: "6px 12px",
+                        padding: "6px 10px",
                         borderRadius: 6,
-                        border: `1px solid ${vizDirection === deg ? C.accent : C.panelBorder}`,
-                        background: vizDirection === deg ? C.accent + "22" : C.button,
-                        color: vizDirection === deg ? C.accent : C.text,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.panelBorder}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent + "22" : C.button,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.text,
                         cursor: "pointer",
-                        fontSize: 12,
+                        fontSize: 11,
                       }}
                     >
-                      {deg}°
+                      {t("project:object_card_align_perpendicular")}
                     </button>
-                  ))}
-                  <input
-                    type="number"
-                    min={0}
-                    max={359}
-                    step={1}
-                    value={vizDirection}
-                    onChange={(e) => setVizDirection(normDir(parseFloat(e.target.value) || 0))}
-                    style={{
-                      width: 70,
-                      padding: "6px 8px",
-                      background: C.bg,
-                      border: `1px solid ${C.panelBorder}`,
-                      borderRadius: 6,
-                      color: C.text,
-                      fontSize: 12,
-                    }}
-                    title={t("project:custom_rotation_title")}
-                  />
+                    {patternAlignPanelOpen && (
+                      <button
+                        type="button"
+                        onClick={() => setPatternAlignPanelOpen(false)}
+                        style={{ padding: "4px 8px", fontSize: 11, color: C.textDim, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                      >
+                        {t("project:object_card_align_hide_preview")}
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {patternAlignPanelOpen && (
+                  <div style={{ flex: "0 0 auto", alignSelf: "flex-start" }}>
+                    <PatternAlignToLineSelector
+                      alignMode={vizPatternAlignMode}
+                      shape={shape}
+                      selectedEdgeIdx={vizPatternAlignEdge}
+                      onSelectStraightEdge={(ei) => {
+                        const k = lastInputsRef.current?.slabSizeKey ?? savedInputsSnapshot.slabSizeKey ?? "60x60";
+                        const dims =
+                          k === "40x40" ? { widthCm: 40, lengthCm: 40 } : k === "90x60" ? { widthCm: 90, lengthCm: 60 } : { widthCm: 60, lengthCm: 60 };
+                        applyPatternAlign(ei, "concreteSlab", vizPatternAlignMode, {
+                          vizPattern,
+                          vizGroutWidthMm: 0,
+                          vizSlabWidth: dims.widthCm,
+                          vizSlabLength: dims.lengthCm,
+                        });
+                      }}
+                    />
+                  </div>
+                )}
               </div>
               <div>
                 <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_starting_corner")}</label>
@@ -770,68 +1039,137 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
             <div style={{ marginTop: 16, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 6 }}>
               <div style={{ fontWeight: 600, marginBottom: 10, color: C.text }}>{t("project:object_card_pattern_viz")}</div>
               <div style={{ marginBottom: 8, fontSize: 12, color: C.textDim }}>{t("project:object_card_blocks_dimensions")}</div>
-              <div style={{ marginBottom: 8 }}>
-                <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
-                <div style={{ display: "flex", gap: 8 }}>
-                  {(["grid", "brick", "onethird"] as const).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setVizPattern(p)}
+              <div style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", gap: 12, alignItems: "flex-start", marginBottom: 8 }}>
+                <div style={{ flex: "1 1 0", minWidth: 0 }}>
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {(["grid", "brick", "onethird"] as const).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => setVizPattern(p)}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: 6,
+                            border: `1px solid ${vizPattern === p ? C.accent : C.panelBorder}`,
+                            background: vizPattern === p ? C.accent + "22" : C.button,
+                            color: vizPattern === p ? C.accent : C.text,
+                            cursor: "pointer",
+                            fontSize: 12,
+                            textTransform: "capitalize",
+                          }}
+                        >
+                          {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    {([0, 45, 90] as const).map((deg) => (
+                      <button
+                        key={deg}
+                        onClick={() => setVizDirection(deg)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: 6,
+                          border: `1px solid ${vizDirection === deg ? C.accent : C.panelBorder}`,
+                          background: vizDirection === deg ? C.accent + "22" : C.button,
+                          color: vizDirection === deg ? C.accent : C.text,
+                          cursor: "pointer",
+                          fontSize: 12,
+                        }}
+                      >
+                        {deg}°
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      min={0}
+                      max={359}
+                      step={1}
+                      value={vizDirection}
+                      onChange={(e) => setVizDirection(normDir(parseFloat(e.target.value) || 0))}
                       style={{
-                        padding: "6px 12px",
+                        width: 70,
+                        padding: "6px 8px",
+                        background: C.bg,
+                        border: `1px solid ${C.panelBorder}`,
                         borderRadius: 6,
-                        border: `1px solid ${vizPattern === p ? C.accent : C.panelBorder}`,
-                        background: vizPattern === p ? C.accent + "22" : C.button,
-                        color: vizPattern === p ? C.accent : C.text,
-                        cursor: "pointer",
+                        color: C.text,
                         fontSize: 12,
-                        textTransform: "capitalize",
+                      }}
+                      title={t("project:custom_rotation_title")}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVizPatternAlignMode("parallel");
+                        setPatternAlignPanelOpen(true);
+                      }}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 6,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.panelBorder}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent + "22" : C.button,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.text,
+                        cursor: "pointer",
+                        fontSize: 11,
                       }}
                     >
-                      {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
+                      {t("project:object_card_align_parallel")}
                     </button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ marginBottom: 8 }}>
-                <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  {([0, 45, 90] as const).map((deg) => (
                     <button
-                      key={deg}
-                      onClick={() => setVizDirection(deg)}
+                      type="button"
+                      onClick={() => {
+                        setVizPatternAlignMode("perpendicular");
+                        setPatternAlignPanelOpen(true);
+                      }}
                       style={{
-                        padding: "6px 12px",
+                        padding: "6px 10px",
                         borderRadius: 6,
-                        border: `1px solid ${vizDirection === deg ? C.accent : C.panelBorder}`,
-                        background: vizDirection === deg ? C.accent + "22" : C.button,
-                        color: vizDirection === deg ? C.accent : C.text,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.panelBorder}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent + "22" : C.button,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.text,
                         cursor: "pointer",
-                        fontSize: 12,
+                        fontSize: 11,
                       }}
                     >
-                      {deg}°
+                      {t("project:object_card_align_perpendicular")}
                     </button>
-                  ))}
-                  <input
-                    type="number"
-                    min={0}
-                    max={359}
-                    step={1}
-                    value={vizDirection}
-                    onChange={(e) => setVizDirection(normDir(parseFloat(e.target.value) || 0))}
-                    style={{
-                      width: 70,
-                      padding: "6px 8px",
-                      background: C.bg,
-                      border: `1px solid ${C.panelBorder}`,
-                      borderRadius: 6,
-                      color: C.text,
-                      fontSize: 12,
-                    }}
-                    title={t("project:custom_rotation_title")}
-                  />
+                    {patternAlignPanelOpen && (
+                      <button
+                        type="button"
+                        onClick={() => setPatternAlignPanelOpen(false)}
+                        style={{ padding: "4px 8px", fontSize: 11, color: C.textDim, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                      >
+                        {t("project:object_card_align_hide_preview")}
+                      </button>
+                    )}
+                  </div>
                 </div>
+                {patternAlignPanelOpen && (
+                  <div style={{ flex: "0 0 auto", alignSelf: "flex-start" }}>
+                    <PatternAlignToLineSelector
+                      alignMode={vizPatternAlignMode}
+                      shape={shape}
+                      selectedEdgeIdx={vizPatternAlignEdge}
+                      onSelectStraightEdge={(ei) => {
+                        const li = lastInputsRef.current ?? {};
+                        applyPatternAlign(ei, "paving", vizPatternAlignMode, {
+                          vizPattern,
+                          blockWidthCm: Number(li.blockWidthCm ?? savedInputsSnapshot.blockWidthCm ?? 20),
+                          blockLengthCm: Number(li.blockLengthCm ?? savedInputsSnapshot.blockLengthCm ?? 10),
+                          jointGapMm: Number(li.jointGapMm ?? savedInputsSnapshot.jointGapMm ?? 1),
+                          addFrameToMonoblock: li.addFrameToMonoblock,
+                          framePieceWidthCm: li.framePieceWidthCm,
+                        });
+                      }}
+                    />
+                  </div>
+                )}
               </div>
               <div>
                 <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_starting_corner")}</label>

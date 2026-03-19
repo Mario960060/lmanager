@@ -3,9 +3,8 @@
 // Arc/curve math for edge arcs (Catmull-Rom, Bézier, sampling)
 // ══════════════════════════════════════════════════════════════
 
-import type { Point } from "./geometry";
-import { distance, projectOntoSegment } from "./geometry";
-import type { ArcPoint, Shape } from "./geometry";
+import type { ArcPoint, Point, Shape } from "./geometry";
+import { distance, projectOntoSegment, undirectedLineAngleDistanceDeg } from "./geometry";
 
 // ── ArcPoint ↔ World ────────────────────────────────────────
 
@@ -355,6 +354,121 @@ export function sampleArcEdge(
     });
   }
   result.push(B);
+  return result;
+}
+
+/**
+ * Tangent directions (degrees, [0,360)) along the shape outline: straight edges use chord bearing;
+ * curved edges add a few tangent samples so snap matches the visible boundary, not the chord.
+ * Computed once per pattern-rotate gesture — O(edges × samples) with small constants.
+ */
+export function collectShapeBoundaryDirectionAnglesDeg(shape: Shape): number[] {
+  const pts = shape.points;
+  const n = pts.length;
+  if (n < 3 || !shape.closed) return [];
+  const edgeArcs = shape.edgeArcs;
+  const out: number[] = [];
+  const pushLine = (deg: number) => {
+    const d = ((deg % 360) + 360) % 360;
+    for (const x of out) {
+      if (undirectedLineAngleDistanceDeg(x, d) < 0.45) return;
+    }
+    out.push(d);
+  };
+
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const A = pts[i]!;
+    const B = pts[j]!;
+    const arcs = edgeArcs?.[i];
+    if (!arcs || arcs.length === 0) {
+      const dx = B.x - A.x;
+      const dy = B.y - A.y;
+      if (dx * dx + dy * dy < 1e-12) continue;
+      pushLine((Math.atan2(dy, dx) * 180) / Math.PI);
+    } else {
+      const prev = pts[(i - 1 + n) % n]!;
+      const next = pts[(j + 1) % n]!;
+      const sampled = sampleArcEdge(A, B, arcs, 16, prev, next);
+      if (sampled.length < 2) continue;
+      const last = sampled.length - 2;
+      const idxs = [0, Math.floor(last / 2), last];
+      for (const k of idxs) {
+        const p0 = sampled[k]!;
+        const p1 = sampled[k + 1]!;
+        const dx = p1.x - p0.x;
+        const dy = p1.y - p0.y;
+        if (dx * dx + dy * dy < 1e-12) continue;
+        pushLine((Math.atan2(dy, dx) * 180) / Math.PI);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Sample arc for frame placement: positions along arc spaced by stepPx, with tangent at each.
+ * Returns array of { pos, tangent } for placing blocks along the curve (joints widen naturally).
+ */
+export function sampleArcEdgeForFrame(
+  A: Point,
+  B: Point,
+  arcPoints: ArcPoint[],
+  stepPx: number,
+  pieceLengthPx: number
+): { pos: Point; tangent: Point }[] {
+  const sorted = [...arcPoints].sort((a, b) => a.t - b.t);
+  let cx = 0, cy = 0;
+  for (const ap of sorted) {
+    const p = arcPointToWorld(A, B, ap);
+    cx += p.x;
+    cy += p.y;
+  }
+  cx /= sorted.length;
+  cy /= sorted.length;
+
+  const numSamples = 100;
+  const pts: Point[] = [];
+  const tangents: Point[] = [];
+  const lengths: number[] = [0];
+  for (let k = 0; k <= numSamples; k++) {
+    const t = k / numSamples;
+    const u = 1 - t;
+    pts.push({
+      x: u * u * A.x + 2 * u * t * cx + t * t * B.x,
+      y: u * u * A.y + 2 * u * t * cy + t * t * B.y,
+    });
+    const tx = 2 * (u * (cx - A.x) + t * (B.x - cx));
+    const ty = 2 * (u * (cy - A.y) + t * (B.y - cy));
+    const tl = Math.sqrt(tx * tx + ty * ty) || 1;
+    tangents.push({ x: tx / tl, y: ty / tl });
+    if (k > 0) {
+      lengths.push(lengths[lengths.length - 1] + distance(pts[k - 1], pts[k]));
+    }
+  }
+  const totalLen = lengths[lengths.length - 1];
+  if (totalLen < 1e-9) return [];
+
+  const result: { pos: Point; tangent: Point }[] = [];
+  let dist = pieceLengthPx / 2;
+  while (dist < totalLen - pieceLengthPx / 2 - 1e-6) {
+    let i = 0;
+    while (i < lengths.length - 1 && lengths[i + 1] < dist) i++;
+    const t0 = lengths[i];
+    const t1 = lengths[i + 1];
+    const frac = t1 > t0 ? (dist - t0) / (t1 - t0) : 0;
+    const pos = {
+      x: pts[i].x + frac * (pts[i + 1].x - pts[i].x),
+      y: pts[i].y + frac * (pts[i + 1].y - pts[i].y),
+    };
+    const tangent = {
+      x: tangents[i].x + frac * (tangents[i + 1].x - tangents[i].x),
+      y: tangents[i].y + frac * (tangents[i + 1].y - tangents[i].y),
+    };
+    const tl = Math.sqrt(tangent.x * tangent.x + tangent.y * tangent.y) || 1;
+    result.push({ pos, tangent: { x: tangent.x / tl, y: tangent.y / tl } });
+    dist += stepPx;
+  }
   return result;
 }
 

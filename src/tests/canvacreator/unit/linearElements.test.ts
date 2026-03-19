@@ -3,6 +3,9 @@ import {
   isLinearElement,
   linearElementColor,
   computeThickPolyline,
+  computeThickPolylineClosed,
+  polygonToSegmentLengths,
+  polygonToCenterline,
   hitTestLinearElement,
 } from "../../../projectmanagement/canvacreator/linearElements";
 import { Shape, C, toPixels } from "../../../projectmanagement/canvacreator/geometry";
@@ -109,6 +112,22 @@ describe("computeThickPolyline", () => {
     // rightPts same = 3, reversed
     // Total = 6
     expect(outline).toHaveLength(6);
+  });
+
+  it("closed loop includes fourth edge vs open U-shape", () => {
+    const openU = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+      { x: 0, y: 100 },
+    ];
+    const openOutline = computeThickPolyline(openU, 20);
+    const closedOutline = computeThickPolylineClosed(openU, 20);
+    expect(closedOutline.length).toBeGreaterThan(openOutline.length);
+    const lens = polygonToSegmentLengths(closedOutline);
+    expect(lens).toHaveLength(4);
+    expect(lens.every((L) => L > 1e-6)).toBe(true);
+    expect(polygonToSegmentLengths(openOutline)).toHaveLength(3);
   });
 });
 

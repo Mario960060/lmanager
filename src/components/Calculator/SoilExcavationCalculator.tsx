@@ -19,7 +19,9 @@ import {
   Button,
   Card,
   Label,
+  DataTable,
 } from '../../themes/uiComponents';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 
 // Define types for our equipment
 interface DiggingEquipment {
@@ -374,20 +376,77 @@ const SoilExcavationCalculator: React.FC<SoilExcavationCalculatorProps> = ({ onR
         </Button>
         
         {result && (
-          <div ref={resultsRef} style={{ marginTop: spacing["5xl"] }}>
+          <div ref={resultsRef} style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
             <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
-              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, marginBottom: spacing.md, color: colors.textSecondary, fontFamily: fonts.display }}>
-                {t('calculator:estimated_time_label')}
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
-                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:total_soil_label')} <span style={{ fontWeight: fontWeights.medium }}>{result.totalTons.toFixed(2)} {t('calculator:tons_suffix')}</span></p>
-                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:excavation_time_label')} <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.excavationTime)}</span></p>
-                {result.transportTime > 0 && (
-                  <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{t('calculator:transport_time_label')} <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.transportTime)}</span></p>
-                )}
-                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body, paddingTop: spacing.md, borderTop: `1px solid ${colors.borderLight}` }}>{t('calculator:total_time')} <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.totalTime)}</span></p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg }}>
+                <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                  {t('calculator:total_labor_hours_label')}
+                </span>
+                <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                  {result.totalTime.toFixed(2)}
+                </span>
+                <span style={{ fontSize: fontSizes.md, color: colors.accentBlue, fontFamily: fonts.body, fontWeight: fontWeights.medium }}>
+                  {t('calculator:hours_abbreviation')}
+                </span>
               </div>
             </Card>
+
+            <Card>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+                {t('calculator:task_breakdown_label')}
+              </h3>
+              <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                    background: undefined,
+                    borderBottom: `1px solid ${colors.borderLight}`,
+                  }}
+                >
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName('Excavation', t)}</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                    <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{result.excavationTime.toFixed(2)}</span>
+                    <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
+                  </div>
+                </div>
+                {result.transportTime > 0 && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                      background: colors.bgTableRowAlt,
+                      borderBottom: 'none',
+                    }}
+                  >
+                    <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName('Transport', t)}</span>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                      <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{result.transportTime.toFixed(2)}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <DataTable
+              columns={[
+                { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+                { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+                { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+              ]}
+              rows={[
+                {
+                  name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName('Soil', t)}</span>,
+                  quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{result.totalTons.toFixed(2)}</span>,
+                  unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit('tonnes', t)}</span>,
+                },
+              ]}
+            />
           </div>
         )}
       </Card>

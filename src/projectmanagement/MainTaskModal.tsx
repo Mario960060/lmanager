@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../themes/designTokens';
 import { X } from 'lucide-react';
 import CalculatorModal from './CalculatorModal';
 
@@ -62,14 +63,14 @@ const MainTaskModal: React.FC<MainTaskModalProps> = ({
   return (
     <>
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
-          <div className="flex justify-between items-center p-6 border-b">
-            <h2 className="text-xl font-semibold text-gray-900">{t('project:add_main_task_title')}</h2>
+        <div className="rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
+          <div className="flex justify-between items-center p-6 border-b" style={{ borderColor: colors.borderDefault }}>
+            <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{t('project:add_main_task_title')}</h2>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              className="p-2 rounded-full transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5" style={{ color: colors.textSubtle }} />
             </button>
           </div>
 
@@ -77,17 +78,16 @@ const MainTaskModal: React.FC<MainTaskModalProps> = ({
             <div className="space-y-4">
               {filteredGroups.map((group) => (
                 <div key={group.type} className="space-y-2">
-                  <h4 className="font-medium text-gray-800">{group.label}</h4>
+                  <h4 className="font-medium" style={{ color: colors.textSecondary }}>{group.label}</h4>
                   <div className="pl-4 space-y-2">
                     {group.subTypes.map((subType) => (
                       <button
                         key={subType.type}
                         onClick={() => handleTaskSelection(group.type, subType.type)}
-                        className={`w-full text-left p-2 rounded-md ${
-                          selectedCalculator === group.type && selectedSubCalculator === subType.type
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-600 hover:bg-gray-100'
-                        }`}
+                        className="w-full text-left p-2 rounded-md"
+                        style={selectedCalculator === group.type && selectedSubCalculator === subType.type
+                          ? { backgroundColor: colors.accentBlue, color: colors.textOnAccent }
+                          : { color: colors.textMuted }}
                       >
                         {subType.label}
                       </button>
@@ -98,10 +98,11 @@ const MainTaskModal: React.FC<MainTaskModalProps> = ({
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 p-6 border-t bg-gray-50">
+          <div className="flex justify-end gap-3 p-6 border-t" style={{ backgroundColor: colors.bgSubtle }}>
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium bg-gray-800 text-gray-300 rounded-md hover:bg-gray-700 transition-colors"
+              className="px-4 py-2 text-sm font-medium rounded-md transition-colors"
+              style={{ backgroundColor: colors.bgCard, color: colors.textMuted }}
             >
               {t('project:cancel_button_label')}
             </button>

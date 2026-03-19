@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Clock, ChevronDown, ChevronUp, Search, X, CheckCircle, Trash2 } from 'lucide-react';
 import { Spinner, Button } from '../themes/uiComponents';
+import { colors } from '../themes/designTokens';
 
 interface TaskPerformanceModalProps {
   onClose: () => void;
@@ -29,11 +30,11 @@ const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
   t = (key) => key
 }) => {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full">
+    <div className="fixed inset-0 flex items-center justify-center z-[60] p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="rounded-lg shadow-xl p-6 max-w-md w-full" style={{ backgroundColor: colors.bgCard }}>
         <h3 className="text-lg font-semibold mb-4">{t('common:confirm_deletion')}</h3>
         <p className="mb-6">{t('common:want_delete_record')}</p>
-        <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
+        <p className="mb-6 text-sm" style={{ color: colors.textSubtle }}>
           <strong>{t('common:type_label')}:</strong> {recordType}<br />
           <strong>{t('common:name_label')}:</strong> {recordName}
         </p>
@@ -245,30 +246,34 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
           {/* Header */}
-          <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
+          <div className="p-4 border-b flex justify-between items-center sticky top-0 z-10" style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard }}>
             <h2 className="text-xl font-semibold flex items-center">
-              <CheckCircle className="w-5 h-5 mr-2 text-blue-500" />
+              <CheckCircle className="w-5 h-5 mr-2" style={{ color: colors.accentBlue }} />
               {t('event:your_task_performance')}
             </h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              className="p-1 rounded-full transition-colors"
+              style={{ backgroundColor: 'transparent' }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
             >
               <X className="w-6 h-6" />
             </button>
           </div>
 
           {/* Search */}
-          <div className="p-4 border-b dark:border-gray-700">
+          <div className="p-4 border-b" style={{ borderColor: colors.borderDefault }}>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: colors.textMuted }} />
               <input
                 type="text"
                 placeholder={t('event:search_tasks_project')}
-                className="w-full pl-10 pr-4 py-2 border dark:border-gray-600 rounded-lg dark:bg-gray-700"
+                className="w-full pl-10 pr-4 py-2 border rounded-lg"
+                style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated }}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -284,42 +289,45 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
             ) : filteredTaskPerformance.length > 0 ? (
               <div className="space-y-4">
                 {filteredTaskPerformance.map((task) => (
-                  <div key={task.eventTasksId} className="border dark:border-gray-700 rounded-lg overflow-hidden">
+                  <div key={task.eventTasksId} className="border rounded-lg overflow-hidden" style={{ borderColor: colors.borderDefault }}>
                     <button
                       onClick={() => toggleTaskDetails(task.eventTasksId)}
-                      className="w-full flex items-center justify-between p-4 text-left bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                      className="w-full flex items-center justify-between p-4 text-left transition-colors"
+                      style={{ backgroundColor: colors.bgElevated }}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.bgElevated; }}
                     >
                       <div>
-                        <h3 className="font-medium text-gray-900 dark:text-gray-100">
+                        <h3 className="font-medium" style={{ color: colors.textPrimary }}>
                           {translateTaskName(task.taskName, t)}
                         </h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p className="text-sm" style={{ color: colors.textSubtle }}>
                           {t('event:project_label')}: {task.eventTitle}
                         </p>
                         <div className="mt-1 grid grid-cols-2 gap-4">
                           <div>
-                            <span className="text-sm text-gray-500 dark:text-gray-400">{t('event:average_time')}:</span>
+                            <span className="text-sm" style={{ color: colors.textSubtle }}>{t('event:average_time')}:</span>
                             <span className="ml-2 font-medium">{(1 / task.efficiency).toFixed(2)} hrs/{task.unit}</span>
                           </div>
                           <div>
-                            <span className="text-sm text-gray-500 dark:text-gray-400">{t('event:total_hours')}:</span>
+                            <span className="text-sm" style={{ color: colors.textSubtle }}>{t('event:total_hours')}:</span>
                             <span className="ml-2 font-medium">{task.totalHours.toFixed(2)} {t('common:hrs_abbr')}</span>
                           </div>
                         </div>
                       </div>
                       {expandedTaskId === task.eventTasksId ? (
-                        <ChevronUp className="h-5 w-5 text-gray-400" />
+                        <ChevronUp className="h-5 w-5" style={{ color: colors.textMuted }} />
                       ) : (
-                        <ChevronDown className="h-5 w-5 text-gray-400" />
+                        <ChevronDown className="h-5 w-5" style={{ color: colors.textMuted }} />
                       )}
                     </button>
                     
                     {expandedTaskId === task.eventTasksId && (
-                      <div className="p-4 bg-white dark:bg-gray-800">
+                      <div className="p-4" style={{ backgroundColor: colors.bgCard }}>
                         <div className="overflow-x-auto">
                           <table className="w-full">
                             <thead>
-                              <tr className="border-b dark:border-gray-700">
+                              <tr className="border-b" style={{ borderColor: colors.borderDefault }}>
                                 <th className="text-left py-2 px-4">{t('common:date')}</th>
                                 <th className="text-left py-2 px-4">{t('event:project_label')}</th>
                                 <th className="text-right py-2 px-4">{t('event:total_completed')}</th>
@@ -329,8 +337,8 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
                               </tr>
                             </thead>
                             <tbody>
-                              {task.entries.map((entry) => (
-                                <tr key={entry.id} className="border-b dark:border-gray-700">
+                              {task.entries.map((entry, index) => (
+                                <tr key={entry.id} className="border-b" style={{ borderColor: colors.borderDefault, background: index % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
                                   <td className="py-2 px-4">{entry.date}</td>
                                   <td className="py-2 px-4">{task.eventTitle}</td>
                                   <td className="text-right py-2 px-4">
@@ -349,7 +357,8 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
                                           `${translateTaskName(task.taskName, t)} (${entry.date})`
                                         );
                                       }}
-                                      className="text-red-600 hover:text-red-800 font-medium flex items-center ml-auto"
+                                      className="font-medium flex items-center ml-auto"
+                                      style={{ color: colors.red }}
                                     >
                                       <Trash2 className="w-4 h-4 mr-1" />
                                       {t('event:delete_button')}
@@ -366,7 +375,7 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <div className="text-center py-8" style={{ color: colors.textSubtle }}>
                 {searchTerm ? t('event:no_tasks_match') : t('event:no_task_progress_yet')}
               </div>
             )}
@@ -387,25 +396,28 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
       )}
 
       {showRequestSent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full">
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="rounded-lg shadow-xl p-6 max-w-sm w-full" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium flex items-center">
-                <svg className="w-5 h-5 text-green-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <svg className="w-5 h-5 mr-2" style={{ color: colors.green }} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {t('event:success')}
               </h3>
               <button
                 onClick={() => setShowRequestSent(false)}
-                className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="p-1 rounded-full transition-colors"
+                style={{ backgroundColor: 'transparent' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <p className="text-gray-700 dark:text-gray-300 mb-4">
+            <p className="mb-4" style={{ color: colors.textMuted }}>
               {t('event:deletion_request_sent')}
             </p>
             <div className="flex justify-end">

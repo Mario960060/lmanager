@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../../themes/designTokens';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
@@ -239,12 +240,12 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
+      <div className="rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
         <div className="flex justify-between items-center p-6 border-b flex-none">
           <h2 className="text-xl font-semibold">{t('event:weekly_worker_hours_title')}</h2>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-2 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -252,11 +253,11 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
 
         <div className="p-6 overflow-y-auto flex-1">
           {/* Time Range Selection - Stays at top */}
-          <div className="sticky top-0 bg-white z-10 pb-4 mb-4 border-b">
+          <div className="sticky top-0 z-10 pb-4 mb-4 border-b" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}>
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">{t('event:select_time_range')}</label>
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:select_time_range')}</label>
               {selectedUserId && (
-                <p className="text-sm text-gray-500">
+                <p className="text-sm" style={{ color: colors.textSubtle }}>
                   {t('event:total_hours_label')} {totalHours}
                 </p>
               )}
@@ -271,9 +272,8 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
                   setSelectedWeek('');
                   setDateRange({ start: '', end: '' });
                 }}
-                className={`px-4 py-2 rounded-lg ${
-                  selectedTimeRange === 'single' ? 'bg-gray-700 text-white' : 'bg-gray-100'
-                }`}
+                className="px-4 py-2 rounded-lg"
+                style={selectedTimeRange === 'single' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
               >
                 {t('event:single_day_button')}
               </button>
@@ -285,9 +285,8 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
                   setSelectedWeek('');
                   setDateRange({ start: '', end: '' });
                 }}
-                className={`px-4 py-2 rounded-lg ${
-                  selectedTimeRange === 'preset' && timeRange === 'current' ? 'bg-gray-700 text-white' : 'bg-gray-100'
-                }`}
+                className="px-4 py-2 rounded-lg"
+                style={selectedTimeRange === 'preset' && timeRange === 'current' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
               >
                 {t('event:this_week_button')}
               </button>
@@ -299,9 +298,8 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
                   setSelectedWeek('');
                   setDateRange({ start: '', end: '' });
                 }}
-                className={`px-4 py-2 rounded-lg ${
-                  selectedTimeRange === 'preset' && timeRange === 'last' ? 'bg-gray-700 text-white' : 'bg-gray-100'
-                }`}
+                className="px-4 py-2 rounded-lg"
+                style={selectedTimeRange === 'preset' && timeRange === 'last' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
               >
                 {t('event:last_week_button')}
               </button>
@@ -312,9 +310,8 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
                   setSelectedDate('');
                   setSelectedWeek('');
                 }}
-                className={`px-4 py-2 rounded-lg ${
-                  selectedTimeRange === 'range' ? 'bg-gray-700 text-white' : 'bg-gray-100'
-                }`}
+                className="px-4 py-2 rounded-lg"
+                style={selectedTimeRange === 'range' ? { backgroundColor: colors.bgElevated, color: colors.textOnAccent } : { backgroundColor: colors.bgSubtle }}
               >
                 {t('event:date_range_label')}
               </button>
@@ -323,13 +320,14 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
             {/* Single Day Selection */}
             {selectedTimeRange === 'single' && (
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:select_date_label')}</label>
+                <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('event:select_date_label')}</label>
                 <div className="relative">
                   <input
                     type="date"
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500 pr-10"
+                    className="block w-full rounded-md shadow-sm pr-10"
+                    style={{ borderColor: colors.borderDefault }}
                   />
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full border-2 border-blue-500 pointer-events-none"></span>
                 </div>
@@ -342,14 +340,14 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
             {selectedTimeRange === 'range' && (
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:start_date_button')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('event:start_date_button')}</label>
                   <DatePicker
                     value={dateRange.start}
                     onChange={(v) => setDateRange(prev => ({ ...prev, start: v }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('event:end_date_button')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textSecondary }}>{t('event:end_date_button')}</label>
                   <DatePicker
                     value={dateRange.end}
                     onChange={(v) => setDateRange(prev => ({ ...prev, end: v }))}
@@ -359,7 +357,7 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
               </div>
             )}
 
-            <div className="mt-2 flex items-center text-sm text-gray-600">
+            <div className="mt-2 flex items-center text-sm" style={{ color: colors.textMuted }}>
               <Calendar className="w-4 h-4 mr-1" />
               <span>
                 {format(startDate, 'MMM d, yyyy')} - {format(endDate, 'MMM d, yyyy')}
@@ -386,8 +384,8 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
           {/* Worker Search */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">{t('event:worker_name_label')}</label>
-              <p className="text-sm text-gray-500">
+              <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:worker_name_label')}</label>
+              <p className="text-sm" style={{ color: colors.textSubtle }}>
                 {t('event:total_workers_label')} {workers.length}
               </p>
             </div>
@@ -399,10 +397,11 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
                   setWorkerName(e.target.value);
                   setSelectedUserId(null);
                 }}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-gray-500 focus:ring-gray-500"
+                className="block w-full rounded-md shadow-sm"
+                style={{ borderColor: colors.borderDefault }}
                 placeholder={t('event:search_worker_placeholder')}
               />
-              <Search className="absolute right-3 top-2.5 h-5 w-5 text-gray-400" />
+              <Search className="absolute right-3 top-2.5 h-5 w-5" style={{ color: colors.textSubtle }} />
             </div>
           </div>
 
@@ -423,17 +422,16 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
                         setWorkerName(worker.full_name);
                       }
                     }}
-                    className={`p-3 rounded-lg cursor-pointer border transition-all ${
-                      worker.id === selectedUserId 
-                        ? 'bg-gray-700 border-gray-800 text-white' 
-                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                    }`}
+                    className="p-3 rounded-lg cursor-pointer border transition-all"
+                    style={worker.id === selectedUserId
+                      ? { backgroundColor: colors.bgElevated, borderColor: colors.bgCard, color: colors.textOnAccent }
+                      : { backgroundColor: colors.bgSubtle, borderColor: colors.borderLight }}
                   >
                     <div className="flex items-center">
-                      <User className={`w-5 h-5 mr-2 ${worker.id === selectedUserId ? 'text-gray-300' : 'text-gray-500'}`} />
+                      <User className="w-5 h-5 mr-2" style={{ color: worker.id === selectedUserId ? colors.textMuted : colors.textSubtle }} />
                       <div>
                         <p className="font-medium">{worker.full_name}</p>
-                        {worker.role && <p className={`text-xs ${worker.id === selectedUserId ? 'text-gray-300' : 'text-gray-500'}`}>{t('event:role_suffix')} {worker.role}</p>}
+                        {worker.role && <p className="text-xs" style={{ color: worker.id === selectedUserId ? colors.textMuted : colors.textSubtle }}>{t('event:role_suffix')} {worker.role}</p>}
                       </div>
                     </div>
                   </div>
@@ -449,34 +447,34 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
               {isLoadingHours ? (
                 <p className="text-center py-4">{t('event:loading_hours_data')}</p>
               ) : Object.keys(hoursByEvent).length === 0 ? (
-                <div className="text-center py-6 bg-gray-50 rounded-lg">
-                  <Clock className="w-12 h-12 mx-auto text-gray-400 mb-2" />
-                  <p className="text-gray-600">{t('event:no_hours_recorded')}</p>
+                <div className="text-center py-6 rounded-lg" style={{ backgroundColor: colors.bgSubtle }}>
+                  <Clock className="w-12 h-12 mx-auto mb-2" style={{ color: colors.textSubtle }} />
+                  <p style={{ color: colors.textMuted }}>{t('event:no_hours_recorded')}</p>
                 </div>
               ) : (
                 Object.entries(hoursByEvent).map(([eventId, eventData]: [string, any]) => (
-                  <div key={eventId} className="bg-gray-50 p-4 rounded-lg">
+                  <div key={eventId} className="p-4 rounded-lg" style={{ backgroundColor: colors.bgSubtle }}>
                     <div 
                       className="flex justify-between items-center cursor-pointer"
                       onClick={() => toggleEventExpansion(eventId)}
                     >
                       <div>
-                    <h3 className="font-medium text-lg text-gray-700">{eventData.eventTitle}</h3>
-                    <p className="text-gray-600 mt-1">
-                      <span className="font-semibold text-gray-700">{eventData.totalHours.toFixed(2)}</span> {t('event:hours_text')}
+                    <h3 className="font-medium text-lg" style={{ color: colors.textSecondary }}>{eventData.eventTitle}</h3>
+                    <p className="mt-1" style={{ color: colors.textMuted }}>
+                      <span className="font-semibold" style={{ color: colors.textSecondary }}>{eventData.totalHours.toFixed(2)}</span> {t('event:hours_text')}
                     </p>
                       </div>
                       {expandedEvents[eventId] ? (
-                        <ChevronUp className="w-5 h-5 text-gray-500" />
+                        <ChevronUp className="w-5 h-5" style={{ color: colors.textSubtle }} />
                       ) : (
-                        <ChevronDown className="w-5 h-5 text-gray-500" />
+                        <ChevronDown className="w-5 h-5" style={{ color: colors.textSubtle }} />
                       )}
                     </div>
                     
                     {expandedEvents[eventId] && (
                       <>
                     <div className="mt-4 space-y-2">
-                      <h4 className="font-medium text-gray-700">{t('event:tasks_breakdown')}</h4>
+                      <h4 className="font-medium" style={{ color: colors.textSecondary }}>{t('event:tasks_breakdown')}</h4>
                       {Object.entries(eventData.tasks).map(([taskName, hours]: [string, any]) => (
                         <div key={taskName} className="flex justify-between text-sm">
                           <span>{taskName}</span>
@@ -486,12 +484,12 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
                     </div>
 
                         <div className="mt-6 space-y-4">
-                          <h4 className="font-medium text-gray-700">{t('event:daily_breakdown')}</h4>
+                          <h4 className="font-medium" style={{ color: colors.textSecondary }}>{t('event:daily_breakdown')}</h4>
                           {Object.entries(eventData.dailyBreakdown)
                             .sort(([dateA], [dateB]) => new Date(dateB).getTime() - new Date(dateA).getTime())
                             .map(([dateKey, dayData]: [string, any]) => (
-                              <div key={dateKey} className="border-l-2 border-gray-300 pl-3">
-                                <div className="font-medium text-sm text-gray-600">
+                              <div key={dateKey} className="border-l-2 pl-3" style={{ borderColor: colors.borderDefault }}>
+                                <div className="font-medium text-sm" style={{ color: colors.textMuted }}>
                                   {format(new Date(dayData.date), 'EEEE, MMM d', { locale: dateLocale })}
                                   <span className="ml-2 font-normal">
                                     ({dayData.hours.toFixed(2)} {t('event:hours_text')})
@@ -499,7 +497,7 @@ const WeeklyWorkerHoursModal: React.FC<WorkerHoursModalProps> = ({ onClose }) =>
                                 </div>
                                 <div className="mt-2 space-y-1">
                                   {Object.entries(dayData.tasks).map(([taskName, hours]: [string, any]) => (
-                                    <div key={taskName} className="flex justify-between text-sm text-gray-500">
+                                    <div key={taskName} className="flex justify-between text-sm" style={{ color: colors.textSubtle }}>
                                       <span>{taskName}</span>
                                       <span>{hours.toFixed(2)} {t('event:hours_text')}</span>
                                     </div>

@@ -141,3 +141,8 @@ body {
   transition: background-color var(--duration-normal) var(--easing-default),
               color var(--duration-normal) var(--easing-default);
 }
+
+/* Zebra striping for tables - co drugi wiersz w jaśniejszym kolorze */
+table tbody tr:nth-child(even) {
+  background-color: var(--bg-table-row-alt);
+}

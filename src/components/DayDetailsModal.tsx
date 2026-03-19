@@ -37,10 +37,10 @@ interface DayDetailsModalProps {
 }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  in_progress: { label: 'W Trakcie', color: '#f97316', bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.3)' },
-  scheduled: { label: 'Zaplanowany', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)' },
-  planned: { label: 'Zaplanowany', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)' },
-  finished: { label: 'Zakończony', color: '#64748b', bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)' },
+  in_progress: { label: 'W Trakcie', color: colors.orange, bg: colors.statusInProgress.bg, border: colors.statusInProgress.border },
+  scheduled: { label: 'Zaplanowany', color: colors.green, bg: colors.statusPlanned.bg, border: colors.statusPlanned.border },
+  planned: { label: 'Zaplanowany', color: colors.green, bg: colors.statusPlanned.bg, border: colors.statusPlanned.border },
+  finished: { label: 'Zakończony', color: colors.textDim, bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)' },
 };
 
 function StatusBadge({ status, t }: { status: string; t: (k: string) => string }) {
@@ -52,18 +52,18 @@ function StatusBadge({ status, t }: { status: string; t: (k: string) => string }
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 5,
-        fontSize: 11,
-        fontWeight: 600,
+        gap: spacing.sm,
+        fontSize: fontSizes.sm,
+        fontWeight: fontWeights.semibold,
         color: cfg.color,
         background: cfg.bg,
         border: `1px solid ${cfg.border}`,
-        borderRadius: 20,
-        padding: '3px 10px 3px 8px',
+        borderRadius: radii.pill,
+        padding: `${spacing.xs}px ${spacing.lg}px ${spacing.xs}px ${spacing.md}px`,
         letterSpacing: 0.2,
       }}
     >
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.color }} />
+      <span style={{ width: spacing.sm, height: spacing.sm, borderRadius: radii.full, background: cfg.color }} />
       {label}
     </span>
   );
@@ -87,22 +87,22 @@ function CollapsibleSection({
   const [open, setOpen] = useState(defaultOpen);
   if (count === 0) return null;
   return (
-    <div style={{ marginTop: 2 }}>
+    <div style={{ marginTop: spacing.xs }}>
       <button
         onClick={() => setOpen(!open)}
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
+          gap: spacing.md,
           width: '100%',
-          padding: '8px 0',
+          padding: `${spacing.md}px 0`,
           background: 'none',
           border: 'none',
           cursor: 'pointer',
           fontFamily: fonts.body,
           color: accentColor || colors.textDim,
-          fontSize: 12.5,
-          fontWeight: 600,
+          fontSize: fontSizes.sm,
+          fontWeight: fontWeights.semibold,
           letterSpacing: 0.2,
         }}
       >
@@ -110,13 +110,13 @@ function CollapsibleSection({
         <span>{label}</span>
         <span
           style={{
-            background: 'rgba(255,255,255,0.08)',
-            borderRadius: 10,
-            padding: '1px 7px',
-            fontSize: 11,
-            fontWeight: 700,
+            background: colors.bgOverlay,
+            borderRadius: radii.xl,
+            padding: `${spacing.xs / 2}px ${spacing.sm}px`,
+            fontSize: fontSizes.sm,
+            fontWeight: fontWeights.bold,
             color: colors.textMuted,
-            minWidth: 18,
+            minWidth: spacing["4xl"],
             textAlign: 'center',
           }}
         >
@@ -129,10 +129,10 @@ function CollapsibleSection({
       {open && (
         <div
           style={{
-            borderLeft: '2px solid rgba(255,255,255,0.06)',
-            marginLeft: 8,
-            paddingLeft: 12,
-            paddingBottom: 4,
+            borderLeft: `2px solid ${colors.borderDefault}`,
+            marginLeft: spacing.md,
+            paddingLeft: spacing.xl,
+            paddingBottom: spacing.xs,
           }}
         >
           {children}
@@ -221,7 +221,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
     enabled: !!companyId && eventIds.length > 0,
   });
 
-  const tasksCountByEvent = tasksData.reduce((acc: Record<string, number>, row: { event_id: string }) => {
+  const tasksCountByEvent = (Array.isArray(tasksData) ? tasksData : []).reduce((acc: Record<string, number>, row: { event_id?: string | null }) => {
     if (row.event_id) {
       acc[row.event_id] = (acc[row.event_id] || 0) + 1;
     }

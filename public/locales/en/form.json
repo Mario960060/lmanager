@@ -274,7 +274,7 @@
   "free_count": "{{count}} free",
   "total_count": "/ {{count}} total",
   "no_equipment_found": "No {{title}} found matching your search.",
-  "equipment_creation_warning": "Don't create here Excavators and Carriers. They will be created automatically in the Machinery Task Creator. Create here only OTHER equipment that you own (compactors, wheelbarrows, etc.)",
+  "equipment_creation_warning": "Don't create here Excavators or loaders or wheelbarrows. They will be created automatically in the Machinery Task Creator. Create here only OTHER equipment that you own (compactors, power tools, etc.)",
   "status_free_to_use_option": "Free to use",
   "status_in_use_option": "In use",
   "status_broken_option": "Broken",

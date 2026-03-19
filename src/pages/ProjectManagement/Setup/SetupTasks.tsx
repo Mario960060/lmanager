@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../../../themes/designTokens';
 import { translateTaskName, translateTaskDescription, translateUnit } from '../../../lib/translationMap';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
@@ -156,8 +157,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
   if (wizardMode) {
     return (
       <div className="p-6 overflow-y-auto h-full">
-        <div className="bg-gray-100 p-3 rounded-lg mb-3 text-sm">
-          <span className="text-sm text-red-600 font-medium">
+        <div className="p-3 rounded-lg mb-3 text-sm" style={{ backgroundColor: colors.bgSubtle }}>
+          <span className="text-sm font-medium" style={{ color: colors.red }}>
             {t('form:task_creation_warning')}
           </span>
         </div>
@@ -166,7 +167,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
         <form onSubmit={handleAddTask} className="mb-4">
           {/* Task Name - full width */}
           <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:task_name_label')}</label>
+            <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:task_name_label')}</label>
             <input
               type="text"
               placeholder={t('form:enter_task_name')}
@@ -178,7 +179,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
           
           {/* Description - full width */}
           <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:description_label')}</label>
+            <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:description_label')}</label>
             <textarea
               placeholder={t('form:enter_task_description')}
               value={newTask.description}
@@ -191,7 +192,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
           {/* Unit and Estimated Hours - same row */}
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:unit_label')}</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:unit_label')}</label>
               <input
                 type="text"
                 placeholder={t('form:unit_placeholder')}
@@ -202,7 +203,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:estimated_hours_label')}</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:estimated_hours_label')}</label>
               <input
                 type="number"
                 placeholder={t('form:base_time_estimate')}
@@ -216,7 +217,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
           {/* Add Button */}
           <button
             type="submit"
-            className="w-full bg-gray-700 text-white p-2 rounded hover:bg-gray-800 text-sm"
+            className="w-full p-2 rounded text-sm"
+            style={{ backgroundColor: colors.bgElevated, color: colors.textOnAccent }}
           >
             {t('form:add_button')}
           </button>
@@ -231,25 +233,25 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
             onChange={(e) => setTaskSearch(e.target.value)}
             className="w-full p-2 pl-8 border rounded text-sm"
           />
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-2 top-2.5 h-4 w-4" style={{ color: colors.textSubtle }} />
         </div>
         
         {/* Tasks List */}
-        <div className="border rounded overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+        <div className="border rounded overflow-x-auto" style={{ borderColor: colors.borderDefault }}>
+          <table className="min-w-full divide-y" style={{ borderColor: colors.borderDefault }}>
+            <thead style={{ backgroundColor: colors.bgSubtle }}>
               <tr>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-2 md:px-4">{t('form:table_header_name')}</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-2 md:px-4">{t('form:table_header_description')}</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-2 md:px-4">{t('form:table_header_unit')}</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-2 md:px-4 whitespace-nowrap">{t('form:table_header_estimated_hours')}</th>
-                <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-2 md:px-4">{t('form:table_header_deletable')}</th>
-                <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-2 md:px-4">{t('form:table_header_actions')}</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wider px-2 py-2 md:px-4" style={{ color: colors.textSubtle }}>{t('form:table_header_name')}</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wider px-2 py-2 md:px-4" style={{ color: colors.textSubtle }}>{t('form:table_header_description')}</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wider px-2 py-2 md:px-4" style={{ color: colors.textSubtle }}>{t('form:table_header_unit')}</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wider px-2 py-2 md:px-4 whitespace-nowrap" style={{ color: colors.textSubtle }}>{t('form:table_header_estimated_hours')}</th>
+                <th className="text-left text-xs font-medium uppercase tracking-wider px-2 py-2 md:px-4" style={{ color: colors.textSubtle }}>{t('form:table_header_deletable')}</th>
+                <th className="text-right text-xs font-medium uppercase tracking-wider px-2 py-2 md:px-4" style={{ color: colors.textSubtle }}>{t('form:table_header_actions')}</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTasks.map(task => (
-                <tr key={task.id}>
+            <tbody className="divide-y" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}>
+              {filteredTasks.map((task, index) => (
+                <tr key={task.id} style={{ background: index % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
                   <td className="text-sm font-medium text-gray-900 px-2 py-2 md:px-4">
                     {editingTaskId === task.id ? (
                       <input
@@ -262,7 +264,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                       translateTaskName(task.name, t)
                     )}
                   </td>
-                  <td className="text-sm text-gray-500 px-2 py-2 md:px-4">
+                  <td className="text-sm px-2 py-2 md:px-4" style={{ color: colors.textMuted }}>
                     {editingTaskId === task.id ? (
                       <input
                         type="text"
@@ -274,7 +276,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                       translateTaskDescription(task.description, t)
                     )}
                   </td>
-                  <td className="text-sm text-gray-500 px-2 py-2 md:px-4">
+                  <td className="text-sm px-2 py-2 md:px-4" style={{ color: colors.textMuted }}>
                     {editingTaskId === task.id ? (
                       <input
                         type="text"
@@ -298,8 +300,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                       t('form:hours_format', { value: parseFloat((task.estimated_hours).toFixed(3)) })
                     )}
                   </td>
-                  <td className="text-sm text-gray-500 px-2 py-2 md:px-4">
-                    <span className={task.is_deletable === false ? 'font-medium text-red-600' : 'font-medium text-green-600'}>
+                  <td className="text-sm px-2 py-2 md:px-4" style={{ color: colors.textMuted }}>
+                    <span className="font-medium" style={{ color: task.is_deletable === false ? colors.red : colors.green }}>
                       {task.is_deletable === false ? t('form:system_label') : t('form:yes_label')}
                     </span>
                   </td>
@@ -309,7 +311,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                         <button
                           onClick={handleSaveTaskEdit}
                           disabled={task.is_deletable === false}
-                          className={task.is_deletable === false ? 'p-2 text-gray-300 cursor-not-allowed' : 'p-2 text-green-600 hover:text-green-700 transition-colors'}
+                          className={task.is_deletable === false ? 'p-2 cursor-not-allowed' : 'p-2 transition-colors'}
+                          style={task.is_deletable === false ? { color: colors.textMuted } : { color: colors.green }}
                           title={t('form:save_button_title')}
                         >
                           <Save className="w-4 h-4" />
@@ -318,7 +321,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                         <button
                           onClick={() => handleEditTask(task)}
                           disabled={task.is_deletable === false}
-                          className={task.is_deletable === false ? 'p-2 text-gray-300 cursor-not-allowed' : 'p-2 text-green-600 hover:text-green-700 transition-colors'}
+                          className={task.is_deletable === false ? 'p-2 cursor-not-allowed' : 'p-2 transition-colors'}
+                          style={task.is_deletable === false ? { color: colors.textMuted } : { color: colors.green }}
                           title={t('form:edit_button_title')}
                         >
                           <Settings className="w-4 h-4" />
@@ -339,7 +343,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
             </tbody>
           </table>
           {filteredTasks.length === 0 && (
-            <p className="text-center text-gray-500 py-4 text-sm">{t('form:no_tasks_found')}</p>
+            <p className="text-center py-4 text-sm" style={{ color: colors.textSubtle }}>{t('form:no_tasks_found')}</p>
           )}
         </div>
       </div>
@@ -348,7 +352,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden" style={{ backgroundColor: colors.bgCard }}>
         {/* Header and Content together - scrollable as one */}
         <div className="overflow-y-auto flex flex-col flex-1">
           {/* Header */}
@@ -356,19 +360,19 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
             {/* First row - Tasks title and close button */}
             <div className="p-4 flex justify-between items-center">
               <div className="flex items-center">
-                <Clock className="w-5 h-5 text-gray-700 mr-2" />
+                <Clock className="w-5 h-5 mr-2" style={{ color: colors.textSecondary }} />
                 <h2 className="text-lg font-semibold">{t('form:setup_tasks_label')}</h2>
               </div>
               <button 
                 onClick={onClose}
-                className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+                className="p-1 rounded-full transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
             {/* Second row - Warning message */}
             <div className="px-4 pb-4">
-              <span className="text-sm text-red-600 font-medium">
+              <span className="text-sm font-medium" style={{ color: colors.red }}>
                 {t('form:task_creation_warning')}
               </span>
             </div>
@@ -380,7 +384,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
           <form onSubmit={handleAddTask} className="mb-4">
             {/* Task Name - full width */}
             <div className="mb-3">
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:task_name_label')}</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:task_name_label')}</label>
               <input
                 type="text"
                 placeholder={t('form:enter_task_name')}
@@ -392,7 +396,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
             
             {/* Description - full width */}
             <div className="mb-3">
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:description_label')}</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:description_label')}</label>
               <textarea
                 placeholder={t('form:enter_task_description')}
                 value={newTask.description}
@@ -405,7 +409,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
             {/* Unit and Estimated Hours - same row */}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:unit_label')}</label>
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:unit_label')}</label>
                   <input
                     type="text"
                     placeholder={t('form:unit_placeholder')}
@@ -416,7 +420,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:estimated_hours_label')}</label>
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:estimated_hours_label')}</label>
                   <input
                     type="number"
                     placeholder={t('form:base_time_estimate')}
@@ -430,7 +434,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
             {/* Add Button */}
             <button
               type="submit"
-              className="w-full bg-gray-700 text-white p-2 rounded hover:bg-gray-800 text-sm"
+              className="w-full p-2 rounded text-sm"
+            style={{ backgroundColor: colors.bgElevated, color: colors.textOnAccent }}
             >
               {t('form:add_button')}
             </button>
@@ -445,25 +450,25 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
               onChange={(e) => setTaskSearch(e.target.value)}
               className="w-full p-2 pl-8 border rounded text-sm"
             />
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-2 top-2.5 h-4 w-4" style={{ color: colors.textSubtle }} />
           </div>
           
           {/* Tasks List */}
           <div className="border rounded overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead style={{ backgroundColor: colors.bgSubtle }}>
                 <tr>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-2 md:px-4">{t('form:table_header_name')}</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-2 md:px-4">{t('form:table_header_description')}</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-2 md:px-4">{t('form:table_header_unit')}</th>
-                  <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-2 md:px-4 whitespace-nowrap">{t('form:table_header_estimated_hours')}</th>
-                  <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-2 py-2 md:px-4">{t('form:table_header_actions')}</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-wider px-2 py-2 md:px-4" style={{ color: colors.textSubtle }}>{t('form:table_header_name')}</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-wider px-2 py-2 md:px-4" style={{ color: colors.textSubtle }}>{t('form:table_header_description')}</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-wider px-2 py-2 md:px-4" style={{ color: colors.textSubtle }}>{t('form:table_header_unit')}</th>
+                  <th className="text-left text-xs font-medium uppercase tracking-wider px-2 py-2 md:px-4 whitespace-nowrap" style={{ color: colors.textSubtle }}>{t('form:table_header_estimated_hours')}</th>
+                  <th className="text-right text-xs font-medium uppercase tracking-wider px-2 py-2 md:px-4" style={{ color: colors.textSubtle }}>{t('form:table_header_actions')}</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredTasks.map(task => (
-                  <tr key={task.id}>
-                    <td className="text-sm font-medium text-gray-900 px-2 py-2 md:px-4">
+              <tbody className="divide-y" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}>
+                {filteredTasks.map((task, index) => (
+                  <tr key={task.id} style={{ background: index % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
+                    <td className="text-sm font-medium px-2 py-2 md:px-4" style={{ color: colors.textPrimary }}>
                       {editingTaskId === task.id ? (
                         <input
                           type="text"
@@ -475,7 +480,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                         translateTaskName(task.name, t)
                       )}
                     </td>
-                    <td className="text-sm text-gray-500 px-2 py-2 md:px-4">
+                    <td className="text-sm px-2 py-2 md:px-4" style={{ color: colors.textSubtle }}>
                       {editingTaskId === task.id ? (
                         <input
                           type="text"
@@ -487,7 +492,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                         translateTaskDescription(task.description, t)
                       )}
                     </td>
-                    <td className="text-sm text-gray-500 px-2 py-2 md:px-4">
+                    <td className="text-sm px-2 py-2 md:px-4" style={{ color: colors.textSubtle }}>
                       {editingTaskId === task.id ? (
                         <input
                           type="text"
@@ -499,7 +504,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                         task.unit
                       )}
                     </td>
-                    <td className="text-sm text-gray-500 px-2 py-2 md:px-4 whitespace-nowrap">
+                    <td className="text-sm px-2 py-2 md:px-4 whitespace-nowrap" style={{ color: colors.textMuted }}>
                       {editingTaskId === task.id ? (
                         <input
                           type="number"
@@ -517,7 +522,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                           <button
                             onClick={handleSaveTaskEdit}
                             disabled={task.is_deletable === false}
-                            className={task.is_deletable === false ? 'p-2 text-gray-300 cursor-not-allowed' : 'p-2 text-green-600 hover:text-green-700 transition-colors'}
+                            className={task.is_deletable === false ? 'p-2 cursor-not-allowed' : 'p-2 transition-colors'}
+                          style={task.is_deletable === false ? { color: colors.textMuted } : { color: colors.green }}
                             title={t('form:save_button_title')}
                           >
                             <Save className="w-4 h-4" />
@@ -526,7 +532,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                           <button
                             onClick={() => handleEditTask(task)}
                             disabled={task.is_deletable === false}
-                            className={task.is_deletable === false ? 'p-2 text-gray-300 cursor-not-allowed' : 'p-2 text-green-600 hover:text-green-700 transition-colors'}
+                            className={task.is_deletable === false ? 'p-2 cursor-not-allowed' : 'p-2 transition-colors'}
+                          style={task.is_deletable === false ? { color: colors.textMuted } : { color: colors.green }}
                             title={t('form:edit_button_title')}
                           >
                             <Settings className="w-4 h-4" />
@@ -535,7 +542,8 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
                         <button
                           onClick={() => deleteTaskMutation.mutate(task.id)}
                           disabled={task.is_deletable === false}
-                          className={task.is_deletable === false ? 'p-2 text-gray-300 cursor-not-allowed' : 'p-2 text-red-600 hover:text-red-700 transition-colors'}
+                          className={task.is_deletable === false ? 'p-2 cursor-not-allowed' : 'p-2 transition-colors'}
+                          style={task.is_deletable === false ? { color: colors.textMuted } : { color: colors.red }}
                           title={t('form:delete_button_title')}
                         >
                           <Trash2 className="w-4 h-4" />
@@ -547,7 +555,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
               </tbody>
             </table>
             {filteredTasks.length === 0 && (
-              <p className="text-center text-gray-500 py-4 text-sm">{t('form:no_tasks_found')}</p>
+              <p className="text-center py-4 text-sm" style={{ color: colors.textSubtle }}>{t('form:no_tasks_found')}</p>
             )}
           </div>
           </div>

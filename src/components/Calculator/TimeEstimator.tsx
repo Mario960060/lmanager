@@ -5,7 +5,7 @@ import { translateTaskName, translateUnit } from '../../lib/translationMap';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { Clock, Users } from 'lucide-react';
-import { colors } from '../../themes/designTokens';
+import { colors, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
 import { Spinner, Button } from '../../themes/uiComponents';
 
 interface TaskTemplate {
@@ -97,39 +97,42 @@ const TimeEstimator = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <div style={{ display: "flex", flexDirection: "column", gap: spacing["3xl"] }}>
       {/* Task Selection */}
       <div>
-        <label className="block text-sm font-medium text-gray-700">{t('calculator:select_task_label')}</label>
-        <div className="relative" ref={dropdownRef}>
+        <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:select_task_label')}</label>
+        <div style={{ position: "relative" }} ref={dropdownRef}>
           <button
             type="button"
-            className="w-full rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            style={{ width: "100%", borderRadius: radii.md, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, padding: `${spacing.xs}px ${spacing.lg}px ${spacing.xs}px ${spacing.lg}px`, textAlign: "left", color: colors.textPrimary, outline: "none" }}
             onClick={() => setDropdownOpen((open) => !open)}
           >
             {selectedTask ? translateTaskName(selectedTask.name, t) : t('calculator:select_task_placeholder')}
           </button>
           {dropdownOpen && (
-            <div className="absolute z-10 mt-1 w-full rounded-md bg-white shadow-lg border border-gray-200">
+            <div style={{ position: "absolute", zIndex: 10, marginTop: spacing.xs, width: "100%", borderRadius: radii.md, background: colors.bgCard, boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)", border: `1px solid ${colors.borderDefault}` }}>
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder={t('calculator:search_tasks_label')}
-                className="w-full px-3 py-2 border-b border-gray-200 focus:outline-none"
+                style={{ width: "100%", padding: `${spacing.xs}px ${spacing.lg}px`, borderBottom: `1px solid ${colors.borderDefault}`, background: "transparent", color: colors.textPrimary, outline: "none" }}
                 autoFocus
               />
-              <ul className="max-h-60 overflow-auto">
+              <ul style={{ maxHeight: 240, overflow: "auto" }}>
                 {filteredTasks.length === 0 ? (
-                  <li className="px-3 py-2 text-gray-500">{t('calculator:no_tasks')}</li>
+                  <li style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textDim }}>{t('calculator:no_tasks')}</li>
                 ) : (
                   filteredTasks.map(task => (
                     <li
                       key={task.id}
-                      className={`px-3 py-2 cursor-pointer 
-                        hover:bg-gray-200
-                        ${selectedTask?.id === task.id ? 'bg-blue-600 text-white font-semibold' : ''}
-                      `}
+                      style={{
+                        padding: `${spacing.xs}px ${spacing.lg}px`,
+                        cursor: "pointer",
+                        background: selectedTask?.id === task.id ? colors.accentBlue : "transparent",
+                        color: selectedTask?.id === task.id ? colors.textOnAccent : colors.textPrimary,
+                        fontWeight: selectedTask?.id === task.id ? fontWeights.semibold : fontWeights.normal
+                      }}
                       onClick={() => {
                         setSelectedTask(task);
                         setDropdownOpen(false);
@@ -149,7 +152,7 @@ const TimeEstimator = () => {
       {selectedTask && (
         <>
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>
               {t('calculator:quantity_label')} ({translateUnit(selectedTask.unit, t)})
             </label>
             <input
@@ -161,18 +164,18 @@ const TimeEstimator = () => {
               }}
               min="0.1"
               step="0.1"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+              style={{ marginTop: spacing.xs, display: "block", width: "100%", borderRadius: radii.md, border: `1px solid ${colors.borderInput}`, padding: `${spacing.sm}px ${spacing.xl}px`, background: colors.bgInput, color: colors.textPrimary, outline: "none" }}
               placeholder={t('calculator:enter_amount_in_unit', { unit: translateUnit(selectedTask.unit, t) })}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">
+            <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>
               {t('calculator:number_of_workers_label')}
             </label>
-            <div className="mt-1 relative rounded-md shadow-sm">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Users className="h-5 w-5 text-gray-400" />
+            <div style={{ marginTop: spacing.xs, position: "relative", borderRadius: radii.md }}>
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, paddingLeft: spacing.lg, display: "flex", alignItems: "center", pointerEvents: "none" }}>
+                <Users style={{ width: 20, height: 20, color: colors.textSubtle }} />
               </div>
               <input
                 type="number"
@@ -182,7 +185,7 @@ const TimeEstimator = () => {
                   setResult(null);
                 }}
                 min="1"
-                className="block w-full pl-10 rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                style={{ display: "block", width: "100%", paddingLeft: 40, borderRadius: radii.md, border: `1px solid ${colors.borderInput}`, padding: `${spacing.sm}px ${spacing.xl}px`, background: colors.bgInput, color: colors.textPrimary, outline: "none" }}
                 placeholder={t('calculator:enter_number_of_workers')}
               />
             </div>
@@ -193,24 +196,24 @@ const TimeEstimator = () => {
           </Button>
 
           {result && (
-            <div className="mt-4 p-4 bg-gray-800 rounded-md space-y-3">
-              <div className="grid grid-cols-2 gap-4">
+            <div style={{ marginTop: spacing["3xl"], padding: spacing["3xl"], background: colors.bgCard, borderRadius: radii.md, display: "flex", flexDirection: "column", gap: spacing.lg }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: spacing["3xl"] }}>
                 <div>
-                  <div className="text-sm text-gray-300">{t('calculator:total_hours_needed')}</div>
-                  <div className="text-2xl font-bold text-white">
+                  <div style={{ fontSize: fontSizes.sm, color: colors.textMuted }}>{t('calculator:total_hours_needed')}</div>
+                  <div style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold, color: colors.textPrimary }}>
                     {result.totalHours}h
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-300">{t('calculator:hours_per_worker')}</div>
-                  <div className="text-2xl font-bold text-white">
+                  <div style={{ fontSize: fontSizes.sm, color: colors.textMuted }}>{t('calculator:hours_per_worker')}</div>
+                  <div style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold, color: colors.textPrimary }}>
                     {result.perWorker}h
                   </div>
                 </div>
               </div>
-              <div className="pt-3 border-t border-gray-700">
-                <div className="text-sm text-gray-300">{t('calculator:estimated_work_time')}</div>
-                <div className="text-2xl font-bold text-white">
+              <div style={{ paddingTop: spacing.lg, borderTop: `1px solid ${colors.borderDefault}` }}>
+                <div style={{ fontSize: fontSizes.sm, color: colors.textMuted }}>{t('calculator:estimated_work_time')}</div>
+                <div style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold, color: colors.textPrimary }}>
                   {t('calculator:estimated_work_time_days_format', { days: result.days })}
                 </div>
               </div>

@@ -180,28 +180,32 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
     : userGroups;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
         {/* Header */}
-        <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
+        <div className="p-4 border-b flex justify-between items-center sticky top-0 z-10" style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard }}>
           <h2 className="text-xl font-semibold flex items-center">
-            <Trash2 className="w-5 h-5 mr-2 text-red-500" />
+            <Trash2 className="w-5 h-5 mr-2" style={{ color: colors.red }} />
             {t('event:delete_additional_tasks_records_title')}
           </h2>
           <button
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            className="p-1 rounded-full transition-colors"
+            style={{ backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             <X className="w-6 h-6" />
           </button>
         </div>
 
         {/* Search */}
-        <div className="p-4 border-b dark:border-gray-700">
+        <div className="p-4 border-b" style={{ borderColor: colors.borderDefault }}>
           <input
             type="text"
             placeholder={t('event:search_additional_tasks_records')}
-            className="w-full px-4 py-2 border dark:border-gray-600 rounded-lg dark:bg-gray-700"
+            className="w-full px-4 py-2 border rounded-lg"
+            style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgElevated }}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -215,15 +219,15 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
             </div>
           ) : isError ? (
             <div className="flex flex-col items-center justify-center py-10">
-              <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-              <p className="text-red-500 dark:text-red-400 text-center">
+              <AlertCircle className="w-12 h-12 mb-4" style={{ color: colors.red }} />
+              <p className="text-center" style={{ color: colors.red }}>
                 {t('event:error_loading_tasks_records')}
               </p>
             </div>
           ) : filteredUserGroups.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10">
-              <AlertCircle className="w-12 h-12 text-gray-400 mb-4" />
-              <p className="text-gray-500 dark:text-gray-400 text-center">
+              <AlertCircle className="w-12 h-12 mb-4" style={{ color: colors.textMuted }} />
+              <p className="text-center" style={{ color: colors.textSubtle }}>
                 {searchTerm ? t('event:no_tasks_records_match_search') : t('event:no_additional_tasks_records')}
               </p>
             </div>
@@ -232,39 +236,41 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
               {filteredUserGroups.map((group) => (
                 <div 
                   key={group.user_id} 
-                  className="border dark:border-gray-700 rounded-lg overflow-hidden"
+                  className="border rounded-lg overflow-hidden"
+                  style={{ borderColor: colors.borderDefault }}
                 >
                   {/* User header */}
                   <div 
-                    className="bg-gray-50 dark:bg-gray-700 p-4 flex justify-between items-center cursor-pointer"
+                    className="p-4 flex justify-between items-center cursor-pointer"
+                    style={{ backgroundColor: colors.bgElevated }}
                     onClick={() => toggleUserExpand(group.user_id)}
                   >
                     <div className="flex items-center">
-                      <User className="w-5 h-5 mr-2 text-blue-500" />
+                      <User className="w-5 h-5 mr-2" style={{ color: colors.accentBlue }} />
                       <span className="font-medium">{group.user_name}</span>
-                      <span className="ml-2 text-sm text-gray-500">
+                      <span className="ml-2 text-sm" style={{ color: colors.textSubtle }}>
                         ({group.records.length} {group.records.length !== 1 ? t('event:records_count_plural') : t('event:records_count')})
                       </span>
                     </div>
                     {expandedUsers.includes(group.user_id) ? (
-                      <ChevronUp className="w-5 h-5 text-gray-500" />
+                      <ChevronUp className="w-5 h-5" style={{ color: colors.textSubtle }} />
                     ) : (
-                      <ChevronDown className="w-5 h-5 text-gray-500" />
+                      <ChevronDown className="w-5 h-5" style={{ color: colors.textSubtle }} />
                     )}
                   </div>
                   
                   {/* User records */}
                   {expandedUsers.includes(group.user_id) && (
-                    <div className="divide-y dark:divide-gray-700">
+                    <div className="divide-y" style={{ borderColor: colors.borderDefault }}>
                       {group.records.map((record) => (
-                        <div key={record.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-750">
+                        <div key={record.id} className="p-4" style={{ backgroundColor: colors.bgCard }}>
                           <div className="flex justify-between">
                             <div className="flex-1">
-                              <h3 className="font-medium text-blue-600 dark:text-blue-400">
+                              <h3 className="font-medium" style={{ color: colors.accentBlue }}>
                                 {translateTaskName(record.description ?? '', t) || t('event:unnamed_task')}
                               </h3>
                               <div className="mt-1 text-sm">
-                                <div className="flex items-center text-gray-500">
+                                <div className="flex items-center" style={{ color: colors.textSubtle }}>
                                   <Calendar className="w-4 h-4 mr-1" />
                                   {formatDate(record.created_at)}
                                 </div>
@@ -291,15 +297,15 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
                                     <span className="font-medium">{t('event:progress_colon')}</span>
                                     <span>{record.progress || 0}%</span>
                                   </div>
-                                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                  <div className="w-full rounded-full h-2" style={{ backgroundColor: colors.bgElevated }}>
                                     <div
-                                      className="bg-blue-600 h-2 rounded-full"
-                                      style={{ width: `${record.progress || 0}%` }}
+                                      className="h-2 rounded-full"
+                                      style={{ backgroundColor: colors.accentBlue, width: `${record.progress || 0}%` }}
                                     ></div>
                                   </div>
                                   <div className="flex justify-between items-center">
                                     <span>{t('event:hours_colon')} {record.hours_spent || 0} / {record.hours_needed || 0}</span>
-                                    <span className="text-gray-500">
+                                    <span style={{ color: colors.textSubtle }}>
                                       {record.hours_needed ? ((record.hours_spent / record.hours_needed) * 100).toFixed(1) : 0}{t('event:percent_of_estimated_time')}
                                     </span>
                                   </div>
@@ -307,7 +313,7 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
 
                                 {/* Latest Progress Entry */}
                                 {record.additional_task_progress_entries && record.additional_task_progress_entries.length > 0 && (
-                                  <div className="mt-3 bg-gray-50 dark:bg-gray-700/50 p-2 rounded">
+                                  <div className="mt-3 p-2 rounded" style={{ backgroundColor: colors.bgSubtle }}>
                                     <div className="font-medium mb-1">{t('event:latest_update')}</div>
                                     {record.additional_task_progress_entries
                                       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
@@ -329,7 +335,8 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
                                 recordId: record.id,
                                 recordName: translateTaskName(record.description ?? '', t) || t('common:this_task')
                               })}
-                              className="p-2 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-full self-start ml-4"
+                              className="p-2 rounded-full self-start ml-4"
+                              style={{ color: colors.red, backgroundColor: 'transparent' }}
                             >
                               <Trash2 className="w-5 h-5" />
                             </button>
@@ -347,8 +354,8 @@ const AdminAdditionalTasksModal: React.FC<AdminAdditionalTasksModalProps> = ({ o
 
       {/* Delete Confirmation Dialog */}
       {deleteConfirmation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full">
+        <div className="fixed inset-0 flex items-center justify-center z-[60] p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="rounded-lg shadow-xl p-6 max-w-md w-full" style={{ backgroundColor: colors.bgCard }}>
             <h3 className="text-xl font-semibold mb-4">{t('event:confirm_deletion_title')}</h3>
             <p className="mb-6">
               {t('event:delete_record_confirmation')}

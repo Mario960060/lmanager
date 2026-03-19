@@ -18,6 +18,8 @@ import {
   makeTrapezoid,
   PIXELS_PER_METER,
   C,
+  snapPatternDirectionToBoundaryAngles,
+  PATTERN_BOUNDARY_SNAP_THRESHOLD_DEG,
 } from "../../../projectmanagement/canvacreator/geometry";
 
 // ── Helper: create a simple rectangle in pixel coords ────────
@@ -297,6 +299,30 @@ describe("makeTrapezoid", () => {
 
   it("has elementType polygon", () => {
     expect(tr.elementType).toBe("polygon");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// snapPatternDirectionToBoundaryAngles
+// ══════════════════════════════════════════════════════════════
+describe("snapPatternDirectionToBoundaryAngles", () => {
+  const thr = PATTERN_BOUNDARY_SNAP_THRESHOLD_DEG;
+  const boundaries = [44, 92] as const;
+
+  it("snaps to parallel boundary tangent when close", () => {
+    const out = snapPatternDirectionToBoundaryAngles(44.5, boundaries, thr);
+    expect(out).toBeCloseTo(44, 5);
+  });
+
+  it("snaps to perpendicular orientation when close to b+90", () => {
+    const out = snapPatternDirectionToBoundaryAngles(133.8, boundaries, thr);
+    expect(out).toBeCloseTo(134, 5);
+  });
+
+  it("does not snap when far from any axis", () => {
+    const raw = 12;
+    const out = snapPatternDirectionToBoundaryAngles(raw, boundaries, thr);
+    expect(out).toBe(raw);
   });
 });
 

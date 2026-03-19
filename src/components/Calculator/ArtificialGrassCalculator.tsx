@@ -7,8 +7,9 @@ import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapa
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
-import { colors } from '../../themes/designTokens';
-import { Spinner, Button } from '../../themes/uiComponents';
+import { colors, fonts, fontSizes, fontWeights, spacing, radii, gradients } from '../../themes/designTokens';
+import { Spinner, Button, Card, DataTable, TextInput, Checkbox } from '../../themes/uiComponents';
+import { getEffectiveTotalArea } from '../../projectmanagement/canvacreator/visualization/grassRolls';
 
 interface Material {
   name: string;
@@ -104,11 +105,21 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
     if (savedInputs?.tape1ThicknessCm != null && savedInputs.tape1ThicknessCm !== '') setTape1ThicknessCm(String(savedInputs.tape1ThicknessCm));
     if (savedInputs?.sandThicknessCm != null && savedInputs.sandThicknessCm !== '') setSandThicknessCm(String(savedInputs.sandThicknessCm));
   }, [savedInputs?.tape1ThicknessCm, savedInputs?.sandThicknessCm]);
+  useEffect(() => {
+    const saved = savedInputs?.grassElements as GrassElement[] | undefined;
+    if (Array.isArray(saved) && saved.length > 0) setGrassElements(saved);
+  }, [savedInputs?.grassElements]);
   const [tape1ThicknessCm, setTape1ThicknessCm] = useState<string>(savedInputs?.tape1ThicknessCm ?? '');
   const [sandThicknessCm, setSandThicknessCm] = useState<string>(savedInputs?.sandThicknessCm ?? '');
   const [soilExcessCm, setSoilExcessCm] = useState<string>(savedInputs?.soilExcessCm ?? '');
   const [jointsLength, setJointsLength] = useState<string>(savedInputs?.jointsLength ?? '');
   const [trimLength, setTrimLength] = useState<string>(savedInputs?.trimLength ?? '');
+  type GrassElement = { widthM: string; lengthM: string };
+  const [grassElements, setGrassElements] = useState<GrassElement[]>(() => {
+    const saved = savedInputs?.grassElements as GrassElement[] | undefined;
+    if (Array.isArray(saved) && saved.length > 0) return saved;
+    return [{ widthM: '4', lengthM: '10' }];
+  });
   const [materials, setMaterials] = useState<Material[]>([]);
   const [totalHours, setTotalHours] = useState<number | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
@@ -120,10 +131,11 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
         tape1ThicknessCm,
         sandThicknessCm,
         soilExcessCm,
+        grassElements,
         ...(!hideEdgeAndJointInputs && { jointsLength, trimLength }),
       });
     }
-  }, [area, tape1ThicknessCm, sandThicknessCm, soilExcessCm, jointsLength, trimLength, hideEdgeAndJointInputs, onInputsChange, isInProjectCreating]);
+  }, [area, tape1ThicknessCm, sandThicknessCm, soilExcessCm, grassElements, jointsLength, trimLength, hideEdgeAndJointInputs, onInputsChange, isInProjectCreating]);
   const [calculateDigging, setCalculateDigging] = useState<boolean>(false);
   const [selectedExcavator, setSelectedExcavator] = useState<DiggingEquipment | null>(null);
   const [selectedCarrier, setSelectedCarrier] = useState<DiggingEquipment | null>(null);
@@ -405,6 +417,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
   // Define loading sand time estimates (same as preparation digger estimates)
   const loadingSandDiggerTimeEstimates = [
     { equipment: 'Shovel (1 Person)', sizeInTons: 0.02, timePerTon: 0.5 },
+    { equipment: 'Digger 0.5T', sizeInTons: 0.5, timePerTon: 0.36 },
     { equipment: 'Digger 1T', sizeInTons: 1, timePerTon: 0.18 },
     { equipment: 'Digger 2T', sizeInTons: 2, timePerTon: 0.12 },
     { equipment: 'Digger 3-5T', sizeInTons: 3, timePerTon: 0.08 },
@@ -448,10 +461,18 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
   };
 
   const calculate = async () => {
-    const areaForCalc = (savedInputs?.effectiveAreaM2 != null && savedInputs.effectiveAreaM2 > 0)
+    const fromCanvas = savedInputs?.effectiveAreaM2 != null && savedInputs.effectiveAreaM2 > 0;
+    const grassElementsArea = grassElements.reduce((sum, el) => {
+      const w = parseFloat(el.widthM || '0');
+      const l = parseFloat(el.lengthM || '0');
+      return sum + (isNaN(w) || isNaN(l) ? 0 : w * l);
+    }, 0);
+    const areaForCalc = fromCanvas
       ? savedInputs.effectiveAreaM2
-      : parseFloat(area);
-    if ((!area || isNaN(parseFloat(area))) && (!savedInputs?.effectiveAreaM2 || savedInputs.effectiveAreaM2 <= 0)) {
+      : grassElementsArea > 0
+        ? grassElementsArea
+        : parseFloat(area);
+    if ((!area || isNaN(parseFloat(area))) && (!savedInputs?.effectiveAreaM2 || savedInputs.effectiveAreaM2 <= 0) && grassElementsArea <= 0) {
       setCalculationError(t('calculator:fill_all_required_fields'));
       return;
     }
@@ -733,8 +754,17 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
       // Calculate total hours
       const totalHours = breakdown.reduce((sum, item) => sum + item.hours, 0);
 
-      // Prepare materials list
+      // Artificial Grass material = roll area (what you buy); other calcs use element area
+      const artificialGrassM2 = fromCanvas
+        ? ((savedInputs?.artificialGrassAreaM2 ?? 0) > 0
+            ? savedInputs.artificialGrassAreaM2
+            : (Array.isArray(savedInputs?.vizPieces) && savedInputs.vizPieces.length > 0
+                ? getEffectiveTotalArea(savedInputs.vizPieces)
+                : areaNum))
+        : areaNum;
+      // Prepare materials list (Artificial Grass first, then others)
       const materialsList: Material[] = [
+        { name: 'Artificial Grass', amount: Number(artificialGrassM2.toFixed(2)), unit: 'm²', price_per_unit: null, total_price: null },
         { name: 'Soil excavation', amount: Number(soilTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null },
         // Use the name and price of the selected sand material if available, otherwise fallback
         { name: selectedSandMaterial?.name || 'Sand', amount: Number(sandTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: selectedSandMaterial?.price_per_unit || null, total_price: null },
@@ -809,107 +839,118 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-48">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 192 }}>
         <Spinner size={32} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold">{t('calculator:artificial_grass_installation_calculator_title')}</h2>
-      <p className="text-sm text-gray-600">
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+      <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display, letterSpacing: '0.3px', margin: `${spacing.md}px 0 ${spacing.sm}px` }}>
+        {t('calculator:artificial_grass_installation_calculator_title')}
+      </h2>
+      <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, lineHeight: 1.5 }}>
         Calculate materials, time, and costs for artificial grass installation projects.
       </p>
       
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_area_m2')}</label>
-          <input
-            type="number"
-            value={area}
-            onChange={(e) => setArea(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_area_m2')}
-            min="0"
-            step="0.01"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_type1_thickness_cm')}</label>
-          <input
-            type="number"
-            value={tape1ThicknessCm}
-            onChange={(e) => setTape1ThicknessCm(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_thickness')}
-            min="0"
-            step="0.5"
-          />
-        </div>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700">{t('calculator:input_sand_thickness_cm')}</label>
-          <input
-            type="number"
-            value={sandThicknessCm}
-            onChange={(e) => setSandThicknessCm(e.target.value)}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-            placeholder={t('calculator:placeholder_enter_thickness')}
-            min="0"
-            step="0.5"
-          />
-        </div>
-        
-        {/* Additional soil depth — hidden in canvas (kanwa), shown in standalone calculator and project creation */}
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
         {!hideEdgeAndJointInputs && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700">{t('calculator:input_additional_soil_depth_cm')}</label>
-            <input
-              type="number"
-              value={soilExcessCm}
-              onChange={(e) => setSoilExcessCm(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-              placeholder={t('calculator:placeholder_enter_depth_cm')}
-              min="0"
-              step="0.5"
-            />
-            <p className="text-xs text-gray-500 mt-1">{t('calculator:additional_soil_depth_desc')}</p>
+          <div style={{ marginBottom: spacing.xl }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
+              <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:grass_elements_label')}</span>
+              <div style={{ display: 'flex', gap: spacing.sm }}>
+                <Button variant="secondary" onClick={() => setGrassElements(prev => [...prev, { widthM: '4', lengthM: '10' }])}>
+                  {t('calculator:grass_add_element')}
+                </Button>
+              </div>
+            </div>
+            {grassElements.map((el, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.md }}>
+                <span style={{ fontSize: fontSizes.sm, color: colors.textDim, minWidth: 70, paddingTop: 10 }}>{t('calculator:grass_element_n', { n: idx + 1 })}</span>
+                <TextInput
+                  label=""
+                  value={el.widthM}
+                  onChange={(v) => setGrassElements(prev => prev.map((e, i) => i === idx ? { ...e, widthM: v } : e))}
+                  placeholder="m"
+                  unit="m"
+                  style={{ flex: 1 }}
+                />
+                <span style={{ paddingTop: 10, color: colors.textDim }}>×</span>
+                <TextInput
+                  label=""
+                  value={el.lengthM}
+                  onChange={(v) => setGrassElements(prev => prev.map((e, i) => i === idx ? { ...e, lengthM: v } : e))}
+                  placeholder="m"
+                  unit="m"
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  variant="secondary"
+                  onClick={() => setGrassElements(prev => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)}
+                  disabled={grassElements.length <= 1}
+                  style={{ marginTop: 4 }}
+                >
+                  {t('calculator:grass_remove_element')}
+                </Button>
+              </div>
+            ))}
+            <div style={{ fontSize: fontSizes.sm, color: colors.textDim, marginTop: spacing.sm }}>
+              {t('calculator:grass_total_area')}: {grassElements.reduce((s, el) => s + (parseFloat(el.widthM || '0') * parseFloat(el.lengthM || '0') || 0), 0).toFixed(2)} m²
+            </div>
           </div>
         )}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+          <TextInput
+            label={t('calculator:input_area_m2')}
+            value={area}
+            onChange={setArea}
+            placeholder={t('calculator:placeholder_enter_area_m2')}
+            unit="m²"
+          />
+          <TextInput
+            label={t('calculator:input_type1_thickness_cm')}
+            value={tape1ThicknessCm}
+            onChange={setTape1ThicknessCm}
+            placeholder={t('calculator:placeholder_enter_thickness')}
+            unit="cm"
+          />
+          <TextInput
+            label={t('calculator:input_sand_thickness_cm')}
+            value={sandThicknessCm}
+            onChange={setSandThicknessCm}
+            placeholder={t('calculator:placeholder_enter_thickness')}
+            unit="cm"
+          />
+        </div>
 
-        {/* Joint length and trim length — shown only in standalone calculator and project creation, not in canvas */}
         {!hideEdgeAndJointInputs && (
           <>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">{t('calculator:input_total_joint_length_m')}</label>
-              <input
-                type="number"
-                value={jointsLength}
-                onChange={(e) => setJointsLength(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-                placeholder={t('calculator:placeholder_enter_joint_length')}
-                min="0"
-                step="0.01"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">{t('calculator:input_total_trim_length_m')}</label>
-              <input
-                type="number"
-                value={trimLength}
-                onChange={(e) => setTrimLength(e.target.value)}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 form-input"
-                placeholder={t('calculator:placeholder_enter_trim_length')}
-                min="0"
-                step="0.01"
-              />
-            </div>
+            <TextInput
+              label={t('calculator:input_additional_soil_depth_cm')}
+              value={soilExcessCm}
+              onChange={setSoilExcessCm}
+              placeholder={t('calculator:placeholder_enter_depth_cm')}
+              unit="cm"
+              helperText={t('calculator:additional_soil_depth_desc')}
+            />
+            <TextInput
+              label={t('calculator:input_total_joint_length_m')}
+              value={jointsLength}
+              onChange={setJointsLength}
+              placeholder={t('calculator:placeholder_enter_joint_length')}
+              unit="m"
+            />
+            <TextInput
+              label={t('calculator:input_total_trim_length_m')}
+              value={trimLength}
+              onChange={setTrimLength}
+              placeholder={t('calculator:placeholder_enter_trim_length')}
+              unit="m"
+            />
           </>
         )}
         
-        {/* Compactor Type Selection */}
         {!isInProjectCreating && (
           <CompactorSelector 
             selectedCompactor={selectedCompactor}
@@ -918,186 +959,115 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
         )}
         
         {!isInProjectCreating && (
-          <div className="mt-4">
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={calculateDigging}
-                onChange={(e) => setCalculateDigging(e.target.checked)}
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-            <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_digging_prep')}</span>
-            </label>
-          </div>
+          <Checkbox label={t('calculator:calculate_digging_prep')} checked={calculateDigging} onChange={setCalculateDigging} />
         )}
 
-        {/* Equipment Selection */}
         {calculateDigging && (
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:excavation_machinery')}</label>
-              <div className="space-y-2">
-                {excavators.length === 0 ? (
-                  <p className="text-gray-500">{t('calculator:no_excavators_found')}</p>
-                ) : (
-                  excavators.map((excavator) => (
-                    <div 
-                      key={excavator.id}
-                      className="flex items-center p-2 cursor-pointer"
-                      onClick={() => setSelectedExcavator(excavator)}
-                    >
-                      <div className={`w-4 h-4 rounded-full border mr-2 ${
-                        selectedExcavator?.id === excavator.id 
-                          ? 'border-gray-400' 
-                          : 'border-gray-400'
-                      }`}>
-                        <div className={`w-2 h-2 rounded-full m-0.5 ${
-                          selectedExcavator?.id === excavator.id 
-                            ? 'bg-gray-400' 
-                            : 'bg-transparent'
-                        }`}></div>
+          <div style={{ borderTop: `1px solid ${colors.borderLight}`, paddingTop: spacing.xl, marginTop: spacing.xs }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+              <div>
+                <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:excavation_machinery')}</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+                  {excavators.length === 0 ? (
+                    <p style={{ color: colors.textDim }}>{t('calculator:no_excavators_found')}</p>
+                  ) : (
+                    excavators.map((excavator) => (
+                      <div
+                        key={excavator.id}
+                        style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: selectedExcavator?.id === excavator.id ? colors.bgHover : 'transparent', border: `1px solid ${selectedExcavator?.id === excavator.id ? colors.accentBlueBorder : colors.borderLight}` }}
+                        onClick={() => setSelectedExcavator(excavator)}
+                      >
+                        <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedExcavator?.id === excavator.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {selectedExcavator?.id === excavator.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                        </div>
+                        <div>
+                          <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{excavator.name}</span>
+                          <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({excavator["size (in tones)"]} tons)</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-gray-800">{excavator.name}</span>
-                        <span className="text-sm text-gray-600 ml-2">({excavator["size (in tones)"]} tons)</span>
-                      </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:carrier_machinery')}</label>
-              <div className="space-y-2">
-                {carriers.length === 0 ? (
-                  <p className="text-gray-500">{t('calculator:no_carriers_found')}</p>
-                ) : (
-                  carriers.map((carrier) => (
-                    <div 
-                      key={carrier.id}
-                      className="flex items-center p-2 cursor-pointer"
-                      onClick={() => setSelectedCarrier(carrier)}
-                    >
-                      <div className={`w-4 h-4 rounded-full border mr-2 ${
-                        selectedCarrier?.id === carrier.id 
-                          ? 'border-gray-400' 
-                          : 'border-gray-400'
-                      }`}>
-                        <div className={`w-2 h-2 rounded-full m-0.5 ${
-                          selectedCarrier?.id === carrier.id 
-                            ? 'bg-gray-400' 
-                            : 'bg-transparent'
-                        }`}></div>
+              <div>
+                <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:carrier_machinery')}</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+                  {carriers.length === 0 ? (
+                    <p style={{ color: colors.textDim }}>{t('calculator:no_carriers_found')}</p>
+                  ) : (
+                    carriers.map((carrier) => (
+                      <div
+                        key={carrier.id}
+                        style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: selectedCarrier?.id === carrier.id ? colors.bgHover : 'transparent', border: `1px solid ${selectedCarrier?.id === carrier.id ? colors.accentBlueBorder : colors.borderLight}` }}
+                        onClick={() => setSelectedCarrier(carrier)}
+                      >
+                        <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedCarrier?.id === carrier.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {selectedCarrier?.id === carrier.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                        </div>
+                        <div>
+                          <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{carrier.name}</span>
+                          <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({carrier["size (in tones)"]} tons)</span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-gray-800">{carrier.name}</span>
-                        <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
-                      </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Transport Distance for Soil and Tape1 */}
         {!isInProjectCreating && calculateDigging && selectedCarrier && (
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
-            <input
-              type="number"
-              value={soilTransportDistance}
-              onChange={(e) => {
-                setSoilTransportDistance(e.target.value);
-                setTape1TransportDistance(e.target.value); // Sync both distances
-              }}
-              className="w-full p-2 border rounded-md"
-              placeholder={t('calculator:placeholder_enter_transport_distance')}
-              min="0"
-              step="1"
-            />
-            <p className="text-xs text-gray-500 mt-1">{t('calculator:set_to_zero_no_transporting')}</p>
-          </div>
+          <TextInput
+            label={t('calculator:transport_distance_label')}
+            value={soilTransportDistance}
+            onChange={(v) => { setSoilTransportDistance(v); setTape1TransportDistance(v); }}
+            placeholder={t('calculator:placeholder_enter_transport_distance')}
+            unit="m"
+            helperText={t('calculator:set_to_zero_no_transport')}
+          />
         )}
         
         {!isInProjectCreating && (
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={calculateTransport}
-              onChange={(e) => setCalculateTransport(e.target.checked)}
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            <span className="text-sm font-medium text-gray-700">{t('calculator:calculate_transport_time_label')}</span>
-          </label>
+          <Checkbox label={t('calculator:calculate_transport_time_label')} checked={calculateTransport} onChange={setCalculateTransport} />
         )}
 
-        {/* Transport Carrier Selection */}
         {!isInProjectCreating && calculateTransport && (
           <>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">{t('calculator:transport_carrier_label')}</label>
-              <div className="space-y-2">
-                <div 
-                  className="flex items-center p-2 cursor-pointer border-2 border-dashed border-gray-300 rounded"
-                  onClick={() => setSelectedTransportCarrier(null)}
-                >
-                  <div className={`w-4 h-4 rounded-full border mr-2 ${
-                    selectedTransportCarrier === null 
-                      ? 'border-gray-400' 
-                      : 'border-gray-400'
-                  }`}>
-                    <div className={`w-2 h-2 rounded-full m-0.5 ${
-                      selectedTransportCarrier === null 
-                        ? 'bg-gray-400' 
-                        : 'bg-transparent'
-                    }`}></div>
+              <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:transport_carrier')}</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+                <div style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: !selectedTransportCarrier ? colors.bgHover : 'transparent', border: `1px solid ${!selectedTransportCarrier ? colors.accentBlueBorder : colors.borderLight}` }} onClick={() => setSelectedTransportCarrier(null)}>
+                  <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${!selectedTransportCarrier ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {!selectedTransportCarrier && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
                   </div>
-                  <div>
-                    <span className="text-gray-800">{t('calculator:default_wheelbarrow')}</span>
-                  </div>
+                  <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{t('calculator:default_wheelbarrow')}</span>
                 </div>
                 {carriers.length > 0 && carriers.map((carrier) => (
-                  <div 
+                  <div
                     key={carrier.id}
-                    className="flex items-center p-2 cursor-pointer"
+                    style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: selectedTransportCarrier?.id === carrier.id ? colors.bgHover : 'transparent', border: `1px solid ${selectedTransportCarrier?.id === carrier.id ? colors.accentBlueBorder : colors.borderLight}` }}
                     onClick={() => setSelectedTransportCarrier(carrier)}
                   >
-                    <div className={`w-4 h-4 rounded-full border mr-2 ${
-                      selectedTransportCarrier?.id === carrier.id 
-                        ? 'border-gray-400' 
-                        : 'border-gray-400'
-                    }`}>
-                      <div className={`w-2 h-2 rounded-full m-0.5 ${
-                        selectedTransportCarrier?.id === carrier.id 
-                          ? 'bg-gray-400' 
-                          : 'bg-transparent'
-                      }`}></div>
+                    <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedTransportCarrier?.id === carrier.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {selectedTransportCarrier?.id === carrier.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
                     </div>
                     <div>
-                      <span className="text-gray-800">{carrier.name}</span>
-                      <span className="text-sm text-gray-600 ml-2">({carrier["size (in tones)"]} tons)</span>
+                      <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{carrier.name}</span>
+                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({carrier["size (in tones)"]} tons)</span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('calculator:transport_distance_label')}</label>
-              <input
-                type="number"
-                value={materialTransportDistance}
-                onChange={(e) => setMaterialTransportDistance(e.target.value)}
-                className="w-full p-2 border rounded-md"
-                placeholder={t('calculator:placeholder_enter_material_transport')}
-                min="0"
-                step="1"
-              />
-              <p className="text-xs text-gray-500 mt-1">{t('calculator:distance_transporting_materials')}</p>
-            </div>
+            <TextInput
+              label={t('calculator:transport_distance_label')}
+              value={materialTransportDistance}
+              onChange={setMaterialTransportDistance}
+              placeholder={t('calculator:placeholder_enter_material_transport')}
+              unit="m"
+              helperText={t('calculator:distance_transporting_materials')}
+            />
           </>
         )}
         
@@ -1106,88 +1076,85 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
         </Button>
         
         {calculationError && (
-          <div className="p-3 bg-red-900/90 border border-red-600 rounded-lg text-white">
+          <div className="p-3 rounded-lg" style={{ background: `${colors.red}15`, border: `1px solid ${colors.red}40`, color: colors.textPrimary }}>
             {calculationError}
           </div>
         )}
         
         {(totalHours !== null || materials.length > 0) && (
-          <div className="mt-6 space-y-4" ref={resultsRef}>
-            <div>
-              <h3 className="text-lg font-medium">{t('calculator:total_labor_hours_label')} <span className="text-blue-600">{totalHours?.toFixed(2)} {t('calculator:hours_abbreviation')}</span></h3>
-              
-              <div className="mt-2">
-                <h4 className="font-medium text-gray-700 mb-2">{t('calculator:task_breakdown_label')}</h4>
-                <ul className="space-y-1 pl-5 list-disc">
-                  {taskBreakdown.map((task, index) => (
-                    <li key={index} className="text-sm">
-                      <span className="font-medium">{translateTaskName(task.task, t)}:</span> {task.hours.toFixed(2)} {t('calculator:hours_label')}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-            
-            <div>
-              <h3 className="font-medium mb-2">{t('calculator:materials_required_label')}</h3>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {t('calculator:table_material_header')}
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {t('calculator:table_quantity_header')}
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {t('calculator:table_unit_header')}
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {t('calculator:table_price_per_unit_header')}
-                      </th>
-                      <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        {t('calculator:table_total_header')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {materials.map((material, index) => (
-                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {translateMaterialName(material.name, t)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.amount.toFixed(2)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {translateUnit(material.unit, t)}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.price_per_unit ? `£${material.price_per_unit.toFixed(2)}` : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                          {material.total_price ? `£${material.total_price.toFixed(2)}` : 'N/A'}
-                        </td>
-                      </tr>
+          <div style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }} ref={resultsRef}>
+            {totalHours !== null && (
+              <>
+                <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg }}>
+                    <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                      {t('calculator:total_labor_hours_label')}
+                    </span>
+                    <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                      {totalHours.toFixed(2)}
+                    </span>
+                    <span style={{ fontSize: fontSizes.md, color: colors.accentBlue, fontFamily: fonts.body, fontWeight: fontWeights.medium }}>
+                      {t('calculator:hours_abbreviation')}
+                    </span>
+                  </div>
+                </Card>
+                <Card>
+                  <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+                    {t('calculator:task_breakdown_label')}
+                  </h3>
+                  <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
+                    {taskBreakdown.map((task, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                          background: index % 2 === 1 ? colors.bgTableRowAlt : undefined,
+                          borderBottom: index < taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
+                        }}
+                      >
+                        <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName(task.task, t)}</span>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                          <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{task.hours.toFixed(2)}</span>
+                          <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-                
-                {/* Add total price row */}
-                <div className="mt-4 text-right pr-6">
-                  <p className="text-sm font-medium">
-                    {t('calculator:total_cost_colon')}{' '}
-                    {materials.some(m => m.total_price !== null) 
-                      ? `£${materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}`
-                      : t('calculator:not_available')}
-                  </p>
-                </div>
-              </div>
-            </div>
+                  </div>
+                </Card>
+              </>
+            )}
+            {materials.length > 0 && (
+              <DataTable
+                columns={[
+                  { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+                  { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+                  { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+                  { key: 'price', label: t('calculator:table_price_per_unit_header'), width: '1fr' },
+                  { key: 'total', label: t('calculator:table_total_header'), width: '1fr' },
+                ]}
+                rows={materials.map((m) => ({
+                  name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName(m.name, t)}</span>,
+                  quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.amount.toFixed(2)}</span>,
+                  unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit(m.unit, t)}</span>,
+                  price: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{m.price_per_unit ? `£${m.price_per_unit.toFixed(2)}` : 'N/A'}</span>,
+                  total: <span style={{ fontSize: fontSizes.md, fontWeight: fontWeights.bold, color: colors.textSecondary }}>{m.total_price ? `£${m.total_price.toFixed(2)}` : 'N/A'}</span>,
+                }))}
+                footer={
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: spacing.md }}>
+                    <span style={{ fontSize: fontSizes.base, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>{t('calculator:total_cost_colon')}</span>
+                    <span style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display }}>
+                      {materials.some(m => m.total_price !== null) ? `£${materials.reduce((sum, m) => sum + (m.total_price || 0), 0).toFixed(2)}` : t('calculator:not_available')}
+                    </span>
+                  </div>
+                }
+              />
+            )}
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 };

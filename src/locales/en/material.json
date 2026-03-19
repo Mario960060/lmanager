@@ -23,6 +23,7 @@
   "tiles": "Tiles",
   "paving": "Paving",
   "grass": "Grass",
+  "artificial_grass": "Artificial Grass",
   "10x10_sets": "10x10 sets",
   "1200_fence_slats": "1200 Fence Slats",
   "1800_fence_slats": "1800 Fence Slats",
@@ -72,5 +73,14 @@
   "joist": "Joist",
   "joists": "Joists",
   "bearers": "Bearers",
-  "frame_slabs": "Frame slabs"
+  "frame_slabs": "Frame slabs",
+  "composite_posts": "Composite Posts",
+  "composite_slats": "Composite Slats",
+  "venetian_slats": "Venetian Slats",
+  "tile_adhesive": "Tile Adhesive",
+  "natural_turf_rolls": "Natural turf rolls",
+  "sleepers": "Sleepers",
+  "posts": "Posts",
+  "frame_boards": "Frame Boards",
+  "fence_slats": "Fence Slats"
 }

@@ -152,18 +152,22 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       return;
     }
     const inputs = { ...shape.calculatorInputs, blockWidthCm: shape.calculatorInputs?.blockWidthCm ?? 20, blockLengthCm: shape.calculatorInputs?.blockLengthCm ?? 10, jointGapMm: shape.calculatorInputs?.jointGapMm ?? 1 };
-    const { cutBlockCount, cuts, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(shape as any, inputs);
+    const { fullBlockCount, cutBlockCount, cuts, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(shape as any, inputs);
     setCutBlocks(String(cutBlockCount));
     setCanvasCutGroups(cuts.length > 0 ? groupCutsByLength(cuts) : []);
     if (onInputsChange) {
       const prev = shape.calculatorInputs ?? {};
       const next = {
         vizWasteSatisfied: wasteSatisfiedPositions ?? [],
+        vizFullBlockCount: fullBlockCount,
+        cutBlocks: String(cutBlockCount),
         vizWasteAreaCm2: wasteAreaCm2,
         vizReusedAreaCm2: reusedAreaCm2,
       };
       const same = prev.vizWasteAreaCm2 === next.vizWasteAreaCm2
         && prev.vizReusedAreaCm2 === next.vizReusedAreaCm2
+        && prev.vizFullBlockCount === next.vizFullBlockCount
+        && prev.cutBlocks === next.cutBlocks
         && JSON.stringify(prev.vizWasteSatisfied ?? []) === JSON.stringify(next.vizWasteSatisfied);
       if (!same) onInputsChange(next);
     }
@@ -368,16 +372,18 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
 
   const fetchMaterialPrices = async (materials: Material[]) => {
     try {
+      if (!companyId) return materials;
       const materialNames = materials.map(m => m.name);
       
       const { data, error } = await supabase
         .from('materials')
         .select('name, price')
+        .eq('company_id', companyId)
         .in('name', materialNames);
       
       if (error) throw error;
       
-      const priceMap = data.reduce((acc, item) => {
+      const priceMap = (data || []).reduce((acc: Record<string, number>, item: { name: string; price: number }) => {
         acc[item.name] = item.price;
         return acc;
       }, {} as Record<string, number>);
@@ -434,6 +440,7 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
   // Define loading sand time estimates (same as preparation digger estimates)
   const loadingSandDiggerTimeEstimates = [
     { equipment: 'Shovel (1 Person)', sizeInTons: 0.02, timePerTon: 0.5 },
+    { equipment: 'Digger 0.5T', sizeInTons: 0.5, timePerTon: 0.36 },
     { equipment: 'Digger 1T', sizeInTons: 1, timePerTon: 0.18 },
     { equipment: 'Digger 2T', sizeInTons: 2, timePerTon: 0.12 },
     { equipment: 'Digger 3-5T', sizeInTons: 3, timePerTon: 0.08 },
@@ -824,8 +831,24 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       // Calculate total hours
       const totalHours = breakdown.reduce((sum, item) => sum + item.hours, 0);
 
-      // Prepare materials list
+      // Monoblocks material in m² (from canvas full+cut or from area)
+      const blockWidthCm = Number(savedInputs?.blockWidthCm ?? 20);
+      const blockLengthCm = Number(savedInputs?.blockLengthCm ?? 10);
+      const blockAreaM2 = (blockWidthCm / 100) * (blockLengthCm / 100);
+      const fromCanvas = isInProjectCreating && (savedInputs?.vizFullBlockCount != null || savedInputs?.cutBlocks != null);
+      const fullCount = fromCanvas ? (savedInputs?.vizFullBlockCount ?? 0) : 0;
+      const cutCount = fromCanvas ? (parseInt(String(savedInputs?.cutBlocks ?? 0), 10) || 0) : cutBlocksNum;
+      const wasteSatisfiedCount = Array.isArray(savedInputs?.vizWasteSatisfied) ? savedInputs.vizWasteSatisfied.length : 0;
+      const blocksForCuts = Math.max(0, cutCount - wasteSatisfiedCount);
+      const blocksToBuy = fromCanvas && (fullCount > 0 || cutCount > 0) ? fullCount + blocksForCuts : 0;
+      const monoblocksMaterialM2 = fromCanvas && blocksToBuy > 0
+        ? blocksToBuy * blockAreaM2
+        : effectiveAreaM2;
+      const monoblocksMaterialName = `Monoblocks ${blockWidthCm}×${blockLengthCm}`;
+
+      // Prepare materials list (Monoblocks first, then others)
       const materialsList: Material[] = [
+        { name: monoblocksMaterialName, amount: Number(monoblocksMaterialM2.toFixed(2)), unit: 'm²', price_per_unit: null, total_price: null },
         { name: 'Soil excavation', amount: Number(soilTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null },
         { name: selectedSandMaterial?.name || 'Sand', amount: Number(sandTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: selectedSandMaterial?.price || null, total_price: null },
         { name: 'tape1', amount: Number(tape1Tonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null }
@@ -1268,7 +1291,7 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
               <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
                 {t('calculator:task_breakdown_label')}
               </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+              <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
                 {taskBreakdown.map((task: { task: string; hours: number }, index: number) => (
                   <div
                     key={index}
@@ -1277,9 +1300,8 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: `${spacing.lg}px ${spacing["2xl"]}px`,
-                      background: colors.bgSubtle,
-                      borderRadius: radii.lg,
-                      border: `1px solid ${colors.borderLight}`,
+                      background: index % 2 === 1 ? colors.bgTableRowAlt : undefined,
+                      borderBottom: index < taskBreakdown.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
                     }}
                   >
                     <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>

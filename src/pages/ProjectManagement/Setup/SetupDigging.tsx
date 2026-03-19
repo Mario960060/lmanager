@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { colors } from '../../../themes/designTokens';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
 import { Truck, X, Search, Info, Trash2, Settings, Save } from 'lucide-react';
@@ -27,6 +28,7 @@ interface SetupDiggingProps {
 // Define predefined sizes for excavators and dumpers/barrows
 const excavatorSizes = [
   { value: 0.02, label: '0.02 (Shovel)' },
+  { value: 0.5, label: '0.5' },
   { value: 1, label: '1' },
   { value: 2, label: '2' },
   { value: 3, label: '3 (to 5)' },
@@ -65,6 +67,7 @@ const defaultSpeeds: { [key: number]: number } = {
 // Time estimates for excavators (hours per ton)
 const soilDiggerTimeEstimates = [
   { size: 'Shovel (1 Person)', sizeInTons: 0.02, timePerTon: 0.5 },
+  { size: 'Digger 0.5T', sizeInTons: 0.5, timePerTon: 0.28 },
   { size: 'Digger 1T', sizeInTons: 1, timePerTon: 0.14 },
   { size: 'Digger 2T', sizeInTons: 2, timePerTon: 0.06 },
   { size: 'Digger 3-5T', sizeInTons: 3, timePerTon: 0.02 },
@@ -78,6 +81,7 @@ const soilDiggerTimeEstimates = [
 // Time estimates for tape1/type1 loading (hours per ton)
 const tape1DiggerTimeEstimates = [
   { size: 'Shovel (1 Person)', sizeInTons: 0.02, timePerTon: 0.35 },
+  { size: 'Digger 0.5T', sizeInTons: 0.5, timePerTon: 0.196 },
   { size: 'Digger 1T', sizeInTons: 1, timePerTon: 0.098 },
   { size: 'Digger 2T', sizeInTons: 2, timePerTon: 0.042 },
   { size: 'Digger 3-5T', sizeInTons: 3, timePerTon: 0.014 },
@@ -381,16 +385,16 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
   };
 
   // Get status color - solid backgrounds with white text for visibility
-  const getStatusColor = (status: DiggingEquipment['status']) => {
+  const getStatusColor = (status: DiggingEquipment['status']): React.CSSProperties => {
     switch (status) {
       case 'free_to_use':
-        return 'bg-green-600 text-white';
+        return { backgroundColor: colors.green, color: colors.textOnAccent };
       case 'in_use':
-        return 'bg-blue-600 text-white';
+        return { backgroundColor: colors.accentBlue, color: colors.textOnAccent };
       case 'broken':
-        return 'bg-red-600 text-white';
+        return { backgroundColor: colors.red, color: colors.textOnAccent };
       default:
-        return 'bg-gray-600 text-white';
+        return { backgroundColor: colors.bgElevated, color: colors.textOnAccent };
     }
   };
 
@@ -444,12 +448,12 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
   const contentMarkup = (
     <>
           {!companyId && (
-            <div className="bg-red-50 p-3 rounded-lg mb-3 text-sm">
-              <p className="text-red-600">{t('form:no_company_selected')}</p>
+            <div className="p-3 rounded-lg mb-3 text-sm" style={{ backgroundColor: colors.redLight }}>
+              <p style={{ color: colors.red }}>{t('form:no_company_selected')}</p>
             </div>
           )}
-          <div className="bg-gray-100 p-3 rounded-lg mb-3 text-sm">
-            <p className="text-red-600">
+          <div className="p-3 rounded-lg mb-3 text-sm" style={{ backgroundColor: colors.bgSubtle }}>
+            <p style={{ color: colors.red }}>
               {t('form:setup_digging_warning')}
             </p>
           </div>
@@ -457,7 +461,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
           {/* Add Equipment Form */}
           <form onSubmit={handleAddEquipment} className="mb-4 space-y-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:equipment_name_label')}</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:equipment_name_label')}</label>
               <input
                 type="text"
                 placeholder={t('form:enter_equipment_name')}
@@ -469,7 +473,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:equipment_description_optional')}</label>
+              <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:equipment_description_optional')}</label>
               <textarea
                 placeholder={t('form:enter_equipment_description')}
                 value={newEquipment.description}
@@ -481,7 +485,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
             
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:equipment_type_label')}</label>
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:equipment_type_label')}</label>
                 <select
                   value={newEquipment.type}
                   onChange={(e) => handleTypeChange(e.target.value as 'excavator' | 'barrows_dumpers')}
@@ -492,7 +496,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:equipment_quantity_label')}</label>
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:equipment_quantity_label')}</label>
                 <input
                   type="number"
                   min="1"
@@ -503,7 +507,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('form:equipment_size_label')}</label>
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>{t('form:equipment_size_label')}</label>
                 <select
                   value={newEquipment["size (in tones)"]}
                   onChange={(e) => {
@@ -528,9 +532,9 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
             {/* Speed field - only for carriers */}
             {newEquipment.type === 'barrows_dumpers' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>
                   {t('form:speed_m_h_label')}
-                  <span className="text-xs text-gray-500 ml-2">
+                  <span className="text-xs ml-2" style={{ color: colors.textSubtle }}>
                     {t('form:default_speed_info', { default: defaultSpeeds[newEquipment["size (in tones)"]] || 4000 })}
                   </span>
                 </label>
@@ -545,7 +549,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                   })}
                   className="w-full p-2 border rounded text-sm"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs mt-1" style={{ color: colors.textSubtle }}>
                   {t('form:speed_use_info')}
                 </p>
               </div>
@@ -554,7 +558,8 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
             <button
               type="submit"
               disabled={!companyId}
-              className="w-full bg-gray-700 text-white p-2 rounded hover:bg-gray-800 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full p-2 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: colors.bgElevated, color: colors.textOnAccent }}
             >
               {t('form:add_equipment_button_text')}
             </button>
@@ -569,28 +574,28 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
               onChange={(e) => setEquipmentSearch(e.target.value)}
               className="w-full p-2 pl-8 border rounded text-sm"
             />
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-2 top-2.5 h-4 w-4" style={{ color: colors.textSubtle }} />
           </div>
           
           {/* Equipment List */}
           <div className="border rounded overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50 sticky top-0">
+              <thead className="sticky top-0" style={{ backgroundColor: colors.bgSubtle }}>
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:name_label')}</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:description_label')}</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:type_label')}</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:quantity_label')}</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:size_label')}</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:speed_label')}</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:status_label')}</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{t('form:actions_label')}</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:name_label')}</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:description_label')}</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:type_label')}</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:quantity_label')}</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:size_label')}</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:speed_label')}</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:status_label')}</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider" style={{ color: colors.textSubtle }}>{t('form:actions_label')}</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredEquipment.map(item => (
-                  <tr key={item.id}>
-                    <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+              <tbody className="divide-y" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}>
+                {filteredEquipment.map((item, index) => (
+                  <tr key={item.id} style={{ background: index % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
+                    <td className="px-3 py-2 whitespace-nowrap text-sm font-medium" style={{ color: colors.textPrimary }}>
                       {editingEquipmentId === item.id ? (
                         <input
                           type="text"
@@ -602,7 +607,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                         item.name
                       )}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-500">
+                    <td className="px-3 py-2 text-sm" style={{ color: colors.textSubtle }}>
                       {editingEquipmentId === item.id ? (
                         <input
                           type="text"
@@ -614,7 +619,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                         item.description || '-'
                       )}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-500">
+                    <td className="px-3 py-2 text-sm" style={{ color: colors.textSubtle }}>
                       {editingEquipmentId === item.id ? (
                         <select
                           value={editEquipment?.type || 'excavator'}
@@ -636,7 +641,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                         getTypeDisplayName(item.type)
                       )}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-500">
+                    <td className="px-3 py-2 text-sm" style={{ color: colors.textSubtle }}>
                       {editingEquipmentId === item.id ? (
                         <input
                           type="number"
@@ -649,12 +654,12 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                         <div>
                           <span>{item.quantity} {t('form:equipment_qty_total', { count: item.quantity })}</span>
                           {item.in_use_quantity > 0 && (
-                            <span className="text-xs text-gray-500 ml-2">{t('form:equipment_qty_in_use', { count: item.in_use_quantity })}</span>
+                            <span className="text-xs ml-2" style={{ color: colors.textSubtle }}>{t('form:equipment_qty_in_use', { count: item.in_use_quantity })}</span>
                           )}
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-500">
+                    <td className="px-3 py-2 text-sm" style={{ color: colors.textSubtle }}>
                       {editingEquipmentId === item.id ? (
                         <select
                           value={editEquipment?.["size (in tones)"] || ''}
@@ -674,7 +679,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                         formatSize(item["size (in tones)"])
                       )}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-500">
+                    <td className="px-3 py-2 text-sm" style={{ color: colors.textSubtle }}>
                       {editingEquipmentId === item.id ? (
                         item.type === 'barrows_dumpers' ? (
                           <input
@@ -689,18 +694,18 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                             className="w-full p-1 border rounded text-sm"
                           />
                         ) : (
-                          <span className="text-gray-400">-</span>
+                          <span style={{ color: colors.textSubtle }}>-</span>
                         )
                       ) : (
                         item.type === 'barrows_dumpers' && item.speed_m_per_hour ? (
                           `${item.speed_m_per_hour}`
                         ) : (
-                          <span className="text-gray-400">-</span>
+                          <span style={{ color: colors.textSubtle }}>-</span>
                         )
                       )}
                     </td>
                     <td className="px-3 py-2 text-sm">
-                      <span className={`px-2 py-1 rounded-full text-xs ${getStatusColor(item.status)}`}>
+                      <span className="px-2 py-1 rounded-full text-xs" style={getStatusColor(item.status)}>
                         {formatEquipmentStatus(item.status)}
                       </span>
                     </td>
@@ -732,7 +737,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
               </tbody>
             </table>
             {filteredEquipment.length === 0 && (
-              <p className="text-center text-gray-500 py-4 text-sm">{t('form:no_equipment_found')}</p>
+              <p className="text-center py-4 text-sm" style={{ color: colors.textSubtle }}>{t('form:no_equipment_found')}</p>
             )}
           </div>
     </>
@@ -748,16 +753,16 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+      <div className="rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
         {/* Header */}
         <div className="p-4 border-b flex justify-between items-center">
           <div className="flex items-center">
-            <Truck className="w-5 h-5 text-gray-700 mr-2" />
+            <Truck className="w-5 h-5 mr-2" style={{ color: colors.textSecondary }} />
             <h2 className="text-lg font-semibold">{t('form:excavators_barrows_dumpers_title')}</h2>
           </div>
           <button 
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+            className="p-1 rounded-full transition-colors"
           >
             <X className="w-6 h-6" />
           </button>

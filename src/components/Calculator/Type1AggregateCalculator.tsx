@@ -19,7 +19,9 @@ import {
   Button,
   Card,
   Label,
+  DataTable,
 } from '../../themes/uiComponents';
+import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 
 // Define types for our equipment
 interface DiggingEquipment {
@@ -310,13 +312,16 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
 
   return (
     <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
-      <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display }}>
+      <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display, letterSpacing: '0.3px', margin: `${spacing.md}px 0 ${spacing.sm}px` }}>
         {t('calculator:input_prep_calculator')}
       </h2>
+      <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, lineHeight: 1.5 }}>
+        {t('calculator:type1_prep_description', { defaultValue: 'Calculate time for Type 1 aggregate preparation: loading, transport and compacting.' })}
+      </p>
       
-      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`}>
+      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
         <p 
-          style={{ color: colors.accentBlue, cursor: 'pointer', marginBottom: spacing.md, fontSize: fontSizes.base, fontFamily: fonts.body }}
+          style={{ color: colors.accentBlue, cursor: 'pointer', marginBottom: spacing["5xl"], fontSize: fontSizes.base, fontFamily: fonts.body, fontWeight: fontWeights.medium }}
           onClick={() => setCalculationMethod(calculationMethod === 'direct' ? 'area' : 'direct')}
         >
           {calculationMethod === 'direct' ? t('calculator:input_calculation_method_area') : t('calculator:input_calculation_method_weight')}
@@ -330,10 +335,8 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
               onChange={setTons}
               placeholder={t('calculator:placeholder_enter_weight_tons')}
               unit="tons"
+              helperText={t('calculator:message_depth_default_compacting')}
             />
-            <p style={{ fontSize: fontSizes.sm, color: colors.textDim, marginTop: spacing.sm, fontFamily: fonts.body }}>
-              {t('calculator:message_depth_default_compacting')}
-            </p>
           </>
         ) : (
           <CalculatorInputGrid columns={3}>
@@ -343,58 +346,59 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
           </CalculatorInputGrid>
         )}
         
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing["6xl"], marginTop: spacing["5xl"] }}>
-          <div>
-            <Label>{t('calculator:input_excavation_machinery')}</Label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
-              {excavators.length === 0 ? (
-                <p style={{ fontSize: fontSizes.base, color: colors.textDim }}>{t('calculator:input_no_excavators')}</p>
-              ) : (
-                excavators.map((excavator) => (
-                  <div key={excavator.id} style={{ display: 'flex', alignItems: 'center', padding: spacing.md, cursor: 'pointer', borderRadius: radii.lg, background: selectedExcavator?.id === excavator.id ? colors.bgHover : 'transparent' }} onClick={() => setSelectedExcavator(excavator)}>
-                    <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedExcavator?.id === excavator.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {selectedExcavator?.id === excavator.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+        <div style={{ borderTop: `1px solid ${colors.borderLight}`, paddingTop: spacing.xl, marginTop: spacing.xs, marginBottom: spacing["3xl"] }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
+            <div>
+              <Label style={{ marginBottom: spacing.lg }}>{t('calculator:input_excavation_machinery')}</Label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+                {excavators.length === 0 ? (
+                  <p style={{ fontSize: fontSizes.base, color: colors.textDim }}>{t('calculator:input_no_excavators')}</p>
+                ) : (
+                  excavators.map((excavator) => (
+                    <div key={excavator.id} style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: selectedExcavator?.id === excavator.id ? colors.bgHover : 'transparent', border: `1px solid ${selectedExcavator?.id === excavator.id ? colors.accentBlueBorder : colors.borderLight}` }} onClick={() => setSelectedExcavator(excavator)}>
+                      <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedExcavator?.id === excavator.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {selectedExcavator?.id === excavator.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                      </div>
+                      <div>
+                        <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{excavator.name}</span>
+                        <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({excavator["size (in tones)"]} tons)</span>
+                      </div>
                     </div>
-                    <div>
-                      <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{excavator.name}</span>
-                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({excavator["size (in tones)"]} tons)</span>
-                    </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-          <div>
-            <Label>{t('calculator:input_transport_carrier_for_aggregate')}</Label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginTop: spacing.sm }}>
-              {carriers.length === 0 ? (
-                <p style={{ fontSize: fontSizes.base, color: colors.textDim }}>{t('calculator:input_no_carriers')}</p>
-              ) : (
-                carriers.map((carrier) => (
-                  <div key={carrier.id} style={{ display: 'flex', alignItems: 'center', padding: spacing.md, cursor: 'pointer', borderRadius: radii.lg, background: selectedCarrier?.id === carrier.id ? colors.bgHover : 'transparent' }} onClick={() => setSelectedCarrier(carrier)}>
-                    <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedCarrier?.id === carrier.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {selectedCarrier?.id === carrier.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+            <div>
+              <Label style={{ marginBottom: spacing.lg }}>{t('calculator:input_transport_carrier_for_aggregate')}</Label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+                {carriers.length === 0 ? (
+                  <p style={{ fontSize: fontSizes.base, color: colors.textDim }}>{t('calculator:input_no_carriers')}</p>
+                ) : (
+                  carriers.map((carrier) => (
+                    <div key={carrier.id} style={{ display: 'flex', alignItems: 'center', padding: `${spacing.lg}px ${spacing["2xl"]}px`, cursor: 'pointer', borderRadius: radii.lg, background: selectedCarrier?.id === carrier.id ? colors.bgHover : 'transparent', border: `1px solid ${selectedCarrier?.id === carrier.id ? colors.accentBlueBorder : colors.borderLight}` }} onClick={() => setSelectedCarrier(carrier)}>
+                      <div style={{ width: 16, height: 16, borderRadius: radii.full, border: `2px solid ${selectedCarrier?.id === carrier.id ? colors.accentBlue : colors.borderMedium}`, marginRight: spacing.md, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {selectedCarrier?.id === carrier.id && <div style={{ width: 8, height: 8, borderRadius: radii.full, background: colors.accentBlue }} />}
+                      </div>
+                      <div>
+                        <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{carrier.name}</span>
+                        <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({carrier["size (in tones)"]} tons)</span>
+                      </div>
                     </div>
-                    <div>
-                      <span style={{ fontSize: fontSizes.base, color: colors.textSecondary }}>{carrier.name}</span>
-                      <span style={{ fontSize: fontSizes.sm, color: colors.textDim, marginLeft: spacing.md }}>({carrier["size (in tones)"]} tons)</span>
-                    </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
         
-        <div style={{ marginTop: spacing["6xl"] }}>
-          <CompactorSelector selectedCompactor={selectedCompactor} onCompactorChange={setSelectedCompactor} />
-        </div>
+        <CompactorSelector selectedCompactor={selectedCompactor} onCompactorChange={setSelectedCompactor} />
         
         <TextInput
           label={t('calculator:transport_distance_each_way_label')}
           value={transportDistance}
           onChange={setTransportDistance}
           placeholder={t('calculator:enter_transport_distance')}
+          unit="m"
           helperText={t('calculator:set_to_zero_no_transport')}
         />
         
@@ -403,21 +407,91 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
         </Button>
         
         {result && (
-          <div ref={resultsRef} style={{ marginTop: spacing["5xl"] }}>
+          <div ref={resultsRef} style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
             <Card style={{ background: gradients.blueCard, border: `1px solid ${colors.accentBlueBorder}` }}>
-              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.semibold, marginBottom: spacing.md, color: colors.textSecondary, fontFamily: fonts.display }}>
-                {t('calculator:estimated_time_label')}
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
-                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Total Aggregate: <span style={{ fontWeight: fontWeights.medium }}>{result.totalTons.toFixed(2)} tons</span></p>
-                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Loading Time: <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.excavationTime)}</span></p>
-                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Transport Time: <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.transportTime)}</span></p>
-                <p style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>Compacting ({result.compactingCompactorName}, {result.compactingLayers} layers): <span style={{ fontWeight: fontWeights.medium }}>{formatTime(result.compactingTime)}</span></p>
-                <p style={{ fontSize: fontSizes.lg, color: colors.textPrimary, fontFamily: fonts.display }}>
-                  Total Time: <span style={{ fontWeight: fontWeights.bold }}>{formatTime(result.totalTime)}</span>
-                </p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.lg }}>
+                <span style={{ fontSize: fontSizes.md, color: colors.textSubtle, fontFamily: fonts.display, fontWeight: fontWeights.semibold }}>
+                  {t('calculator:total_labor_hours_label')}
+                </span>
+                <span style={{ fontSize: fontSizes["4xl"], fontWeight: fontWeights.extrabold, color: colors.accentBlue, fontFamily: fonts.display }}>
+                  {result.totalTime.toFixed(2)}
+                </span>
+                <span style={{ fontSize: fontSizes.md, color: colors.accentBlue, fontFamily: fonts.body, fontWeight: fontWeights.medium }}>
+                  {t('calculator:hours_abbreviation')}
+                </span>
               </div>
             </Card>
+
+            <Card>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display, letterSpacing: '0.3px', marginBottom: spacing["2xl"] }}>
+                {t('calculator:task_breakdown_label')}
+              </h3>
+              <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                    background: undefined,
+                    borderBottom: `1px solid ${colors.borderLight}`,
+                  }}
+                >
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName('Preparation', t)}</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                    <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{result.excavationTime.toFixed(2)}</span>
+                    <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                    background: colors.bgTableRowAlt,
+                    borderBottom: `1px solid ${colors.borderLight}`,
+                  }}
+                >
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName('Transport', t)}</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                    <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{result.transportTime.toFixed(2)}</span>
+                    <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: `${spacing.lg}px ${spacing["2xl"]}px`,
+                    background: undefined,
+                    borderBottom: 'none',
+                  }}
+                >
+                  <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateTaskName(result.compactingCompactorName, t)} ({result.compactingLayers} {t('calculator:layers_suffix', { defaultValue: 'layers' })})</span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: spacing.xs }}>
+                    <span style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.bold, color: colors.textSecondary, fontFamily: fonts.display }}>{result.compactingTime.toFixed(2)}</span>
+                    <span style={{ fontSize: fontSizes.sm, color: colors.textFaint, fontFamily: fonts.body }}>{t('calculator:hours_label')}</span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <DataTable
+              columns={[
+                { key: 'name', label: t('calculator:table_material_header'), width: '2fr' },
+                { key: 'quantity', label: t('calculator:table_quantity_header'), width: '1fr' },
+                { key: 'unit', label: t('calculator:table_unit_header'), width: '1fr' },
+              ]}
+              rows={[
+                {
+                  name: <span style={{ fontSize: fontSizes.base, color: colors.textMuted, fontFamily: fonts.body }}>{translateMaterialName('Type 1 aggregate', t)}</span>,
+                  quantity: <span style={{ fontSize: fontSizes.base, color: colors.textSubtle }}>{result.totalTons.toFixed(2)}</span>,
+                  unit: <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{translateUnit('tonnes', t)}</span>,
+                },
+              ]}
+            />
           </div>
         )}
       </Card>
