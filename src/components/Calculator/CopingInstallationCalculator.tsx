@@ -3,7 +3,7 @@ import { useQuery, UseQueryResult } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { colors, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
 import { Button, Checkbox, TextInput } from '../../themes/uiComponents';
@@ -76,7 +76,7 @@ interface DiggingEquipment {
   updated_at?: string;
 }
 
-const GAP_OPTIONS = [2, 3, 4, 5];
+const GAP_OPTIONS = [2, 3, 4, 5, 10, 20];
 
 const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> = ({
   onResultsChange,
@@ -260,7 +260,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -397,7 +397,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
 
     const taskBreakdown = [
       {
-        task: `Tile Installation ${slabLengthCm} × ${slabWidthCm}`,
+        task: `Coping installation ${slabLengthCm} × ${slabWidthCm}`,
         hours: copingTaskTotal,
         amount: `${numberOfSlabs} pieces`,
         unit: 'pieces'
@@ -707,7 +707,7 @@ const CopingInstallationCalculator: React.FC<CopingInstallationCalculatorProps> 
 
       {!fromWallSegments && (
         <div className="flex justify-center">
-          <Button variant="accent" color={colors.accentBlue} onClick={calculateResults}>
+          <Button variant="primary" fullWidth onClick={calculateResults}>
             {t('calculator:calculate_button')}
           </Button>
         </div>

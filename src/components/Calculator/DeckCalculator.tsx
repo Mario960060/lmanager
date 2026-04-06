@@ -3,9 +3,24 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, FOOT_CARRY_SPEED_M_PER_H, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { computeDeckCalculation } from './deckCalculatorLogic';
+import {
+  deckingJoistMaterialName,
+  deckingBearerMaterialName,
+  deckingBoardMaterialName,
+  compositeDeckingBoardMaterialName,
+  joistLengthMeters,
+  boardLengthMeters,
+  type DeckJoistLengthKey,
+  type DeckBoardLengthKey,
+} from './deckMaterialNames';
+import {
+  type DeckVariant,
+  TIMBER_DECK_TASK_NAMES,
+  TIMBER_DECK_TASK_KEYS,
+} from './deckVariantConfig';
 import {
   colors,
   fonts,
@@ -25,8 +40,11 @@ import {
   Label,
   DataTable,
 } from '../../themes/uiComponents';
+import { RichText } from '../PageInfoModal';
 
 interface DeckCalculatorProps {
+  /** Timber (default) or composite — same tasks/hours; only the decking *boards* material row uses composite product names when composite */
+  deckVariant?: DeckVariant;
   onResultsChange?: (results: any) => void;
   onInputsChange?: (inputs: Record<string, any>) => void;
   isInProjectCreating?: boolean;
@@ -70,6 +88,7 @@ interface DiggingEquipment {
 }
 
 const DeckCalculator: React.FC<DeckCalculatorProps> = ({
+  deckVariant = 'timber',
   onResultsChange,
   onInputsChange,
   isInProjectCreating = false,
@@ -85,6 +104,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
   selectedExcavator: propSelectedExcavator,
   recalculateTrigger = 0
 }) => {
+  const isComposite = deckVariant === 'composite';
   const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
 
@@ -103,9 +123,23 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       setTotalWidth(s);
     }
   }, [savedInputs?.totalLength, savedInputs?.totalWidth, initialArea, isInProjectCreating]);
-  const [joistLength, setJoistLength] = useState(savedInputs?.joistLength ?? '');
+  const normalizeJoistKey = (v: unknown): DeckJoistLengthKey =>
+    v === '5' || v === 5 || v === '5.0' ? '5' : '3.6';
+  const normalizeBoardKey = (v: unknown): DeckBoardLengthKey => {
+    const raw = v != null && v !== '' ? String(v).replace(',', '.').trim() : '3.6';
+    if (raw === '2.4' || raw === '3.6' || raw === '4.2' || raw === '5') return raw as DeckBoardLengthKey;
+    const n = parseFloat(raw);
+    if (!Number.isNaN(n)) {
+      if (Math.abs(n - 2.4) < 0.05) return '2.4';
+      if (Math.abs(n - 4.2) < 0.05) return '4.2';
+      if (Math.abs(n - 5) < 0.05) return '5';
+      if (Math.abs(n - 3.6) < 0.05) return '3.6';
+    }
+    return '3.6';
+  };
+  const [joistLengthKey, setJoistLengthKey] = useState<DeckJoistLengthKey>(() => normalizeJoistKey(savedInputs?.joistLength));
+  const [boardLengthKey, setBoardLengthKey] = useState<DeckBoardLengthKey>(() => normalizeBoardKey(savedInputs?.boardLength));
   const [distanceBetweenJoists, setDistanceBetweenJoists] = useState(savedInputs?.distanceBetweenJoists ?? '');
-  const [boardLength, setBoardLength] = useState(savedInputs?.boardLength ?? '');
   const [boardWidth, setBoardWidth] = useState(savedInputs?.boardWidth ?? '');
   const [jointGaps, setJointGaps] = useState(savedInputs?.jointGaps ?? '');
   const [pattern, setPattern] = useState(savedInputs?.pattern ?? 'Length');
@@ -116,9 +150,23 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
   const [postmixPerPost, setPostmixPerPost] = useState<string>(savedInputs?.postmixPerPost ?? '');
   useEffect(() => {
     if (onInputsChange && isInProjectCreating) {
-      onInputsChange({ totalLength, totalWidth, joistLength, distanceBetweenJoists, boardLength, boardWidth, jointGaps, pattern, patternRotationDeg, includeFrame, frameJointType, halfShift, postmixPerPost });
+      onInputsChange({
+        totalLength,
+        totalWidth,
+        joistLength: joistLengthKey,
+        boardLength: boardLengthKey,
+        distanceBetweenJoists,
+        boardWidth,
+        jointGaps,
+        pattern,
+        patternRotationDeg,
+        includeFrame,
+        frameJointType,
+        halfShift,
+        postmixPerPost,
+      });
     }
-  }, [totalLength, totalWidth, joistLength, distanceBetweenJoists, boardLength, boardWidth, jointGaps, pattern, patternRotationDeg, includeFrame, frameJointType, halfShift, postmixPerPost, onInputsChange, isInProjectCreating]);
+  }, [totalLength, totalWidth, joistLengthKey, boardLengthKey, distanceBetweenJoists, boardWidth, jointGaps, pattern, patternRotationDeg, includeFrame, frameJointType, halfShift, postmixPerPost, onInputsChange, isInProjectCreating]);
   useEffect(() => {
     if (savedInputs?.includeFrame !== undefined) setIncludeFrame(!!savedInputs.includeFrame);
     if (savedInputs?.frameJointType === 'butt' || savedInputs?.frameJointType === 'miter45') setFrameJointType(savedInputs.frameJointType);
@@ -127,6 +175,10 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
     if (savedInputs?.pattern != null) setPattern(savedInputs.pattern);
     if (savedInputs?.patternRotationDeg != null) setPatternRotationDeg(String(savedInputs.patternRotationDeg));
   }, [savedInputs?.pattern, savedInputs?.patternRotationDeg]);
+  useEffect(() => {
+    if (savedInputs?.joistLength != null) setJoistLengthKey(normalizeJoistKey(savedInputs.joistLength));
+    if (savedInputs?.boardLength != null) setBoardLengthKey(normalizeBoardKey(savedInputs.boardLength));
+  }, [savedInputs?.joistLength, savedInputs?.boardLength]);
 
   // State
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -146,25 +198,17 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
   const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
   const effectiveTransportDistance = isInProjectCreating && propTransportDistance ? propTransportDistance : transportDistance;
 
-  // Fetch task templates
+  const taskKeys = TIMBER_DECK_TASK_KEYS;
+
+  // Fetch task templates (same event_tasks as standard deck for both variants)
   const { data: taskTemplates = {} } = useQuery({
     queryKey: ['deck_tasks', companyId],
     queryFn: async () => {
-      const taskNames = [
-        'digging holes for posts',
-        'setting up posts',
-        'decking boards cuts',
-        'cutting decking joists',
-        'fixing decking frame',
-        'fixing decking boards',
-        'decking frame boards cuts'
-      ];
-
       const { data, error } = await supabase
         .from('event_tasks_with_dynamic_estimates')
         .select('id, name, unit, estimated_hours')
         .eq('company_id', companyId || '')
-        .in('name', taskNames);
+        .in('name', TIMBER_DECK_TASK_NAMES);
 
       if (error) {
         console.error('Error fetching deck tasks:', error);
@@ -213,10 +257,9 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
     try {
       const materialNames = materials.map(m => m.name);
 
-      const { data, error } = await supabase
-        .from('materials')
-        .select('name, price')
-        .in('name', materialNames);
+      let q = supabase.from('materials').select('name, price').in('name', materialNames);
+      if (companyId) q = q.eq('company_id', companyId);
+      const { data, error } = await q;
 
       if (error) throw error;
 
@@ -247,7 +290,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -258,21 +301,25 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
 
   const calculate = async () => {
 
-    if (!totalLength || !totalWidth || !joistLength || !distanceBetweenJoists || !boardLength || !boardWidth || !jointGaps) {
+    if (!totalLength || !totalWidth || !distanceBetweenJoists || !boardWidth || !jointGaps) {
       setCalculationError(t('calculator:fill_all_required_fields'));
       return;
     }
 
     try {
-      const tl = parseFloat(totalLength);
-      const tw = parseFloat(totalWidth);
-      const jl = parseFloat(joistLength);
-      const dbj = parseFloat(distanceBetweenJoists);
-      const bl = parseFloat(boardLength);
-      const bw = parseFloat(boardWidth);
-      const jg = parseFloat(jointGaps);
+      const tl = parseFloat(String(totalLength).replace(',', '.'));
+      const tw = parseFloat(String(totalWidth).replace(',', '.'));
+      const jl = joistLengthMeters(joistLengthKey);
+      const dbj = parseFloat(String(distanceBetweenJoists).replace(',', '.'));
+      const bl = boardLengthMeters(boardLengthKey);
+      const bw = parseFloat(String(boardWidth).replace(',', '.'));
+      const jg = parseFloat(String(jointGaps).replace(',', '.'));
 
-      if (isNaN(tl) || isNaN(tw) || isNaN(jl) || isNaN(dbj) || isNaN(bl) || isNaN(bw) || isNaN(jg)) {
+      if (isNaN(tl) || isNaN(tw) || isNaN(dbj) || isNaN(bw) || isNaN(jg)) {
+        setCalculationError(t('calculator:valid_numbers_required'));
+        return;
+      }
+      if (bw <= 0 || jg < 0) {
         setCalculationError(t('calculator:valid_numbers_required'));
         return;
       }
@@ -314,7 +361,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       const breakdown: TaskBreakdown[] = [];
 
       // Digging holes for posts
-      const diggingTask = taskTemplates['digging holes for posts'];
+      const diggingTask = taskTemplates[taskKeys.diggingHoles];
       if (diggingTask && diggingTask.estimated_hours && diggingTask.name) {
         breakdown.push({
           task: diggingTask.name,
@@ -325,7 +372,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       }
 
       // Setting up posts
-      const settingPostsTask = taskTemplates['setting up posts'];
+      const settingPostsTask = taskTemplates[taskKeys.settingPosts];
       if (settingPostsTask && settingPostsTask.estimated_hours && settingPostsTask.name) {
         breakdown.push({
           task: settingPostsTask.name,
@@ -336,7 +383,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       }
 
       // Decking board cuts
-      const boardCutsTask = taskTemplates['decking boards cuts'];
+      const boardCutsTask = taskTemplates[taskKeys.boardCuts];
       if (boardCutsTask && boardCutsTask.estimated_hours && boardCutsTask.name) {
         breakdown.push({
           task: boardCutsTask.name,
@@ -348,7 +395,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
 
       // Cutting decking joists (joists + bearers)
       const totalJoistCuts = joistRows + bearerRows;
-      const joistCutsTask = taskTemplates['cutting decking joists'];
+      const joistCutsTask = taskTemplates[taskKeys.cuttingJoists];
       if (joistCutsTask && joistCutsTask.estimated_hours && joistCutsTask.name) {
         breakdown.push({
           task: joistCutsTask.name,
@@ -360,7 +407,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
 
       // Decking frame boards cuts (if includeFrame is checked)
       if (includeFrame && frameBoards > 0) {
-        const frameTask = taskTemplates['decking frame boards cuts'];
+        const frameTask = taskTemplates[taskKeys.frameBoardCuts];
         if (frameTask && frameTask.estimated_hours && frameTask.name) {
           breakdown.push({
             task: frameTask.name,
@@ -372,7 +419,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       }
 
       // Fixing decking frame (joist + bearer + posts all related)
-      const fixingFrameTask = taskTemplates['fixing decking frame'];
+      const fixingFrameTask = taskTemplates[taskKeys.fixingFrame];
       if (fixingFrameTask && fixingFrameTask.estimated_hours && fixingFrameTask.name) {
         breakdown.push({
           task: fixingFrameTask.name,
@@ -383,7 +430,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
       }
 
       // Fixing decking boards
-      const fixingBoardsTask = taskTemplates['fixing decking boards'];
+      const fixingBoardsTask = taskTemplates[taskKeys.fixingBoards];
       if (fixingBoardsTask && fixingBoardsTask.estimated_hours && fixingBoardsTask.name) {
         breakdown.push({
           task: fixingBoardsTask.name,
@@ -460,8 +507,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         if (totalPosts > 0) {
           const postsPerTrip = 1;
           const trips = Math.ceil(totalPosts / postsPerTrip);
-          const postCarrySpeed = 1500; // m/h
-          const timePerTrip = (distanceVal * 2) / postCarrySpeed;
+          const timePerTrip = (distanceVal * 2) / FOOT_CARRY_SPEED_M_PER_H;
           const postTransportTime = trips * timePerTrip;
 
           if (postTransportTime > 0) {
@@ -497,11 +543,14 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
 
       // ===== MATERIAL BREAKDOWN =====
       const normalBoards = totalBoards - frameBoards; // Calculate normal boards (without frame)
+      const joistMatName = deckingJoistMaterialName(joistLengthKey);
+      const bearerMatName = deckingBearerMaterialName(joistLengthKey);
+      const boardMatName = isComposite ? compositeDeckingBoardMaterialName(boardLengthKey) : deckingBoardMaterialName(boardLengthKey);
       const materialsList: Material[] = [
-        { name: 'Decking Boards', amount: normalBoards, unit: 'boards', price_per_unit: null, total_price: null },
+        { name: boardMatName, amount: normalBoards, unit: 'boards', price_per_unit: null, total_price: null },
         { name: 'Posts', amount: totalPosts, unit: 'posts', price_per_unit: null, total_price: null },
-        { name: 'Joists', amount: totalJoists, unit: 'joists', price_per_unit: null, total_price: null },
-        { name: 'Bearers', amount: totalBearers, unit: 'bearers', price_per_unit: null, total_price: null },
+        { name: joistMatName, amount: totalJoists, unit: 'joists', price_per_unit: null, total_price: null },
+        { name: bearerMatName, amount: totalBearers, unit: 'bearers', price_per_unit: null, total_price: null },
         { name: 'Postmix', amount: totalPostmix, unit: 'bags', price_per_unit: null, total_price: null }
       ];
 
@@ -540,7 +589,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
   useEffect(() => {
     if (totalHours !== null && materials.length > 0) {
       const formattedResults = {
-        name: 'Decking Standard Installation',
+        name: isComposite ? 'Composite Decking Installation' : 'Decking Standard Installation',
         amount: parseFloat(totalLength) || 0,
         unit: 'meters',
         hours_worked: totalHours,
@@ -566,7 +615,7 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
         onResultsChange(formattedResults);
       }
     }
-  }, [totalHours, materials, taskBreakdown, totalLength, onResultsChange]);
+  }, [totalHours, materials, taskBreakdown, totalLength, onResultsChange, isComposite]);
 
   // Scroll to results
   useEffect(() => {
@@ -585,29 +634,63 @@ const DeckCalculator: React.FC<DeckCalculatorProps> = ({
   return (
     <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
       <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, marginBottom: spacing.sm }}>
-        {t('calculator:decking_standard_calculator_title')}
+        {isComposite ? t('calculator:decking_composite_calculator_title') : t('calculator:decking_standard_calculator_title')}
       </h2>
-      <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, lineHeight: 1.5 }}>
-        Calculate materials, time, and costs for decking installation projects.
-      </p>
+      <div style={{ fontFamily: fonts.body, marginBottom: spacing.md }}>
+        <RichText text={isComposite ? t('calculator:deck_composite_info_description') : t('calculator:deck_info_description')} textClassName="text-base leading-relaxed" />
+      </div>
 
       <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
         <CalculatorInputGrid columns={2}>
           <TextInput label={t('calculator:input_length_m')} value={totalLength} onChange={setTotalLength} placeholder={t('calculator:placeholder_enter_length_m')} unit="m" helperText={t('calculator:along_direction_boards_run')} />
           <TextInput label={t('calculator:input_width_m')} value={totalWidth} onChange={setTotalWidth} placeholder={t('calculator:placeholder_enter_width')} unit="m" />
-          <TextInput label={t('calculator:deck_joist_length_label')} value={joistLength} onChange={setJoistLength} placeholder={t('calculator:each_joist_length')} unit="m" />
+          <SelectDropdown
+            label={t('calculator:deck_joist_length_label')}
+            value={joistLengthKey === '5' ? t('calculator:deck_joist_length_5_m') : t('calculator:deck_joist_length_3_6_m')}
+            options={[t('calculator:deck_joist_length_3_6_m'), t('calculator:deck_joist_length_5_m')]}
+            onChange={(val) => setJoistLengthKey(val === t('calculator:deck_joist_length_5_m') ? '5' : '3.6')}
+            placeholder={t('calculator:deck_joist_length_label')}
+          />
+          <SelectDropdown
+            label={t('calculator:deck_board_stock_length_label')}
+            value={
+              boardLengthKey === '2.4'
+                ? t('calculator:deck_board_stock_2_4_m')
+                : boardLengthKey === '4.2'
+                  ? t('calculator:deck_board_stock_4_2_m')
+                  : boardLengthKey === '5'
+                    ? t('calculator:deck_board_stock_5_m')
+                    : t('calculator:deck_board_stock_3_6_m')
+            }
+            options={[
+              t('calculator:deck_board_stock_2_4_m'),
+              t('calculator:deck_board_stock_3_6_m'),
+              t('calculator:deck_board_stock_4_2_m'),
+              t('calculator:deck_board_stock_5_m'),
+            ]}
+            onChange={(val) => {
+              if (val === t('calculator:deck_board_stock_2_4_m')) setBoardLengthKey('2.4');
+              else if (val === t('calculator:deck_board_stock_4_2_m')) setBoardLengthKey('4.2');
+              else if (val === t('calculator:deck_board_stock_5_m')) setBoardLengthKey('5');
+              else setBoardLengthKey('3.6');
+            }}
+            placeholder={t('calculator:deck_board_stock_length_label')}
+          />
           <TextInput label={t('calculator:deck_distance_between_joists_label')} value={distanceBetweenJoists} onChange={setDistanceBetweenJoists} placeholder={t('calculator:distance_spacing')} unit="m" />
-          <TextInput label={t('calculator:deck_board_length_label')} value={boardLength} onChange={setBoardLength} placeholder={t('calculator:each_board_length')} unit="m" />
-          <TextInput label={t('calculator:deck_board_width_label')} value={boardWidth} onChange={setBoardWidth} placeholder={t('calculator:board_width')} unit="m" />
+          <TextInput label={t('calculator:deck_board_width_label')} value={boardWidth} onChange={setBoardWidth} placeholder={t('calculator:board_width')} unit="cm" />
           <TextInput label={t('calculator:deck_gaps_between_boards_label')} value={jointGaps} onChange={setJointGaps} placeholder={t('calculator:gap_between_boards')} unit="mm" />
           <TextInput label={t('calculator:postmix_per_post_label')} value={postmixPerPost} onChange={setPostmixPerPost} placeholder={t('calculator:enter_postmix_per_post')} />
         </CalculatorInputGrid>
 
         <SelectDropdown
           label={t('calculator:pattern_label')}
-          value={pattern === 'Length' ? t('calculator:length_option') : pattern === 'Width' ? 'Width (90° from Length)' : t('calculator:degree_angle_option')}
-          options={[t('calculator:length_option'), 'Width (90° from Length)', t('calculator:degree_angle_option')]}
-          onChange={(val) => setPattern(val === t('calculator:length_option') ? 'Length' : val === 'Width (90° from Length)' ? 'Width' : '45 degree angle')}
+          value={pattern}
+          options={[
+            { value: 'Length', label: t('calculator:length_option') },
+            { value: 'Width', label: t('calculator:width_option') },
+            { value: '45 degree angle', label: t('calculator:degree_angle_option') },
+          ]}
+          onChange={(val) => setPattern(val)}
           placeholder={t('calculator:pattern_label')}
         />
         <TextInput label={t('calculator:pattern_rotation') ?? 'Pattern rotation (°)'} value={patternRotationDeg} onChange={setPatternRotationDeg} placeholder="0" unit="°" />

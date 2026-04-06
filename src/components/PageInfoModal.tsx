@@ -35,7 +35,14 @@ function renderInlineFormatting(content: string): React.ReactNode[] {
   return result;
 }
 
-function RichText({ text }: { text: string }) {
+export function RichText({
+  text,
+  textClassName = 'text-sm leading-relaxed',
+}: {
+  text: string;
+  /** Tailwind classes for body lines (default matches PageInfo modal). */
+  textClassName?: string;
+}) {
   const paragraphs = text.split(/\n\n+/);
   return (
     <div className="space-y-3">
@@ -48,7 +55,7 @@ function RichText({ text }: { text: string }) {
             return (
               <div key={j} className={isBullet ? 'flex gap-2' : ''}>
                 {isBullet && <span className="text-blue-400 flex-shrink-0">•</span>}
-                <span className="text-sm leading-relaxed" style={{ color: colors.textMuted }}>{rendered}</span>
+                <span className={textClassName} style={{ color: colors.textMuted }}>{rendered}</span>
               </div>
             );
           })}
@@ -114,10 +121,10 @@ const PageInfoModal: React.FC<PageInfoModalProps> = ({
         onMouseLeave={() => setHovered(false)}
         style={{
           width: 22, height: 22, borderRadius: '50%',
-          background: hovered ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)',
-          border: `1px solid rgba(255,255,255,0.08)`,
-          color: hovered ? colors.textSubtle : colors.textFaint,
-          fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: hovered ? colors.bgHover : colors.bgSubtle,
+          border: `1px solid ${hovered ? colors.red : colors.borderSubtle}`,
+          color: hovered ? colors.redLight : colors.red,
+          fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: 'pointer', flexShrink: 0, marginLeft: 8, transition: transitions.fast,
         }}
         title={displayTitle}
@@ -128,7 +135,7 @@ const PageInfoModal: React.FC<PageInfoModalProps> = ({
 
       {isOpen && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/50"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-6 bg-black/50"
           onClick={() => setIsOpen(false)}
         >
           <div
@@ -138,14 +145,14 @@ const PageInfoModal: React.FC<PageInfoModalProps> = ({
           >
             {/* Header - fixed */}
             <div className="flex items-center gap-3 p-6 pb-4 flex-shrink-0">
-              <div className="flex items-center justify-center flex-shrink-0 text-red-500">
+              <div className="flex items-center justify-center flex-shrink-0" style={{ color: colors.red }}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-6 h-6">
                   <circle cx="12" cy="12" r="10" />
                   <line x1="12" y1="16" x2="12" y2="12" />
                   <line x1="12" y1="8" x2="12.01" y2="8" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-white">{title}</h3>
+              <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{displayTitle}</h3>
             </div>
 
             {/* Content - scrollable when long */}
@@ -163,7 +170,7 @@ const PageInfoModal: React.FC<PageInfoModalProps> = ({
               )}
 
               {quickTips.length > 0 && (
-                <div className="bg-gray-700/50 dark:bg-[#383a48] rounded-lg p-4 mb-4">
+                <div className="rounded-lg p-4 mb-4" style={{ backgroundColor: colors.bgCardInner }}>
                   <h4 className="text-blue-400 font-semibold text-xs uppercase tracking-wider mb-3">
                     {t('common:quick_tips')}
                   </h4>

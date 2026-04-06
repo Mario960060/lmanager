@@ -520,8 +520,8 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
         {/* Add Equipment Modal */}
         {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
-            <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
+            <div className="rounded-lg max-w-md w-full px-3 py-3 md:p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('form:add_new_equipment')}</h3>
                 <button
@@ -697,9 +697,9 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
       <div className="rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto flex flex-col" style={{ backgroundColor: colors.bgCard }}>
-        <div className="sticky top-0 z-10 flex-shrink-0 border-b py-3 px-4 flex justify-between items-center rounded-t-lg" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}>
+        <div className="sticky top-0 z-10 flex-shrink-0 border-b py-3 px-3 md:px-4 flex justify-between items-center rounded-t-lg" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}>
           <h1 className="text-base font-semibold" style={{ color: colors.textPrimary }}>{t('form:equipment_manager_heading')}</h1>
           <button
             onClick={onClose}
@@ -712,7 +712,7 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
           </button>
         </div>
 
-        <div className="p-4">
+        <div className="px-3 py-3 md:p-4">
       <div className="w-full">
         <p className="italic mb-4" style={{ color: colors.red }}>
           {t('form:equipment_creation_warning')}
@@ -756,8 +756,8 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
       {/* Add Equipment Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
-          <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
+          <div className="rounded-lg max-w-md w-full px-3 py-3 md:p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('form:add_new_equipment')}</h3>
               <button
@@ -850,8 +850,8 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
       {/* Edit Equipment Modal */}
       {showEditModal && editingEquipment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
-          <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
+          <div className="rounded-lg max-w-md w-full px-3 py-3 md:p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('form:edit_equipment_heading')}</h3>
               <button
@@ -938,8 +938,8 @@ const SetupEquipment: React.FC<SetupEquipmentProps> = ({ onClose, wizardMode = f
 
       {/* Status Update Modal */}
       {showStatusModal && selectedEquipment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
-          <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4" style={{ backgroundColor: colors.bgModalBackdrop }}>
+          <div className="rounded-lg max-w-md w-full px-3 py-3 md:p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('form:update_equipment_status_heading')}</h3>
               <button

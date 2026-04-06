@@ -3,10 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, FOOT_CARRY_SPEED_M_PER_H, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii, gradients } from '../../themes/designTokens';
-import { Card, DataTable } from '../../themes/uiComponents';
+import { Button, Card, DataTable } from '../../themes/uiComponents';
 
 interface SleeperWallCalculatorProps {
   onResultsChange?: (results: CalculationResult) => void;
@@ -303,7 +303,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -377,7 +377,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
         task: firstLayerTask.name,
         hours: firstLayerTask.estimated_hours * sleepersPerRow,
         amount: sleepersPerRow,
-        unit: 'sleepers'
+        unit: 'pieces'
       });
     }
 
@@ -389,7 +389,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
         task: regularLayerTask.name,
         hours: regularLayerTask.estimated_hours * additionalSleepers,
         amount: additionalSleepers,
-        unit: 'sleepers'
+        unit: 'pieces'
       });
     } else if (numberOfRows > 1) {
       console.warn('No task template found for building sleeper wall on top of 1st layer');
@@ -437,8 +437,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
       if (totalSleepers > 0) {
         const sleepersPerTrip = 1; // 1 sleeper per person per trip
         const trips = Math.ceil(totalSleepers / sleepersPerTrip);
-        const sleeperCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / sleeperCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / FOOT_CARRY_SPEED_M_PER_H;
         sleeperTransportTime = trips * timePerTrip;
         
         if (sleeperTransportTime > 0) {
@@ -446,7 +445,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
             task: 'transport sleepers',
             hours: sleeperTransportTime,
             amount: totalSleepers,
-            unit: 'sleepers'
+            unit: 'pieces'
           });
         }
       }
@@ -455,8 +454,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
       if (totalPosts > 0) {
         const postsPerTrip = 1; // 1 post per person per trip
         const trips = Math.ceil(totalPosts / postsPerTrip);
-        const postCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / postCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / FOOT_CARRY_SPEED_M_PER_H;
         postTransportTime = trips * timePerTrip;
         
         if (postTransportTime > 0) {
@@ -502,7 +500,7 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
 
     // Prepare materials list with optimized post calculation
     const materials: Material[] = [
-      { name: 'Sleeper', amount: totalSleepers, unit: 'sleepers', price_per_unit: null, total_price: null },
+      { name: 'Sleeper', amount: totalSleepers, unit: 'pieces', price_per_unit: null, total_price: null },
       { name: 'Post', amount: materialPostsNeeded, unit: 'posts (2.4m)', price_per_unit: null, total_price: null },
       { name: 'Postmix', amount: totalPosts * 2, unit: 'bags', price_per_unit: null, total_price: null }
     ];
@@ -747,12 +745,9 @@ const SleeperWallCalculator: React.FC<SleeperWallCalculatorProps> = ({
           </div>
         )}
 
-        <button
-          onClick={calculate}
-          style={{ width: '100%', background: colors.accentBlue, color: colors.textPrimary, padding: `${spacing['2xl']}px ${spacing['4xl']}px`, borderRadius: radii.md, border: 'none', cursor: 'pointer' }}
-        >
+        <Button variant="primary" fullWidth onClick={calculate}>
           {t('calculator:calculate_button')}
-        </button>
+        </Button>
 
         {result && (
           <div style={{ marginTop: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }} ref={resultsRef}>

@@ -335,7 +335,7 @@ const UserProfile = () => {
 
         {/* First row of buttons - original style */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-          <Button variant="primary" fullWidth onClick={handleAbandonTeamClick} disabled={isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: `linear-gradient(135deg, ${colors.amber}, ${colors.orangeLight})` }}>
+          <Button variant="danger" fullWidth onClick={handleAbandonTeamClick} disabled={isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {(isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending) && <Loader2 className="h-5 w-5 animate-spin" />}
             {(isAdmin ? deleteCompanyMutation.isPending : abandonTeamMutation.isPending) ? (isAdmin ? t('common:deleting_company') : t('common:leaving')) : (isAdmin ? t('common:delete_company') : t('common:abandon_team'))}
           </Button>
@@ -349,91 +349,75 @@ const UserProfile = () => {
       {/* Feature Cards - ProjectManagement style */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Check Weekly Hours Card */}
-        <div className="p-6 rounded-lg shadow-lg cursor-pointer transition-colors" style={{ backgroundColor: colors.bgCard }} onClick={() => setShowCheckWeeklyHoursModal(true)} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.bgHover; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.bgCard; }}>
+        <div className="p-6 rounded-lg shadow-lg flex flex-col" style={{ backgroundColor: colors.bgCard }}>
           <div className="flex items-center mb-4">
             <BarChart className="w-6 h-6 mr-3" style={{ color: colors.accentBlue }} />
             <h2 className="text-xl font-semibold">{t('common:check_weekly_hours')}</h2>
           </div>
-          <p className="mb-4" style={{ color: colors.textSubtle }}>
+          <p className="flex-1 mb-4" style={{ color: colors.textSubtle }}>
             {t('common:check_weekly_hours_desc')}
           </p>
-          <Button variant="primary" fullWidth>{t('common:check_hours')}</Button>
+          <Button variant="primary" fullWidth onClick={() => setShowCheckWeeklyHoursModal(true)}>{t('common:check_hours')}</Button>
         </div>
 
         {/* Task Performance Card */}
-        <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
+        <div className="p-6 rounded-lg shadow-lg flex flex-col" style={{ backgroundColor: colors.bgCard }}>
           <div className="flex items-center mb-4">
             <BarChart className="w-6 h-6 mr-3" style={{ color: colors.accentBlue }} />
             <h2 className="text-xl font-semibold">{t('common:your_task_performance')}</h2>
           </div>
-          <p className="mb-4" style={{ color: colors.textSubtle }}>
+          <p className="flex-1 mb-4" style={{ color: colors.textSubtle }}>
             {t('common:task_performance_desc')}
           </p>
-          <button
-            onClick={() => setShowTaskPerformanceModal(true)}
-            className="w-full py-2 px-4 rounded-lg transition-colors"
-            style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = colors.accentBlueDark; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = colors.accentBlue; }}
-          >
-            {t('common:view_performance')}
-          </button>
+          <Button variant="primary" fullWidth onClick={() => setShowTaskPerformanceModal(true)}>{t('common:view_performance')}</Button>
         </div>
 
         {/* Additional Tasks Card */}
-        <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
+        <div className="p-6 rounded-lg shadow-lg flex flex-col" style={{ backgroundColor: colors.bgCard }}>
           <div className="flex items-center mb-4">
             <ClipboardList className="w-6 h-6 mr-3" style={{ color: colors.green }} />
             <h2 className="text-xl font-semibold">{t('common:additional_tasks')}</h2>
           </div>
-          <p className="mb-4" style={{ color: colors.textSubtle }}>
+          <p className="flex-1 mb-4" style={{ color: colors.textSubtle }}>
             {t('common:additional_tasks_desc')}
           </p>
-          <Button variant="success" fullWidth onClick={() => setShowAdditionalTasksModal(true)}>{t('common:view_tasks')}</Button>
+          <Button variant="primary" fullWidth onClick={() => setShowAdditionalTasksModal(true)}>{t('common:view_tasks')}</Button>
         </div>
 
         {/* Material Added Card */}
-        <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
+        <div className="p-6 rounded-lg shadow-lg flex flex-col" style={{ backgroundColor: colors.bgCard }}>
           <div className="flex items-center mb-4">
             <Truck className="w-6 h-6 mr-3" style={{ color: colors.purple }} />
             <h2 className="text-xl font-semibold">{t('common:material_added')}</h2>
           </div>
-          <p className="mb-4" style={{ color: colors.textSubtle }}>
+          <p className="flex-1 mb-4" style={{ color: colors.textSubtle }}>
             {t('common:material_added_desc')}
           </p>
-          <Button variant="primary" fullWidth onClick={() => setShowMaterialAddedModal(true)} style={{ background: `linear-gradient(135deg, ${colors.purple}, ${colors.purpleLight})` }}>{t('common:view_materials')}</Button>
+          <Button variant="primary" fullWidth onClick={() => setShowMaterialAddedModal(true)}>{t('common:view_materials')}</Button>
         </div>
 
         {/* Additional Materials Card */}
-        <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
+        <div className="p-6 rounded-lg shadow-lg flex flex-col" style={{ backgroundColor: colors.bgCard }}>
           <div className="flex items-center mb-4">
             <Package className="w-6 h-6 mr-3" style={{ color: colors.accentBlue }} />
             <h2 className="text-xl font-semibold">{t('common:additional_materials')}</h2>
           </div>
-          <p className="mb-4" style={{ color: colors.textSubtle }}>
+          <p className="flex-1 mb-4" style={{ color: colors.textSubtle }}>
             {t('common:additional_materials_desc')}
           </p>
           <Button variant="primary" fullWidth onClick={() => setShowAdditionalMaterialsModal(true)}>{t('common:view_materials')}</Button>
         </div>
 
         {/* Day Notes Card */}
-        <div className="p-6 rounded-lg shadow-lg" style={{ backgroundColor: colors.bgCard }}>
+        <div className="p-6 rounded-lg shadow-lg flex flex-col" style={{ backgroundColor: colors.bgCard }}>
           <div className="flex items-center mb-4">
             <FileText className="w-6 h-6 mr-3" style={{ color: colors.teal }} />
             <h2 className="text-xl font-semibold">{t('common:day_notes')}</h2>
           </div>
-          <p className="mb-4" style={{ color: colors.textSubtle }}>
+          <p className="flex-1 mb-4" style={{ color: colors.textSubtle }}>
             {t('common:day_notes_desc')}
           </p>
-          <button
-            onClick={() => setShowDayNotesModal(true)}
-            className="w-full py-2 px-4 rounded-lg transition-colors"
-            style={{ backgroundColor: colors.teal, color: colors.textOnAccent }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-          >
-            {t('common:view_notes')}
-          </button>
+          <Button variant="primary" fullWidth onClick={() => setShowDayNotesModal(true)}>{t('common:view_notes')}</Button>
         </div>
       </div>
       
@@ -464,8 +448,8 @@ const UserProfile = () => {
 
       {/* Abandon Team / Delete Company Confirmation Modal */}
       {showAbandonConfirmation && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="rounded-lg max-w-md w-full p-6" style={{ backgroundColor: colors.bgCard }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="rounded-lg max-w-md w-full px-3 py-3 md:p-6" style={{ backgroundColor: colors.bgCard }}>
             {isAdmin && (
               <div className="flex items-center gap-2 mb-4 p-3 rounded-lg" style={{ backgroundColor: colors.amberBg, color: colors.amber }}>
                 <AlertCircle className="h-5 w-5 flex-shrink-0" />

@@ -6,7 +6,7 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { X, Clock, Wrench, FileText, Check, Sparkles, AlertCircle } from "lucide-react";
+import { X, Clock, Wrench, FileText, Check, Sparkles, AlertCircle, Pickaxe } from "lucide-react";
 import { translateTaskName, translateMaterialName, translateUnit } from "../../lib/translationMap";
 import { Shape } from "./geometry";
 import { ProjectSettings } from "./types";
@@ -58,9 +58,87 @@ function isProjectCardComplete(ps: ProjectSettings): boolean {
 type TaskItem = { task: string; name?: string; hours: number; amount?: number | string; unit?: string };
 type MaterialItem = { name: string; quantity: number; unit: string };
 
+/** Same classification as projectSubmit — digging/transport prep tasks. */
+function isDiggingOrPreparationTask(taskName: string): boolean {
+  const n = (taskName || "").toLowerCase();
+  return (
+    n.includes("excavation") ||
+    n.includes("digging") ||
+    n.includes("preparation with") ||
+    n.includes("loading tape1") ||
+    n.includes("loading soil") ||
+    n.includes("loading sand") ||
+    n.includes("transporting soil") ||
+    n.includes("transporting tape1") ||
+    n.includes("transport tape1") ||
+    n.includes("transport soil") ||
+    n.includes("foundation excavation") ||
+    n.includes("soil excavation")
+  );
+}
+
+/** Hours shown in „Kopanie i przygotowanie” — kopanie + zagęszczanie / poziomowanie / grunt pod kruszywem (preview only). */
+function isDiggingAndPrepPreviewTask(taskName: string): boolean {
+  if (isDiggingOrPreparationTask(taskName)) return true;
+  const n = (taskName || "").toLowerCase();
+  return (
+    n.includes("compacting") ||
+    n.includes("final leveling") ||
+    (n.includes("leveling") && n.includes("type 1")) ||
+    n.includes("sand screeding") ||
+    n.includes("primer coating") ||
+    n.includes("mixing mortar")
+  );
+}
+
+function taskLineHours(t: any): number {
+  const raw = t?.hours ?? t?.normalizedHours;
+  if (typeof raw === "number" && !Number.isNaN(raw)) return raw;
+  const n = parseFloat(String(raw ?? "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function soilTonnesFromMaterials(materials: { name: string; quantity: number }[] | undefined): number {
+  if (!materials?.length) return 0;
+  let s = 0;
+  for (const m of materials) {
+    if (!m.quantity || m.quantity <= 0) continue;
+    const n = (m.name || "").toLowerCase();
+    if (n.includes("soil excavation")) {
+      s += m.quantity;
+      continue;
+    }
+    if (n.includes("fill") && n.includes("soil")) {
+      s += m.quantity;
+    }
+  }
+  return Math.round(s * 1000) / 1000;
+}
+
+function tape1TonnesFromMaterials(materials: { name: string; quantity: number }[] | undefined): number {
+  if (!materials?.length) return 0;
+  let s = 0;
+  for (const m of materials) {
+    if (!m.quantity || m.quantity <= 0) continue;
+    const n = (m.name || "").trim().toLowerCase();
+    if (n === "tape1" || n.startsWith("tape1")) {
+      s += m.quantity;
+    }
+  }
+  return Math.round(s * 1000) / 1000;
+}
+
+type DiggingPrepPreviewRow = {
+  elementName: string;
+  soilTonnes: number;
+  tape1Tonnes: number;
+  hours: number;
+};
+
 function aggregatePreview(shapes: Shape[], elementFallback: string) {
-  const layer2Shapes = shapes.filter((s) => s.layer === 2 && s.calculatorResults);
+  const layer2Shapes = shapes.filter((s) => s.layer === 2 && s.calculatorResults && !s.removedFromCanvas);
   const tasksByElement: { elementName: string; tasks: TaskItem[]; isGroundwork: boolean }[] = [];
+  const diggingPrepRows: DiggingPrepPreviewRow[] = [];
   const materialMap = new Map<string, MaterialItem>();
   let totalHours = 0;
 
@@ -68,28 +146,53 @@ function aggregatePreview(shapes: Shape[], elementFallback: string) {
     const r = shape.calculatorResults!;
     const elementName = shape.label || r.name || shape.calculatorType || elementFallback;
     const isGroundwork = isGroundworkLinear(shape);
+    const soilT = soilTonnesFromMaterials(r.materials);
+    const tape1T = tape1TonnesFromMaterials(r.materials);
 
     if (r.taskBreakdown && r.taskBreakdown.length > 0) {
-      const tasks: TaskItem[] = r.taskBreakdown
-        .map((t: any) => ({
-          task: t.task ?? t.name ?? "",
-          name: t.name,
-          hours: t.hours ?? 0,
-          amount: t.amount,
-          unit: t.unit,
-        }))
-        .sort((a: TaskItem, b: TaskItem) => (b.hours ?? 0) - (a.hours ?? 0)); // most hours first
-      tasksByElement.push({ elementName, tasks, isGroundwork });
-      totalHours += tasks.reduce((s, t) => s + (t.hours ?? 0), 0);
+      const rawTasks: TaskItem[] = r.taskBreakdown.map((t: any) => ({
+        task: t.task ?? t.name ?? "",
+        name: t.name,
+        hours: taskLineHours(t),
+        amount: t.amount,
+        unit: t.unit,
+      }));
+      totalHours += rawTasks.reduce((s, t) => s + (t.hours ?? 0), 0);
+
+      const diggingTasks = rawTasks.filter((t) => isDiggingAndPrepPreviewTask(t.task));
+      const otherTasks = rawTasks.filter((t) => !isDiggingAndPrepPreviewTask(t.task));
+      const diggingHours = diggingTasks.reduce((s, t) => s + (t.hours ?? 0), 0);
+
+      if (diggingHours > 0 || soilT > 0 || tape1T > 0) {
+        diggingPrepRows.push({
+          elementName,
+          soilTonnes: soilT,
+          tape1Tonnes: tape1T,
+          hours: diggingHours,
+        });
+      }
+
+      if (otherTasks.length > 0) {
+        const tasks = [...otherTasks].sort((a, b) => (b.hours ?? 0) - (a.hours ?? 0));
+        tasksByElement.push({ elementName, tasks, isGroundwork });
+      }
     } else {
       const h = r.hours_worked ?? r.totalTime ?? r.labor ?? 0;
       if (h > 0) {
+        totalHours += h;
+        if (soilT > 0 || tape1T > 0) {
+          diggingPrepRows.push({
+            elementName,
+            soilTonnes: soilT,
+            tape1Tonnes: tape1T,
+            hours: 0,
+          });
+        }
         tasksByElement.push({
           elementName,
           tasks: [{ task: elementName, hours: h, amount: r.amount, unit: r.unit }],
           isGroundwork,
         });
-        totalHours += h;
       }
     }
 
@@ -119,7 +222,7 @@ function aggregatePreview(shapes: Shape[], elementFallback: string) {
     return sumB - sumA;
   });
 
-  return { tasksByElement, materials, totalHours };
+  return { tasksByElement, materials, totalHours, diggingPrepRows };
 }
 
 function calcGroupTotal(tasks: TaskItem[]): string {
@@ -139,7 +242,18 @@ export default function CreatePreviewModal({
   onOpenProjectCard,
 }: CreatePreviewModalProps) {
   const { t } = useTranslation(["project", "calculator", "material", "units"]);
-  const { tasksByElement, materials, totalHours } = aggregatePreview(shapes, t("project:create_preview_element_fallback"));
+  const { tasksByElement, materials, totalHours, diggingPrepRows } = aggregatePreview(
+    shapes,
+    t("project:create_preview_element_fallback")
+  );
+  const diggingPrepTotals = diggingPrepRows.reduce(
+    (a, r) => ({
+      soilTonnes: a.soilTonnes + r.soilTonnes,
+      tape1Tonnes: a.tape1Tonnes + r.tape1Tonnes,
+      hours: a.hours + r.hours,
+    }),
+    { soilTonnes: 0, tape1Tonnes: 0, hours: 0 }
+  );
   const isCardComplete = isProjectCardComplete(projectSettings);
 
   useEffect(() => {
@@ -172,6 +286,7 @@ export default function CreatePreviewModal({
 
   const modalContent = (
     <div
+      className="canvas-modal-backdrop"
       style={{
         position: "fixed",
         inset: 0,
@@ -186,6 +301,7 @@ export default function CreatePreviewModal({
       onMouseDown={onCancel}
     >
       <div
+        className="canvas-modal-content"
         style={{
           width: "100%",
           maxWidth: 800,
@@ -367,7 +483,207 @@ export default function CreatePreviewModal({
             />
           </div>
 
-          {/* Task breakdown */}
+          {/* Digging & preparation — per element (soil / type 1 / time); matches materials + digging task hours */}
+          {diggingPrepRows.length > 0 && (
+            <>
+              <SectionLabel title={t("project:create_preview_digging_prep_section")} icon={<Pickaxe size={17} />} />
+              <div
+                style={{
+                  overflowX: "auto",
+                  WebkitOverflowScrolling: "touch",
+                  marginBottom: 22,
+                }}
+              >
+              <div
+                style={{
+                  background: D.bgCard,
+                  borderRadius: D.radius,
+                  border: `1px solid ${D.borderSubtle}`,
+                  overflow: "hidden",
+                  minWidth: 320,
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(100px,1fr) 88px 88px 80px",
+                    gap: 4,
+                    padding: "9px 12px",
+                    borderBottom: "1px solid rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      color: D.textMuted,
+                    }}
+                  >
+                    {t("project:create_preview_digging_element")}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      color: D.textMuted,
+                      textAlign: "right",
+                    }}
+                  >
+                    {t("project:create_preview_soil_tonnes")}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      color: D.textMuted,
+                      textAlign: "right",
+                    }}
+                  >
+                    {t("project:create_preview_tape1_tonnes")}
+                  </span>
+                  <span
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
+                      gap: 2,
+                      textAlign: "right",
+                      lineHeight: 1.15,
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        color: D.textMuted,
+                      }}
+                    >
+                      {t("project:create_preview_digging_hours")}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.62rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                        color: D.textMuted,
+                      }}
+                    >
+                      {t("project:create_preview_digging_hours_subtitle")}
+                    </span>
+                  </span>
+                </div>
+                {diggingPrepRows.map((row, i) => (
+                  <div
+                    key={`${row.elementName}-${i}`}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "minmax(100px,1fr) 88px 88px 80px",
+                      gap: 4,
+                      padding: "10px 12px",
+                      alignItems: "center",
+                      background: i % 2 === 1 ? D.bgRowEven : "transparent",
+                      borderTop: i > 0 ? `1px solid ${D.borderTable}` : "none",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.92rem", color: D.textPrimary, fontWeight: 600 }}>{row.elementName}</span>
+                    <span
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: "0.88rem",
+                        fontWeight: 600,
+                        color: D.textSecondary,
+                        textAlign: "right",
+                      }}
+                    >
+                      {row.soilTonnes > 0 ? fmtQ(row.soilTonnes) : "—"}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: "0.88rem",
+                        fontWeight: 600,
+                        color: D.teal,
+                        textAlign: "right",
+                      }}
+                    >
+                      {row.tape1Tonnes > 0 ? fmtQ(row.tape1Tonnes) : "—"}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: "0.88rem",
+                        fontWeight: 700,
+                        color: D.textPrimary,
+                        textAlign: "right",
+                      }}
+                    >
+                      {fmtH(row.hours)}
+                    </span>
+                  </div>
+                ))}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(100px,1fr) 88px 88px 80px",
+                    gap: 4,
+                    padding: "6px 12px 8px",
+                    borderTop: `1px dashed ${colors.borderDefault}`,
+                    alignItems: "center",
+                    background: D.bgSectionHeader,
+                  }}
+                >
+                  <span style={{ fontSize: "0.82rem", color: D.textMuted, fontWeight: 600, fontStyle: "italic" }}>
+                    {t("project:create_preview_subtotal")}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: "0.9rem",
+                      fontWeight: 700,
+                      color: D.textSecondary,
+                      textAlign: "right",
+                    }}
+                  >
+                    {diggingPrepTotals.soilTonnes > 0 ? fmtQ(diggingPrepTotals.soilTonnes) : "—"}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: "0.9rem",
+                      fontWeight: 700,
+                      color: D.teal,
+                      textAlign: "right",
+                    }}
+                  >
+                    {diggingPrepTotals.tape1Tonnes > 0 ? fmtQ(diggingPrepTotals.tape1Tonnes) : "—"}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: "0.9rem",
+                      fontWeight: 700,
+                      color: D.teal,
+                      textAlign: "right",
+                    }}
+                  >
+                    {fmtH(diggingPrepTotals.hours)}
+                  </span>
+                </div>
+              </div>
+              </div>
+            </>
+          )}
+
+          {/* Task breakdown (installation etc.; digging lines are listed above) */}
           {tasksByElement.length > 0 && (
             <>
               <SectionLabel title={t("project:create_preview_task_breakdown")} icon={<Wrench size={17} />} />
@@ -454,7 +770,7 @@ export default function CreatePreviewModal({
                             fontFamily: "'JetBrains Mono', monospace",
                           }}
                         >
-                          {fmtH(t.hours)}
+                          {fmtH(task.hours)}
                         </span>
                       </div>
                     ))}

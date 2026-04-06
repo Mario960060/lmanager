@@ -8,7 +8,6 @@ import { X } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { useAuthStore } from "../../../lib/store";
 import { Shape, LayerID } from "../geometry";
-import { C } from "../geometry";
 import { makeRectangle } from "../geometry";
 import { ProjectSettings } from "../types";
 import { mapProjectCompactorToOption } from "../../../components/Calculator/CompactorSelector";
@@ -139,22 +138,22 @@ const StairsCreationModal: React.FC<StairsCreationModalProps> = ({
 
   return (
     <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div className="canvas-modal-content" style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 8, width: "100%", maxWidth: 900, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottom: `1px solid ${C.panelBorder}` }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: C.text }}>{t("project:stairs_title", { label })}</h2>
-          <button onClick={onClose} style={{ padding: 8, background: "transparent", border: "none", cursor: "pointer", color: C.text }}>
+      <div className="canvas-modal-content" style={{ background: colors.bgElevated, border: `1px solid ${colors.borderDefault}`, borderRadius: 8, width: "100%", maxWidth: 900, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottom: `1px solid ${colors.borderDefault}` }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: colors.textPrimary }}>{t("project:stairs_title", { label })}</h2>
+          <button onClick={onClose} style={{ padding: 8, background: "transparent", border: "none", cursor: "pointer", color: colors.textPrimary }}>
             <X size={20} />
           </button>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-          <p style={{ fontSize: 13, color: C.textDim, marginBottom: 16 }}>
+          <p style={{ fontSize: 13, color: colors.textDim, marginBottom: 16 }}>
             {t("project:stairs_instruction")}
           </p>
 
           {carriers.length > 0 && (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontWeight: 600, marginBottom: 6, color: C.text, fontSize: 13 }}>{t("project:stairs_material_carrier")}</div>
+              <div style={{ fontWeight: 600, marginBottom: 6, color: colors.textPrimary, fontSize: 13 }}>{t("project:stairs_material_carrier")}</div>
               <select
                 value={(materialCarrier as any)?.id ?? ""}
                 onChange={(e) => {
@@ -164,10 +163,10 @@ const StairsCreationModal: React.FC<StairsCreationModalProps> = ({
                 style={{
                   width: "100%",
                   padding: "8px 12px",
-                  background: C.bg,
-                  border: `1px solid ${C.panelBorder}`,
+                  background: colors.bgInput,
+                  border: `1px solid ${colors.borderDefault}`,
                   borderRadius: 6,
-                  color: C.text,
+                  color: colors.textPrimary,
                   fontSize: 13,
                   fontFamily: "inherit",
                 }}
@@ -184,17 +183,17 @@ const StairsCreationModal: React.FC<StairsCreationModalProps> = ({
 
           {calculatorResults && (
             <div style={{ marginBottom: spacing["3xl"], padding: spacing.xl, background: colors.greenBg, border: `1px solid ${colors.greenBorder}`, borderRadius: radii.md, fontSize: 13 }}>
-              <div style={{ fontWeight: 600, marginBottom: spacing.md, color: C.text }}>{t("project:stairs_result_title")}</div>
+              <div style={{ fontWeight: 600, marginBottom: spacing.md, color: colors.textPrimary }}>{t("project:stairs_result_title")}</div>
               {calculatorResults.hours_worked != null && (
-                <div style={{ color: C.text }}>
+                <div style={{ color: colors.textPrimary }}>
                   {t("project:stairs_hours")} <span style={{ color: colors.greenLight, fontWeight: 600 }}>{Number(calculatorResults.hours_worked).toFixed(2)} h</span>
                 </div>
               )}
               {calculatorResults.materials && calculatorResults.materials.length > 0 && (
                 <div style={{ marginTop: 6 }}>
-                  <div style={{ color: C.textDim, marginBottom: 4 }}>{t("project:stairs_materials")}</div>
+                  <div style={{ color: colors.textDim, marginBottom: 4 }}>{t("project:stairs_materials")}</div>
                   {calculatorResults.materials.map((m: any, i: number) => (
-                    <div key={i} style={{ color: C.text, paddingLeft: 8 }}>
+                    <div key={i} style={{ color: colors.textPrimary, paddingLeft: 8 }}>
                       {translateMaterialName(m.name, t)}: {m.quantity ?? m.amount} {translateUnit(m.unit, t)}
                     </div>
                   ))}
@@ -206,10 +205,10 @@ const StairsCreationModal: React.FC<StairsCreationModalProps> = ({
           {renderCalculator()}
         </div>
 
-        <div style={{ padding: 16, borderTop: `1px solid ${C.panelBorder}`, display: "flex", justifyContent: "flex-end", gap: 12 }}>
+        <div style={{ padding: 16, borderTop: `1px solid ${colors.borderDefault}`, display: "flex", justifyContent: "flex-end", gap: 12 }}>
           <button
             onClick={onClose}
-            style={{ padding: "8px 16px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, cursor: "pointer", fontSize: 13 }}
+            style={{ padding: "8px 16px", background: colors.bgOverlay, border: `1px solid ${colors.borderDefault}`, borderRadius: 6, color: colors.textPrimary, cursor: "pointer", fontSize: 13 }}
           >
             {t("common:cancel")}
           </button>
@@ -218,10 +217,10 @@ const StairsCreationModal: React.FC<StairsCreationModalProps> = ({
             disabled={!calculatorResults}
             style={{
               padding: "8px 16px",
-              background: calculatorResults ? C.accent : C.button,
+              background: calculatorResults ? colors.accentBlue : colors.bgOverlay,
               border: "none",
               borderRadius: 6,
-              color: calculatorResults ? C.bg : C.textDim,
+              color: calculatorResults ? colors.bgInput : colors.textDim,
               cursor: calculatorResults ? "pointer" : "not-allowed",
               fontSize: 13,
             }}

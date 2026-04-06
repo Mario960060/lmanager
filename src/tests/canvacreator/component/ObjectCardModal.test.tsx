@@ -134,7 +134,7 @@ describe("ObjectCardModal", () => {
       </AllProviders>
     );
 
-    expect(screen.getByText("Slab Calculator")).toBeInTheDocument();
+    expect(screen.getByText("Slabs (standard)")).toBeInTheDocument();
     expect(screen.getByText("Monoblock Paving")).toBeInTheDocument();
     expect(screen.getByText("Natural Turf")).toBeInTheDocument();
   });
@@ -172,7 +172,7 @@ describe("ObjectCardModal", () => {
       </AllProviders>
     );
 
-    const slabBtn = screen.getByText("Slab Calculator");
+    const slabBtn = screen.getByText("Slabs (standard)");
     fireEvent.click(slabBtn);
     expect(screen.getByTestId("mock-calculator")).toBeInTheDocument();
   });
@@ -268,8 +268,32 @@ describe("ObjectCardModal", () => {
     );
 
     const buttons = screen.getAllByRole("button");
-    const xButton = buttons.find(b => !b.textContent?.includes("Cancel") && !b.textContent?.includes("Save"));
+    const xButton = buttons.find(
+      b =>
+        !b.textContent?.includes("Cancel") &&
+        !b.textContent?.includes("Save to shape")
+    );
     fireEvent.click(xButton!);
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("wall element shows brick and double wall subtype buttons (EN)", () => {
+    const shape = makeLinearShape({ elementType: "wall" });
+    render(
+      <AllProviders>
+        <ObjectCardModal
+          shape={shape}
+          shapeIdx={0}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+          projectSettings={DEFAULT_PROJECT_SETTINGS}
+        />
+      </AllProviders>
+    );
+
+    expect(screen.getByRole("button", { name: "Brick Wall" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Cavity / double-skin wall" })
+    ).toBeInTheDocument();
   });
 });

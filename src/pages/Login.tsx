@@ -208,11 +208,9 @@ const Login = () => {
 
             {!isLogin && (
               <div>
-                <Label>
-                  <span style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 }}>
-                    {t('common:full_name')}
-                  </span>
-                </Label>
+                <label htmlFor="full-name" style={srOnly}>
+                  {t('common:full_name')}
+                </label>
                 <input
                   id="full-name"
                   name="fullName"

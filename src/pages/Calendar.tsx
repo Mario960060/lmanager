@@ -27,6 +27,7 @@ import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Database } from '../lib/database.types';
 import BackButton from '../components/BackButton';
+import { useSidebarSectionReset } from '../hooks/useSidebarSectionReset';
 import DayDetailsModal from '../components/DayDetailsModal';
 import DatePicker from '../components/DatePicker';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
@@ -36,10 +37,10 @@ type Event = Database['public']['Tables']['events']['Row'];
 
 // Status config matching the design from images
 const statusConfig: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  in_progress: { label: 'W Trakcie', color: '#f97316', bg: 'rgba(249,115,22,0.12)', border: 'rgba(249,115,22,0.3)' },
-  scheduled: { label: 'Zaplanowany', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)' },
-  planned: { label: 'Zaplanowany', color: '#22c55e', bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)' },
-  finished: { label: 'Zakończony', color: '#64748b', bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)' },
+  in_progress: { label: 'W Trakcie', color: colors.statusInProgress.dot, bg: colors.statusInProgress.bg, border: colors.statusInProgress.border },
+  scheduled: { label: 'Zaplanowany', color: colors.statusPlanned.dot, bg: colors.statusPlanned.bg, border: colors.statusPlanned.border },
+  planned: { label: 'Zaplanowany', color: colors.statusPlanned.dot, bg: colors.statusPlanned.bg, border: colors.statusPlanned.border },
+  finished: { label: 'Zakończony', color: colors.statusDone.dot, bg: colors.statusDone.bg, border: colors.statusDone.border },
 };
 
 function StatusBadge({ status, t }: { status: string; t: (k: string) => string }) {
@@ -140,7 +141,7 @@ function WeeklyEventCard({
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: colors.textDim, fontWeight: 500 }}>
             <ClipboardList size={12} style={{ opacity: 0.6 }} />
-            {tasksCount} {t('dashboard:tasks_short')}
+            {tasksCount} {t('dashboard:planned_tasks_short')}
           </span>
           {materialsCount > 0 && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: colors.textDim, fontWeight: 500 }}>
@@ -172,6 +173,8 @@ const Calendar = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const companyId = useAuthStore(state => state.getCompanyId());
+
+  useSidebarSectionReset('/calendar', () => setShowAddMaterialModal(false));
 
   useEffect(() => {
     const dateParam = searchParams.get('date');
@@ -223,24 +226,40 @@ const Calendar = () => {
   const weekDates = eachDayOfInterval({ start: weekStart, end: weekEnd });
   const weekDateStrings = weekDates.map(d => format(d, 'yyyy-MM-dd'));
 
-  const { data: tasksCountByEvent = {} } = useQuery({
-    queryKey: ['tasks_done_count', eventIds, companyId],
+  const { data: weekPlannedBlocks = [] } = useQuery({
+    queryKey: ['calendar_week_planned_tasks', weekDateStrings.join(','), eventIds.join(','), companyId],
     queryFn: async () => {
-      if (eventIds.length === 0) return {};
+      if (weekDateStrings.length === 0 || eventIds.length === 0) return [];
       const { data, error } = await supabase
-        .from('tasks_done')
-        .select('event_id')
-        .eq('company_id', companyId)
-        .in('event_id', eventIds);
+        .from('calendar_day_plan_blocks')
+        .select('event_id, plan_date, calendar_day_plan_block_tasks!block_id(tasks_done_id)')
+        .eq('company_id', companyId!)
+        .in('plan_date', weekDateStrings)
+        .in('event_id', eventIds as string[]);
       if (error) throw error;
-      const acc: Record<string, number> = {};
-      (data || []).forEach((row: { event_id: string | null }) => {
-        if (row.event_id) acc[row.event_id] = (acc[row.event_id] || 0) + 1;
-      });
-      return acc;
+      return data || [];
     },
-    enabled: !!companyId && eventIds.length > 0,
+    enabled: !!companyId && view === 'week' && weekDateStrings.length > 0 && eventIds.length > 0,
   });
+
+  const plannedTasksCountByEventDate = useMemo(() => {
+    const m: Record<string, Set<string>> = {};
+    for (const row of weekPlannedBlocks as Array<{
+      event_id?: string | null;
+      plan_date?: string | null;
+      calendar_day_plan_block_tasks?: Array<{ tasks_done_id?: string | null }> | null;
+    }>) {
+      if (!row.event_id || !row.plan_date) continue;
+      const key = `${row.event_id}:${row.plan_date}`;
+      if (!m[key]) m[key] = new Set();
+      for (const t of row.calendar_day_plan_block_tasks || []) {
+        if (t.tasks_done_id) m[key].add(t.tasks_done_id);
+      }
+    }
+    const out: Record<string, number> = {};
+    for (const [k, set] of Object.entries(m)) out[k] = set.size;
+    return out;
+  }, [weekPlannedBlocks]);
 
   const { data: weekMaterials = [] } = useQuery({
     queryKey: ['calendar_materials_week', weekDateStrings, companyId],
@@ -607,10 +626,26 @@ const Calendar = () => {
             </div>
           )}
 
-          {/* Week View */}
+          {/* Week View — horizontal scroll on narrow screens so all 7 days stay usable */}
           {view === 'week' && (
-            <div style={{ padding: 12 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8 }}>
+            <div
+              style={{
+                padding: 12,
+                overflowX: 'auto',
+                overflowY: 'visible',
+                WebkitOverflowScrolling: 'touch',
+                overscrollBehaviorX: 'contain',
+              }}
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(7, minmax(140px, 1fr))',
+                  gap: 8,
+                  width: 'max(100%, calc(7 * 140px + 6 * 8px))',
+                  boxSizing: 'border-box',
+                }}
+              >
                 {weekDates.map((date, i) => {
                   const dayEvents = filteredEvents.filter(event => {
                     const eventStart = parseISO(event.start_date);
@@ -665,7 +700,7 @@ const Calendar = () => {
                           <WeeklyEventCard
                             key={ev.id}
                             event={ev}
-                            tasksCount={tasksCountByEvent[ev.id] || 0}
+                            tasksCount={plannedTasksCountByEventDate[`${ev.id}:${dateStr}`] || 0}
                             materialsCount={materialsByEventDate[`${ev.id}:${dateStr}`] || 0}
                             equipmentCount={equipmentByEventDate[`${ev.id}:${dateStr}`] || 0}
                             onClick={() => handleEventClick(ev.id)}

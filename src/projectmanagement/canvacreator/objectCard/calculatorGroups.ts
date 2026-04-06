@@ -27,8 +27,16 @@ export const POLYGON_CALCULATOR_GROUPS: CalcGroup[] = [
   { type: "slab", label: "calc_group_slabs", subTypes: [{ type: "default", label: "calc_subtype_slab_calculator" }, { type: "concreteSlabs", label: "calc_subtype_concrete_slabs" }] },
   { type: "paving", label: "calc_group_paving", subTypes: [{ type: "default", label: "calc_subtype_monoblock_paving" }] },
   { type: "grass", label: "calc_group_artificial_grass", subTypes: [{ type: "default", label: "calc_subtype_artificial_grass" }] },
-  { type: "deck", label: "calc_group_deck", subTypes: [{ type: "default", label: "calc_subtype_decking_standard" }] },
+  {
+    type: "deck",
+    label: "calc_group_deck",
+    subTypes: [
+      { type: "default", label: "calc_subtype_decking_standard" },
+      { type: "composite_deck", label: "calc_subtype_composite_decking" },
+    ],
+  },
   { type: "turf", label: "calc_group_natural_turf", subTypes: [{ type: "default", label: "calc_subtype_natural_turf" }] },
+  { type: "decorativeStones", label: "calc_group_decorative_stones", subTypes: [{ type: "default", label: "calc_subtype_decorative_stones" }] },
 ];
 
 export const FENCE_CALCULATOR_GROUPS: CalcGroup[] = [
@@ -43,6 +51,8 @@ export const FENCE_CALCULATOR_GROUPS: CalcGroup[] = [
 export const WALL_CALCULATOR_GROUPS: CalcGroup[] = [
   { type: "wall", label: "calc_group_wall", subTypes: [
     { type: "brick", label: "calc_subtype_brick_wall" },
+    /** Cavity / double-skin: brick + 4"/6" blocks only; sleeper is a separate wall subtype, never a leaf here. */
+    { type: "double_wall", label: "calc_subtype_double_wall" },
     { type: "block4", label: "calc_subtype_block4_wall" },
     { type: "block7", label: "calc_subtype_block7_wall" },
     { type: "sleeper", label: "calc_subtype_sleeper_wall" },

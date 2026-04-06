@@ -1,8 +1,8 @@
 import React, { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { FileDown } from "lucide-react";
-import { C } from "./geometry";
 import { colors, shadows } from "../../themes/designTokens";
+import { useBackdropPointerDismiss } from "../../hooks/useBackdropPointerDismiss";
 
 interface PlanPdfExportModalProps {
   isOpen: boolean;
@@ -50,39 +50,45 @@ export default function PlanPdfExportModal({
     onExport(layers);
   };
 
+  const backdropDismiss = useBackdropPointerDismiss(onClose, isOpen && !isExporting);
+
   if (!isOpen) return null;
 
   return (
     <div
+      ref={backdropDismiss.backdropRef}
+      className="canvas-modal-backdrop"
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.6)",
+        background: colors.bgModalBackdrop,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         zIndex: 1000,
         backdropFilter: "blur(4px)",
       }}
-      onClick={!isExporting ? onClose : undefined}
+      onPointerDown={!isExporting ? backdropDismiss.onBackdropPointerDown : undefined}
     >
       <div
+        className="canvas-modal-content"
         style={{
-          background: C.panel,
-          border: `1px solid ${C.panelBorder}`,
+          background: colors.bgElevated,
+          border: `1px solid ${colors.borderDefault}`,
           borderRadius: 16,
           width: "90%",
           maxWidth: 400,
           padding: 24,
           boxShadow: shadows.modal,
         }}
+        onPointerDownCapture={backdropDismiss.onPanelPointerDownCapture}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-          <FileDown size={24} color={C.accent} />
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: C.text }}>{t("project:plan_pdf_export_title")}</h2>
+          <FileDown size={24} color={colors.accentBlue} />
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: colors.textPrimary }}>{t("project:plan_pdf_export_title")}</h2>
         </div>
-        <p style={{ fontSize: 13, color: C.textDim, marginBottom: 20 }}>{t("project:plan_pdf_export_desc")}</p>
+        <p style={{ fontSize: 13, color: colors.textDim, marginBottom: 20 }}>{t("project:plan_pdf_export_desc")}</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
           {LAYERS.map(({ id, key }) => (
             <label
@@ -92,9 +98,9 @@ export default function PlanPdfExportModal({
                 alignItems: "center",
                 gap: 12,
                 padding: "10px 14px",
-                background: C.bg,
+                background: colors.bgInput,
                 borderRadius: 8,
-                border: `1px solid ${C.panelBorder}`,
+                border: `1px solid ${colors.borderDefault}`,
                 cursor: isExporting ? "default" : "pointer",
               }}
             >
@@ -103,9 +109,9 @@ export default function PlanPdfExportModal({
                 checked={selected.has(id)}
                 onChange={() => toggle(id)}
                 disabled={isExporting}
-                style={{ accentColor: C.accent, width: 18, height: 18 }}
+                style={{ accentColor: colors.accentBlue, width: 18, height: 18 }}
               />
-              <span style={{ color: C.text, fontSize: 14 }}>{t(`project:${key}`)}</span>
+              <span style={{ color: colors.textPrimary, fontSize: 14 }}>{t(`project:${key}`)}</span>
             </label>
           ))}
         </div>
@@ -115,10 +121,10 @@ export default function PlanPdfExportModal({
             disabled={isExporting}
             style={{
               padding: "10px 20px",
-              background: C.button,
-              border: `1px solid ${C.panelBorder}`,
+              background: colors.bgOverlay,
+              border: `1px solid ${colors.borderDefault}`,
               borderRadius: 8,
-              color: C.text,
+              color: colors.textPrimary,
               fontSize: 14,
               cursor: isExporting ? "default" : "pointer",
               opacity: isExporting ? 0.6 : 1,
@@ -131,10 +137,10 @@ export default function PlanPdfExportModal({
             disabled={isExporting || selected.size === 0}
             style={{
               padding: "10px 20px",
-              background: selected.size > 0 && !isExporting ? C.accent : C.button,
+              background: selected.size > 0 && !isExporting ? colors.accentBlue : colors.bgOverlay,
               border: "none",
               borderRadius: 8,
-              color: selected.size > 0 && !isExporting ? "#fff" : C.textDim,
+              color: selected.size > 0 && !isExporting ? "#fff" : colors.textDim,
               fontSize: 14,
               fontWeight: 600,
               cursor: isExporting || selected.size === 0 ? "default" : "pointer",

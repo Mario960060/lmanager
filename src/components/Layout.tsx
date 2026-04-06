@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { LM_SIDEBAR_NAV_EVENT } from '../lib/sidebarNav';
 import { useAuthStore } from '../lib/store';
 import { useCalculatorMenu } from '../contexts/CalculatorMenuContext';
 import { useTranslation } from 'react-i18next';
@@ -30,11 +31,27 @@ import {
   Square, 
   Minus, 
   Pickaxe,
-  Activity
+  Activity,
+  Gem
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useTheme, getAllThemes } from '../themes';
 import { colors, spacing, radii, fontSizes, fontWeights, transitions, layout, shadows, gradients, accentAlpha } from '../themes/designTokens';
+
+function isNavItemActive(pathname: string, href: string): boolean {
+  if (href === '/') {
+    return pathname === '/' || pathname === '';
+  }
+  if (href === '/project-management') {
+    return (
+      pathname === '/project-management' ||
+      pathname.startsWith('/project-management/') ||
+      pathname === '/project-performance' ||
+      pathname.startsWith('/project-performance/')
+    );
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 const Layout = () => {
   const location = useLocation();
@@ -96,6 +113,7 @@ const Layout = () => {
       label: t('nav:wall_and_finish_calculator'),
       subTypes: [
         { type: 'brick', label: t('nav:brick_wall_calculator') },
+        { type: 'double_wall', label: t('nav:double_wall_calculator') },
         { type: 'block4', label: t('nav:block4_wall_calculator') },
         { type: 'block7', label: t('nav:block7_wall_calculator') },
         { type: 'sleeper', label: t('nav:sleeper_wall_calculator') }
@@ -144,7 +162,8 @@ const Layout = () => {
       icon: Rows4, 
       label: t('nav:deck_calculator'),
       subTypes: [
-        { type: 'standard', label: t('nav:decking_standard') }
+        { type: 'standard', label: t('nav:decking_standard') },
+        { type: 'composite_deck', label: t('nav:composite_decking') },
       ]
     },
     { 
@@ -162,6 +181,12 @@ const Layout = () => {
       subTypes: [
         { type: 'default', label: t('nav:natural_turf') }
       ]
+    },
+    {
+      type: 'decorativeStones',
+      icon: Gem,
+      label: t('nav:decorative_stones_calculator'),
+      subTypes: [{ type: 'default', label: t('nav:decorative_stones') }],
     },
     { 
       type: 'kerbs', 
@@ -399,7 +424,14 @@ const Layout = () => {
                           onClick={() => {
                             setShowCalculatorMenu(true);
                             setSelectedCalculatorType(null);
+                            setSelectedSubType(null);
                             setExpandedCategory(null);
+                            if (location.pathname !== '/calculator') {
+                              navigate('/calculator');
+                            } else {
+                              window.dispatchEvent(new CustomEvent(LM_SIDEBAR_NAV_EVENT, { detail: { href: '/calculator' } }));
+                            }
+                            setIsSidebarOpen(false);
                           }}
                           style={{
                             width: '100%', display: 'flex', alignItems: 'center', padding: '10px 12px', gap: 10, marginBottom: 2, fontSize: fontSizes.base, fontWeight: isActive ? fontWeights.semibold : fontWeights.normal, borderRadius: radii.lg, transition: transitions.fast,
@@ -416,16 +448,18 @@ const Layout = () => {
                       );
                     }
                     
-                    // Regular Link for other items
-                    const isActive = location.pathname === item.href;
+                    const isActive = isNavItemActive(location.pathname, item.href);
                     return (
-                      <Link
+                      <button
                         key={item.name}
-                        to={item.href}
+                        type="button"
                         onClick={() => {
                           setIsSidebarOpen(false);
+                          navigate(item.href, { replace: true });
+                          window.dispatchEvent(new CustomEvent(LM_SIDEBAR_NAV_EVENT, { detail: { href: item.href } }));
                         }}
                         style={{
+                          width: '100%', textAlign: 'left', cursor: 'pointer', border: 'none', fontFamily: 'inherit',
                           display: 'flex', alignItems: 'center', padding: '10px 12px', gap: 10, marginBottom: 2, fontSize: fontSizes.base, fontWeight: isActive ? fontWeights.semibold : fontWeights.normal, borderRadius: radii.lg, transition: transitions.fast,
                           background: isActive ? colors.accentBlueBg : 'transparent',
                           borderLeft: `3px solid ${isActive ? colors.accentBlue : 'transparent'}`,
@@ -437,7 +471,7 @@ const Layout = () => {
                       >
                         <Icon size={20} style={{ flexShrink: 0, color: isActive ? colors.accentBlue : colors.navIconInactive }} />
                         {item.name}
-                      </Link>
+                      </button>
                     );
                   })
                 )}
@@ -597,13 +631,12 @@ const Layout = () => {
                 className={
                   isCanvasRoute
                     ? 'flex-1 min-h-0 min-w-0 flex flex-col max-lg:min-h-[calc(100dvh-2.75rem-env(safe-area-inset-top,0px))]'
-                    : 'layout-content-wrapper px-4 py-6'
+                    : 'layout-content-wrapper max-lg:px-0 max-lg:py-2 max-lg:ps-[max(0px,env(safe-area-inset-left))] max-lg:pe-[max(0px,env(safe-area-inset-right))] lg:px-8 lg:pt-7 lg:pb-10'
                 }
                 style={{
-                  padding: isCanvasRoute ? 0 : layout.contentPadding,
                   position: 'relative',
                   zIndex: 1,
-                  ...(isCanvasRoute ? { overflow: 'hidden' } : {}),
+                  ...(isCanvasRoute ? { overflow: 'hidden', padding: 0 } : {}),
                 }}
                 data-route={isCalculatorRoute ? 'calculator' : undefined}
               >

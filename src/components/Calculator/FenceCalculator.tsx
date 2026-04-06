@@ -1,12 +1,59 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, FOOT_CARRY_SPEED_M_PER_H, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
+import {
+  FENCE_NAILS_45_MM,
+  FENCE_NAILS_75_MM,
+  FENCE_VERTICAL_NAILS_PER_SLAT,
+  FENCE_RAIL_NAILS_PER_POST,
+  fenceSlatNailsPerSlatAlongLength,
+} from '../../lib/fenceNailMaterials';
 import { colors, fonts, fontSizes, fontWeights, radii, spacing, gradients } from '../../themes/designTokens';
 import { Button, Card, DataTable, TextInput, SelectDropdown, Checkbox, CalculatorInputGrid } from '../../themes/uiComponents';
+
+/** Matches DB materials_template / materials rows for horizontal fence (length × width in cm). */
+const HORIZONTAL_SLAT_MATERIAL_RE = /^Horizontal fence slat (\d+)×(\d+) cm$/;
+
+const HORIZONTAL_SLAT_FALLBACK_NAMES = [
+  'Horizontal fence slat 180×10 cm',
+  'Horizontal fence slat 180×15 cm',
+  'Horizontal fence slat 180×20 cm',
+  'Horizontal fence slat 360×10 cm',
+  'Horizontal fence slat 360×15 cm',
+  'Horizontal fence slat 360×20 cm',
+  'Horizontal fence slat 420×10 cm',
+  'Horizontal fence slat 420×15 cm',
+  'Horizontal fence slat 420×20 cm',
+];
+
+function parseHorizontalSlatMaterial(name: string): { slatL: number; slatW: number } | null {
+  const m = name.match(HORIZONTAL_SLAT_MATERIAL_RE);
+  if (!m) return null;
+  return { slatL: parseInt(m[1], 10), slatW: parseInt(m[2], 10) };
+}
+
+function sortHorizontalSlatNames(names: string[]): string[] {
+  return [...names].sort((a, b) => {
+    const pa = parseHorizontalSlatMaterial(a);
+    const pb = parseHorizontalSlatMaterial(b);
+    if (!pa || !pb) return a.localeCompare(b);
+    if (pa.slatL !== pb.slatL) return pa.slatL - pb.slatL;
+    return pa.slatW - pb.slatW;
+  });
+}
+
+function defaultHorizontalSlatMaterialName(saved: Record<string, any> | undefined): string {
+  if (saved?.horizontalSlatMaterialName && typeof saved.horizontalSlatMaterialName === 'string') {
+    return saved.horizontalSlatMaterialName;
+  }
+  const w = saved?.slatWidth ?? '10';
+  const len = saved?.slatLength ?? '180';
+  return `Horizontal fence slat ${len}×${w} cm`;
+}
 
 interface FenceCalculatorProps {
   fenceType: 'vertical' | 'horizontal';
@@ -93,11 +140,21 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
   }, [segmentLengths.length]);
   const [slatWidth, setSlatWidth] = useState(savedInputs?.slatWidth ?? '10');
   const [slatLength, setSlatLength] = useState(savedInputs?.slatLength ?? '180');
+  const [horizontalSlatMaterialName, setHorizontalSlatMaterialName] = useState(() =>
+    defaultHorizontalSlatMaterialName(savedInputs)
+  );
   const [postmixPerPost, setPostmixPerPost] = useState<string>(savedInputs?.postmixPerPost ?? '');
   const lastInputsSentRef = useRef<string>('');
   useEffect(() => {
     if (!onInputsChange || !isInProjectCreating) return;
-    const inputs: Record<string, any> = { length, height, slatWidth, slatLength, postmixPerPost };
+    const inputs: Record<string, any> = {
+      length,
+      height,
+      slatWidth,
+      slatLength,
+      postmixPerPost,
+      ...(fenceType === 'horizontal' ? { horizontalSlatMaterialName } : {}),
+    };
     if (canvasMode && fenceConfigMode === 'single' && totalLengthCanvas > 0) {
       inputs.segmentLengths = [totalLengthCanvas];
     } else if (segmentLengths.length > 0) {
@@ -107,7 +164,21 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
     if (lastInputsSentRef.current === key) return;
     lastInputsSentRef.current = key;
     onInputsChange(inputs);
-  }, [length, height, slatWidth, slatLength, postmixPerPost, segmentLengths, fenceConfigMode, canvasMode, totalLengthCanvas, onInputsChange, isInProjectCreating]);
+  }, [
+    length,
+    height,
+    slatWidth,
+    slatLength,
+    postmixPerPost,
+    horizontalSlatMaterialName,
+    fenceType,
+    segmentLengths,
+    fenceConfigMode,
+    canvasMode,
+    totalLengthCanvas,
+    onInputsChange,
+    isInProjectCreating,
+  ]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [totalHours, setTotalHours] = useState<number | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
@@ -160,6 +231,43 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
     },
     enabled: !!companyId
   });
+
+  const { data: horizontalSlatMaterialNames = [] } = useQuery({
+    queryKey: ['horizontal_fence_slat_materials', companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('materials')
+        .select('name')
+        .eq('company_id', companyId || '')
+        .ilike('name', 'Horizontal fence slat%')
+        .order('name');
+      if (error) throw error;
+      return (data ?? []).map((r: { name: string }) => r.name);
+    },
+    enabled: !!companyId && fenceType === 'horizontal',
+  });
+
+  const horizontalSlatOptions = useMemo(() => {
+    return sortHorizontalSlatNames(
+      horizontalSlatMaterialNames.length > 0 ? horizontalSlatMaterialNames : HORIZONTAL_SLAT_FALLBACK_NAMES
+    );
+  }, [horizontalSlatMaterialNames]);
+
+  useEffect(() => {
+    if (fenceType !== 'horizontal' || horizontalSlatOptions.length === 0) return;
+    setHorizontalSlatMaterialName((prev) =>
+      horizontalSlatOptions.includes(prev) ? prev : horizontalSlatOptions[0]!
+    );
+  }, [fenceType, horizontalSlatOptions]);
+
+  useEffect(() => {
+    if (fenceType !== 'horizontal') return;
+    const p = parseHorizontalSlatMaterial(horizontalSlatMaterialName);
+    if (p) {
+      setSlatWidth(String(p.slatW));
+      setSlatLength(String(p.slatL));
+    }
+  }, [fenceType, horizontalSlatMaterialName]);
 
   // Fetch task templates for digging holes and setting up posts
   const { data: taskTemplates = [] } = useQuery({
@@ -241,7 +349,7 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -258,8 +366,15 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
 
     const l = parseFloat(length) * 100; // Convert meters to cm
     const h = parseFloat(height) * 100; // Convert meters to cm
-    const slatW = parseFloat(slatWidth);
-    const slatL = parseFloat(slatLength);
+    let slatW = parseFloat(slatWidth);
+    let slatL = parseFloat(slatLength);
+    if (fenceType === 'horizontal') {
+      const p = parseHorizontalSlatMaterial(horizontalSlatMaterialName);
+      if (p) {
+        slatW = p.slatW;
+        slatL = p.slatL;
+      }
+    }
 
     if (isNaN(l) || isNaN(h) || isNaN(slatW) || (fenceType === 'horizontal' && isNaN(slatL))) {
       setCalculationError(t('calculator:valid_numbers_required'));
@@ -383,12 +498,10 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
       }
 
       // Calculate posts transport - each post carried individually (on foot)
-      // Estimate: 1 post per trip on foot at 1.5 km/h = 1500 m/h
       if (posts > 0) {
         const postsPerTrip = 1; // 1 post per person per trip
         const trips = Math.ceil(posts / postsPerTrip);
-        const postCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / postCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / FOOT_CARRY_SPEED_M_PER_H;
         postTransportTime = trips * timePerTrip;
         
         if (postTransportTime > 0) {
@@ -407,8 +520,7 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
       if (slatsNeeded > 0) {
         const slatsPerTrip = fenceType === 'vertical' ? 15 : 2;
         const trips = Math.ceil(slatsNeeded / slatsPerTrip);
-        const slatCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / slatCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / FOOT_CARRY_SPEED_M_PER_H;
         slatTransportTime = trips * timePerTrip;
         
         if (slatTransportTime > 0) {
@@ -442,12 +554,44 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
     // Prepare materials list
     const materialsList: Material[] = [
       { name: 'Post', amount: posts, unit: 'posts', price_per_unit: null, total_price: null },
-      { name: fenceType === 'vertical' ? (h <= 120 ? '1200 Fence Slats' : '1800 Fence Slats') : 'Fence Slats', amount: slatsNeeded, unit: 'slats', price_per_unit: null, total_price: null },
+      {
+        name: fenceType === 'vertical' ? (h <= 120 ? '1200 Fence Slats' : '1800 Fence Slats') : horizontalSlatMaterialName,
+        amount: slatsNeeded,
+        unit: 'slats',
+        price_per_unit: null,
+        total_price: null,
+      },
       { name: 'Postmix', amount: totalPostmix, unit: 'bags', price_per_unit: null, total_price: null }
     ];
 
     if (fenceType === 'vertical') {
       materialsList.push({ name: 'Fence Rails', amount: fenceRails, unit: 'rails', price_per_unit: null, total_price: null });
+    }
+
+    if (fenceType === 'vertical') {
+      materialsList.push({
+        name: FENCE_NAILS_45_MM,
+        amount: FENCE_VERTICAL_NAILS_PER_SLAT * slatsNeeded,
+        unit: 'pieces',
+        price_per_unit: null,
+        total_price: null,
+      });
+      materialsList.push({
+        name: FENCE_NAILS_75_MM,
+        amount: FENCE_RAIL_NAILS_PER_POST * posts,
+        unit: 'pieces',
+        price_per_unit: null,
+        total_price: null,
+      });
+    } else {
+      const nails45Horizontal = fenceSlatNailsPerSlatAlongLength(slatL) * slatsNeeded;
+      materialsList.push({
+        name: FENCE_NAILS_45_MM,
+        amount: nails45Horizontal,
+        unit: 'pieces',
+        price_per_unit: null,
+        total_price: null,
+      });
     }
 
     // Fetch prices and update state
@@ -577,22 +721,24 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
         </CalculatorInputGrid>
 
         <CalculatorInputGrid columns={2}>
-          <SelectDropdown
-            label={t('calculator:input_slat_width_cm')}
-            value={slatWidth + ' cm'}
-            options={['10 cm', '12 cm', '15 cm']}
-            onChange={(v) => setSlatWidth(v.replace(/\s*cm\s*$/, ''))}
-            placeholder={t('calculator:input_slat_width_cm')}
-          />
-          {fenceType === 'horizontal' && (
+          {fenceType === 'vertical' ? (
             <SelectDropdown
-              label={t('calculator:input_slat_length_cm')}
-              value={slatLength + ' cm'}
-              options={['180 cm', '360 cm']}
-              onChange={(v) => setSlatLength(v.replace(/\s*cm\s*$/, ''))}
-              placeholder={t('calculator:input_slat_length_cm')}
+              label={t('calculator:input_slat_width_cm')}
+              value={slatWidth + ' cm'}
+              options={['10 cm', '12 cm', '15 cm']}
+              onChange={(v) => setSlatWidth(v.replace(/\s*cm\s*$/, ''))}
+              placeholder={t('calculator:input_slat_width_cm')}
+            />
+          ) : (
+            <SelectDropdown
+              label={t('calculator:input_horizontal_fence_slat_material')}
+              value={horizontalSlatMaterialName}
+              options={horizontalSlatOptions}
+              onChange={setHorizontalSlatMaterialName}
+              placeholder={t('calculator:input_horizontal_fence_slat_material')}
             />
           )}
+          <div />
         </CalculatorInputGrid>
 
         <TextInput
@@ -649,7 +795,7 @@ const FenceCalculator: React.FC<FenceCalculatorProps> = ({
           </>
         )}
 
-      <Button variant="accent" color={colors.accentBlue} onClick={calculate} disabled={isLoading}>
+      <Button variant="primary" fullWidth onClick={calculate} disabled={isLoading}>
         {isLoading ? t('calculator:loading_in_progress') : t('calculator:calculate_button')}
       </Button>
 

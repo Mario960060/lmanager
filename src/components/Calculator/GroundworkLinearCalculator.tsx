@@ -148,7 +148,7 @@ const GroundworkLinearCalculator: React.FC<GroundworkLinearCalculatorProps> = ({
         </p>
       )}
 
-      <Button onClick={calculate} disabled={!isValid} variant="primary">
+      <Button onClick={calculate} disabled={!isValid} variant="primary" fullWidth>
         {t('calculator:calculate', { defaultValue: 'Calculate' })}
       </Button>
 

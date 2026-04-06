@@ -31,6 +31,8 @@ const data: TableRow[] = [
   { name: "materials_delivered", labelKey: "rls_label_materials_delivered", tag: "readonly", category: "materials", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
   { name: "materials (event)", labelKey: "rls_label_materials_event", category: "materials", user: ["y","y","y","-"], leader: ["y","y","y","-"], pm: ["y","y","y","-"] },
   { name: "calendar_materials", labelKey: "rls_label_calendar_materials", tag: "readonly", category: "materials", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },
+  { name: "calendar_day_plan_blocks", labelKey: "rls_label_calendar_day_plan_blocks", category: "events", user: ["y","n","n","n"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
+  { name: "calendar_day_plan_block_tasks", labelKey: "rls_label_calendar_day_plan_block_tasks", category: "events", user: ["y","n","n","n"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
   { name: "additional_materials", labelKey: "rls_label_additional_materials", category: "materials", user: ["y","y","y","y"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
   { name: "additional_task_materials", labelKey: "rls_label_additional_task_materials", category: "materials", user: ["y","y","y","y"], leader: ["y","y","y","y"], pm: ["y","y","y","y"] },
   { name: "day_notes", labelKey: "rls_label_day_notes", tag: "readonly", category: "other", user: ["y","y","-","-"], leader: ["y","y","-","-"], pm: ["y","y","-","-"] },

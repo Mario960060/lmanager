@@ -1,11 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import type { TFunction } from 'i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Info, Check, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, FOOT_CARRY_SPEED_M_PER_H, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
+import {
+  getSegmentOuterLeafAvgM,
+  getSegmentInnerLeafAvgM,
+  type WallSegmentHeightRow,
+} from '../../projectmanagement/canvacreator/linearElements';
 import { WallTileSidesSelector } from '../../projectmanagement/canvacreator/objectCard/WallTileSidesSelector';
 import TileInstallationCalculator from './TileInstallationCalculator';
 import CopingInstallationCalculator from './CopingInstallationCalculator';
@@ -27,6 +33,39 @@ import {
   Label,
   DataTable,
 } from '../../themes/uiComponents';
+
+function formatDoubleWallLeafCaption(
+  wallType: 'brick' | 'block4' | 'block7',
+  brickBond: 'stretcher' | 'header',
+  layingMethod: 'flat' | 'standing',
+  t: TFunction
+): string {
+  const mat =
+    wallType === 'brick'
+      ? t('calculator:inner_wall_option_brick')
+      : wallType === 'block4'
+        ? t('calculator:inner_wall_option_block4')
+        : t('calculator:inner_wall_option_block7');
+  if (wallType === 'brick') {
+    const bond = brickBond === 'header' ? t('calculator:brick_bond_header') : t('calculator:brick_bond_stretcher');
+    return `${mat} · ${bond}`;
+  }
+  const lay = layingMethod === 'flat' ? t('calculator:flat_label') : t('calculator:standing_label');
+  return `${mat} · ${lay}`;
+}
+
+function parseBulkHeightM(raw: string): number | null {
+  const v = parseFloat(raw.replace(',', '.'));
+  if (!Number.isFinite(v) || v < 0) return null;
+  return v;
+}
+
+/** Task names in DB may still say "7-inch"; match both for block7 walls. */
+function taskNameMatchesBlockWallType(taskName: string, wallKind: 'block4' | 'block7'): boolean {
+  const n = taskName.toLowerCase();
+  if (wallKind === 'block4') return n.includes('4-inch');
+  return n.includes('6-inch') || n.includes('7-inch');
+}
 
 interface Shape {
   points: { x: number; y: number }[];
@@ -57,6 +96,8 @@ interface CalculatorProps {
   /** From Project Card Equipment tab — used when isInProjectCreating, foundation inputs hidden */
   projectSoilType?: 'clay' | 'sand' | 'rock';
   projectDiggingMethod?: 'shovel' | 'small' | 'medium' | 'large';
+  /** Canvas/sidebar subtype `double_wall` maps to type brick; keeps label distinct from plain brick wall */
+  wallBrickVariant?: 'brick' | 'double_wall';
 }
 
 interface Material {
@@ -107,10 +148,79 @@ const WallCalculator: React.FC<CalculatorProps> = ({
   recalculateTrigger = 0,
   projectSoilType: propProjectSoilType,
   projectDiggingMethod: propProjectDiggingMethod,
+  wallBrickVariant,
 }) => {
   const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
   const companyId = useAuthStore(state => state.getCompanyId());
+  const isDoubleWall = wallBrickVariant === 'double_wall';
+
+  const defaultDoubleWallRow = (h: number): WallSegmentHeightRow => ({
+    startH: h,
+    endH: h,
+    outerStartH: h,
+    outerEndH: h,
+    innerStartH: h,
+    innerEndH: h,
+  });
   const [layingMethod, setLayingMethod] = useState<'flat' | 'standing'>('standing');
+  const [brickBond, setBrickBond] = useState<'stretcher' | 'header'>(
+    savedInputs?.brickBond === 'header' ? 'header' : 'stretcher'
+  );
+  useEffect(() => {
+    if (savedInputs?.brickBond === 'header') setBrickBond('header');
+    else if (savedInputs?.brickBond === 'stretcher') setBrickBond('stretcher');
+  }, [savedInputs?.brickBond]);
+  const [outerWallType, setOuterWallType] = useState<'brick' | 'block4' | 'block7'>(() => {
+    const w = savedInputs?.outerWallType;
+    if (w === 'brick' || w === 'block4' || w === 'block7') return w;
+    return 'brick';
+  });
+  const [innerWallType, setInnerWallType] = useState<'brick' | 'block4' | 'block7'>(() => {
+    const w = savedInputs?.innerWallType;
+    return w === 'brick' || w === 'block4' || w === 'block7' ? w : 'block4';
+  });
+  const [outerBrickBond, setOuterBrickBond] = useState<'stretcher' | 'header'>(() => {
+    if (savedInputs?.outerBrickBond === 'header') return 'header';
+    if (savedInputs?.outerBrickBond === 'stretcher') return 'stretcher';
+    if (savedInputs?.brickBond === 'header') return 'header';
+    return 'stretcher';
+  });
+  const [innerBrickBond, setInnerBrickBond] = useState<'stretcher' | 'header'>(() => {
+    if (savedInputs?.innerBrickBond === 'header') return 'header';
+    if (savedInputs?.innerBrickBond === 'stretcher') return 'stretcher';
+    if (savedInputs?.brickBond === 'header') return 'header';
+    return 'stretcher';
+  });
+  const [outerLayingMethod, setOuterLayingMethod] = useState<'flat' | 'standing'>(() =>
+    savedInputs?.outerLayingMethod === 'flat' ? 'flat' : 'standing'
+  );
+  const [innerLayingMethod, setInnerLayingMethod] = useState<'flat' | 'standing'>(
+    savedInputs?.innerLayingMethod === 'flat' ? 'flat' : 'standing'
+  );
+  useEffect(() => {
+    const w = savedInputs?.outerWallType;
+    if (w === 'brick' || w === 'block4' || w === 'block7') setOuterWallType(w);
+  }, [savedInputs?.outerWallType]);
+  useEffect(() => {
+    const w = savedInputs?.innerWallType;
+    if (w === 'brick' || w === 'block4' || w === 'block7') setInnerWallType(w);
+  }, [savedInputs?.innerWallType]);
+  useEffect(() => {
+    if (savedInputs?.outerBrickBond === 'header') setOuterBrickBond('header');
+    else if (savedInputs?.outerBrickBond === 'stretcher') setOuterBrickBond('stretcher');
+  }, [savedInputs?.outerBrickBond]);
+  useEffect(() => {
+    if (savedInputs?.innerBrickBond === 'header') setInnerBrickBond('header');
+    else if (savedInputs?.innerBrickBond === 'stretcher') setInnerBrickBond('stretcher');
+  }, [savedInputs?.innerBrickBond]);
+  useEffect(() => {
+    if (savedInputs?.outerLayingMethod === 'flat') setOuterLayingMethod('flat');
+    else if (savedInputs?.outerLayingMethod === 'standing') setOuterLayingMethod('standing');
+  }, [savedInputs?.outerLayingMethod]);
+  useEffect(() => {
+    if (savedInputs?.innerLayingMethod === 'flat') setInnerLayingMethod('flat');
+    else if (savedInputs?.innerLayingMethod === 'standing') setInnerLayingMethod('standing');
+  }, [savedInputs?.innerLayingMethod]);
   const [postMethod, setPostMethod] = useState<'concrete' | 'direct'>(savedInputs?.postMethod ?? 'concrete');
   const [length, setLength] = useState<string>(initialLength != null ? initialLength.toFixed(3) : '');
   const [height, setHeight] = useState<string>('');
@@ -128,6 +238,8 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     totalHours: number;
     taskBreakdown: { task: string; hours: number; normalizedHours?: number }[];
     materials: Material[];
+    /** Inner leaf piece count when brick + cavity wall */
+    innerLeafUnits?: number;
   } | null>(null);
   const [transportDistance, setTransportDistance] = useState<string>('30');
   const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
@@ -174,16 +286,34 @@ const WallCalculator: React.FC<CalculatorProps> = ({
   const effectiveFoundationDiggingMethod = isInProjectCreating && propProjectDiggingMethod ? propProjectDiggingMethod : foundationDiggingMethod;
   const effectiveFoundationSoilType = isInProjectCreating && propProjectSoilType ? propProjectSoilType : foundationSoilType;
 
-  const segmentLengths: number[] = savedInputs?.segmentLengths ?? [];
+  const segmentLengthsFromSaved: number[] = savedInputs?.segmentLengths ?? [];
+  /** Manual segment lengths for sleeper wall when not from canvas (standalone / ProjectCreating). */
+  const [manualSegmentLengths, setManualSegmentLengths] = useState<number[]>([]);
+
   const defH = parseFloat(height) || 1;
   const [wallConfigMode, setWallConfigMode] = useState<'single' | 'segments'>(
-    segmentLengths.length > 1 ? 'segments' : 'single'
+    segmentLengthsFromSaved.length > 1 ? 'segments' : 'single'
   );
-  const [segmentHeights, setSegmentHeights] = useState<Array<{ startH: number; endH: number }>>(() => {
-    const existing = savedInputs?.segmentHeights as Array<{ startH: number; endH: number }> | undefined;
-    if (existing && existing.length === segmentLengths.length) return existing.map(s => ({ ...s }));
-    return segmentLengths.map(() => ({ startH: defH, endH: defH }));
+
+  const segmentLengths: number[] = useMemo(() => {
+    if (segmentLengthsFromSaved.length > 0) return segmentLengthsFromSaved;
+    if (type === 'sleeper' && !canvasMode && wallConfigMode === 'segments' && manualSegmentLengths.length > 0) {
+      return manualSegmentLengths;
+    }
+    return [];
+  }, [segmentLengthsFromSaved, type, canvasMode, wallConfigMode, manualSegmentLengths]);
+
+  const [segmentHeights, setSegmentHeights] = useState<WallSegmentHeightRow[]>(() => {
+    const existing = savedInputs?.segmentHeights as WallSegmentHeightRow[] | undefined;
+    const h0 = parseFloat(String(savedInputs?.height ?? '1')) || 1;
+    if (existing && existing.length === segmentLengthsFromSaved.length) return existing.map(s => ({ ...s }));
+    return segmentLengthsFromSaved.map(() =>
+      wallBrickVariant === 'double_wall' ? defaultDoubleWallRow(h0) : { startH: h0, endH: h0 }
+    );
   });
+
+  /** Canvas / saved geometry: user cannot switch back to single length without editing the shape. */
+  const segmentSingleLocked = segmentLengthsFromSaved.length > 1;
 
   useEffect(() => {
     if (segmentLengths.length > 1) setWallConfigMode('segments');
@@ -191,15 +321,16 @@ const WallCalculator: React.FC<CalculatorProps> = ({
 
   useEffect(() => {
     const segLens = savedInputs?.segmentLengths ?? [];
-    const existing = savedInputs?.segmentHeights as Array<{ startH: number; endH: number }> | undefined;
-    const h = parseFloat(height) || 1;
-    const next = existing && existing.length === segLens.length
-      ? existing.map(s => ({ ...s }))
-      : segLens.length > 0
-        ? segLens.map(() => ({ startH: h, endH: h }))
-        : null;
+    const existing = savedInputs?.segmentHeights as WallSegmentHeightRow[] | undefined;
+    const h = parseFloat(String(savedInputs?.height ?? '1')) || 1;
+    const next =
+      existing && existing.length === segLens.length
+        ? existing.map((s) => ({ ...s }))
+        : segLens.length > 0
+          ? segLens.map(() => (isDoubleWall ? defaultDoubleWallRow(h) : { startH: h, endH: h }))
+          : null;
     if (next) setSegmentHeights(next);
-  }, [savedInputs?.segmentLengths, savedInputs?.segmentHeights, height]);
+  }, [savedInputs?.segmentLengths, savedInputs?.segmentHeights, savedInputs?.height, isDoubleWall]);
 
   useEffect(() => {
     const segLens = savedInputs?.segmentLengths ?? segmentLengths;
@@ -230,25 +361,139 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     if (savedInputs?.copingGroutingId != null) setCopingGroutingId(String(savedInputs.copingGroutingId));
   }, [savedInputs?.copingSlabLength, savedInputs?.copingSlabWidth, savedInputs?.copingGap, savedInputs?.copingAdhesiveThickness, savedInputs?.coping45Cut, savedInputs?.copingGroutingId]);
 
-  const updateSegmentHeight = (idx: number, field: 'startH' | 'endH', value: number) => {
-    setSegmentHeights(prev => {
+  type SegmentHeightField = 'startH' | 'endH' | 'outerStartH' | 'outerEndH' | 'innerStartH' | 'innerEndH';
+  const updateSegmentHeight = (idx: number, field: SegmentHeightField, value: number) => {
+    setSegmentHeights((prev) => {
       const next = [...prev];
-      if (!next[idx]) next[idx] = { startH: defH, endH: defH };
+      if (!next[idx]) {
+        next[idx] = isDoubleWall ? defaultDoubleWallRow(defH) : { startH: defH, endH: defH };
+      }
       next[idx] = { ...next[idx], [field]: Math.max(0, value) };
       return next;
     });
   };
 
+  /** Single-leaf wall: one height for all segments. Double wall: use setAllOuterHeights / setAllInnerHeights. */
   const setAllHeights = (h: number) => {
-    setSegmentHeights(segmentLengths.map(() => ({ startH: h, endH: h })));
+    setSegmentHeights(
+      segmentLengths.map(() => (isDoubleWall ? defaultDoubleWallRow(h) : { startH: h, endH: h }))
+    );
   };
+
+  const setAllOuterHeights = (h: number) => {
+    setSegmentHeights((prev) =>
+      segmentLengths.map((_, idx) => {
+        const prevRow = prev[idx];
+        if (!isDoubleWall) return { startH: h, endH: h };
+        const innerS = prevRow?.innerStartH ?? defH;
+        const innerE = prevRow?.innerEndH ?? defH;
+        return {
+          ...prevRow,
+          startH: h,
+          endH: h,
+          outerStartH: h,
+          outerEndH: h,
+          innerStartH: innerS,
+          innerEndH: innerE,
+        };
+      })
+    );
+  };
+
+  const setAllInnerHeights = (h: number) => {
+    setSegmentHeights((prev) =>
+      segmentLengths.map((_, idx) => {
+        const prevRow = prev[idx];
+        if (!isDoubleWall) return { startH: h, endH: h };
+        const outerS = prevRow?.outerStartH ?? defH;
+        const outerE = prevRow?.outerEndH ?? defH;
+        return {
+          ...prevRow,
+          startH: h,
+          endH: h,
+          outerStartH: outerS,
+          outerEndH: outerE,
+          innerStartH: h,
+          innerEndH: h,
+        };
+      })
+    );
+  };
+
+  const [bulkSetAllInput, setBulkSetAllInput] = useState('');
+  const [bulkSetOuterInput, setBulkSetOuterInput] = useState('');
+  const [bulkSetInnerInput, setBulkSetInnerInput] = useState('');
+
+  const doubleWallOuterCaption = useMemo(
+    () => formatDoubleWallLeafCaption(outerWallType, outerBrickBond, outerLayingMethod, t),
+    [outerWallType, outerBrickBond, outerLayingMethod, t]
+  );
+  const doubleWallInnerCaption = useMemo(
+    () => formatDoubleWallLeafCaption(innerWallType, innerBrickBond, innerLayingMethod, t),
+    [innerWallType, innerBrickBond, innerLayingMethod, t]
+  );
+
+  useEffect(() => {
+    if (!canvasMode || !isInProjectCreating || !isDoubleWall || wallConfigMode !== 'single') return;
+    if (segmentHeights.length >= 1) return;
+    const h = parseFloat(height) || 1;
+    setSegmentHeights([{ startH: h, endH: h, outerStartH: h, outerEndH: h, innerStartH: h, innerEndH: h }]);
+  }, [canvasMode, isInProjectCreating, isDoubleWall, wallConfigMode, segmentHeights.length, height]);
 
   const setWallConfigModeWithSync = (mode: 'single' | 'segments') => {
     setWallConfigMode(mode);
     if (mode === 'single' && segmentHeights.length > 0) {
       setHeight(String(segmentHeights[0]?.startH ?? defH));
     }
+    if (mode === 'single' && type === 'sleeper' && !canvasMode) {
+      const sumFromManual = manualSegmentLengths.length > 0 ? manualSegmentLengths.reduce((a, b) => a + b, 0) : null;
+      setManualSegmentLengths([]);
+      if (sumFromManual != null && sumFromManual > 0) {
+        setLength(sumFromManual.toFixed(3));
+      } else if (segmentLengthsFromSaved.length > 0) {
+        const s = segmentLengthsFromSaved.reduce((a, b) => a + b, 0);
+        setLength(s.toFixed(3));
+      }
+    }
   };
+
+  const enterSleeperStandaloneSegmentsMode = () => {
+    const total = parseFloat(length) || 2;
+    const a = Number((total / 2).toFixed(3));
+    const b = Number((total - a).toFixed(3));
+    const h = parseFloat(height) || 1;
+    setManualSegmentLengths([a, b]);
+    setSegmentHeights([{ startH: h, endH: h }, { startH: h, endH: h }]);
+    setWallConfigMode('segments');
+  };
+
+  const updateManualSegmentLength = (idx: number, value: number) => {
+    setManualSegmentLengths((prev) => {
+      const next = [...prev];
+      next[idx] = Math.max(0.01, value);
+      return next;
+    });
+  };
+
+  const addManualSleeperSegment = () => {
+    setManualSegmentLengths((prev) => [...prev, 1]);
+  };
+
+  const removeManualSleeperSegment = () => {
+    setManualSegmentLengths((prev) => (prev.length <= 2 ? prev : prev.slice(0, -1)));
+  };
+
+  useEffect(() => {
+    if (type !== 'sleeper' || canvasMode) return;
+    const n = segmentLengths.length;
+    if (n === 0) return;
+    setSegmentHeights((prev) => {
+      const h = parseFloat(height) || 1;
+      if (prev.length === n) return prev;
+      if (prev.length > n) return prev.slice(0, n);
+      return Array.from({ length: n }, (_, i) => prev[i] ?? { startH: h, endH: h });
+    });
+  }, [type, canvasMode, segmentLengths.length, height]);
 
   const totalLengthCanvas = canvasLength ?? (segmentLengths.length > 0 ? segmentLengths.reduce((a, b) => a + b, 0) : parseFloat(length) || 0);
 
@@ -256,10 +501,37 @@ const WallCalculator: React.FC<CalculatorProps> = ({
   useEffect(() => {
     if (!onInputsChange || !isInProjectCreating) return;
     const inputs: Record<string, any> = { length, height, layingMethod, postMethod, includeFoundation, foundationLength, foundationWidth, foundationDepthCm, foundationDiggingMethod: effectiveFoundationDiggingMethod, foundationSoilType: effectiveFoundationSoilType };
+    if (type === 'brick') {
+      if (isDoubleWall) {
+        inputs.cavityWall = true;
+        inputs.outerWallType = outerWallType;
+        inputs.innerWallType = innerWallType;
+        inputs.outerBrickBond = outerBrickBond;
+        inputs.innerBrickBond = innerBrickBond;
+        inputs.outerLayingMethod = outerLayingMethod;
+        inputs.innerLayingMethod = innerLayingMethod;
+      } else {
+        inputs.brickBond = brickBond;
+      }
+    }
     if (canvasMode && wallConfigMode === 'single') {
       const h = parseFloat(height) || 1;
       inputs.segmentLengths = [totalLengthCanvas];
-      inputs.segmentHeights = [{ startH: h, endH: h }];
+      const row0 = segmentHeights[0];
+      if (isDoubleWall && row0) {
+        inputs.segmentHeights = [
+          {
+            startH: h,
+            endH: h,
+            outerStartH: row0.outerStartH ?? h,
+            outerEndH: row0.outerEndH ?? h,
+            innerStartH: row0.innerStartH ?? h,
+            innerEndH: row0.innerEndH ?? h,
+          },
+        ];
+      } else {
+        inputs.segmentHeights = [{ startH: h, endH: h }];
+      }
     } else {
       inputs.segmentHeights = segmentHeights;
       if (segmentLengths.length > 0) inputs.segmentLengths = segmentLengths;
@@ -286,7 +558,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     if (lastInputsSentRef.current === key) return;
     lastInputsSentRef.current = key;
     onInputsChange(inputs);
-  }, [length, height, layingMethod, postMethod, includeFoundation, foundationLength, foundationWidth, foundationDepthCm, foundationDiggingMethod, foundationSoilType, segmentHeights, segmentLengths, segmentTileSides, frontFacesTiled, wallTileSlabThicknessCm, wallTileAdhesiveThicknessCm, wallConfigMode, canvasMode, totalLengthCanvas, onInputsChange, isInProjectCreating, type, includeCopings, includeTileInstallation, copingSlabLength, copingSlabWidth, copingGap, copingAdhesiveThickness, coping45Cut, copingGroutingId]);
+  }, [length, height, layingMethod, brickBond, isDoubleWall, outerWallType, innerWallType, outerBrickBond, innerBrickBond, outerLayingMethod, innerLayingMethod, postMethod, includeFoundation, foundationLength, foundationWidth, foundationDepthCm, foundationDiggingMethod, foundationSoilType, segmentHeights, segmentLengths, segmentTileSides, frontFacesTiled, wallTileSlabThicknessCm, wallTileAdhesiveThicknessCm, wallConfigMode, canvasMode, totalLengthCanvas, onInputsChange, isInProjectCreating, type, includeCopings, includeTileInstallation, copingSlabLength, copingSlabWidth, copingGap, copingAdhesiveThickness, coping45Cut, copingGroutingId]);
 
   // Use carriers from props if available (from ProjectCreating), otherwise use local state
   const carriers = propCarriers && propCarriers.length > 0 ? propCarriers : carriersLocal;
@@ -342,9 +614,12 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     }
   }, [effectiveCalculateTransport]);
 
+  const taskQueryType = isDoubleWall ? outerWallType : type;
+  const taskQueryLaying = isDoubleWall ? outerLayingMethod : layingMethod;
+
   // Fetch task templates for wall building
   const { data: taskTemplates = [], isLoading } = useQuery({
-    queryKey: ['wall_tasks', type, layingMethod, companyId],
+    queryKey: ['wall_tasks', taskQueryType, taskQueryLaying, isDoubleWall, companyId],
     queryFn: async () => {
       let query = supabase
         .from('event_tasks_with_dynamic_estimates')
@@ -352,17 +627,16 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         .eq('company_id', companyId);
 
       // Add specific filters based on wall type
-      if (type === 'brick') {
+      if (taskQueryType === 'brick') {
         query = query.ilike('name', '%bricklaying%');
-      } else if (type === 'block4') {
-        // More specific queries for block types
-        if (layingMethod === 'standing') {
+      } else if (taskQueryType === 'block4') {
+        if (taskQueryLaying === 'standing') {
           query = query.ilike('name', '%4-inch block%standing%');
         } else {
           query = query.ilike('name', '%4-inch block%flat%');
         }
-      } else if (type === 'block7') {
-        if (layingMethod === 'standing') {
+      } else if (taskQueryType === 'block7') {
+        if (taskQueryLaying === 'standing') {
           query = query.ilike('name', '%7-inch block%standing%');
         } else {
           query = query.ilike('name', '%7-inch block%flat%');
@@ -377,6 +651,47 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       return data;
     },
     enabled: !!companyId
+  });
+
+  const { data: innerLeafBrickTasks = [] } = useQuery({
+    queryKey: ['wall_tasks_inner_brick', companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('event_tasks_with_dynamic_estimates')
+        .select('id, name, unit, estimated_hours')
+        .eq('company_id', companyId!)
+        .ilike('name', '%bricklaying%')
+        .order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!companyId && isDoubleWall && innerWallType === 'brick',
+  });
+
+  /** Task templates for inner leaf blocks (double wall) */
+  const { data: innerLeafBlockTasks = [] } = useQuery({
+    queryKey: ['wall_tasks_inner_leaf', innerWallType, innerLayingMethod, companyId],
+    queryFn: async () => {
+      let query = supabase
+        .from('event_tasks_with_dynamic_estimates')
+        .select('id, name, unit, estimated_hours')
+        .eq('company_id', companyId!);
+      if (innerWallType === 'block4') {
+        query = innerLayingMethod === 'standing'
+          ? query.ilike('name', '%4-inch block%standing%')
+          : query.ilike('name', '%4-inch block%flat%');
+      } else if (innerWallType === 'block7') {
+        query = innerLayingMethod === 'standing'
+          ? query.ilike('name', '%7-inch block%standing%')
+          : query.ilike('name', '%7-inch block%flat%');
+      } else {
+        return [];
+      }
+      const { data, error } = await query.order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!companyId && isDoubleWall && (innerWallType === 'block4' || innerWallType === 'block7'),
   });
 
   // Fetch task template for preparing for the wall (leveling)
@@ -573,7 +888,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -751,15 +1066,29 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     const defH = parseFloat(height) || 1;
 
     let segLengths: number[];
-    let segHeightsRaw: Array<{ startH: number; endH: number }> | undefined;
+    let segHeightsRaw: WallSegmentHeightRow[] | undefined;
     if (canvasMode && wallConfigMode === 'single') {
       segLengths = [totalLengthCanvas];
       const singleH = parseFloat(height) || 1;
-      segHeightsRaw = [{ startH: singleH, endH: singleH }];
+      if (isDoubleWall && segmentHeights[0]) {
+        const r = segmentHeights[0];
+        segHeightsRaw = [
+          {
+            startH: singleH,
+            endH: singleH,
+            outerStartH: r.outerStartH ?? singleH,
+            outerEndH: r.outerEndH ?? singleH,
+            innerStartH: r.innerStartH ?? singleH,
+            innerEndH: r.innerEndH ?? singleH,
+          },
+        ];
+      } else {
+        segHeightsRaw = [{ startH: singleH, endH: singleH }];
+      }
     } else {
-      segLengths = savedInputs?.segmentLengths ?? [l];
+      segLengths = segmentLengths.length > 0 ? segmentLengths : [l];
       const useLocalHeights = segmentHeights.length === segLengths.length;
-      segHeightsRaw = useLocalHeights ? segmentHeights : (savedInputs?.segmentHeights as Array<{ startH: number; endH: number }> | undefined);
+      segHeightsRaw = useLocalHeights ? segmentHeights : (savedInputs?.segmentHeights as WallSegmentHeightRow[] | undefined);
     }
     if (segLengths.length === 0 && canvasMode && totalLengthCanvas > 0) {
       segLengths = [totalLengthCanvas];
@@ -772,9 +1101,9 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     if (!hasValidLength) return;
     if (!hasValidSegmentHeights && isNaN(h)) return;
 
-    const segHeights: Array<{ startH: number; endH: number }> = hasValidSegmentHeights
+    const segHeights: WallSegmentHeightRow[] = hasValidSegmentHeights
       ? segHeightsRaw!
-      : segLengths.map(() => ({ startH: defH, endH: defH }));
+      : segLengths.map(() => (isDoubleWall ? defaultDoubleWallRow(defH) : { startH: defH, endH: defH }));
 
     let area = 0;
     let units = 0;
@@ -789,49 +1118,54 @@ const WallCalculator: React.FC<CalculatorProps> = ({
     const { cementProportion, sandProportion } = getMortarMixRatioProportion(mortarMixRatio);
 
     const brickHeight = 0.06; // Brick height in meters
-    const brickLength = 0.215; // Brick length in meters (21.5 cm)
-    const mortarThickness = 0.01; // Mortar thickness in meters
-    const totalRowHeight = brickHeight + mortarThickness;
-
+    const outerWallKind = isDoubleWall ? outerWallType : type;
+    const bondOuter = isDoubleWall ? outerBrickBond : brickBond;
+    const layingOuter = isDoubleWall ? outerLayingMethod : layingMethod;
+    /** Wall thickness: `header` = 21.5 cm (PL „W poprzek”), `stretcher` = 10 cm (PL „Wzdłuż”). Along-wall module: header 0.1 m, stretcher 0.215 m. */
+    const brickAlongOuterM = bondOuter === 'header' ? 0.1 : 0.215;
+    const mortarThickness = 0.01; // Mortar thickness in meters (bricks)
+    /** Block wall joints — 15 mm; volume constants below are scaled for this (vs former 10 mm). */
+    const blockMortarThickness = 0.015;
     let blockHeight = 0.22; // Default block height
     let blockWidth = 0;
     let blockLength = 0.44; // Block length in meters
 
-    if (type === 'block4') {
+    if (outerWallKind === 'block4') {
       blockWidth = 0.10;
-    } else if (type === 'block7') {
+    } else if (outerWallKind === 'block7') {
       blockWidth = 0.14;
     }
-    
-    if (type === 'block4' || type === 'block7') {
-      if (layingMethod === 'flat') {
+
+    if (outerWallKind === 'block4' || outerWallKind === 'block7') {
+      if (layingOuter === 'flat') {
         blockHeight = blockWidth;
       }
     }
 
     const calcSegmentUnits = (segLen: number, avgH: number): { units: number; mortarVolume: number } => {
+      if (avgH <= 0) return { units: 0, mortarVolume: 0 };
       let segUnits = 0;
       let segMortar = 0;
-      switch (type) {
+      switch (outerWallKind) {
         case 'brick': {
           const brickRows = Math.ceil(avgH / (brickHeight + mortarThickness));
-          const bricksPerRow = Math.ceil(segLen / (brickLength + mortarThickness));
+          const bricksPerRow = Math.ceil(segLen / (brickAlongOuterM + mortarThickness));
           segUnits = brickRows * bricksPerRow;
           segMortar = segUnits * 0.000269;
           break;
         }
         case 'block4': {
-          const blockRows4 = Math.ceil(avgH / (blockHeight + mortarThickness));
-          const blocksPerRow4 = Math.ceil(segLen / (blockLength + mortarThickness));
+          const blockRows4 = Math.ceil(avgH / (blockHeight + blockMortarThickness));
+          const blocksPerRow4 = Math.ceil(segLen / (blockLength + blockMortarThickness));
           segUnits = blockRows4 * blocksPerRow4;
-          segMortar = segUnits * (layingMethod === 'flat' ? 0.001452 : 0.000871);
+          segMortar = segUnits * (layingOuter === 'flat' ? 0.002178 : 0.0013065);
           break;
         }
         case 'block7': {
-          const blockRows7 = Math.ceil(avgH / (blockHeight + mortarThickness));
-          const blocksPerRow7 = Math.ceil(segLen / (blockLength + mortarThickness));
+          const blockRows7 = Math.ceil(avgH / (blockHeight + blockMortarThickness));
+          const blocksPerRow7 = Math.ceil(segLen / (blockLength + blockMortarThickness));
           segUnits = blockRows7 * blocksPerRow7;
-          segMortar = segUnits * (layingMethod === 'flat' ? 0.001531 : 0.001109);
+          segMortar = segUnits * (layingOuter === 'flat' ? 0.0022965 : 0.0016635);
           break;
         }
         default:
@@ -840,13 +1174,66 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       return { units: segUnits, mortarVolume: segMortar };
     };
 
+    const brickAlongInnerM = innerBrickBond === 'header' ? 0.1 : 0.215;
+
+    const calcInnerLeafSegment = (segLen: number, avgH: number): { units: number; mortarVolume: number } => {
+      if (avgH <= 0) return { units: 0, mortarVolume: 0 };
+      if (innerWallType === 'brick') {
+        const brickRows = Math.ceil(avgH / (brickHeight + mortarThickness));
+        const bricksPerRow = Math.ceil(segLen / (brickAlongInnerM + mortarThickness));
+        const u = brickRows * bricksPerRow;
+        return { units: u, mortarVolume: u * 0.000269 };
+      }
+      const iw = innerWallType === 'block4' ? 0.10 : 0.14;
+      let ih = 0.22;
+      const ilen = 0.44;
+      if (innerLayingMethod === 'flat') ih = iw;
+      const blockRows = Math.ceil(avgH / (ih + blockMortarThickness));
+      const blocksPerRow = Math.ceil(segLen / (ilen + blockMortarThickness));
+      const u = blockRows * blocksPerRow;
+      const mv =
+        u *
+        (innerLayingMethod === 'flat'
+          ? innerWallType === 'block7'
+            ? 0.0022965
+            : 0.002178
+          : innerWallType === 'block7'
+            ? 0.0016635
+            : 0.0013065);
+      return { units: u, mortarVolume: mv };
+    };
+
     for (let i = 0; i < segHeights.length; i++) {
       const segLen = segLengths[i] ?? l / segHeights.length;
-      const avgH = (segHeights[i].startH + segHeights[i].endH) / 2;
-      area += segLen * avgH;
-      const seg = calcSegmentUnits(segLen, avgH);
-      units += seg.units;
-      mortarVolume += seg.mortarVolume;
+      const row = segHeights[i];
+      if (isDoubleWall) {
+        const outerAvg = getSegmentOuterLeafAvgM(row, defH, defH);
+        const innerAvg = getSegmentInnerLeafAvgM(row, defH, defH);
+        area += segLen * outerAvg + segLen * innerAvg;
+        if (outerAvg > 0) {
+          const seg = calcSegmentUnits(segLen, outerAvg);
+          units += seg.units;
+          mortarVolume += seg.mortarVolume;
+        }
+      } else {
+        const avgH = (row.startH + row.endH) / 2;
+        area += segLen * avgH;
+        const seg = calcSegmentUnits(segLen, avgH);
+        units += seg.units;
+        mortarVolume += seg.mortarVolume;
+      }
+    }
+
+    let innerLeafUnits = 0;
+    if (isDoubleWall) {
+      for (let i = 0; i < segHeights.length; i++) {
+        const segLen = segLengths[i] ?? l / segHeights.length;
+        const innerAvg = getSegmentInnerLeafAvgM(segHeights[i], defH, defH);
+        if (innerAvg <= 0) continue;
+        const seg = calcInnerLeafSegment(segLen, innerAvg);
+        innerLeafUnits += seg.units;
+        mortarVolume += seg.mortarVolume;
+      }
     }
 
     if (type === 'sleeper') {
@@ -893,7 +1280,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             task: firstLayerTask.name,
             hours: firstLayerTask.estimated_hours * totalFirstRowSleepers,
             amount: totalFirstRowSleepers,
-            unit: 'sleepers'
+            unit: 'pieces'
           });
         }
 
@@ -907,7 +1294,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
               task: regularLayerTask.name,
               hours: regularLayerTask.estimated_hours * totalAdditionalSleepers,
               amount: totalAdditionalSleepers,
-              unit: 'sleepers'
+              unit: 'pieces'
             });
           }
         }
@@ -948,8 +1335,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           if (units > 0) {
             const sleepersPerTrip = 1;
             const sleeperTrips = Math.ceil(units / sleepersPerTrip);
-            const sleeperCarrySpeed = 1500;
-            const sleeperTimePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / sleeperCarrySpeed;
+            const sleeperTimePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / FOOT_CARRY_SPEED_M_PER_H;
             const sleeperTransportTime = sleeperTrips * sleeperTimePerTrip;
 
             if (sleeperTransportTime > 0) {
@@ -957,7 +1343,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 task: 'transport sleepers',
                 hours: sleeperTransportTime,
                 amount: units,
-                unit: 'sleepers'
+                unit: 'pieces'
               });
             }
           }
@@ -965,8 +1351,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           if (postsNeeded > 0) {
             const postsPerTrip = 1;
             const postTrips = Math.ceil(postsNeeded / postsPerTrip);
-            const postCarrySpeed = 1500;
-            const postTimePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / postCarrySpeed;
+            const postTimePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / FOOT_CARRY_SPEED_M_PER_H;
             const postTransportTime = postTrips * postTimePerTrip;
 
             if (postTransportTime > 0) {
@@ -997,10 +1382,23 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           }
         }
 
+        const wallLenForLeveling = segLengths.reduce((a, b) => a + b, 0);
+        if (
+          preparingForWallTask &&
+          preparingForWallTask.estimated_hours !== undefined &&
+          wallLenForLeveling > 0
+        ) {
+          taskBreakdown.push({
+            task: 'preparing for the wall (leveling)',
+            hours: wallLenForLeveling * preparingForWallTask.estimated_hours,
+            event_task_id: preparingForWallTask.id,
+          });
+        }
+
         const finalTotalHours = taskBreakdown.reduce((sum, task) => sum + task.hours, 0);
 
         const materials: Material[] = [
-          { name: 'Sleepers', amount: units, unit: 'sleepers', price_per_unit: null, total_price: null },
+          { name: 'Sleepers', amount: units, unit: 'pieces', price_per_unit: null, total_price: null },
           { name: 'Post', amount: postsNeeded, unit: 'posts', price_per_unit: null, total_price: null }
         ];
 
@@ -1063,21 +1461,28 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
       }
 
-      // Calculate brick/block transport
-      let materialType = 'bricks';
-      if (type === 'block4' || type === 'block7') {
-        materialType = 'blocks';
+      let brickPiecesForTransport = 0;
+      let blockPiecesForTransport = 0;
+      if (isDoubleWall) {
+        if (outerWallType === 'brick') brickPiecesForTransport += units;
+        if (innerWallType === 'brick') brickPiecesForTransport += innerLeafUnits;
+        if (outerWallType === 'block4' || outerWallType === 'block7') blockPiecesForTransport += units;
+        if (innerWallType === 'block4' || innerWallType === 'block7') blockPiecesForTransport += innerLeafUnits;
+      } else if (type === 'brick') {
+        brickPiecesForTransport = units;
+      } else if (type === 'block4' || type === 'block7') {
+        blockPiecesForTransport = units;
       }
-      
-      if (units > 0) {
-        const unitResult = calculateMaterialTransportTime(units, carrierSizeForTransport, materialType, transportDistanceMeters);
-        if (type === 'brick') {
-          brickTransportTime = unitResult.totalTransportTime;
-          normalizedBrickTransportTime = unitResult.normalizedTransportTime;
-        } else {
-          blockTransportTime = unitResult.totalTransportTime;
-          normalizedBlockTransportTime = unitResult.normalizedTransportTime;
-        }
+
+      if (brickPiecesForTransport > 0) {
+        const unitResult = calculateMaterialTransportTime(brickPiecesForTransport, carrierSizeForTransport, 'bricks', transportDistanceMeters);
+        brickTransportTime = unitResult.totalTransportTime;
+        normalizedBrickTransportTime = unitResult.normalizedTransportTime;
+      }
+      if (blockPiecesForTransport > 0) {
+        const innerBt = calculateMaterialTransportTime(blockPiecesForTransport, carrierSizeForTransport, 'blocks', transportDistanceMeters);
+        blockTransportTime = innerBt.totalTransportTime;
+        normalizedBlockTransportTime = innerBt.normalizedTransportTime;
       }
 
       // Calculate sand transport
@@ -1097,59 +1502,115 @@ const WallCalculator: React.FC<CalculatorProps> = ({
 
     const totalLen = segLengths.reduce((a, b) => a + b, 0) || l;
     const effectiveH = totalLen > 0 ? area / totalLen : h;
-    const rows = effectiveH / (blockHeight + mortarThickness);
-    const roundedDownHeight = Math.floor(rows) * (blockHeight + mortarThickness);
-    const roundedUpHeight = Math.ceil(rows) * (blockHeight + mortarThickness);
+    const rowHeightM =
+      outerWallKind === 'brick' ? brickHeight + mortarThickness : blockHeight + blockMortarThickness;
+    const rows = effectiveH / rowHeightM;
+    const roundedDownHeight = Math.floor(rows) * rowHeightM;
+    const roundedUpHeight = Math.ceil(rows) * rowHeightM;
 
     // Calculate time estimates
     let totalHours = 0;
     const taskBreakdown: { task: string; hours: number; normalizedHours?: number }[] = [];
 
     if (taskTemplates && taskTemplates.length > 0) {
-      let relevantTask;
+      let relevantTask: { id: string; name: string; unit: string; estimated_hours: number | null } | undefined;
+      let innerLeafLaborHours = 0;
+      let innerLeafTaskName: string | null = null;
 
-      if (type === 'brick') {
-        relevantTask = taskTemplates[0]; // Bricklaying task
+      if (isDoubleWall) {
+        if (outerWallType === 'brick') {
+          relevantTask = taskTemplates[0];
+        } else {
+          relevantTask = taskTemplates.find(task =>
+            taskNameMatchesBlockWallType(task.name, outerWallType) &&
+            task.name.toLowerCase().includes(outerLayingMethod.toLowerCase())
+          );
+          if (!relevantTask && taskTemplates.length > 0) {
+            relevantTask = taskTemplates.find(task =>
+              taskNameMatchesBlockWallType(task.name, outerWallType)
+            );
+          }
+          if (!relevantTask && taskTemplates.length > 0) {
+            relevantTask = taskTemplates[0];
+          }
+        }
+        if (innerLeafUnits > 0) {
+          if (innerWallType === 'brick') {
+            const brickTask = innerLeafBrickTasks[0] ?? (outerWallType === 'brick' ? taskTemplates[0] : undefined);
+            if (brickTask?.estimated_hours) {
+              innerLeafLaborHours = innerLeafUnits * brickTask.estimated_hours;
+              innerLeafTaskName = brickTask.name;
+            }
+          } else if ((innerWallType === 'block4' || innerWallType === 'block7') && innerLeafBlockTasks.length > 0) {
+            let innerTask = innerLeafBlockTasks.find(task =>
+              taskNameMatchesBlockWallType(task.name, innerWallType) &&
+              task.name.toLowerCase().includes(innerLayingMethod.toLowerCase())
+            );
+            if (!innerTask) innerTask = innerLeafBlockTasks.find(t => taskNameMatchesBlockWallType(t.name, innerWallType));
+            if (!innerTask) innerTask = innerLeafBlockTasks[0];
+            if (innerTask?.estimated_hours) {
+              innerLeafLaborHours = innerLeafUnits * innerTask.estimated_hours;
+              innerLeafTaskName = innerTask.name;
+            }
+          }
+        }
+      } else if (type === 'brick') {
+        relevantTask = taskTemplates[0];
       } else {
-        // Improved task selection for blocks with better matching
-        const blockType = type === 'block4' ? '4-inch' : '7-inch';
-        
-        // First try to find an exact match
-        relevantTask = taskTemplates.find(task => 
-          task.name.toLowerCase().includes(blockType.toLowerCase()) && 
+        relevantTask = taskTemplates.find(task =>
+          taskNameMatchesBlockWallType(task.name, type) &&
           task.name.toLowerCase().includes(layingMethod.toLowerCase())
         );
-        
-        // If no exact match, try just the block type
+
         if (!relevantTask && taskTemplates.length > 0) {
-          relevantTask = taskTemplates.find(task => 
-            task.name.toLowerCase().includes(blockType.toLowerCase())
+          relevantTask = taskTemplates.find(task =>
+            taskNameMatchesBlockWallType(task.name, type)
           );
         }
-        
-        // Last resort: just use the first task in the list
+
         if (!relevantTask && taskTemplates.length > 0) {
           relevantTask = taskTemplates[0];
         }
       }
 
-
       if (relevantTask && relevantTask.estimated_hours) {
-        const taskHours = units * relevantTask.estimated_hours;
-        totalHours = taskHours;
-        taskBreakdown.push({
-          task: relevantTask.name,
-          hours: taskHours
-        });
+        if (isDoubleWall) {
+          const outerHours = units * relevantTask.estimated_hours;
+          totalHours = outerHours + innerLeafLaborHours;
+          taskBreakdown.push({
+            task: relevantTask.name,
+            hours: outerHours
+          });
+          if (innerLeafUnits > 0 && innerLeafLaborHours > 0 && innerLeafTaskName) {
+            taskBreakdown.push({
+              task: `${innerLeafTaskName} (${t('calculator:inner_leaf_task_suffix')})`,
+              hours: innerLeafLaborHours
+            });
+          }
+        } else if (type === 'brick') {
+          const outerHours = units * relevantTask.estimated_hours;
+          totalHours = outerHours;
+          taskBreakdown.push({
+            task: relevantTask.name,
+            hours: outerHours
+          });
+        } else {
+          const taskHours = units * relevantTask.estimated_hours;
+          totalHours = taskHours;
+          taskBreakdown.push({
+            task: relevantTask.name,
+            hours: taskHours
+          });
+        }
 
-        // Add transport tasks if applicable
-        if (effectiveCalculateTransport && (type === 'brick' && brickTransportTime > 0)) {
+        if (effectiveCalculateTransport && brickTransportTime > 0) {
           taskBreakdown.push({
             task: 'transport bricks',
             hours: brickTransportTime,
             normalizedHours: normalizedBrickTransportTime
           });
-        } else if (effectiveCalculateTransport && ((type === 'block4' || type === 'block7') && blockTransportTime > 0)) {
+        }
+        if (effectiveCalculateTransport && blockTransportTime > 0) {
           taskBreakdown.push({
             task: 'transport blocks',
             hours: blockTransportTime,
@@ -1213,11 +1674,32 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       { name: selectedSandMaterial?.name || 'Sand', amount: Number(sandTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: selectedSandMaterial?.price || null, total_price: null }
     ];
 
-    // Add specific materials based on wall type
-    if (type === 'brick') {
+    // Add specific materials based on wall type (double wall: same material names as single wall, one line per leaf)
+    const doubleWallLeafMaterialName = (wt: 'brick' | 'block4' | 'block7') =>
+      wt === 'brick' ? 'Bricks' : wt === 'block4' ? '4-inch blocks' : '6-inch blocks';
+    if (isDoubleWall) {
+      if (units > 0) {
+        materials.push({
+          name: doubleWallLeafMaterialName(outerWallType),
+          amount: units,
+          unit: 'pieces',
+          price_per_unit: null,
+          total_price: null
+        });
+      }
+      if (innerLeafUnits > 0) {
+        materials.push({
+          name: doubleWallLeafMaterialName(innerWallType),
+          amount: innerLeafUnits,
+          unit: 'pieces',
+          price_per_unit: null,
+          total_price: null
+        });
+      }
+    } else if (type === 'brick') {
       materials.push({ name: 'Bricks', amount: units, unit: 'pieces', price_per_unit: null, total_price: null });
     } else {
-      const blockType = type === 'block4' ? '4-inch blocks' : '7-inch blocks';
+      const blockType = type === 'block4' ? '4-inch blocks' : '6-inch blocks';
       materials.push({ name: blockType, amount: units, unit: 'pieces', price_per_unit: null, total_price: null });
     }
 
@@ -1247,7 +1729,8 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       roundedUpHeight: Number(roundedUpHeight.toFixed(2)),
       totalHours,
       taskBreakdown,
-      materials: materialsWithPrices
+      materials: materialsWithPrices,
+      innerLeafUnits: isDoubleWall ? innerLeafUnits : undefined,
     });
     if (canvasMode && (type === 'block4' || type === 'block7')) {
       if (includeTileInstallation) setTileCalculateTrigger(prev => prev + 1);
@@ -1271,12 +1754,12 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         task: item.task,
         hours: item.hours,
         amount: item.amount ?? result.units,
-        unit: item.unit ?? 'sleepers',
+        unit: item.unit ?? 'pieces',
       }));
       const formattedResults = {
         name: 'Sleeper Wall',
         amount: result.units,
-        unit: 'sleepers',
+        unit: 'pieces',
         hours_worked: totalHours,
         postMethod,
         includeFoundation: false,
@@ -1287,7 +1770,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         tileTaskBreakdown: [] as any[],
         tileMaterials: [] as any[],
         copingMaterials: [] as any[],
-        ...(canvasMode && segmentLengths.length > 0 && {
+        ...(segmentLengths.length > 0 && {
           segmentLengths,
           segmentHeights,
         }),
@@ -1346,11 +1829,22 @@ const WallCalculator: React.FC<CalculatorProps> = ({
 
       // Format results for database storage
       const formattedResults = {
-        name: `${type === 'brick' ? 'Brick' : type === 'block4' ? '4-inch Block' : '7-inch Block'} Wall`,
+        name: `${type === 'brick' ? 'Brick' : type === 'block4' ? '4-inch Block' : '6-inch Block'} Wall`,
         amount: result.units,
         unit: 'pieces',
         hours_worked: totalHours,
         includeFoundation,
+        ...(type === 'brick' && !isDoubleWall && { brickBond }),
+        ...(type === 'brick' && isDoubleWall && {
+          cavityWall: true,
+          outerWallType,
+          innerWallType,
+          outerBrickBond,
+          innerBrickBond,
+          outerLayingMethod,
+          innerLayingMethod,
+          innerLeafUnits: result.innerLeafUnits,
+        }),
         ...(includeFoundation && { diggingMethod: effectiveFoundationDiggingMethod }),
         ...(canvasMode && (type === 'block4' || type === 'block7') && {
           includeCopings,
@@ -1387,7 +1881,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
       // Notify parent component of results
       onResultsChange(formattedResults);
     }
-  }, [result, type, layingMethod, onResultsChange, includeFoundation, effectiveFoundationDiggingMethod, canvasMode, includeCopings, includeTileInstallation, segmentTileSides, frontFacesTiled, segmentLengths, segmentHeights, defH, tileInstallationResults, copingInstallationResults, wallTileSlabThicknessCm, wallTileAdhesiveThicknessCm, postMethod]);
+  }, [result, type, layingMethod, brickBond, isDoubleWall, outerWallType, innerWallType, outerBrickBond, innerBrickBond, outerLayingMethod, innerLayingMethod, onResultsChange, includeFoundation, effectiveFoundationDiggingMethod, canvasMode, includeCopings, includeTileInstallation, segmentTileSides, frontFacesTiled, segmentLengths, segmentHeights, defH, tileInstallationResults, copingInstallationResults, wallTileSlabThicknessCm, wallTileAdhesiveThicknessCm, postMethod]);
 
   // Scroll to results when they appear
   useEffect(() => {
@@ -1410,13 +1904,44 @@ const WallCalculator: React.FC<CalculatorProps> = ({
   if (canvasMode && isInProjectCreating) {
     const totalLen = totalLengthCanvas;
     const segs = wallConfigMode === 'segments' ? segmentLengths : [totalLen];
-    const heights = wallConfigMode === 'segments' ? segmentHeights : [{ startH: parseFloat(height) || 1, endH: parseFloat(height) || 1 }];
+    const fh = parseFloat(height) || 1;
+    const heights: WallSegmentHeightRow[] =
+      wallConfigMode === 'segments'
+        ? segmentHeights
+        : [
+            {
+              startH: fh,
+              endH: fh,
+              ...(isDoubleWall && segmentHeights[0]
+                ? {
+                    outerStartH: segmentHeights[0].outerStartH,
+                    outerEndH: segmentHeights[0].outerEndH,
+                    innerStartH: segmentHeights[0].innerStartH,
+                    innerEndH: segmentHeights[0].innerEndH,
+                  }
+                : {}),
+            },
+          ];
     const totalArea = segs.reduce((sum, len, i) => {
       const sh = heights[i];
-      const avgH = sh ? (sh.startH + sh.endH) / 2 : parseFloat(height) || 1;
+      if (!sh) return sum + len * fh;
+      if (isDoubleWall) {
+        const o = getSegmentOuterLeafAvgM(sh, fh, fh);
+        const inn = getSegmentInnerLeafAvgM(sh, fh, fh);
+        return sum + len * o + len * inn;
+      }
+      const avgH = (sh.startH + sh.endH) / 2;
       return sum + len * avgH;
     }, 0);
-    const allHeights = heights.flatMap(h => [h.startH, h.endH]);
+    const allHeights = heights.flatMap(h => {
+      if (isDoubleWall) {
+        return [
+          getSegmentOuterLeafAvgM(h, fh, fh),
+          getSegmentInnerLeafAvgM(h, fh, fh),
+        ];
+      }
+      return [h.startH, h.endH];
+    });
     const uniformH = allHeights.length > 0 && allHeights.every(v => v === allHeights[0]);
     const displayHeight = uniformH && allHeights[0] > 0 ? allHeights[0] : null;
 
@@ -1427,6 +1952,101 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           <Info size={14} style={{ color: colors.teal, flexShrink: 0 }} />
           <span>{t('calculator:from_canvas_length')} <strong style={{ color: colors.textPrimaryLight, fontWeight: 600 }}>{totalLen.toFixed(3)} m</strong></span>
         </div>
+
+        {type === 'brick' && !isDoubleWall && (
+          <div>
+            <div style={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.textLabel, marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('calculator:brick_bond_label')}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => setBrickBond('header')}
+                style={{
+                  padding: '6px 14px', borderRadius: radii.sm, border: brickBond === 'header' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`,
+                  background: brickBond === 'header' ? colors.greenBg : colors.bgSubtle, color: brickBond === 'header' ? colors.green : colors.textCool,
+                  fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer'
+                }}
+              >
+                {t('calculator:brick_bond_stretcher')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setBrickBond('stretcher')}
+                style={{
+                  padding: '6px 14px', borderRadius: 6, border: brickBond === 'stretcher' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`,
+                  background: brickBond === 'stretcher' ? colors.greenBg : colors.bgSubtle, color: brickBond === 'stretcher' ? colors.green : colors.textCool,
+                  fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer'
+                }}
+              >
+                {t('calculator:brick_bond_header')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {type === 'brick' && isDoubleWall && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing[4] }}>
+            <div style={{ paddingBottom: spacing[3], borderBottom: `1px solid ${colors.bgDeepBorder}` }}>
+              <SelectDropdown
+                label={t('calculator:wall_layer1_material_label')}
+                value={outerWallType}
+                onChange={(v) => setOuterWallType(v as 'brick' | 'block4' | 'block7')}
+                options={[
+                  { value: 'brick', label: t('calculator:inner_wall_option_brick') },
+                  { value: 'block4', label: t('calculator:inner_wall_option_block4') },
+                  { value: 'block7', label: t('calculator:inner_wall_option_block7') },
+                ]}
+              />
+              {outerWallType === 'brick' && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.textLabel, marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('calculator:brick_bond_label')}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <button type="button" onClick={() => setOuterBrickBond('header')} style={{ padding: '6px 14px', borderRadius: radii.sm, border: outerBrickBond === 'header' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`, background: outerBrickBond === 'header' ? colors.greenBg : colors.bgSubtle, color: outerBrickBond === 'header' ? colors.green : colors.textCool, fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>{t('calculator:brick_bond_stretcher')}</button>
+                    <button type="button" onClick={() => setOuterBrickBond('stretcher')} style={{ padding: '6px 14px', borderRadius: 6, border: outerBrickBond === 'stretcher' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`, background: outerBrickBond === 'stretcher' ? colors.greenBg : colors.bgSubtle, color: outerBrickBond === 'stretcher' ? colors.green : colors.textCool, fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>{t('calculator:brick_bond_header')}</button>
+                  </div>
+                </div>
+              )}
+              {(outerWallType === 'block4' || outerWallType === 'block7') && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.textLabel, marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('calculator:element_type_label')}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <button type="button" onClick={() => setOuterLayingMethod('standing')} style={{ padding: '6px 14px', borderRadius: radii.sm, border: outerLayingMethod === 'standing' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`, background: outerLayingMethod === 'standing' ? colors.greenBg : colors.bgSubtle, color: outerLayingMethod === 'standing' ? colors.green : colors.textCool, fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>{t('calculator:standing_label')}</button>
+                    <button type="button" onClick={() => setOuterLayingMethod('flat')} style={{ padding: '6px 14px', borderRadius: 6, border: outerLayingMethod === 'flat' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`, background: outerLayingMethod === 'flat' ? colors.greenBg : colors.bgSubtle, color: outerLayingMethod === 'flat' ? colors.green : colors.textCool, fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>{t('calculator:flat_label')}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div>
+              <SelectDropdown
+                label={t('calculator:wall_layer2_material_label')}
+                value={innerWallType}
+                onChange={(v) => setInnerWallType(v as 'brick' | 'block4' | 'block7')}
+                options={[
+                  { value: 'brick', label: t('calculator:inner_wall_option_brick') },
+                  { value: 'block4', label: t('calculator:inner_wall_option_block4') },
+                  { value: 'block7', label: t('calculator:inner_wall_option_block7') },
+                ]}
+              />
+              {innerWallType === 'brick' && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.textLabel, marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('calculator:brick_bond_label')}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <button type="button" onClick={() => setInnerBrickBond('header')} style={{ padding: '6px 14px', borderRadius: radii.sm, border: innerBrickBond === 'header' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`, background: innerBrickBond === 'header' ? colors.greenBg : colors.bgSubtle, color: innerBrickBond === 'header' ? colors.green : colors.textCool, fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>{t('calculator:brick_bond_stretcher')}</button>
+                    <button type="button" onClick={() => setInnerBrickBond('stretcher')} style={{ padding: '6px 14px', borderRadius: 6, border: innerBrickBond === 'stretcher' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`, background: innerBrickBond === 'stretcher' ? colors.greenBg : colors.bgSubtle, color: innerBrickBond === 'stretcher' ? colors.green : colors.textCool, fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>{t('calculator:brick_bond_header')}</button>
+                  </div>
+                </div>
+              )}
+              {(innerWallType === 'block4' || innerWallType === 'block7') && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.textLabel, marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('calculator:inner_leaf_laying_label')}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <button type="button" onClick={() => setInnerLayingMethod('standing')} style={{ padding: '6px 14px', borderRadius: radii.sm, border: innerLayingMethod === 'standing' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`, background: innerLayingMethod === 'standing' ? colors.greenBg : colors.bgSubtle, color: innerLayingMethod === 'standing' ? colors.green : colors.textCool, fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>{t('calculator:standing_label')}</button>
+                    <button type="button" onClick={() => setInnerLayingMethod('flat')} style={{ padding: '6px 14px', borderRadius: 6, border: innerLayingMethod === 'flat' ? `1px solid ${colors.greenBorder}` : `1px solid ${colors.borderInputDark}`, background: innerLayingMethod === 'flat' ? colors.greenBg : colors.bgSubtle, color: innerLayingMethod === 'flat' ? colors.green : colors.textCool, fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>{t('calculator:flat_label')}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Standing / Flat chips (block4, block7) */}
         {(type === 'block4' || type === 'block7') && (
@@ -1497,12 +2117,12 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           <div style={{ display: 'flex', background: colors.bgDeep, borderRadius: 8, border: `1px solid ${colors.bgDeepBorder}`, padding: 3, gap: 3 }}>
             <button
               type="button"
-              disabled={segmentLengths.length > 1}
-              onClick={() => segmentLengths.length <= 1 && setWallConfigModeWithSync('single')}
-              title={segmentLengths.length > 1 ? t('calculator:remove_segments_single') : undefined}
+              disabled={segmentSingleLocked}
+              onClick={() => !segmentSingleLocked && setWallConfigModeWithSync('single')}
+              title={segmentSingleLocked ? t('calculator:remove_segments_single') : undefined}
               style={{
                 flex: 1, padding: '9px 12px', borderRadius: 6, border: 'none', background: wallConfigMode === 'single' ? colors.greenBg : 'transparent',
-                color: segmentLengths.length > 1 ? colors.textDisabled : (wallConfigMode === 'single' ? colors.green : colors.textLabel), fontWeight: 600, fontSize: '0.82rem', cursor: segmentLengths.length > 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, opacity: segmentLengths.length > 1 ? 0.5 : 1
+                color: segmentSingleLocked ? colors.textDisabled : (wallConfigMode === 'single' ? colors.green : colors.textLabel), fontWeight: 600, fontSize: '0.82rem', cursor: segmentSingleLocked ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, opacity: segmentSingleLocked ? 0.5 : 1
               }}
             >
               <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><rect x={3} y={8} width={18} height={8} rx={1} /></svg>
@@ -1510,7 +2130,13 @@ const WallCalculator: React.FC<CalculatorProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setWallConfigMode('segments')}
+              onClick={() => {
+                if (type === 'sleeper' && !canvasMode && segmentLengthsFromSaved.length === 0 && manualSegmentLengths.length === 0) {
+                  enterSleeperStandaloneSegmentsMode();
+                } else {
+                  setWallConfigMode('segments');
+                }
+              }}
               style={{
                 flex: 1, padding: '9px 12px', borderRadius: 6, border: 'none', background: wallConfigMode === 'segments' ? colors.greenBg : 'transparent',
                 color: wallConfigMode === 'segments' ? colors.green : colors.textLabel, fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7
@@ -1555,14 +2181,56 @@ const WallCalculator: React.FC<CalculatorProps> = ({
 
         {/* Single wall section */}
         {wallConfigMode === 'single' && (
-          <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: colors.textWarm, marginBottom: 6, display: 'block' }}>{t('calculator:wall_length_m')}</label>
-              <input type="text" readOnly value={totalLen.toFixed(3)} style={{ width: '100%', padding: '8px 12px', background: colors.bgInputDarkAlpha, border: `1px solid ${colors.borderInputDark}`, borderRadius: 8, color: colors.textCool, fontSize: '0.85rem', cursor: 'default' }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 600, color: colors.textWarm, marginBottom: 6, display: 'block' }}>{t('calculator:wall_height_m')}</label>
-              <input type="number" value={height} onChange={(e) => setHeight(e.target.value)} step={0.1} min={0.1} style={{ width: '100%', padding: '8px 12px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 8, color: colors.textPrimaryLight, fontSize: '0.85rem', outline: 'none' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 120 }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: colors.textWarm, marginBottom: 6, display: 'block' }}>{t('calculator:wall_length_m')}</label>
+                <input type="text" readOnly value={totalLen.toFixed(3)} style={{ width: '100%', padding: '8px 12px', background: colors.bgInputDarkAlpha, border: `1px solid ${colors.borderInputDark}`, borderRadius: 8, color: colors.textCool, fontSize: '0.85rem', cursor: 'default' }} />
+              </div>
+              {!isDoubleWall ? (
+                <div style={{ flex: 1, minWidth: 120 }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: colors.textWarm, marginBottom: 6, display: 'block' }}>{t('calculator:wall_height_m')}</label>
+                  <input type="number" value={height} onChange={(e) => setHeight(e.target.value)} step={0.1} min={0.1} style={{ width: '100%', padding: '8px 12px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 8, color: colors.textPrimaryLight, fontSize: '0.85rem', outline: 'none' }} />
+                </div>
+              ) : (
+                <div style={{ flex: 2, minWidth: 260, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textCool, letterSpacing: '0.02em' }}>{doubleWallOuterCaption}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div>
+                        <label style={{ fontSize: '0.7rem', fontWeight: 600, color: colors.textWarm, marginBottom: 4, display: 'block' }}>{t('calculator:double_wall_outer_start_h')}</label>
+                        <input type="number" value={segmentHeights[0]?.outerStartH ?? fh} onChange={(e) => updateSegmentHeight(0, 'outerStartH', parseFloat(e.target.value) || 0)} step={0.1} min={0} style={{ width: '100%', padding: '6px 8px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 8, color: colors.textPrimaryLight, fontSize: '0.82rem', outline: 'none' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.7rem', fontWeight: 600, color: colors.textWarm, marginBottom: 4, display: 'block' }}>{t('calculator:double_wall_outer_end_h')}</label>
+                        <input type="number" value={segmentHeights[0]?.outerEndH ?? fh} onChange={(e) => updateSegmentHeight(0, 'outerEndH', parseFloat(e.target.value) || 0)} step={0.1} min={0} style={{ width: '100%', padding: '6px 8px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 8, color: colors.textPrimaryLight, fontSize: '0.82rem', outline: 'none' }} />
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      borderTop: `1px dashed ${colors.borderInputDark}`,
+                      paddingTop: 8,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textCool, letterSpacing: '0.02em' }}>{doubleWallInnerCaption}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div>
+                        <label style={{ fontSize: '0.7rem', fontWeight: 600, color: colors.textWarm, marginBottom: 4, display: 'block' }}>{t('calculator:double_wall_inner_start_h')}</label>
+                        <input type="number" value={segmentHeights[0]?.innerStartH ?? fh} onChange={(e) => updateSegmentHeight(0, 'innerStartH', parseFloat(e.target.value) || 0)} step={0.1} min={0} style={{ width: '100%', padding: '6px 8px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 8, color: colors.textPrimaryLight, fontSize: '0.82rem', outline: 'none' }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.7rem', fontWeight: 600, color: colors.textWarm, marginBottom: 4, display: 'block' }}>{t('calculator:double_wall_inner_end_h')}</label>
+                        <input type="number" value={segmentHeights[0]?.innerEndH ?? fh} onChange={(e) => updateSegmentHeight(0, 'innerEndH', parseFloat(e.target.value) || 0)} step={0.1} min={0} style={{ width: '100%', padding: '6px 8px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 8, color: colors.textPrimaryLight, fontSize: '0.82rem', outline: 'none' }} />
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.62rem', color: colors.textLabel, lineHeight: 1.35 }}>{t('calculator:segment_zero_removes_leaf_hint')}</div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1581,33 +2249,157 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                 {t('calculator:reset_button')}
               </button>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.68rem', color: colors.textLabel, fontWeight: 600 }}>{t('calculator:set_all_label')}</span>
-              {[0.6, 1.0, 1.2, 1.5, 1.8, 2.0].map(h => (
-                <button key={h} type="button" onClick={() => setAllHeights(h)} style={{ padding: '3px 10px', borderRadius: 12, border: `1px solid ${colors.borderInputDark}`, background: 'transparent', color: colors.textLabel, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer' }}>
-                  {h === 1 || h === 2 ? `${h}.0m` : `${h}m`}
-                </button>
-              ))}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+              {isDoubleWall ? (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.68rem', color: colors.textLabel, fontWeight: 600 }}>{t('calculator:double_wall_set_all_outer_label')}</span>
+                    <input
+                      type="number"
+                      step={0.1}
+                      min={0}
+                      placeholder={defH.toFixed(1)}
+                      value={bulkSetOuterInput}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setBulkSetOuterInput(raw);
+                        const v = parseBulkHeightM(raw);
+                        if (v != null) setAllOuterHeights(v);
+                      }}
+                      title={t('calculator:set_all_height_live_hint')}
+                      aria-label={t('calculator:double_wall_set_all_outer_label')}
+                      style={{ width: 88, padding: '5px 8px', borderRadius: 8, border: `1px solid ${colors.borderInputDark}`, background: colors.bgInputDark, color: colors.textPrimaryLight, fontSize: '0.78rem', fontFamily: "'JetBrains Mono', monospace", outline: 'none' }}
+                    />
+                    <span style={{ fontSize: '0.62rem', color: colors.textLabel }}>m</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.68rem', color: colors.textLabel, fontWeight: 600 }}>{t('calculator:double_wall_set_all_inner_label')}</span>
+                    <input
+                      type="number"
+                      step={0.1}
+                      min={0}
+                      placeholder={defH.toFixed(1)}
+                      value={bulkSetInnerInput}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setBulkSetInnerInput(raw);
+                        const v = parseBulkHeightM(raw);
+                        if (v != null) setAllInnerHeights(v);
+                      }}
+                      title={t('calculator:set_all_height_live_hint')}
+                      aria-label={t('calculator:double_wall_set_all_inner_label')}
+                      style={{ width: 88, padding: '5px 8px', borderRadius: 8, border: `1px solid ${colors.borderInputDark}`, background: colors.bgInputDark, color: colors.textPrimaryLight, fontSize: '0.78rem', fontFamily: "'JetBrains Mono', monospace", outline: 'none' }}
+                    />
+                    <span style={{ fontSize: '0.62rem', color: colors.textLabel }}>m</span>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.68rem', color: colors.textLabel, fontWeight: 600 }}>{t('calculator:set_all_label')}</span>
+                  <input
+                    type="number"
+                    step={0.1}
+                    min={0}
+                    placeholder={defH.toFixed(1)}
+                    value={bulkSetAllInput}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setBulkSetAllInput(raw);
+                      const v = parseBulkHeightM(raw);
+                      if (v != null) setAllHeights(v);
+                    }}
+                    title={t('calculator:set_all_height_live_hint')}
+                    aria-label={t('calculator:set_all_label')}
+                    style={{ width: 88, padding: '5px 8px', borderRadius: 8, border: `1px solid ${colors.borderInputDark}`, background: colors.bgInputDark, color: colors.textPrimaryLight, fontSize: '0.78rem', fontFamily: "'JetBrains Mono', monospace", outline: 'none' }}
+                  />
+                  <span style={{ fontSize: '0.62rem', color: colors.textLabel }}>m</span>
+                </div>
+              )}
             </div>
             <div style={{ background: colors.bgDeep, border: `1px solid ${colors.bgDeepBorder}`, borderRadius: 12, overflow: 'hidden', marginTop: 10 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '46px 1fr 100px 100px', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel, padding: '0 12px', textTransform: 'uppercase' }}>#</span>
-                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel, padding: '0 12px', textTransform: 'uppercase' }}>{t('calculator:length_label')}</span>
-                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel, padding: '0 12px', textTransform: 'uppercase', textAlign: 'center' }}>{t('calculator:segment_start_h')}</span>
-                <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel, padding: '0 12px', textTransform: 'uppercase', textAlign: 'center' }}>{t('calculator:segment_end_h')}</span>
-              </div>
-              {segmentLengths.map((segLen, idx) => (
-                <div key={idx} style={{ display: 'grid', gridTemplateColumns: '46px 1fr 100px 100px', alignItems: 'center', padding: 0, borderBottom: idx < segmentLengths.length - 1 ? `1px solid ${colors.borderSubtle}` : 'none', background: idx % 2 === 1 ? colors.bgSubtle : undefined }}>
-                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem', fontWeight: 600, color: colors.textLabel, textAlign: 'center', padding: '10px 0' }}>{idx + 1}</div>
-                  <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.82rem', fontWeight: 600, color: colors.textPrimaryLight, padding: '10px 12px' }}>{segLen.toFixed(2)} <span style={{ fontSize: '0.72rem', color: colors.textLabel }}>m</span></div>
-                  <div style={{ padding: '5px 6px', display: 'flex', justifyContent: 'center' }}>
-                    <input type="number" value={segmentHeights[idx]?.startH ?? defH} step={0.1} min={0.1} onChange={(e) => updateSegmentHeight(idx, 'startH', parseFloat(e.target.value) || 0)} style={{ width: '100%', maxWidth: 80, padding: '6px 8px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', textAlign: 'center', outline: 'none' }} />
+              {isDoubleWall ? (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr repeat(4, minmax(56px, 1fr))', padding: '6px 0 0', gap: 4, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <div style={{ gridColumn: '1 / 3', minHeight: 4 }} />
+                    <div
+                      style={{
+                        gridColumn: '3 / 5',
+                        fontSize: '0.62rem',
+                        fontWeight: 700,
+                        color: colors.textCool,
+                        textAlign: 'center',
+                        padding: '6px 4px',
+                        borderLeft: `1px dashed ${colors.borderInputDark}`,
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {doubleWallOuterCaption}
+                    </div>
+                    <div
+                      style={{
+                        gridColumn: '5 / -1',
+                        fontSize: '0.62rem',
+                        fontWeight: 700,
+                        color: colors.textCool,
+                        textAlign: 'center',
+                        padding: '6px 4px',
+                        borderLeft: `1px dashed ${colors.borderInputDark}`,
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {doubleWallInnerCaption}
+                    </div>
                   </div>
-                  <div style={{ padding: '5px 6px', display: 'flex', justifyContent: 'center' }}>
-                    <input type="number" value={segmentHeights[idx]?.endH ?? defH} step={0.1} min={0.1} onChange={(e) => updateSegmentHeight(idx, 'endH', parseFloat(e.target.value) || 0)} style={{ width: '100%', maxWidth: 80, padding: '6px 8px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', textAlign: 'center', outline: 'none' }} />
+                  <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr repeat(4, minmax(56px, 1fr))', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', gap: 4 }}>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textLabel, padding: '0 8px', textTransform: 'uppercase' }}>#</span>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textLabel, textTransform: 'uppercase' }}>{t('calculator:length_label')}</span>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textLabel, textAlign: 'center', borderLeft: `1px dashed ${colors.borderInputDark}`, padding: '0 2px' }}>{t('calculator:segment_start_h_short')}</span>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textLabel, textAlign: 'center' }}>{t('calculator:segment_end_h_short')}</span>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textLabel, textAlign: 'center', borderLeft: `1px dashed ${colors.borderInputDark}`, padding: '0 2px' }}>{t('calculator:segment_start_h_short')}</span>
+                    <span style={{ fontSize: '0.65rem', fontWeight: 700, color: colors.textLabel, textAlign: 'center' }}>{t('calculator:segment_end_h_short')}</span>
                   </div>
-                </div>
-              ))}
+                  <div style={{ fontSize: '0.6rem', color: colors.textLabel, padding: '6px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', lineHeight: 1.35 }}>{t('calculator:segment_zero_removes_leaf_hint')}</div>
+                  {segmentLengths.map((segLen, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '40px 1fr repeat(4, minmax(56px, 1fr))', alignItems: 'center', padding: '4px 0', gap: 4, borderBottom: idx < segmentLengths.length - 1 ? `1px solid ${colors.borderSubtle}` : 'none', background: idx % 2 === 1 ? colors.bgSubtle : undefined }}>
+                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem', fontWeight: 600, color: colors.textLabel, textAlign: 'center' }}>{idx + 1}</div>
+                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.82rem', fontWeight: 600, color: colors.textPrimaryLight, padding: '6px 8px' }}>{segLen.toFixed(2)} <span style={{ fontSize: '0.72rem', color: colors.textLabel }}>m</span></div>
+                      <div style={{ padding: '4px', display: 'flex', justifyContent: 'center', borderLeft: `1px dashed ${colors.borderInputDark}` }}>
+                        <input type="number" value={segmentHeights[idx]?.outerStartH ?? defH} step={0.1} min={0} onChange={(e) => updateSegmentHeight(idx, 'outerStartH', parseFloat(e.target.value) || 0)} style={{ width: '100%', maxWidth: 72, padding: '5px 4px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.72rem', textAlign: 'center', outline: 'none' }} />
+                      </div>
+                      <div style={{ padding: '4px', display: 'flex', justifyContent: 'center' }}>
+                        <input type="number" value={segmentHeights[idx]?.outerEndH ?? defH} step={0.1} min={0} onChange={(e) => updateSegmentHeight(idx, 'outerEndH', parseFloat(e.target.value) || 0)} style={{ width: '100%', maxWidth: 72, padding: '5px 4px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.72rem', textAlign: 'center', outline: 'none' }} />
+                      </div>
+                      <div style={{ padding: '4px', display: 'flex', justifyContent: 'center', borderLeft: `1px dashed ${colors.borderInputDark}` }}>
+                        <input type="number" value={segmentHeights[idx]?.innerStartH ?? defH} step={0.1} min={0} onChange={(e) => updateSegmentHeight(idx, 'innerStartH', parseFloat(e.target.value) || 0)} style={{ width: '100%', maxWidth: 72, padding: '5px 4px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.72rem', textAlign: 'center', outline: 'none' }} />
+                      </div>
+                      <div style={{ padding: '4px', display: 'flex', justifyContent: 'center' }}>
+                        <input type="number" value={segmentHeights[idx]?.innerEndH ?? defH} step={0.1} min={0} onChange={(e) => updateSegmentHeight(idx, 'innerEndH', parseFloat(e.target.value) || 0)} style={{ width: '100%', maxWidth: 72, padding: '5px 4px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.72rem', textAlign: 'center', outline: 'none' }} />
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '46px 1fr 100px 100px', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel, padding: '0 12px', textTransform: 'uppercase' }}>#</span>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel, padding: '0 12px', textTransform: 'uppercase' }}>{t('calculator:length_label')}</span>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel, padding: '0 12px', textTransform: 'uppercase', textAlign: 'center' }}>{t('calculator:segment_start_h')}</span>
+                    <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colors.textLabel, padding: '0 12px', textTransform: 'uppercase', textAlign: 'center' }}>{t('calculator:segment_end_h')}</span>
+                  </div>
+                  {segmentLengths.map((segLen, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '46px 1fr 100px 100px', alignItems: 'center', padding: 0, borderBottom: idx < segmentLengths.length - 1 ? `1px solid ${colors.borderSubtle}` : 'none', background: idx % 2 === 1 ? colors.bgSubtle : undefined }}>
+                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.75rem', fontWeight: 600, color: colors.textLabel, textAlign: 'center', padding: '10px 0' }}>{idx + 1}</div>
+                      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.82rem', fontWeight: 600, color: colors.textPrimaryLight, padding: '10px 12px' }}>{segLen.toFixed(2)} <span style={{ fontSize: '0.72rem', color: colors.textLabel }}>m</span></div>
+                      <div style={{ padding: '5px 6px', display: 'flex', justifyContent: 'center' }}>
+                        <input type="number" value={segmentHeights[idx]?.startH ?? defH} step={0.1} min={0.1} onChange={(e) => updateSegmentHeight(idx, 'startH', parseFloat(e.target.value) || 0)} style={{ width: '100%', maxWidth: 80, padding: '6px 8px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', textAlign: 'center', outline: 'none' }} />
+                      </div>
+                      <div style={{ padding: '5px 6px', display: 'flex', justifyContent: 'center' }}>
+                        <input type="number" value={segmentHeights[idx]?.endH ?? defH} step={0.1} min={0.1} onChange={(e) => updateSegmentHeight(idx, 'endH', parseFloat(e.target.value) || 0)} style={{ width: '100%', maxWidth: 80, padding: '6px 8px', background: colors.bgInputDark, border: `1px solid ${colors.borderInputDark}`, borderRadius: 6, color: colors.textPrimaryLight, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', textAlign: 'center', outline: 'none' }} />
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1812,16 +2604,18 @@ const WallCalculator: React.FC<CalculatorProps> = ({
                           const [s0, s1] = segmentTileSides[i] ?? [false, false];
                           if (!s0 && !s1) continue;
                           const sh = segmentHeights[i];
-                          const avgH = ((sh?.startH ?? defH) + (sh?.endH ?? defH)) / 2;
-                          segs.push({ length: segmentLengths[i], height: avgH });
+                          const h0 = sh?.startH ?? defH;
+                          const h1 = sh?.endH ?? defH;
+                          const avgH = (h0 + h1) / 2;
+                          segs.push({ length: segmentLengths[i], height: avgH, startH: h0, endH: h1 });
                         }
                         if (frontFacesTiled[0]) {
                           const h0 = segmentHeights[0] ? (segmentHeights[0].startH + segmentHeights[0].endH) / 2 : defH;
-                          segs.push({ length: frontThicknessM, height: h0 });
+                          segs.push({ length: frontThicknessM, height: h0, startH: h0, endH: h0 });
                         }
                         if (frontFacesTiled[1]) {
                           const hLast = segmentHeights.length > 0 ? (segmentHeights[segmentHeights.length - 1].startH + segmentHeights[segmentHeights.length - 1].endH) / 2 : defH;
-                          segs.push({ length: frontThicknessM, height: hLast });
+                          segs.push({ length: frontThicknessM, height: hLast, startH: hLast, endH: hLast });
                         }
                         return segs;
                       })()}
@@ -1839,10 +2633,10 @@ const WallCalculator: React.FC<CalculatorProps> = ({
         </div>
         )}
 
-        <button onClick={calculate} style={{ width: '100%', padding: '9px 20px', borderRadius: 8, background: colors.green, color: colors.textOnAccent, fontWeight: 600, fontSize: '0.85rem', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+        <Button variant="primary" fullWidth onClick={calculate}>
           <Check size={15} />
           {t('calculator:calculate_button')}
-        </button>
+        </Button>
 
         {result && (
           <div ref={resultsRef} style={{ marginTop: 16 }}>
@@ -1998,54 +2792,311 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           {chipBtn(postMethod === 'concrete', () => setPostMethod('concrete'), t('calculator:input_concrete_in_posts'))}
           {chipBtn(postMethod === 'direct', () => setPostMethod('direct'), t('calculator:input_drive_posts_directly'))}
         </div>
-      ) : (
-        (type === 'block4' || type === 'block7') && (
-          <div style={{ display: 'flex', gap: spacing.md }}>
-            {chipBtn(layingMethod === 'standing', () => setLayingMethod('standing'), t('calculator:standing_label'))}
-            {chipBtn(layingMethod === 'flat', () => setLayingMethod('flat'), t('calculator:flat_label'))}
+      ) : type === 'brick' && !isDoubleWall ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, marginBottom: spacing["5xl"] }}>
+          <div style={{ display: 'flex', gap: spacing.md, flexWrap: 'wrap' }}>
+            {chipBtn(brickBond === 'header', () => setBrickBond('header'), t('calculator:brick_bond_stretcher'))}
+            {chipBtn(brickBond === 'stretcher', () => setBrickBond('stretcher'), t('calculator:brick_bond_header'))}
           </div>
-        )
-      )}
-      <TextInput label={t('calculator:wall_length_label')} value={length} onChange={setLength} placeholder="0" unit="m" />
-      <TextInput label={t('calculator:wall_height_label')} value={height} onChange={setHeight} placeholder="0" unit="m" />
-
-      {/* Wall segments (przełamania) - when segmentLengths from canvas */}
-      {segmentLengths.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, color: colors.textSegment }}>{t('calculator:wall_segments_label')}</div>
-          {segmentLengths.map((segLen, idx) => (
-            <div key={idx} style={{ padding: '10px 12px', background: colors.bgOverlay, border: `1px solid ${colors.borderSegment}`, borderRadius: 6 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: colors.textSegment, marginBottom: 8 }}>
-                {t('calculator:wall_segment_n', { n: idx + 1 })}
-                <span style={{ color: colors.teal, marginLeft: 8 }}>{segLen.toFixed(2)} m</span>
+        </div>
+      ) : type === 'brick' && isDoubleWall ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["5xl"], marginBottom: spacing["5xl"] }}>
+          <div style={{ paddingBottom: spacing[4], borderBottom: `1px solid ${colors.borderDefault}` }}>
+            <SelectDropdown
+              label={t('calculator:wall_layer1_material_label')}
+              value={outerWallType}
+              onChange={(v) => setOuterWallType(v as 'brick' | 'block4' | 'block7')}
+              options={[
+                { value: 'brick', label: t('calculator:inner_wall_option_brick') },
+                { value: 'block4', label: t('calculator:inner_wall_option_block4') },
+                { value: 'block7', label: t('calculator:inner_wall_option_block7') },
+              ]}
+            />
+            {outerWallType === 'brick' && (
+              <div style={{ display: 'flex', gap: spacing.md, flexWrap: 'wrap', marginTop: spacing.md }}>
+                {chipBtn(outerBrickBond === 'header', () => setOuterBrickBond('header'), t('calculator:brick_bond_stretcher'))}
+                {chipBtn(outerBrickBond === 'stretcher', () => setOuterBrickBond('stretcher'), t('calculator:brick_bond_header'))}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, color: colors.textSegmentLabel, marginBottom: 2 }}>{t('calculator:segment_start_h')}</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={segmentHeights[idx]?.startH ?? defH}
-                    onChange={(e) => updateSegmentHeight(idx, 'startH', parseFloat(e.target.value) || 0)}
-                    style={{ width: '100%', padding: '6px 10px', background: colors.bgSegmentInput, border: `1px solid ${colors.borderSegment}`, borderRadius: 6, color: colors.textSegment, fontSize: 13, outline: 'none' }}
-                  />
+            )}
+            {(outerWallType === 'block4' || outerWallType === 'block7') && (
+              <div style={{ display: 'flex', gap: spacing.md, flexWrap: 'wrap', marginTop: spacing.md }}>
+                {chipBtn(outerLayingMethod === 'standing', () => setOuterLayingMethod('standing'), t('calculator:standing_label'))}
+                {chipBtn(outerLayingMethod === 'flat', () => setOuterLayingMethod('flat'), t('calculator:flat_label'))}
+              </div>
+            )}
+          </div>
+          <div>
+            <SelectDropdown
+              label={t('calculator:wall_layer2_material_label')}
+              value={innerWallType}
+              onChange={(v) => setInnerWallType(v as 'brick' | 'block4' | 'block7')}
+              options={[
+                { value: 'brick', label: t('calculator:inner_wall_option_brick') },
+                { value: 'block4', label: t('calculator:inner_wall_option_block4') },
+                { value: 'block7', label: t('calculator:inner_wall_option_block7') },
+              ]}
+            />
+            {innerWallType === 'brick' && (
+              <div style={{ display: 'flex', gap: spacing.md, flexWrap: 'wrap', marginTop: spacing.md }}>
+                {chipBtn(innerBrickBond === 'header', () => setInnerBrickBond('header'), t('calculator:brick_bond_stretcher'))}
+                {chipBtn(innerBrickBond === 'stretcher', () => setInnerBrickBond('stretcher'), t('calculator:brick_bond_header'))}
+              </div>
+            )}
+            {(innerWallType === 'block4' || innerWallType === 'block7') && (
+              <div style={{ display: 'flex', gap: spacing.md, flexWrap: 'wrap', marginTop: spacing.md }}>
+                {chipBtn(innerLayingMethod === 'standing', () => setInnerLayingMethod('standing'), t('calculator:standing_label'))}
+                {chipBtn(innerLayingMethod === 'flat', () => setInnerLayingMethod('flat'), t('calculator:flat_label'))}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (type === 'block4' || type === 'block7') ? (
+        <div style={{ display: 'flex', gap: spacing.md }}>
+          {chipBtn(layingMethod === 'standing', () => setLayingMethod('standing'), t('calculator:standing_label'))}
+          {chipBtn(layingMethod === 'flat', () => setLayingMethod('flat'), t('calculator:flat_label'))}
+        </div>
+      ) : null}
+      {type === 'sleeper' && !canvasMode ? (
+        <>
+          <div>
+            <label style={{ fontSize: fontSizes.sm, fontWeight: 600, color: colors.textMuted, marginBottom: spacing.sm, display: 'block' }}>{t('calculator:wall_configuration_label')}</label>
+            <div style={{ display: 'flex', background: colors.bgCardInner, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}`, padding: 3, gap: 3 }}>
+              <button
+                type="button"
+                disabled={segmentSingleLocked}
+                onClick={() => !segmentSingleLocked && setWallConfigModeWithSync('single')}
+                title={segmentSingleLocked ? t('calculator:remove_segments_single') : undefined}
+                style={{
+                  flex: 1, padding: `${spacing.lg}px ${spacing.xl}px`, borderRadius: radii.lg, border: 'none',
+                  background: wallConfigMode === 'single' ? colors.accentBlueBg : 'transparent',
+                  color: segmentSingleLocked ? colors.textDisabled : (wallConfigMode === 'single' ? colors.accentBlue : colors.textDim), fontWeight: fontWeights.semibold, fontSize: fontSizes.md, cursor: segmentSingleLocked ? 'not-allowed' : 'pointer', opacity: segmentSingleLocked ? 0.5 : 1,
+                }}
+              >
+                {t('calculator:single_wall_label')}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (segmentLengthsFromSaved.length === 0 && manualSegmentLengths.length === 0) {
+                    enterSleeperStandaloneSegmentsMode();
+                  } else {
+                    setWallConfigMode('segments');
+                  }
+                }}
+                style={{
+                  flex: 1, padding: `${spacing.lg}px ${spacing.xl}px`, borderRadius: radii.lg, border: 'none',
+                  background: wallConfigMode === 'segments' ? colors.accentBlueBg : 'transparent',
+                  color: wallConfigMode === 'segments' ? colors.accentBlue : colors.textDim, fontWeight: fontWeights.semibold, fontSize: fontSizes.sm, cursor: 'pointer',
+                }}
+              >
+                {t('calculator:segments_label')}
+                {segmentLengths.length > 1 ? <span style={{ marginLeft: 6 }}>({segmentLengths.length})</span> : null}
+              </button>
+            </div>
+            <div style={{ fontSize: fontSizes.sm, color: colors.textDim, marginTop: spacing.md }}>
+              {wallConfigMode === 'single' ? t('calculator:wall_config_single_desc') : t('calculator:wall_config_segments_desc')}
+            </div>
+          </div>
+
+          {wallConfigMode === 'single' ? (
+            <>
+              <TextInput label={t('calculator:wall_length_label')} value={length} onChange={setLength} placeholder="0" unit="m" />
+              <TextInput label={t('calculator:wall_height_label')} value={height} onChange={setHeight} placeholder="0" unit="m" />
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.md, alignItems: 'center' }}>
+                <span style={{ fontSize: fontSizes.sm, color: colors.textMuted }}>
+                  {t('calculator:total_length_label')}: <strong style={{ color: colors.textPrimary }}>{segmentLengths.reduce((a, b) => a + b, 0).toFixed(3)} m</strong>
+                </span>
+                {segmentLengthsFromSaved.length === 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={addManualSleeperSegment}
+                      style={{ padding: '6px 12px', borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, background: colors.bgCardInner, color: colors.textSecondary, fontSize: fontSizes.sm, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      {t('calculator:add_segment')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={removeManualSleeperSegment}
+                      disabled={manualSegmentLengths.length <= 2}
+                      style={{ padding: '6px 12px', borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, background: colors.bgCardInner, color: colors.textSecondary, fontSize: fontSizes.sm, fontWeight: 600, cursor: manualSegmentLengths.length <= 2 ? 'not-allowed' : 'pointer', opacity: manualSegmentLengths.length <= 2 ? 0.5 : 1 }}
+                    >
+                      {t('calculator:remove_segment')}
+                    </button>
+                  </>
+                )}
+              </div>
+              <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 1fr 1fr', padding: `${spacing.md}px ${spacing.xl}px`, borderBottom: `1px solid ${colors.borderLight}`, fontSize: fontSizes.xs, fontWeight: 600, color: colors.textDim, textTransform: 'uppercase' }}>
+                  <span>#</span>
+                  <span>{t('calculator:length_label')}</span>
+                  <span style={{ textAlign: 'center' }}>{t('calculator:segment_start_h')}</span>
+                  <span style={{ textAlign: 'center' }}>{t('calculator:segment_end_h')}</span>
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 11, color: colors.textSegmentLabel, marginBottom: 2 }}>{t('calculator:segment_end_h')}</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={segmentHeights[idx]?.endH ?? defH}
-                    onChange={(e) => updateSegmentHeight(idx, 'endH', parseFloat(e.target.value) || 0)}
-                    style={{ width: '100%', padding: '6px 10px', background: colors.bgSegmentInput, border: `1px solid ${colors.borderSegment}`, borderRadius: 6, color: colors.textSegment, fontSize: 13, outline: 'none' }}
-                  />
-                </div>
+                {segmentLengths.map((segLen, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '40px 1fr 1fr 1fr',
+                      alignItems: 'center',
+                      padding: `${spacing.md}px ${spacing.xl}px`,
+                      borderBottom: idx < segmentLengths.length - 1 ? `1px solid ${colors.borderLight}` : 'none',
+                      background: idx % 2 === 1 ? colors.bgTableRowAlt : undefined,
+                    }}
+                  >
+                    <span style={{ fontWeight: fontWeights.semibold, color: colors.textDim }}>{idx + 1}</span>
+                    <div>
+                      {segmentLengthsFromSaved.length === 0 ? (
+                        <input
+                          type="number"
+                          min={0.01}
+                          step={0.01}
+                          value={manualSegmentLengths[idx] ?? segLen}
+                          onChange={(e) => updateManualSegmentLength(idx, parseFloat(e.target.value) || 0.01)}
+                          style={{ width: '100%', maxWidth: 120, padding: '6px 10px', borderRadius: radii.md, border: `1px solid ${colors.borderInput}`, fontSize: fontSizes.sm }}
+                        />
+                      ) : (
+                        <span style={{ fontWeight: fontWeights.semibold, color: colors.textSecondary }}>{segLen.toFixed(2)} m</span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <input
+                        type="number"
+                        min={0.01}
+                        step={0.01}
+                        value={segmentHeights[idx]?.startH ?? defH}
+                        onChange={(e) => updateSegmentHeight(idx, 'startH', parseFloat(e.target.value) || 0)}
+                        style={{ width: '100%', maxWidth: 100, padding: '6px 8px', borderRadius: radii.md, border: `1px solid ${colors.borderInput}`, fontSize: fontSizes.sm, textAlign: 'center' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                      <input
+                        type="number"
+                        min={0.01}
+                        step={0.01}
+                        value={segmentHeights[idx]?.endH ?? defH}
+                        onChange={(e) => updateSegmentHeight(idx, 'endH', parseFloat(e.target.value) || 0)}
+                        style={{ width: '100%', maxWidth: 100, padding: '6px 8px', borderRadius: radii.md, border: `1px solid ${colors.borderInput}`, fontSize: fontSizes.sm, textAlign: 'center' }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+          )}
+        </>
+      ) : (
+        <>
+          <TextInput label={t('calculator:wall_length_label')} value={length} onChange={setLength} placeholder="0" unit="m" />
+          {isDoubleWall && segmentLengths.length > 0 ? (
+            <TextInput label={t('calculator:double_wall_default_height_label')} value={height} onChange={setHeight} placeholder="1" unit="m" />
+          ) : (
+            <TextInput label={t('calculator:wall_height_label')} value={height} onChange={setHeight} placeholder="0" unit="m" />
+          )}
+
+          {/* Wall segments (przełamania) — imported / canvas; not used for sleeper standalone (dedicated UI above) */}
+          {segmentLengths.length > 0 && !(type === 'sleeper' && !canvasMode) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: colors.textSegment }}>{t('calculator:wall_segments_label')}</div>
+              {segmentLengths.map((segLen, idx) => (
+                <div key={idx} style={{ padding: '10px 12px', background: colors.bgOverlay, border: `1px solid ${colors.borderSegment}`, borderRadius: 6 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: colors.textSegment, marginBottom: 8 }}>
+                    {t('calculator:wall_segment_n', { n: idx + 1 })}
+                    <span style={{ color: colors.teal, marginLeft: 8 }}>{segLen.toFixed(2)} m</span>
+                  </div>
+                  {isDoubleWall ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: colors.textSegment, marginBottom: 6, lineHeight: 1.3 }}>{doubleWallOuterCaption}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, color: colors.textSegmentLabel, marginBottom: 2 }}>{t('calculator:double_wall_outer_start_h')}</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={segmentHeights[idx]?.outerStartH ?? defH}
+                              onChange={(e) => updateSegmentHeight(idx, 'outerStartH', parseFloat(e.target.value) || 0)}
+                              style={{ width: '100%', padding: '6px 10px', background: colors.bgSegmentInput, border: `1px solid ${colors.borderSegment}`, borderRadius: 6, color: colors.textSegment, fontSize: 13, outline: 'none' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, color: colors.textSegmentLabel, marginBottom: 2 }}>{t('calculator:double_wall_outer_end_h')}</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={segmentHeights[idx]?.outerEndH ?? segmentHeights[idx]?.endH ?? defH}
+                              onChange={(e) => updateSegmentHeight(idx, 'outerEndH', parseFloat(e.target.value) || 0)}
+                              style={{ width: '100%', padding: '6px 10px', background: colors.bgSegmentInput, border: `1px solid ${colors.borderSegment}`, borderRadius: 6, color: colors.textSegment, fontSize: 13, outline: 'none' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ borderTop: `1px dashed ${colors.borderSegment}`, paddingTop: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: colors.textSegment, marginBottom: 6, lineHeight: 1.3 }}>{doubleWallInnerCaption}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, color: colors.textSegmentLabel, marginBottom: 2 }}>{t('calculator:double_wall_inner_start_h')}</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={segmentHeights[idx]?.innerStartH ?? defH}
+                              onChange={(e) => updateSegmentHeight(idx, 'innerStartH', parseFloat(e.target.value) || 0)}
+                              style={{ width: '100%', padding: '6px 10px', background: colors.bgSegmentInput, border: `1px solid ${colors.borderSegment}`, borderRadius: 6, color: colors.textSegment, fontSize: 13, outline: 'none' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ display: 'block', fontSize: 11, color: colors.textSegmentLabel, marginBottom: 2 }}>{t('calculator:double_wall_inner_end_h')}</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={segmentHeights[idx]?.innerEndH ?? defH}
+                              onChange={(e) => updateSegmentHeight(idx, 'innerEndH', parseFloat(e.target.value) || 0)}
+                              style={{ width: '100%', padding: '6px 10px', background: colors.bgSegmentInput, border: `1px solid ${colors.borderSegment}`, borderRadius: 6, color: colors.textSegment, fontSize: 13, outline: 'none' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 10, color: colors.textSegmentLabel, lineHeight: 1.35 }}>{t('calculator:segment_zero_removes_leaf_hint')}</div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, color: colors.textSegmentLabel, marginBottom: 2 }}>{t('calculator:segment_start_h')}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={segmentHeights[idx]?.startH ?? defH}
+                          onChange={(e) => updateSegmentHeight(idx, 'startH', parseFloat(e.target.value) || 0)}
+                          style={{ width: '100%', padding: '6px 10px', background: colors.bgSegmentInput, border: `1px solid ${colors.borderSegment}`, borderRadius: 6, color: colors.textSegment, fontSize: 13, outline: 'none' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 11, color: colors.textSegmentLabel, marginBottom: 2 }}>{t('calculator:segment_end_h')}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={segmentHeights[idx]?.endH ?? defH}
+                          onChange={(e) => updateSegmentHeight(idx, 'endH', parseFloat(e.target.value) || 0)}
+                          style={{ width: '100%', padding: '6px 10px', background: colors.bgSegmentInput, border: `1px solid ${colors.borderSegment}`, borderRadius: 6, color: colors.textSegment, fontSize: 13, outline: 'none' }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
       
       {/* Foundation Calculator Tickbox - Only show for brick, block4, block7 */}
@@ -2204,7 +3255,7 @@ const WallCalculator: React.FC<CalculatorProps> = ({
           </div>
         )}
       
-      <Button variant="accent" color={colors.accentBlue} onClick={calculate}>
+      <Button variant="primary" fullWidth onClick={calculate}>
         {t('calculator:calculate_button')}
       </Button>
       {result && (

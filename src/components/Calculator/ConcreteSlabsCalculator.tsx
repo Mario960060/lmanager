@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
@@ -117,6 +117,8 @@ const ConcreteSlabsCalculator: React.FC<ConcreteSlabsCalculatorProps> = ({
   const [canvasCutGroups, setCanvasCutGroups] = useState<{ lengthCm: number; count: number }[]>([]);
 
   const lastInputsSentRef = useRef<string>("");
+  const onResultsChangeRef = useRef(onResultsChange);
+  onResultsChangeRef.current = onResultsChange;
   useEffect(() => {
     if (!onInputsChange || !isInProjectCreating) return;
     const next = {
@@ -153,7 +155,9 @@ const ConcreteSlabsCalculator: React.FC<ConcreteSlabsCalculatorProps> = ({
       const prev = shape.calculatorInputs?.vizWasteSatisfied ?? [];
       const prevFull = shape.calculatorInputs?.vizFullSlabCount;
       const prevCut = shape.calculatorInputs?.cutSlabs;
-      if (JSON.stringify(prev) !== JSON.stringify(next) || prevFull !== fullSlabCount || prevCut !== String(cutSlabCount)) {
+      const sameFull = Number(prevFull ?? 0) === Number(fullSlabCount ?? 0);
+      const sameCut = String(prevCut ?? '') === String(cutSlabCount);
+      if (JSON.stringify(prev) !== JSON.stringify(next) || !sameFull || !sameCut) {
         onInputsChange({ vizWasteSatisfied: next, vizFullSlabCount: fullSlabCount, cutSlabs: String(cutSlabCount) });
       }
     }
@@ -358,7 +362,7 @@ const ConcreteSlabsCalculator: React.FC<ConcreteSlabsCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -563,14 +567,14 @@ const ConcreteSlabsCalculator: React.FC<ConcreteSlabsCalculatorProps> = ({
       const totalH = breakdown.reduce((sum, item) => sum + item.hours, 0);
 
       const materialsList: Material[] = [
+        { name: `Concrete slabs ${slabSizeConfig.label}`, amount: Number(slabMaterialM2.toFixed(2)), unit: 'm²', price_per_unit: null, total_price: null },
         { name: 'Soil excavation', amount: Number(soilTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null },
         { name: selectedSandMaterial?.name || 'Sand', amount: Number(sandTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: selectedSandMaterial?.price || null, total_price: null },
         { name: 'tape1', amount: Number(tape1Tonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null },
-        { name: `Concrete slabs ${slabSizeConfig.label}`, amount: Number(slabMaterialM2.toFixed(2)), unit: 'm²', price_per_unit: null, total_price: null },
       ];
       if (fillTonnes > 0) {
         const fillLabel = levelingMaterial === 'soil' ? 'Fill (Soil)' : 'Fill (Tape1)';
-        materialsList.unshift({ name: fillLabel, amount: Number(fillTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null });
+        materialsList.splice(1, 0, { name: fillLabel, amount: Number(fillTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null });
       }
 
       const materialsWithPrices = await fetchMaterialPrices(materialsList);
@@ -599,9 +603,9 @@ const ConcreteSlabsCalculator: React.FC<ConcreteSlabsCalculatorProps> = ({
       };
       const el = document.querySelector('[data-calculator-results]');
       if (el) el.setAttribute('data-results', JSON.stringify(formattedResults));
-      onResultsChange?.(formattedResults);
+      onResultsChangeRef.current?.(formattedResults);
     }
-  }, [totalHours, materials, taskBreakdown, area, slabSizeConfig, onResultsChange]);
+  }, [totalHours, materials, taskBreakdown, area, slabSizeConfig]);
 
   useEffect(() => {
     if (materials.length > 0 && resultsRef.current) {
@@ -787,7 +791,7 @@ const ConcreteSlabsCalculator: React.FC<ConcreteSlabsCalculatorProps> = ({
         </>
       )}
 
-      <Button variant="accent" color={colors.accentBlue} onClick={calculate} fullWidth>
+      <Button variant="primary" onClick={calculate} fullWidth>
         {t('calculator:calculate_button')}
       </Button>
 

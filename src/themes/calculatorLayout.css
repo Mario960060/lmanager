@@ -40,10 +40,23 @@
     font-size: 16px; /* zapobiega zoom na iOS przy focus */
   }
 
-  /* Wszystkie gridy w calculator-container - na mobile 1 kolumna */
-  #calculator-container [style*="grid-template-columns"],
-  #calculator-container .grid {
+  /* Gridy inputów w calculator-container — 1 kolumna; wyłączenie: tabela materiałów (wielokolumnowy grid) */
+  #calculator-container [style*="grid-template-columns"]:not(:is(.calculator-data-table, .calculator-data-table *)),
+  #calculator-container .grid:not(:is(.calculator-data-table, .calculator-data-table *)) {
     grid-template-columns: 1fr !important;
+  }
+
+  /* Tabela materiałów: zachowaj kolumny, mniejszy padding, przewijanie poziome w razie potrzeby */
+  .calculator-data-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .calculator-data-table > div[style*="grid-template-columns"] {
+    min-width: min(100%, 520px);
+  }
+  .calculator-data-table > div {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
   }
 
   /* Inputy w kalkulatorze - pełna szerokość, więcej miejsca na cyfry */
@@ -109,16 +122,98 @@ label:has(input[type="radio"]),
   cursor: pointer;
 }
 
-/* Canvas modals (ObjectCard, PathCreation, etc.) – full width on mobile */
+/* Canvas modals (ObjectCard, PathCreation, UnifiedEventDay, etc.) – pełna szerokość, bez zewnętrznego guttera na mobile */
 @media (max-width: 768px) {
   .canvas-modal-backdrop {
-    padding: 12px !important;
-    padding-left: 12px !important;
-    padding-right: 12px !important;
-    align-items: flex-start !important;
+    padding: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    align-items: stretch !important;
+    justify-content: stretch !important;
   }
   .canvas-modal-content {
     max-width: 100% !important;
     width: 100% !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+  }
+  /* Panel z dużym paddingiem inline (np. EquipmentPanel) — na mobile ciaśniej */
+  .equipment-modal-panel {
+    padding: 10px !important;
+  }
+}
+
+/* Design system Modal (themes/uiComponents) — ciaśniej na mobile */
+@media (max-width: 768px) {
+  .ds-modal-backdrop {
+    padding: 0 !important;
+    align-items: stretch !important;
+    justify-content: stretch !important;
+  }
+  .ds-modal-panel {
+    max-width: 100% !important;
+    width: 100% !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+  }
+  .ds-modal-header,
+  .ds-modal-body,
+  .ds-modal-footer {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  .ds-modal-header {
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+  }
+  .ds-modal-body {
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+  }
+  .ds-modal-footer {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+  }
+}
+
+/* Ramka płyt — długość / szerokość / rząd obrzeża w jednym rzędzie na mobile (SlabCalculator w projekcie) */
+@media (max-width: 768px) {
+  .frame-board-inline-inputs {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    align-items: end;
+    gap: 8px !important;
+    flex-wrap: nowrap !important;
+  }
+  .frame-board-inline-inputs label {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 4px !important;
+  }
+}
+
+/* Modal ramki płyt (SlabFrameCalculator) — bez zbędnego paddingu na mobile */
+@media (max-width: 768px) {
+  .slab-frame-calculator-modal-panel {
+    padding: 10px !important;
+  }
+  .slab-frame-piece-dims {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  }
+}
+
+/* Material usage setup — pełna szerokość na mobile */
+@media (max-width: 768px) {
+  .setup-material-usage-inner {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+}
+
+/* Dodatkowe zadania — ciało modala z mniejszym paddingiem na mobile */
+@media (max-width: 768px) {
+  .modal-body-mobile-tight {
+    padding: 8px 10px !important;
   }
 }

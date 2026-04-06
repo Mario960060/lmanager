@@ -121,9 +121,9 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
       <div className="rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
-        <div className="flex justify-between items-center p-6 border-b flex-none" style={{ borderColor: colors.borderDefault }}>
+        <div className="flex justify-between items-center px-3 py-3 md:p-6 border-b flex-none" style={{ borderColor: colors.borderDefault }}>
           <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{t('event:delete_user_title')}</h2>
           <button
             onClick={onClose}
@@ -133,7 +133,7 @@ const DeleteUserModal: React.FC<DeleteUserModalProps> = ({ onClose }) => {
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto">
+        <div className="px-3 py-3 md:p-6 overflow-y-auto">
           {/* Search - Sticky at top */}
           <div className="sticky top-0 z-10 pb-4 mb-4 border-b" style={{ backgroundColor: colors.bgCard, borderColor: colors.borderDefault }}>
             <div className="flex items-center justify-between mb-2">

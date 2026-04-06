@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSidebarSectionReset } from '../hooks/useSidebarSectionReset';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { translateTaskName, translateMaterialName, translateMaterialDescription, translateTaskDescription, translateUnit } from '../lib/translationMap';
@@ -55,6 +56,28 @@ const Projects = () => {
   const [projectToDelete, setProjectToDelete] = useState<Event | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  useSidebarSectionReset('/projects', () => {
+    setShowTaskModal(false);
+    setShowMaterialModal(false);
+    setSelectedProject('');
+    setSelectedTask(null);
+    setSelectedMaterial(null);
+    setQuantity('');
+    setTaskName('');
+    setTaskSearch('');
+    setMaterialSearch('');
+    setIsMainTaskMode(false);
+    setMainTaskResults(null);
+    setShowNamePrompt(false);
+    setMainTaskName('');
+    setSelectedCalculator(null);
+    setSelectedSubCalculator(null);
+    setShowUnspecifiedMaterialModal(false);
+    setShowDeleteModal(false);
+    setProjectToDelete(null);
+    setShowDeleteConfirm(false);
+  });
+
   // Calculator groups definition
   const calculatorGroups = [
     {
@@ -76,6 +99,7 @@ const Projects = () => {
       label: t('project:wall_finish_calc'),
       subTypes: [
         { type: 'brick', label: t('project:brick_wall') },
+        { type: 'double_wall', label: t('project:double_wall') },
         { type: 'block4', label: t('project:block4_wall') },
         { type: 'block7', label: t('project:block7_wall') },
         { type: 'sleeper', label: t('project:sleeper_wall') }

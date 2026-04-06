@@ -29,8 +29,8 @@ const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
   onConfirm,
   t = (key) => key
 }) => (
-  <div className="fixed inset-0 flex items-center justify-center z-[60] p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-    <div className="rounded-lg shadow-xl p-6 max-w-md w-full" style={{ backgroundColor: colors.bgCard }}>
+  <div className="fixed inset-0 flex items-center justify-center z-[60] p-0 md:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+    <div className="rounded-lg shadow-xl px-3 py-3 md:p-6 max-w-md w-full" style={{ backgroundColor: colors.bgCard }}>
       <h3 className="text-lg font-semibold mb-4">{t('common:confirm_deletion')}</h3>
       <p className="mb-6">{t('common:want_delete_record')}</p>
       <p className="mb-6 text-sm" style={{ color: colors.textSubtle }}>
@@ -264,7 +264,7 @@ const CompanyTaskPerformanceModal: React.FC<CompanyTaskPerformanceModalProps> = 
 
   return (
     <>
-      <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="fixed inset-0 flex items-center justify-center z-50 p-0 md:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
         <div className="rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
           {/* Header */}
           <div className="p-4 border-b flex justify-between items-center sticky top-0 z-10" style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard }}>
@@ -326,7 +326,7 @@ const CompanyTaskPerformanceModal: React.FC<CompanyTaskPerformanceModalProps> = 
               {/* Content */}
               <div className="flex-1 overflow-y-auto p-4">
                 {isLoadingProgress ? (
-                  <div className="flex justify-center p-6">
+                  <div className="flex justify-center px-3 py-3 md:p-6">
                     <Spinner size={32} />
                   </div>
                 ) : filteredTaskPerformance.length > 0 ? (
@@ -434,7 +434,7 @@ const CompanyTaskPerformanceModal: React.FC<CompanyTaskPerformanceModalProps> = 
           )}
 
           {!selectedUserId && (
-            <div className="flex-1 flex items-center justify-center p-8" style={{ color: colors.textSubtle }}>
+            <div className="flex-1 flex items-center justify-center px-3 py-6 md:p-8" style={{ color: colors.textSubtle }}>
               <p>{t('common:select_employee_to_view_performance')}</p>
             </div>
           )}
@@ -453,8 +453,8 @@ const CompanyTaskPerformanceModal: React.FC<CompanyTaskPerformanceModalProps> = 
       )}
 
       {showRequestSent && (
-        <div className="fixed inset-0 flex items-center justify-center z-[60]" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-          <div className="rounded-lg shadow-xl p-6 max-w-sm w-full" style={{ backgroundColor: colors.bgCard }}>
+        <div className="fixed inset-0 flex items-center justify-center z-[60] p-0 md:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="rounded-lg shadow-xl px-3 py-3 md:p-6 max-w-sm w-full" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium flex items-center">
                 <svg className="w-5 h-5 mr-2" style={{ color: colors.green }} fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -1,16 +1,20 @@
-import React, { startTransition, Suspense } from 'react';
+import React, { lazy, startTransition, Suspense } from 'react';
+import { useSidebarSectionReset } from '../hooks/useSidebarSectionReset';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../lib/store';
 import { show403Modal } from '../components/Error403Modal';
-import { Users, UserMinus, X, BarChart } from 'lucide-react';
+import { X } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import PageInfoModal from '../components/PageInfoModal';
 import UserAuthorizationModal from '../components/ProjectManagement/UserAuthorizationModal';
 import DeleteUserModal from '../components/ProjectManagement/DeleteUserModal';
 import CompanyTaskPerformanceModal from '../components/ProjectManagement/CompanyTaskPerformanceModal';
+import { canManageEventAssignmentsRole } from '../lib/eventMembers';
 import { RLSPermissionsTable } from '../data/RLSTable';
 import { Spinner, Button, Card } from '../themes';
-import { colors, spacing, radii, fontSizes, fontWeights } from '../themes/designTokens';
+
+const ProjectAssignmentsModal = lazy(() => import('../components/EventMembers/ProjectAssignmentsModal'));
+import { colors, fonts, spacing, radii, fontSizes, fontWeights } from '../themes/designTokens';
 
 const CompanyPanel = () => {
   const { t } = useTranslation(['common', 'dashboard']);
@@ -19,8 +23,18 @@ const CompanyPanel = () => {
   const [showDeleteUser, setShowDeleteUser] = React.useState(false);
   const [showPermissionsTable, setShowPermissionsTable] = React.useState(false);
   const [showTaskPerformance, setShowTaskPerformance] = React.useState(false);
+  const [showProjectAssignments, setShowProjectAssignments] = React.useState(false);
+
+  useSidebarSectionReset('/company-panel', () => {
+    setShowUserAuthorization(false);
+    setShowDeleteUser(false);
+    setShowPermissionsTable(false);
+    setShowTaskPerformance(false);
+    setShowProjectAssignments(false);
+  });
 
   const hasCompanyPanelAccess = profile?.role === 'Admin' || profile?.role === 'boss' || profile?.role === 'project_manager';
+  const canManageAssignments = canManageEventAssignmentsRole(profile?.role);
 
   const handleUserAuthClick = () => {
     if (!hasCompanyPanelAccess) {
@@ -54,6 +68,14 @@ const CompanyPanel = () => {
     startTransition(() => setShowTaskPerformance(true));
   };
 
+  const handleProjectAssignmentsClick = () => {
+    if (!canManageAssignments) {
+      show403Modal();
+      return;
+    }
+    startTransition(() => setShowProjectAssignments(true));
+  };
+
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: spacing['6xl'], display: 'flex', flexDirection: 'column', gap: spacing['6xl'] }}>
       <BackButton />
@@ -74,54 +96,59 @@ const CompanyPanel = () => {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: spacing['6xl'], alignItems: 'stretch' }}>
-        <Card padding={`${spacing['6xl']}px`} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+        <Card padding={`${spacing['6xl']}px`} style={{ display: 'flex', flexDirection: 'column', minHeight: 200 }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing['4xl'], gap: spacing.lg }}>
-              <Users style={{ width: 24, height: 24, color: colors.purple }} />
-              <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textSecondary, margin: 0 }}>
-                {t('common:user_authorization')}
-              </h2>
-            </div>
-            <p style={{ color: colors.textMuted, flex: 1, marginBottom: 0, fontSize: fontSizes.base, lineHeight: 1.5 }}>
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0, marginBottom: spacing['3xl'] }}>
+              {t('common:user_authorization')}
+            </h2>
+            <p style={{ color: colors.textDim, flex: 1, marginBottom: 0, fontSize: fontSizes.base, lineHeight: 1.5 }}>
               {t('common:user_authorization_desc')}
             </p>
           </div>
-          <Button variant="primary" fullWidth onClick={handleUserAuthClick} style={{ background: `linear-gradient(135deg, ${colors.purple}, ${colors.purpleLight})` }}>
+          <Button fullWidth onClick={handleUserAuthClick}>
             {t('common:manage_users')}
           </Button>
         </Card>
 
-        <Card padding={`${spacing['6xl']}px`} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+        <Card padding={`${spacing['6xl']}px`} style={{ display: 'flex', flexDirection: 'column', minHeight: 200 }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing['4xl'], gap: spacing.lg }}>
-              <BarChart style={{ width: 24, height: 24, color: colors.accentBlue }} />
-              <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textSecondary, margin: 0 }}>
-                {t('common:company_task_performance')}
-              </h2>
-            </div>
-            <p style={{ color: colors.textMuted, flex: 1, marginBottom: 0, fontSize: fontSizes.base, lineHeight: 1.5 }}>
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0, marginBottom: spacing['3xl'] }}>
+              {t('common:company_task_performance')}
+            </h2>
+            <p style={{ color: colors.textDim, flex: 1, marginBottom: 0, fontSize: fontSizes.base, lineHeight: 1.5 }}>
               {t('common:company_task_performance_desc')}
             </p>
           </div>
-          <Button variant="primary" fullWidth onClick={handleTaskPerformanceClick} style={{ background: `linear-gradient(135deg, ${colors.accentBlue}, ${colors.accentBlueDark})` }}>
+          <Button fullWidth onClick={handleTaskPerformanceClick}>
             {t('common:view_employees_performance')}
           </Button>
         </Card>
 
-        <Card padding={`${spacing['6xl']}px`} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+        <Card padding={`${spacing['6xl']}px`} style={{ display: 'flex', flexDirection: 'column', minHeight: 200 }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: spacing['4xl'], gap: spacing.lg }}>
-              <UserMinus style={{ width: 24, height: 24, color: colors.red }} />
-              <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textSecondary, margin: 0 }}>
-                {t('common:delete_user')}
-              </h2>
-            </div>
-            <p style={{ color: colors.textMuted, flex: 1, marginBottom: 0, fontSize: fontSizes.base, lineHeight: 1.5 }}>
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0, marginBottom: spacing['3xl'] }}>
+              {t('common:delete_user')}
+            </h2>
+            <p style={{ color: colors.textDim, flex: 1, marginBottom: 0, fontSize: fontSizes.base, lineHeight: 1.5 }}>
               {t('common:delete_user_desc')}
             </p>
           </div>
-          <Button variant="primary" fullWidth onClick={handleDeleteUserClick} style={{ background: `linear-gradient(135deg, ${colors.red}, ${colors.redLight})` }}>
+          <Button variant="danger" fullWidth onClick={handleDeleteUserClick}>
             {t('common:delete_user')}
+          </Button>
+        </Card>
+
+        <Card padding={`${spacing['6xl']}px`} style={{ display: 'flex', flexDirection: 'column', minHeight: 200 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0, marginBottom: spacing['3xl'] }}>
+              {t('common:company_panel_project_assignments')}
+            </h2>
+            <p style={{ color: colors.textDim, flex: 1, marginBottom: 0, fontSize: fontSizes.base, lineHeight: 1.5 }}>
+              {t('common:company_panel_project_assignments_desc')}
+            </p>
+          </div>
+          <Button fullWidth onClick={handleProjectAssignmentsClick}>
+            {t('common:company_panel_project_assignments_open')}
           </Button>
         </Card>
       </div>
@@ -142,8 +169,13 @@ const CompanyPanel = () => {
           <CompanyTaskPerformanceModal onClose={() => setShowTaskPerformance(false)} />
         </Suspense>
       )}
+      {showProjectAssignments && (
+        <Suspense fallback={<div style={{ position: 'fixed', inset: 0, background: colors.bgModalBackdrop, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ background: colors.bgCard, padding: 32, borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}><Spinner size={32} /><span style={{ color: colors.textMuted }}>{t('common:loading')}</span></div></div>}>
+          <ProjectAssignmentsModal onClose={() => setShowProjectAssignments(false)} />
+        </Suspense>
+      )}
       {showPermissionsTable && (
-        <div style={{ position: 'fixed', inset: 0, background: colors.bgModalBackdrop, zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: spacing['4xl'] }}>
+        <div className="canvas-modal-backdrop" style={{ position: 'fixed', inset: 0, background: colors.bgModalBackdrop, zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: spacing['4xl'] }}>
           <div style={{ width: '100%', maxWidth: 1280, display: 'flex', justifyContent: 'flex-end', marginBottom: spacing.sm }}>
             <button
               onClick={() => setShowPermissionsTable(false)}

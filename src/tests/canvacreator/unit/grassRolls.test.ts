@@ -372,6 +372,9 @@ describe("drawGrassPieces", () => {
     return {
       save: () => {},
       restore: () => {},
+      translate: () => {},
+      rotate: () => {},
+      scale: () => {},
       beginPath: () => {},
       moveTo: () => {},
       lineTo: () => {},

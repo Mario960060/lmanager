@@ -3,8 +3,8 @@
   import { useTranslation } from 'react-i18next';
   import { supabase } from '../../lib/supabase';
   import { useAuthStore } from '../../lib/store';
-  import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
   import { colors, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
+  import { Button } from '../../themes/uiComponents';
 
   interface SlabFrameCalculatorProps {
     isOpen: boolean;
@@ -22,28 +22,21 @@
       unit: string;
       estimated_hours: number;
     }>;
-    onResultsChange?: (results: {
-      totalFrameSlabs: number;
-      totalHours: number;
-      totalFrameAreaM2: number;
-      sides: Array<{ length: number; slabs: number }>;
-      taskName: string;
-      task_id?: string;
-      framePieceLengthCm?: string;
-      framePieceWidthCm?: string;
-      cuttingHours: number;
-      cuttingTaskName: string;
-      cutting_task_id?: string;
-    }) => void;
-  }
-
-  interface DiggingEquipment {
-    id: string;
-    name: string;
-    'size (in tones)': number | null;
-    speed_m_per_hour?: number | null;
-    company_id?: string | null;
-    type?: string;
+    onResultsChange?: (
+      results: {
+        totalFrameSlabs: number;
+        totalHours: number;
+        totalFrameAreaM2: number;
+        sides: Array<{ length: number; slabs: number }>;
+        taskName: string;
+        task_id?: string;
+        framePieceLengthCm?: string;
+        framePieceWidthCm?: string;
+        cuttingHours: number;
+        cuttingTaskName: string;
+        cutting_task_id?: string;
+      } | null
+    ) => void;
   }
 
   const SlabFrameCalculator: React.FC<SlabFrameCalculatorProps> = ({ isOpen, onClose, selectedSlabType, cuttingTasks = [], onResultsChange }) => {
@@ -64,30 +57,16 @@
       cuttingHours: number;
       cuttingTaskName: string;
       cutting_task_id?: string;
-      transportTime?: number;
-      normalizedTransportTime?: number;
     } | null>(null);
-    const [transportDistance, setTransportDistance] = useState<string>('30');
-    const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
-    const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
     const resultsRef = useRef<HTMLDivElement>(null);
-
-    // Helper function to calculate material transport time
-    const calculateMaterialTransportTime = (
-      materialAmount: number,
-      carrierSize: number,
-      materialType: string,
-      transportDistanceMeters: number
-    ) => {
-      const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-      const carrierSpeed = carrierSpeedData?.speed || 4000;
-      const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
-      const trips = Math.ceil(materialAmount / materialCapacityUnits);
-      const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
-      const totalTransportTime = trips * timePerTrip;
-      const normalizedTransportTime = (totalTransportTime * 30) / transportDistanceMeters;
-      return { trips, totalTransportTime, normalizedTransportTime };
-    };
+    const [pieceDimsNarrow, setPieceDimsNarrow] = useState(false);
+    useEffect(() => {
+      const mq = window.matchMedia("(max-width: 768px)");
+      const fn = () => setPieceDimsNarrow(mq.matches);
+      fn();
+      mq.addEventListener("change", fn);
+      return () => mq.removeEventListener("change", fn);
+    }, []);
 
     // Add useEffect to recalculate when selectedSlabType changes
     useEffect(() => {
@@ -205,23 +184,7 @@
       // Calculate total frame area in m²
       const totalFrameAreaM2 = sides.reduce((sum, side) => sum + side.length * widthM, 0);
 
-      // Calculate transport time if enabled
-      let transportTime = 0;
-      let normalizedTransportTime = 0;
-
-      if (calculateTransport && totalFrameSlabs > 0) {
-        let carrierSizeForTransport = 0.125;
-        
-        if (selectedTransportCarrier) {
-          carrierSizeForTransport = selectedTransportCarrier["size (in tones)"] || 0.125;
-        }
-
-        const transportResult = calculateMaterialTransportTime(totalFrameSlabs, carrierSizeForTransport, 'slabs', parseFloat(transportDistance) || 30);
-        transportTime = transportResult.totalTransportTime;
-        // Do NOT normalize transport time for frame slabs - just use actual transport time
-      }
-
-      // Add cutting hours to total hours (do NOT add transport - that's calculated in SlabCalculator)
+      // Add cutting hours to total hours (transport materiałów dla ramek liczy główny SlabCalculator)
       const finalTotalHours = totalHours + cuttingHours;
 
       const calculationResults = {
@@ -234,9 +197,7 @@
         frameSlabsName: `Frame slabs ${pieceLengthCm}x${pieceWidthCm}`,
         cuttingHours,
         cuttingTaskName,
-        cutting_task_id: cuttingTaskId,
-        transportTime,
-        normalizedTransportTime
+        cutting_task_id: cuttingTaskId
       };
 
       setResults(calculationResults as any);
@@ -252,13 +213,17 @@
       setSideLength('');
       setSides([]);
       setResults(null);
+      onResultsChange?.(null);
     };
 
     if (!isOpen) return null;
 
     return (
-      <div style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
-        <div style={{ background: colors.bgCard, borderRadius: radii.lg, padding: spacing["6xl"], width: "100%", maxWidth: 672, maxHeight: "80vh", overflowY: "auto" }}>
+      <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
+        <div
+          className="slab-frame-calculator-modal-panel canvas-modal-content"
+          style={{ background: colors.bgCard, borderRadius: radii.lg, padding: spacing["6xl"], width: "100%", maxWidth: 672, maxHeight: "80vh", overflowY: "auto" }}
+        >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: spacing["6xl"] }}>
             <h2 style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary }}>{t('calculator:slab_frame_calculator_title')}</h2>
             <button
@@ -270,8 +235,15 @@
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: spacing["3xl"] }}>
-            {/* Piece Dimensions */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: spacing["3xl"] }}>
+            {/* Piece Dimensions — zawsze 2 kolumny na mobile (długość | szerokość w jednym rzędzie) */}
+            <div
+              className="slab-frame-piece-dims"
+              style={{
+                display: "grid",
+                gridTemplateColumns: pieceDimsNarrow ? "minmax(0,1fr) minmax(0,1fr)" : "1fr 1fr",
+                gap: pieceDimsNarrow ? spacing.md : spacing["3xl"],
+              }}
+            >
               <div>
                 <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:piece_length_cm_label')}</label>
                 <input
@@ -344,81 +316,27 @@
               </div>
             )}
 
-            {/* Transport Distance */}
-            {calculateTransport && (
-              <div style={{ marginBottom: spacing["3xl"] }}>
-                <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.xs }}>{t('calculator:transport_distance_label')}</label>
-                <input
-                  type="number"
-                  value={transportDistance}
-                  onChange={(e) => setTransportDistance(e.target.value)}
-                  style={{ width: "100%", padding: spacing.xs, border: `1px solid ${colors.borderInput}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }}
-                  placeholder={t('calculator:placeholder_enter_transport_distance')}
-                  min="0"
-                  step="1"
-                />
-              </div>
-            )}
-
-            <div style={{ marginBottom: spacing["3xl"] }}>
-              <label style={{ display: "inline-flex", alignItems: "center" }}>
-                <input
-                  type="checkbox"
-                  checked={calculateTransport}
-                  onChange={(e) => setCalculateTransport(e.target.checked)}
-                  style={{ borderRadius: radii.sm, border: `1px solid ${colors.borderInput}` }}
-                />
-                <span style={{ marginLeft: spacing.xs, fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:calculate_transport_time_label')}</span>
-              </label>
-            </div>
-
-            {calculateTransport && (
-              <div style={{ marginBottom: spacing["3xl"] }}>
-                <label style={{ display: "block", fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.xs }}>{t('calculator:transport_carrier_label')}</label>
-                <select
-                  value={selectedTransportCarrier?.id || ''}
-                  onChange={(e) => {
-                    if (e.target.value === 'default') {
-                      setSelectedTransportCarrier({ id: 'default', name: '0.125t Wheelbarrow', 'size (in tones)': 0.125 });
-                    } else if (e.target.value) {
-                      const carrier = carrierSpeeds.find(c => c.size.toString() === e.target.value);
-                      if (carrier) {
-                        setSelectedTransportCarrier({
-                          id: carrier.size.toString(),
-                          name: `${carrier.size}t Carrier`,
-                          'size (in tones)': carrier.size
-                        });
-                      }
-                    }
-                  }}
-                  style={{ width: "100%", padding: spacing.xs, border: `1px solid ${colors.borderInput}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }}
-                >
-                  <option value="">-- {t('calculator:select_carrier_label')} --</option>
-                  <option value="default">{t('calculator:default_wheelbarrow')}</option>
-                  {carrierSpeeds.map(carrier => (
-                    <option key={carrier.size} value={carrier.size.toString()}>
-                      {carrier.size}t Carrier
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div style={{ display: "flex", gap: spacing.xs }}>
-              <button
-                onClick={calculate}
+            {/* Action Buttons — wrap on narrow modals; type="button" avoids accidental form submit */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: spacing.sm,
+                width: "100%",
+              }}
+            >
+              <Button
+                type="button"
+                variant="primary"
+                fullWidth
                 disabled={!pieceLengthCm || !pieceWidthCm || sides.length === 0}
-                style={{ flex: 1, background: colors.green, color: colors.textOnAccent, padding: `${spacing.xs}px ${spacing["3xl"]}px`, borderRadius: radii.md, border: "none", cursor: "pointer", fontWeight: fontWeights.medium, opacity: (!pieceLengthCm || !pieceWidthCm || sides.length === 0) ? 0.5 : 1 }}
+                onClick={calculate}
               >
                 {t('calculator:calculate_frame_slabs_button')}
-              </button>
-              <button
-                onClick={clearAll}
-                style={{ background: colors.bgElevated, color: colors.textPrimary, padding: `${spacing.xs}px ${spacing["3xl"]}px`, borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, cursor: "pointer", fontWeight: fontWeights.medium }}
-              >
+              </Button>
+              <Button type="button" variant="secondary" fullWidth onClick={clearAll}>
                 {t('calculator:clear_all_button')}
-              </button>
+              </Button>
             </div>
 
             {/* Results */}
@@ -429,9 +347,6 @@
                   <p style={{ color: colors.textMuted }}><strong style={{ color: colors.textPrimary }}>{t('calculator:frame_slabs_format', { length: results.framePieceLengthCm ?? pieceLengthCm, width: results.framePieceWidthCm ?? pieceWidthCm })} {t('calculator:needed_label')}:</strong> {results.totalFrameSlabs}</p>
                   <p style={{ color: colors.textMuted }}><strong style={{ color: colors.textPrimary }}>{t('calculator:total_labor_hours_label')}:</strong> {results.totalHours.toFixed(2)} {t('calculator:hours_label')}</p>
                   <p style={{ color: colors.textMuted }}><strong style={{ color: colors.textPrimary }}>{t('calculator:total_frame_area_label')}:</strong> {results.totalFrameAreaM2.toFixed(2)} m²</p>
-                  {calculateTransport && results && results.transportTime !== undefined && results.transportTime > 0 && (
-                    <p style={{ color: colors.textMuted }}><strong style={{ color: colors.textPrimary }}>{t('calculator:transport_time_label')}:</strong> {results.transportTime?.toFixed(2) || 0} {t('calculator:hours_label')} ({t('calculator:normalised_to_30m')}: {results.normalizedTransportTime?.toFixed(2) || 0} {t('calculator:hours_label')})</p>
-                  )}
                   
                   <div style={{ marginTop: spacing.lg }}>
                     <p style={{ fontWeight: fontWeights.medium, color: colors.textPrimary }}>{t('calculator:side_breakdown')}:</p>
@@ -445,13 +360,10 @@
                   </div>
                 </div>
                 
-                <div style={{ marginTop: spacing["3xl"], display: "flex", justifyContent: "flex-end" }}>
-                  <button
-                    onClick={onClose}
-                    style={{ padding: `${spacing.xs}px ${spacing["6xl"]}px`, background: colors.green, color: colors.textOnAccent, borderRadius: radii.md, border: "none", cursor: "pointer", fontWeight: fontWeights.medium }}
-                  >
+                <div style={{ marginTop: spacing["3xl"], width: "100%" }}>
+                  <Button variant="primary" fullWidth onClick={onClose}>
                     {t('calculator:accept_button')}
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

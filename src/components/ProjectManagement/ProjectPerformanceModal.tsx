@@ -214,9 +214,9 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
   const selectedProject_data = selectedProject ? projects.find(p => p.id === selectedProject) : null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
       <div className="rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
-        <div className="flex justify-between items-center p-6 border-b flex-none">
+        <div className="flex justify-between items-center px-3 py-3 md:p-6 border-b flex-none">
           <h2 className="text-xl font-semibold">{t('event:project_performance_title')}</h2>
           <button
             onClick={onClose}
@@ -226,7 +226,7 @@ const ProjectPerformanceModal: React.FC<ProjectPerformanceModalProps> = ({ onClo
           </button>
         </div>
 
-        <div className="p-6 flex flex-col h-full">
+        <div className="px-3 py-3 md:p-6 flex flex-col h-full">
           {/* Project Search */}
           <div className="mb-6">
             <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:search_project')}</label>

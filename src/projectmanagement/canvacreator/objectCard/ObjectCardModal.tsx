@@ -10,7 +10,6 @@ import { X } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import { useAuthStore } from "../../../lib/store";
 import { Shape } from "../geometry";
-import { C } from "../geometry";
 import { ProjectSettings } from "../types";
 import { computeAutoFill } from "./autoFill";
 import { getGroupsForElement, type CalcGroup, type CalcSubType } from "./calculatorGroups";
@@ -25,7 +24,7 @@ import { autoLayoutGrassPieces, autoJoinAdjacentPieces, validateCoverage, getEff
 import { computePreparation } from "../preparationLogic";
 import { getCalculatorInputDefaults } from "../../../lib/materialUsageDefaults";
 import { translateUnit, translateMaterialName, translateTaskName } from "../../../lib/translationMap";
-import { colors, spacing, radii, shadows } from "../../../themes/designTokens";
+import { colors, spacing, radii, shadows, accentAlpha } from "../../../themes/designTokens";
 
 import WallCalculator from "../../../components/Calculator/WallCalculator";
 import KerbsEdgesAndSetsCalculator from "../../../components/Calculator/KerbsEdgesAndSetsCalculator";
@@ -41,6 +40,7 @@ import ArtificialGrassCalculator from "../../../components/Calculator/Artificial
 import NaturalTurfCalculator from "../../../components/Calculator/NaturalTurfCalculator";
 import FoundationCalculator from "../../../components/Calculator/FoundationCalculator";
 import DeckCalculator from "../../../components/Calculator/DeckCalculator";
+import DecorativeStonesCalculator from "../../../components/Calculator/DecorativeStonesCalculator";
 import GroundworkLinearCalculator from "../../../components/Calculator/GroundworkLinearCalculator";
 import { getFoundationDiggingMethodFromExcavator } from "../GroundworkLinearCalculator";
 import VenetianFenceCalculator from "../../../components/Calculator/VenetianFenceCalculator";
@@ -301,6 +301,11 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
   const canSave = calculatorType !== "" && calculatorResults !== null;
 
   const savedInputsSnapshot = shape.calculatorInputs ?? {};
+  const slabPatternOptions = ["grid", "brick", "onethird", "herringbone"] as const;
+  const pavingPatternOptions =
+    (savedInputsSnapshot.monoblockLayoutMode ?? "single") === "mix"
+      ? (["grid", "brick", "onethird"] as const)
+      : (["grid", "brick", "onethird", "herringbone"] as const);
   const slabTypeName = savedInputsSnapshot.selectedSlabName ?? liveInputs.selectedSlabName ?? "";
   const firstSlabTypeName = slabTypesData.length > 0 ? slabTypesData[0]?.name ?? "" : "";
   const slabTypeNameForViz = slabTypeName || firstSlabTypeName;
@@ -338,7 +343,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
     normDir(Number(savedInputsSnapshot.grassVizDirection ?? savedInputsSnapshot.vizDirection ?? 0))
   );
   useEffect(() => {
-    setVizPattern(savedInputsSnapshot.vizPattern ?? "grid");
+    const vp = savedInputsSnapshot.vizPattern ?? "grid";
+    const mix = savedInputsSnapshot.monoblockLayoutMode === "mix";
+    setVizPattern(mix && vp === "herringbone" ? "grid" : vp);
     setVizDirection(normDir(Number(savedInputsSnapshot.vizDirection ?? 0)));
     setVizStartCorner(Number(savedInputsSnapshot.vizStartCorner ?? 0));
     const legacyMm = savedInputsSnapshot.vizGroutWidth != null ? Math.round(Number(savedInputsSnapshot.vizGroutWidth) * 10) : undefined;
@@ -369,6 +376,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
     savedInputsSnapshot.grassVizDirection,
     savedInputsSnapshot.vizPatternAlignEdge,
     savedInputsSnapshot.vizPatternAlignMode,
+    savedInputsSnapshot.monoblockLayoutMode,
   ]);
 
   useEffect(() => {
@@ -460,13 +468,18 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
 
   const materialCarrier = projectSettings.selectedMaterialCarrier ?? projectSettings.selectedCarrier;
   const projectCompactor = mapProjectCompactorToOption(projectSettings.selectedCompactor);
-  const effectiveCalcTypeForDefaults = (calculatorType === "slab" && calculatorSubType === "concreteSlabs") ? "concreteSlabs" : calculatorType;
+  const effectiveCalcTypeForDefaults =
+    calculatorType === "slab" && calculatorSubType === "concreteSlabs"
+      ? "concreteSlabs"
+      : calculatorType === "decorativeStones"
+        ? "decorativeStones"
+        : calculatorType;
   const materialDefaults = useMemo(
     () => getCalculatorInputDefaults(effectiveCalcTypeForDefaults, companyId),
     [effectiveCalcTypeForDefaults, companyId]
   );
   const isConcreteSlabs = calculatorType === "concreteSlabs" || (calculatorType === "slab" && calculatorSubType === "concreteSlabs");
-  const THICKNESS_KEYS = ["tape1ThicknessCm", "sandThicknessCm", "soilThicknessCm", "mortarThicknessCm", "monoBlocksHeightCm", "slabThicknessCm", "concreteSlabThicknessCm"];
+  const THICKNESS_KEYS = ["tape1ThicknessCm", "sandThicknessCm", "soilThicknessCm", "mortarThicknessCm", "monoBlocksHeightCm", "slabThicknessCm", "concreteSlabThicknessCm", "decorativeDepthCm"];
   const savedInputsMerged = useMemo(() => {
     const filterEmpty = (obj: Record<string, any>) => {
       const out = { ...obj };
@@ -539,13 +552,19 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
       case "slab":
         if (calculatorSubType === "concreteSlabs") return <ConcreteSlabsCalculator {...areaProps} shape={shape} />;
         return <SlabCalculator {...areaProps} shape={shape} />;
-      case "wall":
+      case "wall": {
+        const isDoubleWall = calculatorSubType === "double_wall";
+        const isBrickOnly = calculatorSubType === "brick";
         return (
           <WallCalculator
-            type={calculatorSubType as "brick" | "block4" | "block7" | "sleeper"}
+            type={isDoubleWall ? "brick" : (calculatorSubType as "brick" | "block4" | "block7" | "sleeper")}
+            {...(isDoubleWall || isBrickOnly
+              ? { wallBrickVariant: isDoubleWall ? ("double_wall" as const) : ("brick" as const) }
+              : {})}
             {...lengthProps}
           />
         );
+      }
       case "kerbs":
         return <KerbsEdgesAndSetsCalculator type={calculatorSubType as "kl" | "rumbled" | "flat" | "sets"} {...lengthProps} />;
       case "fence":
@@ -572,7 +591,14 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
           />
         );
       case "deck":
-        return <DeckCalculator {...areaProps} />;
+        return (
+          <DeckCalculator
+            {...areaProps}
+            deckVariant={calculatorSubType === "composite_deck" ? "composite" : "timber"}
+          />
+        );
+      case "decorativeStones":
+        return <DecorativeStonesCalculator {...areaProps} />;
       default:
         return null;
     }
@@ -580,18 +606,18 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
 
   return (
     <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: spacing["3xl"], paddingLeft: `max(${spacing["3xl"]}px, 240px)` }}>
-      <div className="canvas-modal-content" style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: radii.lg, width: "100%", maxWidth: 900, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: shadows.modal }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: spacing["3xl"], borderBottom: `1px solid ${C.panelBorder}` }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, color: C.text }}>{t("project:object_card_title", { label: shape.label || "" })}</h2>
-          <button onClick={onClose} style={{ padding: 8, background: "transparent", border: "none", cursor: "pointer", color: C.text }}>
+      <div className="canvas-modal-content" style={{ background: colors.bgElevated, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, width: "100%", maxWidth: 900, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: shadows.modal }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: spacing["3xl"], borderBottom: `1px solid ${colors.borderDefault}` }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, color: colors.textPrimary }}>{t("project:object_card_title", { label: shape.label || "" })}</h2>
+          <button onClick={onClose} style={{ padding: 8, background: "transparent", border: "none", cursor: "pointer", color: colors.textPrimary }}>
             <X size={20} />
           </button>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: spacing["3xl"] }}>
           {/* Auto-fill from canvas */}
-          <div style={{ marginBottom: spacing["3xl"], padding: spacing.xl, background: "rgba(0,0,0,0.2)", borderRadius: radii.md, fontSize: 13, color: C.textDim }}>
-            <div style={{ fontWeight: 600, marginBottom: 8, color: C.text }}>{t("project:from_canvas")}</div>
+          <div style={{ marginBottom: spacing["3xl"], padding: spacing.xl, background: colors.bgCardInner, borderRadius: radii.md, fontSize: 13, color: colors.textDim }}>
+            <div style={{ fontWeight: 600, marginBottom: 8, color: colors.textPrimary }}>{t("project:from_canvas")}</div>
             {autoFill.areaM2 !== undefined && <div>{t("project:object_card_area")} {autoFill.areaM2.toFixed(3)} m²</div>}
             {autoFill.totalLengthM !== undefined && <div>{t("project:object_card_length")} {autoFill.totalLengthM.toFixed(3)} m</div>}
             {autoFill.perimeterM !== undefined && <div>{t("project:object_card_perimeter")} {autoFill.perimeterM.toFixed(3)} m</div>}
@@ -600,9 +626,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
           </div>
 
           {/* Material transport carrier (for calculator materials: slabs, pavers, etc. — not turf/grass, not wall in canvas) */}
-          {!hideMaterialTransportCarrier && calculatorType && calculatorType !== "turf" && calculatorType !== "grass" && calculatorType !== "wall" && carriers.length > 0 && (
+          {!hideMaterialTransportCarrier && calculatorType && calculatorType !== "turf" && calculatorType !== "grass" && calculatorType !== "wall" && calculatorType !== "decorativeStones" && carriers.length > 0 && (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontWeight: 600, marginBottom: 6, color: C.text, fontSize: 13 }}>{t("project:object_card_material_carrier")}</div>
+              <div style={{ fontWeight: 600, marginBottom: 6, color: colors.textPrimary, fontSize: 13 }}>{t("project:object_card_material_carrier")}</div>
               <select
                 value={(materialCarrier as any)?.id ?? ""}
                 onChange={e => {
@@ -612,10 +638,10 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                 style={{
                   width: "100%",
                   padding: "8px 12px",
-                  background: C.bg,
-                  border: `1px solid ${C.panelBorder}`,
+                  background: colors.bgInput,
+                  border: `1px solid ${colors.borderDefault}`,
                   borderRadius: 6,
-                  color: C.text,
+                  color: colors.textPrimary,
                   fontSize: 13,
                   fontFamily: "inherit",
                 }}
@@ -632,7 +658,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
 
           {/* Type selector */}
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8, color: C.text }}>{t("project:object_card_element_type")}</div>
+            <div style={{ fontWeight: 600, marginBottom: 8, color: colors.textPrimary }}>{t("project:object_card_element_type")}</div>
             <div data-testid="calculator-type-buttons" style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {groups.map((group: CalcGroup) =>
                 group.subTypes.map((st: CalcSubType) => {
@@ -644,9 +670,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       style={{
                         padding: "8px 14px",
                         borderRadius: 6,
-                        border: `1px solid ${active ? C.accent : C.panelBorder}`,
-                        background: active ? C.accent + "22" : C.button,
-                        color: active ? C.accent : C.text,
+                        border: `1px solid ${active ? colors.accentBlue : colors.borderDefault}`,
+                        background: active ? accentAlpha(0.13) : colors.bgOverlay,
+                        color: active ? colors.accentBlue : colors.textPrimary,
                         cursor: "pointer",
                         fontSize: 13,
                       }}
@@ -662,15 +688,15 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
           {/* Saved results summary (shown immediately on re-open) */}
           {calculatorType && calculatorType !== "turf" && calculatorResults && (
             <div style={{ marginBottom: spacing["3xl"], padding: spacing.xl, background: colors.greenBg, border: `1px solid ${colors.greenBorder}`, borderRadius: radii.md, fontSize: 13 }}>
-              <div style={{ fontWeight: 600, marginBottom: spacing.md, color: C.text }}>{t("project:object_card_last_result")}</div>
+              <div style={{ fontWeight: 600, marginBottom: spacing.md, color: colors.textPrimary }}>{t("project:object_card_last_result")}</div>
               {calculatorResults.hours_worked != null && (
-                <div style={{ color: C.text }}>{t("project:object_card_total_hours")} <span style={{ color: colors.greenLight, fontWeight: 600 }}>{Number(calculatorResults.hours_worked).toFixed(2)} h</span></div>
+                <div style={{ color: colors.textPrimary }}>{t("project:object_card_total_hours")} <span style={{ color: colors.greenLight, fontWeight: 600 }}>{Number(calculatorResults.hours_worked).toFixed(2)} h</span></div>
               )}
               {calculatorResults.taskBreakdown && calculatorResults.taskBreakdown.length > 0 && (
                 <div style={{ marginTop: 6 }}>
-                  <div style={{ color: C.textDim, marginBottom: 4 }}>{t("project:object_card_tasks")}</div>
+                  <div style={{ color: colors.textDim, marginBottom: 4 }}>{t("project:object_card_tasks")}</div>
                   {calculatorResults.taskBreakdown.map((tb: any, i: number) => (
-                    <div key={i} style={{ color: C.text, paddingLeft: 8 }}>
+                    <div key={i} style={{ color: colors.textPrimary, paddingLeft: 8 }}>
                       {translateTaskName(tb.task ?? tb.name, t)}: {Number(tb.hours).toFixed(2)} h
                     </div>
                   ))}
@@ -678,49 +704,49 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
               )}
               {calculatorResults.materials && calculatorResults.materials.length > 0 && (
                 <div style={{ marginTop: 6 }}>
-                  <div style={{ color: C.textDim, marginBottom: 4 }}>{t("project:object_card_materials")}</div>
+                  <div style={{ color: colors.textDim, marginBottom: 4 }}>{t("project:object_card_materials")}</div>
                   {calculatorResults.materials.map((m: any, i: number) => (
-                    <div key={i} style={{ color: C.text, paddingLeft: 8 }}>
+                    <div key={i} style={{ color: colors.textPrimary, paddingLeft: 8 }}>
                       {translateMaterialName(m.name, t)}: {m.quantity ?? m.amount} {translateUnit(m.unit, t)}
                     </div>
                   ))}
                 </div>
               )}
-              <div style={{ marginTop: 8, fontSize: 11, color: C.textDim }}>{t("project:object_card_change_inputs")}</div>
+              <div style={{ marginTop: 8, fontSize: 11, color: colors.textDim }}>{t("project:object_card_change_inputs")}</div>
             </div>
           )}
 
           {/* Slab pattern visualization (only when dimensions parseable) */}
           {calculatorType === "slab" && calculatorSubType !== "concreteSlabs" && slabDims && shape.closed && shape.points.length >= 3 && (
-            <div style={{ marginTop: 16, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 6 }}>
-              <div style={{ fontWeight: 600, marginBottom: 10, color: C.text }}>{t("project:object_card_pattern_viz")}</div>
-              <div style={{ marginBottom: 8, fontSize: 12, color: C.textDim }}>{t("project:object_card_detected_slab")} {slabDims.widthCm} × {slabDims.lengthCm} cm</div>
+            <div style={{ marginTop: 16, padding: 12, background: colors.bgCardInner, borderRadius: 6 }}>
+              <div style={{ fontWeight: 600, marginBottom: 10, color: colors.textPrimary }}>{t("project:object_card_pattern_viz")}</div>
+              <div style={{ marginBottom: 8, fontSize: 12, color: colors.textDim }}>{t("project:object_card_detected_slab")} {slabDims.widthCm} × {slabDims.lengthCm} cm</div>
               <div style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", gap: 12, alignItems: "flex-start", marginBottom: 8 }}>
                 <div style={{ flex: "1 1 0", minWidth: 0 }}>
                   <div style={{ marginBottom: 8 }}>
-                    <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
+                    <label style={{ fontSize: 12, color: colors.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {(["grid", "brick", "onethird"] as const).map((p) => (
+                      {slabPatternOptions.map((p) => (
                         <button
                           key={p}
                           onClick={() => setVizPattern(p)}
                           style={{
                             padding: "6px 12px",
                             borderRadius: 6,
-                            border: `1px solid ${vizPattern === p ? C.accent : C.panelBorder}`,
-                            background: vizPattern === p ? C.accent + "22" : C.button,
-                            color: vizPattern === p ? C.accent : C.text,
+                            border: `1px solid ${vizPattern === p ? colors.accentBlue : colors.borderDefault}`,
+                            background: vizPattern === p ? accentAlpha(0.13) : colors.bgOverlay,
+                            color: vizPattern === p ? colors.accentBlue : colors.textPrimary,
                             cursor: "pointer",
                             fontSize: 12,
                             textTransform: "capitalize",
                           }}
                         >
-                          {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
+                          {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : p === "onethird" ? t("project:path_pattern_onethird") : t("project:path_pattern_herringbone")}
                         </button>
                       ))}
                     </div>
                   </div>
-                  <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
+                  <label style={{ fontSize: 12, color: colors.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     {([0, 45, 90] as const).map((deg) => (
                       <button
@@ -729,9 +755,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                         style={{
                           padding: "6px 12px",
                           borderRadius: 6,
-                          border: `1px solid ${vizDirection === deg ? C.accent : C.panelBorder}`,
-                          background: vizDirection === deg ? C.accent + "22" : C.button,
-                          color: vizDirection === deg ? C.accent : C.text,
+                          border: `1px solid ${vizDirection === deg ? colors.accentBlue : colors.borderDefault}`,
+                          background: vizDirection === deg ? accentAlpha(0.13) : colors.bgOverlay,
+                          color: vizDirection === deg ? colors.accentBlue : colors.textPrimary,
                           cursor: "pointer",
                           fontSize: 12,
                         }}
@@ -749,10 +775,10 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       style={{
                         width: 70,
                         padding: "6px 8px",
-                        background: C.bg,
-                        border: `1px solid ${C.panelBorder}`,
+                        background: colors.bgInput,
+                        border: `1px solid ${colors.borderDefault}`,
                         borderRadius: 6,
-                        color: C.text,
+                        color: colors.textPrimary,
                         fontSize: 12,
                       }}
                       title={t("project:custom_rotation_title")}
@@ -768,9 +794,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       style={{
                         padding: "6px 10px",
                         borderRadius: 6,
-                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.panelBorder}`,
-                        background: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent + "22" : C.button,
-                        color: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.text,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? colors.accentBlue : colors.borderDefault}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? accentAlpha(0.13) : colors.bgOverlay,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? colors.accentBlue : colors.textPrimary,
                         cursor: "pointer",
                         fontSize: 11,
                       }}
@@ -786,9 +812,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       style={{
                         padding: "6px 10px",
                         borderRadius: 6,
-                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.panelBorder}`,
-                        background: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent + "22" : C.button,
-                        color: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.text,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? colors.accentBlue : colors.borderDefault}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? accentAlpha(0.13) : colors.bgOverlay,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? colors.accentBlue : colors.textPrimary,
                         cursor: "pointer",
                         fontSize: 11,
                       }}
@@ -799,7 +825,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setPatternAlignPanelOpen(false)}
-                        style={{ padding: "4px 8px", fontSize: 11, color: C.textDim, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                        style={{ padding: "4px 8px", fontSize: 11, color: colors.textDim, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}
                       >
                         {t("project:object_card_align_hide_preview")}
                       </button>
@@ -825,17 +851,17 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                 )}
               </div>
               <div style={{ marginBottom: 8 }}>
-                <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_grout_width")}</label>
+                <label style={{ fontSize: 12, color: colors.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_grout_width")}</label>
                 <select
                   value={vizGroutWidthMm}
                   onChange={(e) => setVizGroutWidthMm(snapSlabGroutMm(parseInt(e.target.value, 10) || 5))}
                   style={{
                     width: "100%",
                     padding: "6px 10px",
-                    background: C.bg,
-                    border: `1px solid ${C.panelBorder}`,
+                    background: colors.bgInput,
+                    border: `1px solid ${colors.borderDefault}`,
                     borderRadius: 6,
-                    color: C.text,
+                    color: colors.textPrimary,
                     fontSize: 13,
                   }}
                 >
@@ -846,34 +872,14 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                   ))}
                 </select>
               </div>
-              <div>
-                <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_starting_corner")}</label>
-                <select
-                  value={vizStartCorner}
-                  onChange={(e) => setVizStartCorner(parseInt(e.target.value, 10))}
-                  style={{
-                    width: "100%",
-                    padding: "6px 10px",
-                    background: C.bg,
-                    border: `1px solid ${C.panelBorder}`,
-                    borderRadius: 6,
-                    color: C.text,
-                    fontSize: 13,
-                  }}
-                >
-                  {shape.points.map((_, i) => (
-                    <option key={i} value={i}>{t("project:object_card_corner", { n: i + 1 })}</option>
-                  ))}
-                </select>
-              </div>
             </div>
           )}
 
           {/* Concrete slabs pattern visualization (no grout - slabs touch) */}
           {isConcreteSlabs && shape.closed && shape.points.length >= 3 && (
-            <div style={{ marginTop: 16, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 6 }}>
-              <div style={{ fontWeight: 600, marginBottom: 10, color: C.text }}>{t("project:object_card_pattern_viz")}</div>
-              <div style={{ marginBottom: 8, fontSize: 12, color: C.textDim }}>
+            <div style={{ marginTop: 16, padding: 12, background: colors.bgCardInner, borderRadius: 6 }}>
+              <div style={{ fontWeight: 600, marginBottom: 10, color: colors.textPrimary }}>{t("project:object_card_pattern_viz")}</div>
+              <div style={{ marginBottom: 8, fontSize: 12, color: colors.textDim }}>
                 {t("project:path_slab_size")} {(() => {
                   const k = lastInputsRef.current?.slabSizeKey ?? savedInputsSnapshot.slabSizeKey ?? "60x60";
                   return k === "40x40" ? "40 × 40" : k === "90x60" ? "90 × 60" : "60 × 60";
@@ -882,29 +888,29 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
               <div style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", gap: 12, alignItems: "flex-start", marginBottom: 8 }}>
                 <div style={{ flex: "1 1 0", minWidth: 0 }}>
                   <div style={{ marginBottom: 8 }}>
-                    <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
+                    <label style={{ fontSize: 12, color: colors.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {(["grid", "brick", "onethird"] as const).map((p) => (
+                      {slabPatternOptions.map((p) => (
                         <button
                           key={p}
                           onClick={() => setVizPattern(p)}
                           style={{
                             padding: "6px 12px",
                             borderRadius: 6,
-                            border: `1px solid ${vizPattern === p ? C.accent : C.panelBorder}`,
-                            background: vizPattern === p ? C.accent + "22" : C.button,
-                            color: vizPattern === p ? C.accent : C.text,
+                            border: `1px solid ${vizPattern === p ? colors.accentBlue : colors.borderDefault}`,
+                            background: vizPattern === p ? accentAlpha(0.13) : colors.bgOverlay,
+                            color: vizPattern === p ? colors.accentBlue : colors.textPrimary,
                             cursor: "pointer",
                             fontSize: 12,
                             textTransform: "capitalize",
                           }}
                         >
-                          {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
+                          {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : p === "onethird" ? t("project:path_pattern_onethird") : t("project:path_pattern_herringbone")}
                         </button>
                       ))}
                     </div>
                   </div>
-                  <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
+                  <label style={{ fontSize: 12, color: colors.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     {([0, 45, 90] as const).map((deg) => (
                       <button
@@ -913,9 +919,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                         style={{
                           padding: "6px 12px",
                           borderRadius: 6,
-                          border: `1px solid ${vizDirection === deg ? C.accent : C.panelBorder}`,
-                          background: vizDirection === deg ? C.accent + "22" : C.button,
-                          color: vizDirection === deg ? C.accent : C.text,
+                          border: `1px solid ${vizDirection === deg ? colors.accentBlue : colors.borderDefault}`,
+                          background: vizDirection === deg ? accentAlpha(0.13) : colors.bgOverlay,
+                          color: vizDirection === deg ? colors.accentBlue : colors.textPrimary,
                           cursor: "pointer",
                           fontSize: 12,
                         }}
@@ -933,10 +939,10 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       style={{
                         width: 70,
                         padding: "6px 8px",
-                        background: C.bg,
-                        border: `1px solid ${C.panelBorder}`,
+                        background: colors.bgInput,
+                        border: `1px solid ${colors.borderDefault}`,
                         borderRadius: 6,
-                        color: C.text,
+                        color: colors.textPrimary,
                         fontSize: 12,
                       }}
                       title={t("project:custom_rotation_title")}
@@ -952,9 +958,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       style={{
                         padding: "6px 10px",
                         borderRadius: 6,
-                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.panelBorder}`,
-                        background: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent + "22" : C.button,
-                        color: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.text,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? colors.accentBlue : colors.borderDefault}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? accentAlpha(0.13) : colors.bgOverlay,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? colors.accentBlue : colors.textPrimary,
                         cursor: "pointer",
                         fontSize: 11,
                       }}
@@ -970,9 +976,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       style={{
                         padding: "6px 10px",
                         borderRadius: 6,
-                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.panelBorder}`,
-                        background: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent + "22" : C.button,
-                        color: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.text,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? colors.accentBlue : colors.borderDefault}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? accentAlpha(0.13) : colors.bgOverlay,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? colors.accentBlue : colors.textPrimary,
                         cursor: "pointer",
                         fontSize: 11,
                       }}
@@ -983,7 +989,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setPatternAlignPanelOpen(false)}
-                        style={{ padding: "4px 8px", fontSize: 11, color: C.textDim, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                        style={{ padding: "4px 8px", fontSize: 11, color: colors.textDim, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}
                       >
                         {t("project:object_card_align_hide_preview")}
                       </button>
@@ -1011,60 +1017,40 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                   </div>
                 )}
               </div>
-              <div>
-                <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_starting_corner")}</label>
-                <select
-                  value={vizStartCorner}
-                  onChange={(e) => setVizStartCorner(parseInt(e.target.value, 10))}
-                  style={{
-                    width: "100%",
-                    padding: "6px 10px",
-                    background: C.bg,
-                    border: `1px solid ${C.panelBorder}`,
-                    borderRadius: 6,
-                    color: C.text,
-                    fontSize: 13,
-                  }}
-                >
-                  {shape.points.map((_, i) => (
-                    <option key={i} value={i}>{t("project:object_card_corner", { n: i + 1 })}</option>
-                  ))}
-                </select>
-              </div>
             </div>
           )}
 
           {/* Paving pattern visualization */}
           {calculatorType === "paving" && shape.closed && shape.points.length >= 3 && (
-            <div style={{ marginTop: 16, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 6 }}>
-              <div style={{ fontWeight: 600, marginBottom: 10, color: C.text }}>{t("project:object_card_pattern_viz")}</div>
-              <div style={{ marginBottom: 8, fontSize: 12, color: C.textDim }}>{t("project:object_card_blocks_dimensions")}</div>
+            <div style={{ marginTop: 16, padding: 12, background: colors.bgCardInner, borderRadius: 6 }}>
+              <div style={{ fontWeight: 600, marginBottom: 10, color: colors.textPrimary }}>{t("project:object_card_pattern_viz")}</div>
+              <div style={{ marginBottom: 8, fontSize: 12, color: colors.textDim }}>{t("project:object_card_blocks_dimensions")}</div>
               <div style={{ display: "flex", flexDirection: "row", flexWrap: "nowrap", gap: 12, alignItems: "flex-start", marginBottom: 8 }}>
                 <div style={{ flex: "1 1 0", minWidth: 0 }}>
                   <div style={{ marginBottom: 8 }}>
-                    <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
+                    <label style={{ fontSize: 12, color: colors.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_pattern")}</label>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {(["grid", "brick", "onethird"] as const).map((p) => (
+                      {pavingPatternOptions.map((p) => (
                         <button
                           key={p}
                           onClick={() => setVizPattern(p)}
                           style={{
                             padding: "6px 12px",
                             borderRadius: 6,
-                            border: `1px solid ${vizPattern === p ? C.accent : C.panelBorder}`,
-                            background: vizPattern === p ? C.accent + "22" : C.button,
-                            color: vizPattern === p ? C.accent : C.text,
+                            border: `1px solid ${vizPattern === p ? colors.accentBlue : colors.borderDefault}`,
+                            background: vizPattern === p ? accentAlpha(0.13) : colors.bgOverlay,
+                            color: vizPattern === p ? colors.accentBlue : colors.textPrimary,
                             cursor: "pointer",
                             fontSize: 12,
                             textTransform: "capitalize",
                           }}
                         >
-                          {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : t("project:path_pattern_onethird")}
+                          {p === "grid" ? t("project:path_pattern_grid") : p === "brick" ? t("project:path_pattern_brick") : p === "onethird" ? t("project:path_pattern_onethird") : t("project:path_pattern_herringbone")}
                         </button>
                       ))}
                     </div>
                   </div>
-                  <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
+                  <label style={{ fontSize: 12, color: colors.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     {([0, 45, 90] as const).map((deg) => (
                       <button
@@ -1073,9 +1059,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                         style={{
                           padding: "6px 12px",
                           borderRadius: 6,
-                          border: `1px solid ${vizDirection === deg ? C.accent : C.panelBorder}`,
-                          background: vizDirection === deg ? C.accent + "22" : C.button,
-                          color: vizDirection === deg ? C.accent : C.text,
+                          border: `1px solid ${vizDirection === deg ? colors.accentBlue : colors.borderDefault}`,
+                          background: vizDirection === deg ? accentAlpha(0.13) : colors.bgOverlay,
+                          color: vizDirection === deg ? colors.accentBlue : colors.textPrimary,
                           cursor: "pointer",
                           fontSize: 12,
                         }}
@@ -1093,10 +1079,10 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       style={{
                         width: 70,
                         padding: "6px 8px",
-                        background: C.bg,
-                        border: `1px solid ${C.panelBorder}`,
+                        background: colors.bgInput,
+                        border: `1px solid ${colors.borderDefault}`,
                         borderRadius: 6,
-                        color: C.text,
+                        color: colors.textPrimary,
                         fontSize: 12,
                       }}
                       title={t("project:custom_rotation_title")}
@@ -1112,9 +1098,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       style={{
                         padding: "6px 10px",
                         borderRadius: 6,
-                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.panelBorder}`,
-                        background: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent + "22" : C.button,
-                        color: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? C.accent : C.text,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? colors.accentBlue : colors.borderDefault}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? accentAlpha(0.13) : colors.bgOverlay,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "parallel" ? colors.accentBlue : colors.textPrimary,
                         cursor: "pointer",
                         fontSize: 11,
                       }}
@@ -1130,9 +1116,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       style={{
                         padding: "6px 10px",
                         borderRadius: 6,
-                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.panelBorder}`,
-                        background: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent + "22" : C.button,
-                        color: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? C.accent : C.text,
+                        border: `1px solid ${patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? colors.accentBlue : colors.borderDefault}`,
+                        background: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? accentAlpha(0.13) : colors.bgOverlay,
+                        color: patternAlignPanelOpen && vizPatternAlignMode === "perpendicular" ? colors.accentBlue : colors.textPrimary,
                         cursor: "pointer",
                         fontSize: 11,
                       }}
@@ -1143,7 +1129,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setPatternAlignPanelOpen(false)}
-                        style={{ padding: "4px 8px", fontSize: 11, color: C.textDim, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}
+                        style={{ padding: "4px 8px", fontSize: 11, color: colors.textDim, background: "transparent", border: "none", cursor: "pointer", textDecoration: "underline" }}
                       >
                         {t("project:object_card_align_hide_preview")}
                       </button>
@@ -1171,36 +1157,16 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                   </div>
                 )}
               </div>
-              <div>
-                <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_starting_corner")}</label>
-                <select
-                  value={vizStartCorner}
-                  onChange={(e) => setVizStartCorner(parseInt(e.target.value, 10))}
-                  style={{
-                    width: "100%",
-                    padding: "6px 10px",
-                    background: C.bg,
-                    border: `1px solid ${C.panelBorder}`,
-                    borderRadius: 6,
-                    color: C.text,
-                    fontSize: 13,
-                  }}
-                >
-                  {shape.points.map((_, i) => (
-                    <option key={i} value={i}>{t("project:object_card_corner", { n: i + 1 })}</option>
-                  ))}
-                </select>
-              </div>
             </div>
           )}
 
           {/* Grass pieces (for artificial grass) */}
           {calculatorType === "grass" && shape.closed && shape.points.length >= 3 && (
-            <div style={{ marginTop: 16, padding: 12, background: "rgba(0,0,0,0.2)", borderRadius: 6 }}>
-              <div style={{ fontWeight: 600, marginBottom: 10, color: C.text }}>{t("project:object_card_grass_pieces")}</div>
-              <p style={{ fontSize: 12, color: C.textDim, marginBottom: 10 }}>{t("project:object_card_grass_pieces_desc")}</p>
+            <div style={{ marginTop: 16, padding: 12, background: colors.bgCardInner, borderRadius: 6 }}>
+              <div style={{ fontWeight: 600, marginBottom: 10, color: colors.textPrimary }}>{t("project:object_card_grass_pieces")}</div>
+              <p style={{ fontSize: 12, color: colors.textDim, marginBottom: 10 }}>{t("project:object_card_grass_pieces_desc")}</p>
               <div style={{ marginBottom: 10 }}>
-                <label style={{ fontSize: 12, color: C.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
+                <label style={{ fontSize: 12, color: colors.textDim, display: "block", marginBottom: 4 }}>{t("project:object_card_laying_direction")}</label>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   {([0, 45, 90, 135, 180] as const).map((deg) => (
                     <button
@@ -1209,9 +1175,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       style={{
                         padding: "6px 12px",
                         borderRadius: 6,
-                        border: `1px solid ${grassVizDirection === deg ? C.accent : C.panelBorder}`,
-                        background: grassVizDirection === deg ? C.accent + "22" : C.button,
-                        color: grassVizDirection === deg ? C.accent : C.text,
+                        border: `1px solid ${grassVizDirection === deg ? colors.accentBlue : colors.borderDefault}`,
+                        background: grassVizDirection === deg ? accentAlpha(0.13) : colors.bgOverlay,
+                        color: grassVizDirection === deg ? colors.accentBlue : colors.textPrimary,
                         cursor: "pointer",
                         fontSize: 12,
                       }}
@@ -1229,10 +1195,10 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                     style={{
                       width: 70,
                       padding: "6px 8px",
-                      background: C.bg,
-                      border: `1px solid ${C.panelBorder}`,
+                      background: colors.bgInput,
+                      border: `1px solid ${colors.borderDefault}`,
                       borderRadius: 6,
-                      color: C.text,
+                      color: colors.textPrimary,
                       fontSize: 12,
                     }}
                     title={t("project:custom_rotation_title")}
@@ -1241,7 +1207,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
               </div>
               {grassPieces.map((piece, i) => (
                 <div key={piece.id} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
-                  <span style={{ fontSize: 12, color: C.textDim, minWidth: 60 }}>{t("project:object_card_piece")} {i + 1}</span>
+                  <span style={{ fontSize: 12, color: colors.textDim, minWidth: 60 }}>{t("project:object_card_piece")} {i + 1}</span>
                   <input
                     type="number"
                     placeholder={t("project:object_card_length_m")}
@@ -1253,9 +1219,9 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                         setGrassPieces(prev => prev.map((p, j) => j === i ? { ...p, lengthM: n } : p));
                       } }
                     }}
-                    style={{ width: 80, padding: "6px 8px", background: C.bg, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 12 }}
+                    style={{ width: 80, padding: "6px 8px", background: colors.bgInput, border: `1px solid ${colors.borderDefault}`, borderRadius: 6, color: colors.textPrimary, fontSize: 12 }}
                   />
-                  <span style={{ color: C.textDim }}>×</span>
+                  <span style={{ color: colors.textDim }}>×</span>
                   <input
                     type="number"
                     placeholder={t("project:object_card_width_m")}
@@ -1268,13 +1234,13 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
                       else { const n = parseFloat(v); if (!isNaN(n)) setGrassPieces(prev => prev.map((p, j) => j === i ? { ...p, widthM: n } : p)); }
                     }}
                     readOnly={!!(piece.trimEdges?.length)}
-                    style={{ width: 80, padding: `${spacing.sm}px ${spacing.md}px`, background: piece.trimEdges?.length ? "rgba(0,0,0,0.2)" : C.bg, border: `1px solid ${C.panelBorder}`, borderRadius: radii.md, color: C.text, fontSize: 12 }}
+                    style={{ width: 80, padding: `${spacing.sm}px ${spacing.md}px`, background: piece.trimEdges?.length ? colors.bgCardInner : colors.bgInput, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md, color: colors.textPrimary, fontSize: 12 }}
                   />
-                  <span style={{ fontSize: 12, color: C.textDim }}>{piece.trimEdges?.length ? t("project:object_card_unit_effective") : t("project:object_card_unit_m")}</span>
+                  <span style={{ fontSize: 12, color: colors.textDim }}>{piece.trimEdges?.length ? t("project:object_card_unit_effective") : t("project:object_card_unit_m")}</span>
                   {grassPieces.length > 1 && (
                     <button
                       onClick={() => setGrassPieces(prev => prev.filter((_, j) => j !== i))}
-                      style={{ padding: "4px 8px", background: C.danger, border: "none", borderRadius: 4, color: "#fff", cursor: "pointer", fontSize: 11 }}
+                      style={{ padding: "4px 8px", background: colors.red, border: "none", borderRadius: 4, color: "#fff", cursor: "pointer", fontSize: 11 }}
                     >
                       {t("project:object_card_remove")}
                     </button>
@@ -1283,7 +1249,7 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
               ))}
               <button
                 onClick={() => setGrassPieces(prev => [...prev, { id: String(Date.now()), widthM: 4, lengthM: 10, x: 0, y: 0, rotation: 0 }])}
-                style={{ padding: "6px 12px", background: C.accent, border: "none", borderRadius: 6, color: C.bg, cursor: "pointer", fontSize: 12 }}
+                style={{ padding: "6px 12px", background: colors.accentBlue, border: "none", borderRadius: 6, color: colors.bgInput, cursor: "pointer", fontSize: 12 }}
               >
                 {t("project:object_card_add_piece")}
               </button>
@@ -1296,8 +1262,8 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
           )}
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.xl, padding: spacing["3xl"], borderTop: `1px solid ${C.panelBorder}`, background: "rgba(0,0,0,0.2)" }}>
-          <button onClick={onClose} style={{ padding: "8px 16px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, cursor: "pointer", fontSize: 13 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.xl, padding: spacing["3xl"], borderTop: `1px solid ${colors.borderDefault}`, background: colors.bgCardInner }}>
+          <button onClick={onClose} style={{ padding: "8px 16px", background: colors.bgOverlay, border: `1px solid ${colors.borderDefault}`, borderRadius: 6, color: colors.textPrimary, cursor: "pointer", fontSize: 13 }}>
             {t("project:object_card_cancel")}
           </button>
           <button
@@ -1305,10 +1271,10 @@ const ObjectCardModal: React.FC<ObjectCardModalProps> = ({
             disabled={!canSave}
             style={{
               padding: "8px 16px",
-              background: canSave ? C.accent : C.button,
-              border: `1px solid ${canSave ? C.accent : C.panelBorder}`,
+              background: canSave ? colors.accentBlue : colors.bgOverlay,
+              border: `1px solid ${canSave ? colors.accentBlue : colors.borderDefault}`,
               borderRadius: 6,
-              color: canSave ? C.bg : C.textDim,
+              color: canSave ? colors.bgInput : colors.textDim,
               cursor: canSave ? "pointer" : "default",
               fontSize: 13,
               opacity: canSave ? 1 : 0.5,

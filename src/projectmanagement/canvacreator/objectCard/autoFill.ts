@@ -6,7 +6,7 @@
 import { Shape, areaM2, distance, toMeters, polylineLengthMeters, toPixels } from "../geometry";
 import { AutoFillData } from "../types";
 import { getEffectivePolygon, calcEdgeLengthWithArcs } from "../arcMath";
-import { getPathPolygon, isPolygonLinearElement, getPolygonLinearOutline, polygonToSegmentLengths } from "../linearElements";
+import { getPathPolygon, isPolygonLinearElement, getPolygonLinearOutline, polygonToSegmentLengths, isPolygonLinearStripOutline } from "../linearElements";
 import { getSurfacePolygonWithFenceCutouts } from "../adjustmentLogic";
 
 export function computeAutoFill(shape: Shape, allShapes?: Shape[]): AutoFillData {
@@ -42,7 +42,7 @@ export function computeAutoFill(shape: Shape, allShapes?: Shape[]): AutoFillData
 
   if (shape.elementType !== "polygon") {
     // Linear element — wall/kerb/foundation may be stored as polygon (closed)
-    if (isPolygonLinearElement(shape) && shape.closed && pts.length >= 3) {
+    if (isPolygonLinearElement(shape) && (isPolygonLinearStripOutline(shape) || (shape.closed && pts.length >= 3))) {
       const edgeLengthsM = polygonToSegmentLengths(pts);
       const totalLengthM = edgeLengthsM.reduce((a, b) => a + b, 0);
       return {
@@ -69,7 +69,7 @@ export function computeAutoFill(shape: Shape, allShapes?: Shape[]): AutoFillData
   const effectivePts = shape.closed && pts.length >= 3 ? getEffectivePolygon(shape) : pts;
   let area = 0;
   if (shape.closed && pts.length >= 3) {
-    if (allShapes?.length && (shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs" || shape.calculatorType === "paving" || shape.calculatorType === "grass" || shape.calculatorType === "turf" || shape.calculatorType === "deck")) {
+    if (allShapes?.length && (shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs" || shape.calculatorType === "paving" || shape.calculatorType === "grass" || shape.calculatorType === "turf" || shape.calculatorType === "deck" || shape.calculatorType === "decorativeStones")) {
       const withCutouts = getSurfacePolygonWithFenceCutouts(shape, allShapes);
       area = withCutouts.reduce((sum, p) => sum + areaM2(p), 0);
     } else {

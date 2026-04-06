@@ -207,8 +207,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
 
         {/* Add Material Modal */}
         {showAddModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
+            <div className="rounded-lg max-w-md w-full px-3 py-3 md:p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">{t('form:add_material_button')}</h3>
                 <button
@@ -284,9 +284,9 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
       <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b p-6 flex justify-between items-center">
+        <div className="sticky top-0 bg-white border-b px-3 py-3 md:p-6 flex justify-between items-center">
           <h1 className="text-3xl font-bold" style={{ color: colors.textPrimary }}>{t('form:materials_heading')}</h1>
           <button
             onClick={onClose}
@@ -299,7 +299,7 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="px-3 py-3 md:p-6 space-y-6">
         <button
           onClick={() => setShowAddModal(true)}
           className="md:inline-flex hidden items-center px-4 py-2 rounded-lg transition-colors"
@@ -430,8 +430,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
 
       {/* Add Material Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="rounded-lg max-w-sm w-full p-4 space-y-3" style={{ backgroundColor: colors.bgCard }}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
+          <div className="rounded-lg max-w-sm w-full px-3 py-3 md:p-4 space-y-3" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">{t('form:add_material_button')}</h3>
               <button
@@ -503,8 +503,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
 
       {/* Edit Material Modal (system materials: only price editable) */}
       {showEditModal && selectedMaterial && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="rounded-lg max-w-sm w-full p-4 space-y-3" style={{ backgroundColor: colors.bgCard }}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
+          <div className="rounded-lg max-w-sm w-full px-3 py-3 md:p-4 space-y-3" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">
                 {selectedMaterial.is_deletable === false ? t('form:edit_material_price_heading') : t('form:edit_material_heading')}
@@ -607,8 +607,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
 
       {/* Delete Material Confirmation Modal */}
       {showDeleteConfirm && selectedMaterial && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4">
-          <div className="rounded-lg max-w-sm w-full p-4 shadow-xl" style={{ backgroundColor: colors.bgCard }}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-0 md:p-4">
+          <div className="rounded-lg max-w-sm w-full px-3 py-3 md:p-4 shadow-xl" style={{ backgroundColor: colors.bgCard }}>
             {deleteError && (
               <p className="text-sm mb-3" style={{ color: colors.red }}>{deleteError}</p>
             )}
@@ -646,8 +646,8 @@ const SetupMaterials: React.FC<SetupMaterialsProps> = ({ onClose, wizardMode = f
 
       {/* Material Details Modal */}
       {showDetailsModal && selectedMaterial && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="rounded-lg max-w-sm w-full p-4" style={{ backgroundColor: colors.bgCard }}>
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
+          <div className="rounded-lg max-w-sm w-full px-3 py-3 md:p-4" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{translateMaterialName(selectedMaterial.name, t)}</h3>

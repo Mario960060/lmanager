@@ -1,15 +1,21 @@
-// Carrier speeds in meters per hour
+// Carrier speeds in meters per hour (wheelbarrows / small dumpers vs larger carriers)
 export const carrierSpeeds = [
-  { size: 0.1, speed: 1500 },
-  { size: 0.125, speed: 1500 },
-  { size: 0.15, speed: 1500 },
-  { size: 0.3, speed: 2500 },
-  { size: 0.5, speed: 1000 },
-  { size: 1, speed: 4000 },
-  { size: 3, speed: 6000 },
-  { size: 5, speed: 7000 },
-  { size: 10, speed: 8000 }
+  { size: 0.1, speed: 5000 },
+  { size: 0.125, speed: 5000 },
+  { size: 0.15, speed: 5000 },
+  { size: 0.3, speed: 5000 },
+  { size: 0.5, speed: 3000 },
+  { size: 1, speed: 9000 },
+  { size: 3, speed: 12000 },
+  { size: 5, speed: 17000 },
+  { size: 10, speed: 30000 }
 ];
+
+/** Fallback m/h when carrier size is unknown (aligned with 1t default) */
+export const DEFAULT_CARRIER_SPEED_M_PER_H = 9000;
+
+/** On-foot carrying of posts, slats, sleepers (m/h) — same order of magnitude as comfortable walking */
+export const FOOT_CARRY_SPEED_M_PER_H = 5000;
 
 // Material capacity in units per carrier size (in tonnes)
 // Format: { [materialName]: { [carrierSize]: quantity } }
@@ -157,6 +163,19 @@ export const materialCapacity = {
     10: 10
   },
 
+  // Decorative stones / gravel (bulk) - tonnes per trip (same as sand; transport uses fixed 0.125 t barrow)
+  decorativeStones: {
+    0.1: 0.1,
+    0.125: 0.125,
+    0.15: 0.15,
+    0.3: 0.3,
+    0.5: 0.5,
+    1: 1,
+    3: 3,
+    5: 5,
+    10: 10
+  },
+
   // Grit Sand - tonnes
   gritSand: {
     0.1: 0.1,
@@ -200,7 +219,7 @@ export const materialCapacity = {
 // Helper function to get carrier speed by size
 export const findCarrierSpeed = (sizeInTonnes: number): number => {
   const carrier = carrierSpeeds.find(c => c.size === sizeInTonnes);
-  return carrier ? carrier.speed : 4000; // Default to 4000 m/h if not found
+  return carrier ? carrier.speed : DEFAULT_CARRIER_SPEED_M_PER_H;
 };
 
 // Helper function to get material capacity by name and carrier size

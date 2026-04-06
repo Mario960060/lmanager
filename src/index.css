@@ -514,6 +514,98 @@
   overflow: hidden !important;
 }
 
+/* Obudowa: przyklejony nagłówek + dni tygodnia; scroll tylko siatki miesięcy. */
+.datepicker-popover-shell {
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: min(70vh, 28rem) !important;
+  border-radius: 0.75rem !important;
+  border: 1px solid var(--color-border) !important;
+  background-color: var(--color-bg-secondary) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+  overflow: hidden !important;
+  font-family: inherit !important;
+  font-size: 0.8rem !important;
+}
+
+.datepicker-sticky-header {
+  flex-shrink: 0 !important;
+  background-color: var(--color-bg-tertiary) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+}
+
+.datepicker-sticky-day-names {
+  flex-shrink: 0 !important;
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-around !important;
+  margin: 0 !important;
+  padding: 4px 4px 2px !important;
+  background-color: var(--color-bg-secondary) !important;
+  border-bottom: 1px solid var(--color-border) !important;
+}
+
+/* Wiersz jest poza .react-datepicker--theme — bez tego dziedziczy ciemny tekst na ciemnym tle. */
+.datepicker-sticky-day-names .react-datepicker__day-name {
+  color: var(--color-text-primary) !important;
+  font-size: 0.7rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  width: 2rem !important;
+  line-height: 2rem !important;
+  text-align: center !important;
+}
+
+/* Kilka miesięcy pod sobą + pionowy scroll wewnątrz obudowy. */
+.react-datepicker--theme.datepicker-stacked-months.datepicker-scroll-region {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  /* `smooth` + ~25 miesięcy DOM = ciężki layout przy scrollu; natywny scroll jest lżejszy */
+  scroll-behavior: auto !important;
+  overscroll-behavior: contain !important;
+  border-radius: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--color-border-light) var(--color-bg-tertiary) !important;
+}
+
+.react-datepicker--theme.datepicker-stacked-months.datepicker-scroll-region::-webkit-scrollbar {
+  width: 8px !important;
+}
+
+.react-datepicker--theme.datepicker-stacked-months.datepicker-scroll-region::-webkit-scrollbar-track {
+  background: var(--color-bg-tertiary) !important;
+  border-radius: 4px !important;
+}
+
+.react-datepicker--theme.datepicker-stacked-months.datepicker-scroll-region::-webkit-scrollbar-thumb {
+  background: var(--color-border-light) !important;
+  border-radius: 4px !important;
+}
+
+.react-datepicker--theme.datepicker-stacked-months.datepicker-scroll-region::-webkit-scrollbar-thumb:hover {
+  background: var(--color-bg-hover) !important;
+}
+
+.react-datepicker--theme.datepicker-stacked-months > .react-datepicker__month-container {
+  flex: 0 0 auto !important;
+  width: 100% !important;
+}
+
+/* Jedna linia Pn–Nd jest nad scrollem; ukryj duplikaty z react-datepicker. */
+.react-datepicker--theme.datepicker-scroll-region .react-datepicker__day-names {
+  display: none !important;
+}
+
 /* Header */
 .react-datepicker--theme .react-datepicker__header {
   background-color: var(--color-bg-tertiary) !important;
@@ -672,4 +764,31 @@
 .react-datepicker-popper[data-placement^="top"] .react-datepicker__triangle {
   fill: var(--color-bg-secondary) !important;
   color: var(--color-bg-secondary) !important;
+}
+
+/* Dashboard day columns: thin themed scrollbar; thumb shows while scrolling (like mobile overlay) */
+.dashboard-days-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.dashboard-days-scroll.dashboard-days-scroll--interacting {
+  scrollbar-color: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.55) transparent;
+}
+
+.dashboard-days-scroll::-webkit-scrollbar {
+  height: 6px;
+}
+.dashboard-days-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dashboard-days-scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+.dashboard-days-scroll.dashboard-days-scroll--interacting::-webkit-scrollbar-thumb {
+  background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.55);
+}
+.dashboard-days-scroll.dashboard-days-scroll--interacting::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.85);
 }

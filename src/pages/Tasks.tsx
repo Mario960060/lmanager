@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { translateTaskName, translateTaskDescription } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { X, Wrench, Package, Pencil, Info } from 'lucide-react';
+import { X, Wrench, Package, Pencil, Info, Trash2 } from 'lucide-react';
+import { useSidebarSectionReset } from '../hooks/useSidebarSectionReset';
 import PageInfoModal from '../components/PageInfoModal';
 import BackButton from '../components/BackButton';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
@@ -33,6 +34,7 @@ const TaskRequirements = () => {
     materials: ['']
   });
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [taskPendingDelete, setTaskPendingDelete] = useState<Task | null>(null);
 
   // Fetch tasks from task_requirements
   const { data: tasks = [], isLoading } = useQuery({
@@ -96,6 +98,35 @@ const TaskRequirements = () => {
       setShowEditModal(false);
       setEditingTask(null);
     }
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('task_requirements')
+        .delete()
+        .eq('id', id)
+        .eq('company_id', companyId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task_requirements', companyId] });
+      setTaskPendingDelete(null);
+      setShowDetailsModal(false);
+      setSelectedTask(null);
+      setShowEditModal(false);
+      setEditingTask(null);
+    }
+  });
+
+  useSidebarSectionReset('/tasks', () => {
+    setShowAddModal(false);
+    setShowEditModal(false);
+    setShowDetailsModal(false);
+    setSelectedTask(null);
+    setEditingTask(null);
+    setTaskPendingDelete(null);
+    setNewTask({ name: '', description: '', tools: [''], materials: [''] });
   });
 
   const handleAddTool = (isEditing: boolean = false) => {
@@ -217,10 +248,13 @@ const TaskRequirements = () => {
   }
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["6xl"], fontFamily: fonts.body }}>
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["6xl"], fontFamily: fonts.body, position: 'relative' }}>
       <BackButton />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexDirection: 'column' }} className="md:flex-row">
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+      <div
+        className="max-md:pt-14 md:pt-0 flex flex-col md:flex-row md:items-center md:justify-between"
+        style={{ gap: spacing["5xl"] }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm }}>
           <h1 style={{ fontSize: fontSizes["3xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('utilities:task_requirements_title')}</h1>
           <PageInfoModal
             description={t('form:task_requirements_info_description')}
@@ -228,15 +262,10 @@ const TaskRequirements = () => {
             quickTips={[]}
           />
         </div>
-        <Button variant="accent" color={colors.accentBlue} icon="📋" onClick={() => setShowAddModal(true)} className="md:flex hidden">
+        <Button variant="accent" color={colors.accentBlue} icon="📋" onClick={() => setShowAddModal(true)} style={{ alignSelf: 'stretch' }} className="md:shrink-0 md:self-center md:w-auto w-full">
           {t('utilities:add_task_requirements')}
         </Button>
       </div>
-
-      {/* Mobile Button - compact, not full width */}
-      <Button variant="accent" color={colors.accentBlue} icon="📋" onClick={() => setShowAddModal(true)} style={{ alignSelf: 'flex-start' }} className="md:hidden">
-        {t('utilities:add_task_requirements')}
-      </Button>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: spacing["6xl"] }}>
         {tasks.map((task) => (
@@ -252,13 +281,24 @@ const TaskRequirements = () => {
                 </button>
                 <p style={{ color: colors.textDim, fontFamily: fonts.body, marginTop: spacing.sm, margin: `${spacing.sm} 0 0 0`, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{task.description}</p>
               </div>
-              <button
-                onClick={() => handleEditClick(task)}
-                style={{ padding: spacing.sm, background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer', marginLeft: spacing.sm }}
-                title={t('utilities:edit_task')}
-              >
-                <Pencil style={{ width: 20, height: 20, color: colors.accentBlue }} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: spacing.xs, flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => handleEditClick(task)}
+                  style={{ padding: spacing.sm, background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer' }}
+                  title={t('utilities:edit_task')}
+                >
+                  <Pencil style={{ width: 20, height: 20, color: colors.accentBlue }} />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setTaskPendingDelete(task); }}
+                  style={{ padding: spacing.sm, background: 'transparent', border: 'none', borderRadius: '50%', cursor: 'pointer' }}
+                  title={t('utilities:delete_task_requirement')}
+                >
+                  <Trash2 style={{ width: 20, height: 20, color: colors.red }} />
+                </button>
+              </div>
             </div>
             <div style={{ marginTop: spacing["5xl"], display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
               <div style={{ display: 'flex', alignItems: 'center', fontSize: fontSizes.base, color: colors.accentBlue }}>
@@ -332,7 +372,7 @@ const TaskRequirements = () => {
         }
       >
             <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["5xl"], overflowY: 'auto' }}>
-                <TextInput label={t('utilities:task_name')} value={newTask.name} onChange={(v) => setNewTask(prev => ({ ...prev, name: v }))} placeholder={t('utilities:enter_task_name')} />
+                <TextInput type="text" label={t('utilities:task_name')} value={newTask.name} onChange={(v) => setNewTask(prev => ({ ...prev, name: v }))} placeholder={t('utilities:enter_task_name')} />
                 <div>
                   <Label>{t('utilities:description')}</Label>
                   <textarea
@@ -388,7 +428,7 @@ const TaskRequirements = () => {
       >
         {editingTask && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["5xl"], overflowY: 'auto' }}>
-            <TextInput label={t('utilities:task_name')} value={editingTask.name} onChange={(v) => setEditingTask(prev => prev ? { ...prev, name: v } : null)} placeholder={t('utilities:enter_task_name')} />
+            <TextInput type="text" label={t('utilities:task_name')} value={editingTask.name} onChange={(v) => setEditingTask(prev => prev ? { ...prev, name: v } : null)} placeholder={t('utilities:enter_task_name')} />
             <div>
               <Label>{t('utilities:description')}</Label>
               <textarea value={editingTask.description} onChange={(e) => setEditingTask(prev => prev ? { ...prev, description: e.target.value } : null)} rows={3} placeholder={t('utilities:enter_task_description')} style={{ width: '100%', padding: spacing.xl, borderRadius: radii.xl, border: `1px solid ${colors.borderInput}`, background: colors.bgInput, fontFamily: fonts.body, fontSize: fontSizes.base, marginTop: spacing.xs }} />
@@ -423,6 +463,31 @@ const TaskRequirements = () => {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={!!taskPendingDelete}
+        onClose={() => setTaskPendingDelete(null)}
+        title={t('utilities:delete_task_requirement')}
+        width={448}
+        footer={
+          <div style={{ display: 'flex', gap: spacing.md, width: '100%' }}>
+            <Button variant="secondary" onClick={() => setTaskPendingDelete(null)} style={{ flex: 1 }}>
+              {t('utilities:cancel')}
+            </Button>
+            <Button
+              onClick={() => taskPendingDelete && deleteTaskMutation.mutate(taskPendingDelete.id)}
+              disabled={deleteTaskMutation.isPending}
+              style={{ flex: 1, background: colors.red, borderColor: colors.red }}
+            >
+              {deleteTaskMutation.isPending ? t('utilities:loading') : t('utilities:delete')}
+            </Button>
+          </div>
+        }
+      >
+        <p style={{ color: colors.textDim, fontFamily: fonts.body, margin: 0 }}>
+          {t('utilities:delete_task_requirement_confirm')}
+        </p>
       </Modal>
     </div>
   );

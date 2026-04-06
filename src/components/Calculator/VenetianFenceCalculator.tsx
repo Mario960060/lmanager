@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, FOOT_CARRY_SPEED_M_PER_H, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
+import { FENCE_NAILS_35_MM, fenceSlatNailsPerSlatAlongLength } from '../../lib/fenceNailMaterials';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii, gradients } from '../../themes/designTokens';
 import { Card, DataTable, TextInput, SelectDropdown, Checkbox, CalculatorInputGrid, Button } from '../../themes/uiComponents';
 
@@ -218,7 +219,7 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -328,8 +329,7 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
       if (posts > 0) {
         const postsPerTrip = 1; // 1 post per person per trip
         const trips = Math.ceil(posts / postsPerTrip);
-        const postCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / postCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / FOOT_CARRY_SPEED_M_PER_H;
         postTransportTime = trips * timePerTrip;
         
         if (postTransportTime > 0) {
@@ -346,8 +346,7 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
       if (slatsNeeded > 0) {
         const slatsPerTrip = 6;
         const trips = Math.ceil(slatsNeeded / slatsPerTrip);
-        const slatCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / slatCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / FOOT_CARRY_SPEED_M_PER_H;
         slatTransportTime = trips * timePerTrip;
         
         if (slatTransportTime > 0) {
@@ -379,10 +378,13 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
     const finalTotalHours = breakdown.reduce((sum, item) => sum + item.hours, 0);
 
     // Prepare materials list
+    const nails35 = fenceSlatNailsPerSlatAlongLength(slatL) * slatsNeeded;
+
     const materialsList: Material[] = [
       { name: 'Post', amount: posts, unit: 'posts', price_per_unit: null, total_price: null },
       { name: 'Venetian Slats', amount: slatsNeeded, unit: 'slats', price_per_unit: null, total_price: null },
-      { name: 'Postmix', amount: totalPostmix, unit: 'bags', price_per_unit: null, total_price: null }
+      { name: 'Postmix', amount: totalPostmix, unit: 'bags', price_per_unit: null, total_price: null },
+      { name: FENCE_NAILS_35_MM, amount: nails35, unit: 'pieces', price_per_unit: null, total_price: null },
     ];
 
     // Fetch prices and update state
@@ -556,7 +558,7 @@ const VenetianFenceCalculator: React.FC<VenetianFenceCalculatorProps> = ({
           </>
         )}
 
-        <Button variant="accent" color={colors.accentBlue} onClick={calculate} disabled={isLoading}>
+        <Button variant="primary" fullWidth onClick={calculate} disabled={isLoading}>
           {isLoading ? t('calculator:loading_in_progress') : t('calculator:calculate_button')}
         </Button>
 

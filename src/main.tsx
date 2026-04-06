@@ -8,6 +8,15 @@ import 'react-datepicker/dist/react-datepicker.css';
 import './i18n/config.ts';
 import { ThemeProvider } from './themes';
 
+// Supabase (and browser fetch) abort in-flight requests on unmount/navigation/auth refresh.
+// Those rejections are expected; without handling they clutter the console as unhandled.
+window.addEventListener('unhandledrejection', (event) => {
+  const r = event.reason;
+  if (r?.name === 'AbortError') {
+    event.preventDefault();
+  }
+});
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSidebarSectionReset } from '../hooks/useSidebarSectionReset';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../lib/store';
 import { show403Modal } from '../components/Error403Modal';
@@ -13,6 +14,8 @@ const Finance = () => {
   const { t } = useTranslation(['common', 'dashboard', 'form']);
   const { profile } = useAuthStore();
   const [showWorkPricing, setShowWorkPricing] = useState(false);
+
+  useSidebarSectionReset('/finance', () => setShowWorkPricing(false));
 
   const hasFinanceAccess = profile?.role === 'Admin' || profile?.role === 'project_manager';
 

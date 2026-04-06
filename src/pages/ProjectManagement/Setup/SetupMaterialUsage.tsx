@@ -16,6 +16,14 @@ import { SectionHeader } from "../../../themes/uiComponents";
 
 const SAND_OPTION_KEYS = ["form:material_usage_sand_granite", "form:material_usage_sand_building", "form:material_usage_sand_sharp"] as const;
 const SAND_OPTIONS_RAW = ["Granite Sand", "Building sand", "Sharp Sand"] as const;
+
+/** Loose aggregate sand (building / sharp / granite sand). Excludes paving slabs whose names contain "sand" as part of "sandstone". */
+function isLooseSandMaterialName(name: string): boolean {
+  const n = name.toLowerCase();
+  if (!n.includes("sand")) return false;
+  if (n.includes("sandstone")) return false;
+  return true;
+}
 const MORTAR_RATIOS = ["1:3", "1:4", "1:5", "1:6"];
 
 const CALCULATORS = [
@@ -81,6 +89,18 @@ const CALCULATORS = [
     ],
     hasSand: false,
     supabaseId: "natural_turf",
+  },
+  {
+    key: "decorative_stones_calculator",
+    labelKey: "form:material_usage_calc_decorative_stones",
+    icon: "◆",
+    color: "#a78bfa",
+    thicknesses: [
+      { key: "type1_thickness", labelKey: "form:material_usage_type1_thickness", unit: "cm", default: 10 },
+      { key: "decorative_stones_depth", labelKey: "form:material_usage_decorative_stones_depth", unit: "cm", default: 5 },
+    ],
+    hasSand: false,
+    supabaseId: "decorative_stones",
   },
   {
     key: "wall_calculator",
@@ -249,6 +269,7 @@ function getSandNameFromMaterialId(materials: Material[], materialId: string | u
   if (!materialId) return SAND_OPTIONS_RAW[0];
   const m = materials.find((x) => x.id === materialId);
   if (!m) return SAND_OPTIONS_RAW[0];
+  if (!isLooseSandMaterialName(m.name)) return SAND_OPTIONS_RAW[0];
   const match = SAND_OPTIONS_RAW.find((opt) => opt.toLowerCase() === m.name.toLowerCase());
   if (match) return match;
   return m.name;
@@ -355,8 +376,23 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
   const thicknessDefaultsRows = thicknessDefaultsData ?? EMPTY_THICKNESS_ROWS;
 
   const sandMaterials = useMemo(
-    () => materials.filter((m) => m.name.toLowerCase().includes("sand")),
+    () => materials.filter((m) => isLooseSandMaterialName(m.name)),
     [materials]
+  );
+
+  const getSandDropdownOptions = useCallback(
+    (calcKey: string): { value: string; label: string }[] => {
+      const value = sandConfig[calcKey] || SAND_OPTIONS_RAW[0];
+      const base =
+        sandMaterials.length > 0
+          ? sandMaterials.map((m) => ({ value: m.name, label: translateMaterialName(m.name, t) }))
+          : SAND_OPTIONS_RAW.map((raw, i) => ({ value: raw, label: t(SAND_OPTION_KEYS[i]) }));
+      if (value && !base.some((o) => o.value === value)) {
+        return [{ value, label: translateMaterialName(value, t) }, ...base];
+      }
+      return base;
+    },
+    [sandMaterials, sandConfig, t]
   );
 
   const supabaseIdToCalcKey: Record<string, string> = useMemo(() => {
@@ -407,18 +443,23 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
   const saveConfigMutation = useMutation({
     mutationFn: async (config: MaterialUsageConfig[]) => {
       if (!companyId) throw new Error(t("form:company_id_required"));
-      const ids = config.map((c) => c.calculator_id);
+      const idsFromSave = config.map((c) => c.calculator_id);
+      // decorative_stones is not configured here (no sand); remove stale row from when it was saved as sand.
+      const idsToDelete = [...new Set([...idsFromSave, "decorative_stones"])];
       await supabase
         .from("material_usage_configs")
         .delete()
-        .in("calculator_id", ids)
+        .in("calculator_id", idsToDelete)
         .eq("company_id", companyId);
       const toInsert = config.map((c) => ({ ...c, company_id: companyId }));
-      const { error } = await supabase.from("material_usage_configs").insert(toInsert);
-      if (error) throw error;
+      if (toInsert.length > 0) {
+        const { error } = await supabase.from("material_usage_configs").insert(toInsert);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["materialUsageConfigs", companyId] });
+      queryClient.invalidateQueries({ queryKey: ["materialUsageConfig"] });
     },
   });
 
@@ -501,7 +542,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
 
     const configToSave: MaterialUsageConfig[] = [];
     CALCULATORS.filter((c) => c.hasSand).forEach((calc) => {
-      const sandName = sandConfig[calc.key] || SAND_OPTIONS[0];
+      const sandName = sandConfig[calc.key] || SAND_OPTIONS_RAW[0];
       const materialId = findMaterialIdByName(sandMaterials, sandName);
       if (materialId) {
         configToSave.push({
@@ -531,14 +572,10 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
     };
 
     const saveConfigAndMortar = () => {
-      if (configToSave.length > 0) {
-        saveConfigMutation.mutate(configToSave, {
-          onSuccess: saveMortar,
-          onError: () => setSaving(false),
-        });
-      } else {
-        saveMortar();
-      }
+      saveConfigMutation.mutate(configToSave, {
+        onSuccess: saveMortar,
+        onError: () => setSaving(false),
+      });
     };
 
     saveThicknessMutation.mutate(thicknessConfig, {
@@ -579,7 +616,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
         rel="stylesheet"
       />
 
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: `${spacing["6xl"]}px ${spacing["3xl"]}px` }}>
+      <div className="setup-material-usage-inner" style={{ maxWidth: 640, margin: "0 auto", padding: `${spacing["6xl"]}px ${spacing["3xl"]}px` }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: spacing["7xl"] }}>
           <div style={{ display: "flex", alignItems: "center", gap: spacing.md }}>
             <h1
@@ -719,6 +756,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
                     display: "grid",
                     gridTemplateColumns: calc.thicknesses.length <= 2 ? "1fr 1fr" : "1fr 1fr 1fr",
                     gap: spacing.xl,
+                    alignItems: "end",
                   }}
                 >
                   {calc.thicknesses.map((thick) => (
@@ -799,7 +837,7 @@ const SetupMaterialUsage: React.FC<SetupMaterialUsageProps> = ({ onClose, wizard
               </span>
               <SelectDropdown
                 value={sandConfig[calc.key] || SAND_OPTIONS_RAW[0]}
-                options={sandMaterials.length > 0 ? sandMaterials.map((m) => ({ value: m.name, label: translateMaterialName(m.name, t) })) : SAND_OPTIONS_RAW.map((raw, i) => ({ value: raw, label: t(SAND_OPTION_KEYS[i]) }))}
+                options={getSandDropdownOptions(calc.key)}
                 onChange={(v) => setSandConfig((prev) => ({ ...prev, [calc.key]: v }))}
                 style={{ width: 160 }}
               />

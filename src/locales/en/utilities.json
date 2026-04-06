@@ -119,5 +119,7 @@
   "adding": "Adding...",
   "saving": "Saving...",
   "save_changes": "Save Changes",
-  "edit_task": "Edit task"
+  "edit_task": "Edit task",
+  "delete_task_requirement": "Delete task requirement",
+  "delete_task_requirement_confirm": "Delete this task requirement? This cannot be undone."
 }

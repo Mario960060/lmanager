@@ -8,9 +8,9 @@ import { X } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../lib/store";
 import { ProjectSettings } from "./types";
-import { C } from "./geometry";
 import { COMPACTORS } from "../../components/Calculator/CompactorSelector";
 import { colors, radii, shadows } from "../../themes/designTokens";
+import { useBackdropPointerDismiss } from "../../hooks/useBackdropPointerDismiss";
 
 interface EquipmentPanelProps {
   isOpen: boolean;
@@ -62,21 +62,23 @@ export default function EquipmentPanel({
     fetch();
   }, [isOpen, companyId]);
 
+  const backdropDismiss = useBackdropPointerDismiss(onClose, isOpen);
+
   if (!isOpen) return null;
 
   return (
-    <div className="canvas-modal-backdrop" style={{
+    <div ref={backdropDismiss.backdropRef} className="canvas-modal-backdrop" style={{
       position: "fixed",
       inset: 0,
-      background: "rgba(0,0,0,0.6)",
+      background: colors.bgModalBackdrop,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       zIndex: 1000,
-    }} onClick={onClose}>
-      <div className="canvas-modal-content" style={{
-        background: C.panel,
-        border: `1px solid ${C.panelBorder}`,
+    }} onPointerDown={backdropDismiss.onBackdropPointerDown}>
+      <div className="canvas-modal-content equipment-modal-panel" style={{
+        background: colors.bgElevated,
+        border: `1px solid ${colors.borderDefault}`,
         borderRadius: 12,
         padding: 24,
         maxWidth: 480,
@@ -84,20 +86,20 @@ export default function EquipmentPanel({
         maxHeight: "85vh",
         overflow: "auto",
         boxShadow: shadows.xl,
-      }} onClick={e => e.stopPropagation()}>
+      }} onPointerDownCapture={backdropDismiss.onPanelPointerDownCapture} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 18, color: C.text }}>{t("project:equipment_transport_title")}</h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: C.textDim }}>
+          <h3 style={{ margin: 0, fontSize: 18, color: colors.textPrimary }}>{t("project:equipment_transport_title")}</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textDim }}>
             <X size={20} />
           </button>
         </div>
 
         {loading ? (
-          <div style={{ color: C.textDim, fontSize: 14 }}>{t("common:loading")}</div>
+          <div style={{ color: colors.textDim, fontSize: 14 }}>{t("common:loading")}</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div>
-              <label style={{ display: "block", fontSize: 12, color: C.textDim, marginBottom: 6 }}>{t("project:excavator_label_short")}</label>
+              <label style={{ display: "block", fontSize: 12, color: colors.textDim, marginBottom: 6 }}>{t("project:excavator_label_short")}</label>
               <select
                 value={(projectSettings.selectedExcavator as any)?.id ?? ""}
                 onChange={e => {
@@ -108,10 +110,10 @@ export default function EquipmentPanel({
                 style={{
                   width: "100%",
                   padding: "8px 12px",
-                  background: C.bg,
-                  border: `1px solid ${C.panelBorder}`,
+                  background: colors.bgInput,
+                  border: `1px solid ${colors.borderDefault}`,
                   borderRadius: 6,
-                  color: C.text,
+                  color: colors.textPrimary,
                   fontSize: 14,
                 }}
               >
@@ -123,7 +125,7 @@ export default function EquipmentPanel({
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, color: C.textDim, marginBottom: 6 }}>{t("project:carrier_soil_tape1")}</label>
+              <label style={{ display: "block", fontSize: 12, color: colors.textDim, marginBottom: 6 }}>{t("project:carrier_soil_tape1")}</label>
               <select
                 value={(projectSettings.selectedCarrier as any)?.id ?? ""}
                 onChange={e => {
@@ -134,10 +136,10 @@ export default function EquipmentPanel({
                 style={{
                   width: "100%",
                   padding: "8px 12px",
-                  background: C.bg,
-                  border: `1px solid ${C.panelBorder}`,
+                  background: colors.bgInput,
+                  border: `1px solid ${colors.borderDefault}`,
                   borderRadius: 6,
-                  color: C.text,
+                  color: colors.textPrimary,
                   fontSize: 14,
                 }}
               >
@@ -146,11 +148,11 @@ export default function EquipmentPanel({
                   <option key={x.id} value={x.id}>{x.name} ({x["size (in tones)"] ?? "?"}t)</option>
                 ))}
               </select>
-              <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>For excavator materials</div>
+              <div style={{ fontSize: 11, color: colors.textDim, marginTop: 4 }}>For excavator materials</div>
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, color: C.textDim, marginBottom: 6 }}>{t("project:carrier_slabs_pavers")}</label>
+              <label style={{ display: "block", fontSize: 12, color: colors.textDim, marginBottom: 6 }}>{t("project:carrier_slabs_pavers")}</label>
               <select
                 value={(projectSettings.selectedMaterialCarrier as any)?.id ?? ""}
                 onChange={e => {
@@ -161,10 +163,10 @@ export default function EquipmentPanel({
                 style={{
                   width: "100%",
                   padding: "8px 12px",
-                  background: C.bg,
-                  border: `1px solid ${C.panelBorder}`,
+                  background: colors.bgInput,
+                  border: `1px solid ${colors.borderDefault}`,
                   borderRadius: 6,
-                  color: C.text,
+                  color: colors.textPrimary,
                   fontSize: 14,
                 }}
               >
@@ -173,11 +175,11 @@ export default function EquipmentPanel({
                   <option key={x.id} value={x.id}>{x.name} ({x["size (in tones)"] ?? "?"}t)</option>
                 ))}
               </select>
-              <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{t("project:for_calculator_materials")}</div>
+              <div style={{ fontSize: 11, color: colors.textDim, marginTop: 4 }}>{t("project:for_calculator_materials")}</div>
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 12, color: C.textDim, marginBottom: 6 }}>Wacker / Compactor</label>
+              <label style={{ display: "block", fontSize: 12, color: colors.textDim, marginBottom: 6 }}>Wacker / Compactor</label>
               <select
                 value={(projectSettings.selectedCompactor as any)?.id ?? ""}
                 onChange={e => {
@@ -197,10 +199,10 @@ export default function EquipmentPanel({
                 style={{
                   width: "100%",
                   padding: "8px 12px",
-                  background: C.bg,
-                  border: `1px solid ${C.panelBorder}`,
+                  background: colors.bgInput,
+                  border: `1px solid ${colors.borderDefault}`,
                   borderRadius: 6,
-                  color: C.text,
+                  color: colors.textPrimary,
                   fontSize: 14,
                 }}
               >
@@ -230,7 +232,7 @@ export default function EquipmentPanel({
 
             {projectSettings.calculateTransport && (
               <div>
-                <label style={{ display: "block", fontSize: 12, color: C.textDim, marginBottom: 6 }}>Transport distance (m)</label>
+                <label style={{ display: "block", fontSize: 12, color: colors.textDim, marginBottom: 6 }}>Transport distance (m)</label>
                 <input
                   type="text"
                   value={projectSettings.transportDistance}
@@ -239,10 +241,10 @@ export default function EquipmentPanel({
                   style={{
                     width: "100%",
                     padding: "8px 12px",
-                    background: C.bg,
-                    border: `1px solid ${C.panelBorder}`,
+                    background: colors.bgInput,
+                    border: `1px solid ${colors.borderDefault}`,
                     borderRadius: 6,
-                    color: C.text,
+                    color: colors.textPrimary,
                     fontSize: 14,
                   }}
                 />
@@ -253,7 +255,7 @@ export default function EquipmentPanel({
               onClick={onClose}
               style={{
                 padding: "10px 20px",
-                background: C.accent,
+                background: colors.accentBlue,
                 border: "none",
                 borderRadius: 6,
                 color: "#fff",

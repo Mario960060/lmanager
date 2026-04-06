@@ -3,6 +3,8 @@
 // Types, constants, math utilities, snap, shape factories, theme
 // ══════════════════════════════════════════════════════════════
 
+import { arcPointToWorldOnCurve, projectOntoArcEdge } from "./arcMath";
+
 // ── Types ────────────────────────────────────────────────────
 
 export interface Point {
@@ -44,13 +46,26 @@ export interface Shape {
   calculatorSubType?: string;
   calculatorInputs?: Record<string, any>;
   calculatorResults?: any;
+  /** Stable UUID for layer-2 elements; used to sync folders/tasks with Event Details */
+  canvasElementId?: string;
+  /** Element removed from project (Event Details or sync); hidden on canvas, kept for history */
+  removedFromCanvas?: boolean;
   linkedShapeIdx?: number;  // index of linked shape (e.g. foundation linked to wall)
+  /** Open wall/kerb/foundation: points are mitered strip outline from computeThickPolyline (corner handles), not centerline */
+  linearOpenStripOutline?: boolean;
   /** Linear elements: user finished editing via PPM — hide "Continue" and pulsing endpoint */
   drawingFinished?: boolean;
   /** Name prompt was already shown (user confirmed or cancelled) — don't ask again when adding segments */
   namePromptShown?: boolean;
   /** Arc points per edge. Index = edge index. null/undefined = straight line. */
   edgeArcs?: (ArcPoint[] | null)[];
+}
+
+export interface MultiDragVertexStart {
+  shapeIdx: number;
+  pointIdx: number;
+  x: number;
+  y: number;
 }
 
 export interface DragInfo {
@@ -60,12 +75,32 @@ export interface DragInfo {
   startPoint: Point;
   isOpenEnd?: boolean;
   openEndSide?: "first" | "last";
+  /** Rigid group drag: same Δ as primary vertex for every listed vertex (Ctrl/rectangle multi-select). */
+  multiDragStartPositions?: MultiDragVertexStart[];
+}
+
+export interface MultiShapeDragStart {
+  shapeIdx: number;
+  startPoints: Point[];
+  /** Snapshot of grass viz pieces at drag start (same structure as calculatorInputs.vizPieces). */
+  startVizPieces?: unknown[] | null;
+  /** Path ribbon: must translate with whole-shape drag (pattern uses pathCenterline). */
+  startPathCenterline?: Point[];
+  startPathCenterlineOriginal?: Point[];
+  linkedPathSnapshot?: { shapeIdx: number; startPathCenterline?: Point[]; startPathCenterlineOriginal?: Point[] };
 }
 
 export interface ShapeDragInfo {
   shapeIdx: number;
   startMouse: Point;
   startPoints: Point[];
+  /** Same rigid Δ for each shape (Ctrl multi-select). Primary = shapeIdx / startPoints (snap target). */
+  multiShapeDragStarts?: MultiShapeDragStart[];
+  /** Path ribbon on primary shape at mousedown — translated by same Δ as points. */
+  startPathCenterline?: Point[];
+  startPathCenterlineOriginal?: Point[];
+  /** Linked duplicate shape (e.g. same geometry) — path data snapshot at drag start. */
+  linkedPathSnapshot?: { shapeIdx: number; startPathCenterline?: Point[]; startPathCenterlineOriginal?: Point[] };
 }
 
 export interface RotateInfo {
@@ -82,6 +117,12 @@ export interface ScaleCornerInfo {
   startMouse: Point;
   startPoints: Point[];
   startDist: number;
+  /** Closed path ribbon (pathIsOutline): scale centerline only, rebuild outline at fixed pathWidthM */
+  pathRibbonScale?: {
+    pathWidthM: number;
+    startCenterline: Point[];
+    segmentSides: ("left" | "right")[];
+  };
 }
 
 export interface ScaleEdgeInfo {
@@ -236,6 +277,16 @@ export function angleDeg(p1: Point, vertex: Point, p2: Point): number {
   if (magA < 0.001 || magB < 0.001) return 0;
   const cos = Math.max(-1, Math.min(1, dot / (magA * magB)));
   return (Math.acos(cos) * 180) / Math.PI;
+}
+
+/** Four-point loop (e.g. path centerline corners) with ~90° at each vertex — a rectangle in the plane (any orientation). */
+export function isRectangleCenterlineQuad(pts: Point[], tolDeg = 7): boolean {
+  if (pts.length !== 4) return false;
+  for (let i = 0; i < 4; i++) {
+    const a = angleDeg(pts[(i + 3) % 4]!, pts[i]!, pts[(i + 1) % 4]!);
+    if (Math.abs(a - 90) > tolDeg) return false;
+  }
+  return true;
 }
 
 /** Rotate point around center by angleDeg (positive = counterclockwise). */
@@ -700,6 +751,59 @@ export function polylineMidpointAndAngle(points: Point[]): { point: Point; angle
   return { point: last, angleRad: Math.atan2(dy, dx) };
 }
 
+/**
+ * One label on the longest straight centerline segment (short segments skipped as noise),
+ * offset perpendicular toward `interiorRef` (e.g. path outline centroid) — same inward rule as ribbon metrics.
+ */
+export function pathLongestSegmentLabelPlacement(
+  pathCenterline: Point[],
+  interiorRef: Point,
+  options?: { minSegmentLenM?: number; inwardOffsetM?: number }
+): { point: Point; textAngleRad: number } | null {
+  if (pathCenterline.length < 2) return null;
+  const minSegPx = toPixels(options?.minSegmentLenM ?? 0.12);
+  const inwardM = options?.inwardOffsetM ?? 0.1;
+
+  let bestI = -1;
+  let bestLen = 0;
+  for (let i = 0; i < pathCenterline.length - 1; i++) {
+    const a = pathCenterline[i]!;
+    const b = pathCenterline[i + 1]!;
+    const lenPx = distance(a, b);
+    if (lenPx >= minSegPx && lenPx > bestLen) {
+      bestLen = lenPx;
+      bestI = i;
+    }
+  }
+  if (bestI < 0) {
+    for (let i = 0; i < pathCenterline.length - 1; i++) {
+      const a = pathCenterline[i]!;
+      const b = pathCenterline[i + 1]!;
+      const lenPx = distance(a, b);
+      if (lenPx > bestLen) {
+        bestLen = lenPx;
+        bestI = i;
+      }
+    }
+  }
+  if (bestI < 0 || bestLen < 1e-9) return null;
+
+  const A = pathCenterline[bestI]!;
+  const B = pathCenterline[bestI + 1]!;
+  const mid = midpoint(A, B);
+  const dx = B.x - A.x;
+  const dy = B.y - A.y;
+  const segLen = Math.hypot(dx, dy) || 1;
+  const cross = dx * (interiorRef.y - mid.y) - dy * (interiorRef.x - mid.x);
+  const sign = cross >= 0 ? 1 : -1;
+  const nx = (-dy / segLen) * sign;
+  const ny = (dx / segLen) * sign;
+  const offPx = toPixels(inwardM);
+  const point = { x: mid.x + nx * offPx, y: mid.y + ny * offPx };
+  const textAngleRad = readableTextAngle(Math.atan2(dy, dx));
+  return { point, textAngleRad };
+}
+
 export function polylineLengthMeters(points: Point[]): number {
   return toMeters(polylineLength(points));
 }
@@ -781,11 +885,28 @@ export function snapMagnet(
 
   for (let si = 0; si < shapes.length; si++) {
     if (si === excludeShapeIdx) continue;
-    for (const pt of shapes[si].points) {
+    const sh = shapes[si];
+    const pts = sh.points;
+    for (const pt of pts) {
       const d = distance(point, pt);
       if (d < bestDist && inPreferredDir(pt)) {
         bestDist = d;
         result = { snapped: { ...pt }, didSnap: true, snapType: "point", snapTarget: { ...pt } };
+      }
+    }
+    const ecArc = sh.closed ? pts.length : pts.length - 1;
+    for (let ei = 0; ei < ecArc; ei++) {
+      const arcs = sh.edgeArcs?.[ei];
+      if (!arcs?.length) continue;
+      const A = pts[ei]!;
+      const B = pts[(ei + 1) % pts.length]!;
+      for (const ap of arcs) {
+        const pos = arcPointToWorldOnCurve(A, B, arcs, ap);
+        const d = distance(point, pos);
+        if (d < bestDist && inPreferredDir(pos)) {
+          bestDist = d;
+          result = { snapped: { ...pos }, didSnap: true, snapType: "point", snapTarget: { ...pos } };
+        }
       }
     }
   }
@@ -796,14 +917,24 @@ export function snapMagnet(
     bestDist = threshold;
     for (let si = 0; si < shapes.length; si++) {
       if (si === excludeShapeIdx) continue;
-      const pts = shapes[si].points;
-      const ec = shapes[si].closed ? pts.length : pts.length - 1;
+      const sh = shapes[si];
+      const pts = sh.points;
+      const ec = sh.closed ? pts.length : pts.length - 1;
       for (let i = 0; i < ec; i++) {
         const j = (i + 1) % pts.length;
-        const proj = projectOntoSegment(point, pts[i], pts[j]);
-        if (proj.t > 0.01 && proj.t < 0.99 && proj.dist < bestDist && inPreferredDir(proj.proj)) {
-          bestDist = proj.dist;
-          result = { snapped: { ...proj.proj }, didSnap: true, snapType: "edge", snapTarget: { ...proj.proj } };
+        const arcs = sh.edgeArcs?.[i];
+        if (arcs && arcs.length > 0) {
+          const pr = projectOntoArcEdge(point, pts[i]!, pts[j]!, arcs, 24);
+          if (pr.t > 0.02 && pr.t < 0.98 && pr.dist < bestDist && inPreferredDir(pr.proj)) {
+            bestDist = pr.dist;
+            result = { snapped: { ...pr.proj }, didSnap: true, snapType: "edge", snapTarget: { ...pr.proj } };
+          }
+        } else {
+          const proj = projectOntoSegment(point, pts[i], pts[j]);
+          if (proj.t > 0.01 && proj.t < 0.99 && proj.dist < bestDist && inPreferredDir(proj.proj)) {
+            bestDist = proj.dist;
+            result = { snapped: { ...proj.proj }, didSnap: true, snapType: "edge", snapTarget: { ...proj.proj } };
+          }
         }
       }
     }
@@ -812,17 +943,25 @@ export function snapMagnet(
   return result;
 }
 
-export function snapMagnetShape(shapePoints: Point[], shapes: Shape[], excludeShapeIdx: number, threshold: number): ShapeSnapResult {
+/** Snap a rigid shape (point ring) to magnets; ignore vertices/edges of every index in `excludeIndices` (e.g. all shapes being dragged together). */
+export function snapMagnetShapeExcluding(
+  shapePoints: Point[],
+  shapes: Shape[],
+  excludeIndices: ReadonlySet<number>,
+  threshold: number,
+): ShapeSnapResult {
   let bestDist = threshold;
   let bestOffset: Point = { x: 0, y: 0 };
   let didSnap = false;
   let snapTarget: Point | null = null;
 
-  // 1) Point-to-point
+  // 1) Point-to-point (vertices + arc handles on curves)
   for (const pt of shapePoints) {
     for (let si = 0; si < shapes.length; si++) {
-      if (si === excludeShapeIdx) continue;
-      for (const opt of shapes[si].points) {
+      if (excludeIndices.has(si)) continue;
+      const sh = shapes[si];
+      const oPts = sh.points;
+      for (const opt of oPts) {
         const d = distance(pt, opt);
         if (d < bestDist) {
           bestDist = d;
@@ -831,25 +970,54 @@ export function snapMagnetShape(shapePoints: Point[], shapes: Shape[], excludeSh
           snapTarget = { ...opt };
         }
       }
+      const ecArc = sh.closed ? oPts.length : oPts.length - 1;
+      for (let ei = 0; ei < ecArc; ei++) {
+        const arcs = sh.edgeArcs?.[ei];
+        if (!arcs?.length) continue;
+        const A = oPts[ei]!;
+        const B = oPts[(ei + 1) % oPts.length]!;
+        for (const ap of arcs) {
+          const pos = arcPointToWorldOnCurve(A, B, arcs, ap);
+          const d = distance(pt, pos);
+          if (d < bestDist) {
+            bestDist = d;
+            bestOffset = { x: pos.x - pt.x, y: pos.y - pt.y };
+            didSnap = true;
+            snapTarget = { ...pos };
+          }
+        }
+      }
     }
   }
   if (didSnap && bestDist < threshold * 0.6) return { offset: bestOffset, didSnap, snapTarget };
 
-  // 2) Point-to-edge
+  // 2) Point-to-edge (straight segments or projection onto arc)
   bestDist = threshold;
   for (const pt of shapePoints) {
     for (let si = 0; si < shapes.length; si++) {
-      if (si === excludeShapeIdx) continue;
-      const pts = shapes[si].points;
-      const ec = shapes[si].closed ? pts.length : pts.length - 1;
+      if (excludeIndices.has(si)) continue;
+      const sh = shapes[si];
+      const pts = sh.points;
+      const ec = sh.closed ? pts.length : pts.length - 1;
       for (let i = 0; i < ec; i++) {
         const j = (i + 1) % pts.length;
-        const proj = projectOntoSegment(pt, pts[i], pts[j]);
-        if (proj.t > 0.01 && proj.t < 0.99 && proj.dist < bestDist) {
-          bestDist = proj.dist;
-          bestOffset = { x: proj.proj.x - pt.x, y: proj.proj.y - pt.y };
-          didSnap = true;
-          snapTarget = { ...proj.proj };
+        const arcs = sh.edgeArcs?.[i];
+        if (arcs && arcs.length > 0) {
+          const pr = projectOntoArcEdge(pt, pts[i]!, pts[j]!, arcs, 24);
+          if (pr.t > 0.02 && pr.t < 0.98 && pr.dist < bestDist) {
+            bestDist = pr.dist;
+            bestOffset = { x: pr.proj.x - pt.x, y: pr.proj.y - pt.y };
+            didSnap = true;
+            snapTarget = { ...pr.proj };
+          }
+        } else {
+          const proj = projectOntoSegment(pt, pts[i], pts[j]);
+          if (proj.t > 0.01 && proj.t < 0.99 && proj.dist < bestDist) {
+            bestDist = proj.dist;
+            bestOffset = { x: proj.proj.x - pt.x, y: proj.proj.y - pt.y };
+            didSnap = true;
+            snapTarget = { ...proj.proj };
+          }
         }
       }
     }
@@ -868,7 +1036,7 @@ export function snapMagnetShape(shapePoints: Point[], shapes: Shape[], excludeSh
     if (mLen < 1) continue;
 
     for (let si = 0; si < shapes.length; si++) {
-      if (si === excludeShapeIdx) continue;
+      if (excludeIndices.has(si)) continue;
       const oPts = shapes[si].points;
       const oEC = shapes[si].closed ? oPts.length : oPts.length - 1;
       for (let oi = 0; oi < oEC; oi++) {
@@ -904,6 +1072,85 @@ export function snapMagnetShape(shapePoints: Point[], shapes: Shape[], excludeSh
   return { offset: bestOffset, didSnap, snapTarget };
 }
 
+export function snapMagnetShape(shapePoints: Point[], shapes: Shape[], excludeShapeIdx: number, threshold: number): ShapeSnapResult {
+  return snapMagnetShapeExcluding(shapePoints, shapes, new Set([excludeShapeIdx]), threshold);
+}
+
+// ── Frame Link: shared‑edge detection between two shapes ─────
+
+export interface FrameEdgeLink {
+  myEdgeIdx: number;
+  otherShapeIdx: number;
+  otherEdgeIdx: number;
+}
+
+/**
+ * Find logical edges of polygon A that overlap with logical edges of polygon B.
+ * Two edges overlap if both endpoints of one are within `tol` of the other edge's endpoints
+ * (same or reversed direction). Returns pairs { edgeA, edgeB } (indices into each ring).
+ */
+export function findSharedFrameEdgesFromPoints(
+  ptsA: Point[],
+  ptsB: Point[],
+  closedA: boolean,
+  closedB: boolean,
+  tol: number = 2,
+): { edgeA: number; edgeB: number }[] {
+  const nA = ptsA.length;
+  const nB = ptsB.length;
+  if (nA < 3 || nB < 3 || !closedA || !closedB) return [];
+  const tol2 = tol * tol;
+  const near = (a: Point, b: Point) => (a.x - b.x) ** 2 + (a.y - b.y) ** 2 < tol2;
+  const result: { edgeA: number; edgeB: number }[] = [];
+  for (let ea = 0; ea < nA; ea++) {
+    const a0 = ptsA[ea];
+    const a1 = ptsA[(ea + 1) % nA];
+    for (let eb = 0; eb < nB; eb++) {
+      const b0 = ptsB[eb];
+      const b1 = ptsB[(eb + 1) % nB];
+      if ((near(a0, b0) && near(a1, b1)) || (near(a0, b1) && near(a1, b0))) {
+        result.push({ edgeA: ea, edgeB: eb });
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Find logical edges of shapeA that overlap with logical edges of shapeB.
+ * Uses `shape.points` as the polygon ring (see {@link findSharedFrameEdgesFromPoints} for custom rings).
+ */
+export function findSharedFrameEdges(
+  shapeA: Shape,
+  shapeB: Shape,
+  tol: number = 2,
+): { edgeA: number; edgeB: number }[] {
+  return findSharedFrameEdgesFromPoints(shapeA.points, shapeB.points, shapeA.closed, shapeB.closed, tol);
+}
+
+/**
+ * Find all shapes that share at least one edge with shape at `shapeIdx`.
+ * Returns per‑other‑shape list of shared edge pairs.
+ * Edge indices are in `shape.points` space (for `pathIsOutline` paths this equals the outline).
+ */
+export function findAllSharedFrameEdgePartners(
+  shapes: Shape[],
+  shapeIdx: number,
+  tol?: number,
+): { otherIdx: number; edges: { edgeA: number; edgeB: number }[] }[] {
+  const shapeA = shapes[shapeIdx];
+  if (!shapeA || !shapeA.closed || shapeA.points.length < 3) return [];
+  const result: { otherIdx: number; edges: { edgeA: number; edgeB: number }[] }[] = [];
+  for (let oi = 0; oi < shapes.length; oi++) {
+    if (oi === shapeIdx) continue;
+    const sb = shapes[oi];
+    if (!sb || !sb.closed || sb.points.length < 3 || sb.layer !== shapeA.layer) continue;
+    const edges = findSharedFrameEdges(shapeA, sb, tol);
+    if (edges.length > 0) result.push({ otherIdx: oi, edges });
+  }
+  return result;
+}
+
 // ── Shape Factories ──────────────────────────────────────────
 
 export function makeSquare(cx: number, cy: number, layer: LayerID = 1, sideM?: number): Shape {
@@ -924,6 +1171,117 @@ export function makeTriangle(cx: number, cy: number, layer: LayerID = 1, baseM?:
 export function makeTrapezoid(cx: number, cy: number, layer: LayerID = 1, topM?: number, bottomM?: number, heightM?: number): Shape {
   const topW = toPixels((topM ?? 3) / 2), botW = toPixels((bottomM ?? 6) / 2), hh = toPixels((heightM ?? 4) / 2);
   return { points: [{ x: cx - topW, y: cy - hh }, { x: cx + topW, y: cy - hh }, { x: cx + botW, y: cy + hh }, { x: cx - botW, y: cy + hh }], closed: true, label: "Trapezoid", layer, lockedEdges: [], lockedAngles: [], heights: [0, 0, 0, 0], elementType: "polygon", thickness: 0 };
+}
+
+/** Regular polygon with equal sides; `sideM` is one edge length in meters. First vertex at top (−90°). */
+export function makeRegularPolygon(cx: number, cy: number, layer: LayerID = 1, nSides: number, sideM?: number): Shape {
+  const n = Math.max(3, Math.floor(nSides));
+  const s = sideM ?? 4;
+  const Rm = s / (2 * Math.sin(Math.PI / n));
+  const Rpx = toPixels(Rm);
+  const pts: Point[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    pts.push({ x: cx + Rpx * Math.cos(a), y: cy + Rpx * Math.sin(a) });
+  }
+  const label = n === 5 ? "Pentagon" : n === 6 ? "Hexagon" : n === 8 ? "Octagon" : `Polygon(${n})`;
+  return { points: pts, closed: true, label, layer, lockedEdges: [], lockedAngles: [], heights: Array(n).fill(0), elementType: "polygon", thickness: 0 };
+}
+
+/**
+ * Logical vertices on the circle; each edge is curved via {@link Shape.edgeArcs}
+ * (quadratic Bézier — same as manual arc points elsewhere).
+ */
+const CIRCLE_VERTEX_COUNT = 8;
+
+/**
+ * One arc point per chord A–B so the curve midpoint (u=½) lies on the circle
+ * (perpendicular bisector). Matches drawCurvedEdge / sampleArcEdge in arcMath.
+ */
+function arcPointForCircleChord(A: Point, B: Point, center: Point, radiusPx: number, edgeIdx: number): ArcPoint {
+  const dx = B.x - A.x;
+  const dy = B.y - A.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 1e-9) return { id: `circ-${edgeIdx}`, t: 0.5, offset: 0 };
+  const nx = -dy / len;
+  const ny = dx / len;
+  const Mx = (A.x + B.x) / 2;
+  const My = (A.y + B.y) / 2;
+  const uax = A.x - center.x;
+  const uay = A.y - center.y;
+  const ubx = B.x - center.x;
+  const uby = B.y - center.y;
+  const la = Math.hypot(uax, uay);
+  const lb = Math.hypot(ubx, uby);
+  if (la < 1e-9 || lb < 1e-9) return { id: `circ-${edgeIdx}`, t: 0.5, offset: 0 };
+  const bisx = uax / la + ubx / lb;
+  const bisy = uay / la + uby / lb;
+  const lbis = Math.hypot(bisx, bisy);
+  if (lbis < 1e-9) return { id: `circ-${edgeIdx}`, t: 0.5, offset: 0 };
+  const Tx = center.x + radiusPx * (bisx / lbis);
+  const Ty = center.y + radiusPx * (bisy / lbis);
+  const offset = 2 * ((Tx - Mx) * nx + (Ty - My) * ny);
+  return { id: `circ-${edgeIdx}`, t: 0.5, offset };
+}
+
+/** Circle: few vertices + arc points on each edge. `diameterM` in meters. */
+export function makeCircle(cx: number, cy: number, layer: LayerID = 1, diameterM?: number): Shape {
+  const d = diameterM ?? 4;
+  const Rpx = toPixels(d / 2);
+  const n = CIRCLE_VERTEX_COUNT;
+  const center = { x: cx, y: cy };
+  const pts: Point[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (2 * Math.PI * i) / n;
+    pts.push({ x: cx + Rpx * Math.cos(a), y: cy + Rpx * Math.sin(a) });
+  }
+  const edgeArcs: (ArcPoint[] | null)[] = [];
+  for (let i = 0; i < n; i++) {
+    const A = pts[i]!;
+    const B = pts[(i + 1) % n]!;
+    edgeArcs.push([arcPointForCircleChord(A, B, center, Rpx, i)]);
+  }
+  return {
+    points: pts,
+    closed: true,
+    label: "Circle",
+    layer,
+    lockedEdges: [],
+    lockedAngles: [],
+    heights: Array(n).fill(0),
+    elementType: "polygon",
+    thickness: 0,
+    edgeArcs,
+    /** UI: only arc handles — no vertex squares (geometry still uses vertices + arcs). */
+    calculatorInputs: { circleVertexHandlesHidden: true },
+  };
+}
+
+/** Circle from tool: edit via arc points only; vertex handles hidden in UI. */
+export function isCircleArcHandlesOnlyShape(shape: Shape): boolean {
+  if (shape.label !== "Circle" || !shape.closed) return false;
+  if (shape.calculatorInputs?.circleVertexHandlesHidden === false) return false;
+  const n = shape.points.length;
+  if (n < 3 || !shape.edgeArcs || shape.edgeArcs.length !== n) return false;
+  return shape.edgeArcs.every(a => a && a.length > 0);
+}
+
+/**
+ * Legacy: many-point circle (plain polygon, no arcs) → same geometry as {@link makeCircle}.
+ * Preserves approximate diameter from average radius to center.
+ */
+export function migrateLegacyCirclePolygon(shape: Shape): Shape {
+  if (!shape.closed || shape.label !== "Circle") return shape;
+  if (shape.edgeArcs?.some(a => a && a.length > 0)) return shape;
+  const pts = shape.points;
+  if (pts.length < 12 || pts.length > 96) return shape;
+  const c = centroid(pts);
+  let sumR = 0;
+  for (const p of pts) sumR += Math.hypot(p.x - c.x, p.y - c.y);
+  const Rpx = sumR / pts.length;
+  if (Rpx < 1e-6) return shape;
+  const diameterM = (Rpx / PIXELS_PER_METER) * 2;
+  return makeCircle(c.x, c.y, shape.layer, diameterM);
 }
 
 // ── Theme Colors ─────────────────────────────────────────────

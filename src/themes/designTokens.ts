@@ -70,6 +70,8 @@ export const shadows = {
   xl: "var(--shadow-xl)", xxl: "var(--shadow-xxl)",
   blue: "var(--shadow-accent)", blueHover: "var(--shadow-accent-hover)",
   cardHover: "var(--shadow-card-hover)", modal: "var(--shadow-modal)",
+  dangerBtnIdle: "var(--shadow-danger-btn-idle)", dangerBtnHover: "var(--shadow-danger-btn-hover)",
+  successBtnIdle: "var(--shadow-success-btn-idle)", successBtnHover: "var(--shadow-success-btn-hover)",
   glow: (color: string, opacity = "50") => `0 0 6px ${color}${opacity}`,
 } as const;
 
@@ -78,6 +80,7 @@ export const gradients = {
   bluePrimary: "var(--grad-primary)", blueLogo: "var(--grad-logo)",
   blueAvatar: "var(--grad-avatar)", blueSubtle: "var(--grad-subtle)",
   blueCard: "var(--grad-card)", greenSave: "var(--grad-save)", teamCard: "var(--grad-team)",
+  danger: "var(--grad-danger)", success: "var(--grad-success)",
   accentTeal: "linear-gradient(90deg, var(--teal), transparent)",
   accentBlueBar: "linear-gradient(90deg, var(--accent), transparent)",
   accentAmberBar: "linear-gradient(90deg, var(--amber), transparent)",

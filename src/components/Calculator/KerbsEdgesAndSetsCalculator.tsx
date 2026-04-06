@@ -110,7 +110,8 @@ const KERB_NAMES = {
   kl: 'KL kerbs',
   rumbled: 'Rumbled kerbs',
   flat: 'Flat edges',
-  sets: 'Sets'
+  /** Matches material / translation keys (10x10 paving blocks, not “sets”) */
+  sets: '10x10 sets',
 } as const;
 
 const KERB_DIMENSIONS = {
@@ -273,7 +274,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -485,21 +486,22 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
       const calculateKerbUnits = (lengthInMeters: number): { quantity: number; unit: string } => {
         switch (kerbType) {
           case 'kl':
-            return { quantity: lengthInMeters * 10, unit: 'kerbs' };
+            return { quantity: lengthInMeters * 10, unit: 'pieces' };
           case 'rumbled':
             if (isRumbledStanding) {
-              return { quantity: Math.ceil(lengthInMeters * 6.67), unit: 'kerbs' };
+              return { quantity: Math.ceil(lengthInMeters * 6.67), unit: 'pieces' };
             } else {
-              return { quantity: lengthInMeters * 5, unit: 'kerbs' };
+              return { quantity: lengthInMeters * 5, unit: 'pieces' };
             }
           case 'flat':
             return { quantity: Math.ceil((lengthInMeters * 100) / dims.length), unit: 'pieces' };
-          case 'sets':
+          case 'sets': {
             const linearCm = lengthInMeters * 100;
             const divisor = setsLengthwise ? dims.length : dims.width;
-            return { quantity: Math.ceil(linearCm / divisor), unit: 'sets' };
+            return { quantity: Math.ceil(linearCm / divisor), unit: 'pieces' };
+          }
           default:
-            return { quantity: lengthInMeters, unit: 'units' };
+            return { quantity: lengthInMeters, unit: 'pieces' };
         }
       };
 
@@ -643,7 +645,7 @@ const KerbsEdgesAndSetsCalculator: React.FC<CalculatorProps> = ({
       // Add preparing for the wall (leveling) task if available
       if (preparingForWallTask && preparingForWallTask.estimated_hours !== undefined && preparingForWallTask.estimated_hours !== null) {
         taskBreakdown.push({
-          name: 'Preparing for kerbs/edges (leveling)',
+          name: 'preparing for kerbs edges (leveling)',
           hours: lengthM * preparingForWallTask.estimated_hours,
           quantity: lengthM,
           unit: 'metres',

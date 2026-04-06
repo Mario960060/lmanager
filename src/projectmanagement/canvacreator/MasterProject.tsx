@@ -1,17 +1,19 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, type CSSProperties, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  Point, Shape, CollinearSnapHit, LayerID, ArcPoint, DragInfo, ShapeDragInfo, RotateInfo, ScaleCornerInfo, ScaleEdgeInfo,
+  Point, Shape, CollinearSnapHit, LayerID, ArcPoint, DragInfo, MultiDragVertexStart, MultiShapeDragStart, ShapeDragInfo, RotateInfo, ScaleCornerInfo, ScaleEdgeInfo,
   HitResult, EdgeHitResult, OpenEndHit,
   SelectionRect, DimEdit, ContextMenuInfo, LinkedEntry, isArcEntry,
   PIXELS_PER_METER, GRID_SPACING, POINT_RADIUS, EDGE_HIT_THRESHOLD, GRASS_EDGE_HIT_PX,
   SNAP_TO_START_RADIUS, SNAP_TO_LAST_RADIUS, MIN_ZOOM, MAX_ZOOM, SNAP_MAGNET_PX, PATTERN_SNAP_PX,
   distance, toMeters, toPixels, formatLength, midpoint, angleDeg, areaM2, polylineLengthMeters, rotatePointAround,
-  projectOntoSegment, bestCollinearVertexSnap, edgeNormalAngle, readableTextAngle, snapTo45, snapTo45Soft, snapShiftSmart, interiorAngleDir, centroid, labelAnchorInsidePolygon,
+  projectOntoSegment, bestCollinearVertexSnap, edgeNormalAngle, readableTextAngle, snapTo45, snapShiftSmart, interiorAngleDir, centroid, labelAnchorInsidePolygon, shoelaceArea,
   snapPatternDirectionToBoundaryAngles,
   constrainLockedEdges,
-  snapMagnet, snapMagnetShape, pointInPolygon, pointInOrNearPolygon,
-  makeSquare, makeRectangle, makeTriangle, makeTrapezoid, C, C_LIGHT,
+  snapMagnet, snapMagnetShape, snapMagnetShapeExcluding, pointInPolygon, pointInOrNearPolygon,
+  findAllSharedFrameEdgePartners,
+  makeSquare, makeRectangle, makeTriangle, makeTrapezoid, makeRegularPolygon, makeCircle, migrateLegacyCirclePolygon, isCircleArcHandlesOnlyShape, C, C_LIGHT,
   edgeOutwardRadForL1Edge,
   outwardUnitNormalForPolygonEdge,
 } from "./geometry";
@@ -23,14 +25,15 @@ import {
   GARDEN_EXTERIOR_DIM_TEXT_COLOR,
 } from "./boundaryDimensionDraw";
 import { calcEdgeSlopes, calcShapeGradient, formatSlope, slopeColor, interpolateHeightAtPoint, fillShapeHeightHeatmap, computeGlobalHeightRange } from "./geodesy";
-import { isLinearElement, isGroundworkLinear, isPathElement, isPolygonLinearElement, groundworkLabel, drawLinearElement, drawLinearElementInactive, hitTestLinearElement, hitTestPathElement, computeThickPolyline, computeThickPolylineClosed, getPathPolygon, getLinearElementPath, getPolygonThicknessM, polygonToSegmentLengths, polygonToCenterline, polygonEdgeToSegmentIndex, removeSegmentFromPolygonOutline, computePathPolygonOneSide, computePathOutlineFromSegmentSides, pointSideOfLine } from "./linearElements";
-import { drawShapeObjectLabel, drawExcavationLayers, getPathLabel } from "./canvasRenderers";
+import { isLinearElement, isGroundworkLinear, isPathElement, isPolygonLinearElement, groundworkLabel, drawLinearElement, drawLinearElementInactive, hitTestLinearElement, hitTestPathElement, computeThickPolyline, computeThickPolylineClosed, getPathPolygon, getPathRibbonDerivedCenterline, getLinearElementPath, getPolygonThicknessM, polygonToSegmentLengths, polygonToCenterline, polygonEdgeToSegmentIndex, removeSegmentFromPolygonOutline, removeOpenStripSegmentAndRebuild, openStripEdgeToCenterSegment, extractCenterlineFromOpenStripOutline, extractPathRibbonCenterlineFromOutline, recoverCenterlineQuadFromPairFourRibbonOutline, rebuildRectangularPathRibbonFromOutlineDrag, rebuildRectangularPathRibbonLengthAnchorsFixed, pathRibbonLengthAnchorPairsFromOutlineSnap, resolvePathRibbonRectCenterline4, mapPairFourToRectRibbonOutlineVertex, computePathOutlineFromSegmentSides, PATH_CLOSED_RIBBON_RECT_CORNER_OUTLINE_INDICES, pointSideOfLine, rebuildClosedStripOutlineFromVertexTarget, rebuildClosedStripOutlineAfterEdgeTranslate, rebuildOpenStripOutlineAfterEdgeTranslate, rebuildPathClosedRibbonFromVertexTarget, rebuildOpenStripOutlineFromVertexTarget, isOpenStripPolygonOutline, isClosedStripPolygonOutline, isPolygonLinearStripOutline, rebuildPathRibbonSingleSegmentDrag, rebuildPathRibbonGeneralDrag, baselineFacePolylineToCenterline, stripOutlineParallelEdges, stripPolygonEdgeToSegmentIndex, stripOppositePolygonEdgeIndex, applyStripParallelEdgeArcSync, stripOppositeVertexIndex, computeLinearElementFillOutline, getLinearElementVertexGripWorld } from "./linearElements";
+import { drawShapeObjectLabel, drawExcavationLayers, getPathLabel, drawPathRibbonMetrics } from "./canvasRenderers";
 import { drawDeckPattern } from "./visualization/deckBoards";
-import { drawSlabPattern, drawPathSlabPattern, drawPathSlabLabel, drawSlabFrame, computePatternSnap, getPolygonForPatternSnapOutline, computeSlabCuts, computePathSlabCuts } from "./visualization/slabPattern";
+import { drawSlabPattern, drawPathSlabPattern, drawPathSlabLabel, drawPathCobblePattern, drawPathCobbleLabel, drawSlabFrame, computePatternSnap, getPolygonForPatternSnapOutline, computeSlabCuts, computePathSlabCuts, computePathCobbleCuts, getTotalFrameInsetWidthCm, shouldDrawSlabFrameViz } from "./visualization/slabPattern";
 import { drawCobblestonePattern, drawMonoblockFrame, computeCobblestoneCuts } from "./visualization/cobblestonePattern";
 import { drawFencePostMarkers, drawWallSlopeIndicators } from "./visualization/linearMarkers";
 import { drawGeodesyLabels, getGeodesyCardsInfo, hitTestGeodesyCard, findCardForPoint, type GeodesyCardInfo, GEODESY_CARD_PAD, GEODESY_CARD_ROW_H } from "./visualization/geodesyLabels";
 import { drawGrassPieces, hitTestGrassPiece, hitTestGrassPieceEdge, hitTestGrassJoinEdge, snapGrassPieceEdge, snapGrassPieceToPolygon, getJoinedGroup, rotateGrassGroup90, validateCoverage, getEffectiveTotalArea, getEffectivePieceDimensionsForInput, type GrassPiece } from "./visualization/grassRolls";
+import { drawGravelPattern } from "./visualization/gravelPattern";
 import { computeAutoFill } from "./objectCard/autoFill";
 import { ProjectSettings, DEFAULT_PROJECT_SETTINGS } from "./types";
 import ObjectCardModal from "./objectCard/ObjectCardModal";
@@ -43,16 +46,20 @@ import { computePreparation } from "./preparationLogic";
 import { computeEmptyAreas, computeOverflowAreas, computeOverlaps, clipShapeToGarden, removeOverlapFromShape, findTouchingElementsForEmptyArea, extendShapeToCoverEmptyArea, extendShapeToGardenEdge, clipSurfaceToOutsideLinear, findSurfacesOverlappingLinear, fitUnionResultToShape } from "./adjustmentLogic";
 import { computeGroundworkLinearResults, isManualExcavation, getFoundationDiggingMethodFromExcavator } from "./GroundworkLinearCalculator";
 import { drawAlternatingLinkedHalf } from "./linkedEdgeDrawing";
-import { drawCurvedEdge, calcEdgeLengthWithArcs, getEffectivePolygon, getEffectivePolygonWithEdgeIndices, drawSmoothPolygonPath, drawSmoothPolygonStroke, projectOntoArcEdge, drawArcHandles, hitTestArcPoint, snapArcPoint, buildArcPointPositionCache, arcPointToWorldOnCurve, worldToArcPoint, worldToArcPointOnCurve, collectShapeBoundaryDirectionAnglesDeg, type ArcPointCacheEntry } from "./arcMath";
+import { drawCurvedEdge, calcEdgeLengthWithArcs, getEffectivePolygon, getEffectivePolygonWithEdgeIndices, drawSmoothPolygonPath, drawSmoothPolygonStroke, projectOntoArcEdge, drawArcHandles, hitTestArcPoint, snapArcPoint, buildArcPointPositionCache, arcPointToWorldOnCurve, worldToArcPoint, worldToArcPointOnCurve, mirrorArcPointsToOppositeChord, collectShapeBoundaryDirectionAnglesDeg, type ArcPointCacheEntry } from "./arcMath";
 import CreatePreviewModal from "./CreatePreviewModal";
 import PlanPdfExportModal from "./PlanPdfExportModal";
 import { submitProject } from "./projectSubmit";
+import { ensureCanvasElementIds } from "./canvasElementIds";
+import { syncCanvasToEvent } from "./projectSync";
+import { useBackdropPointerDismiss } from "../../hooks/useBackdropPointerDismiss";
 import jsPDF from "jspdf";
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../lib/store";
-import { loadPlan, savePlan, linkPlanToEvent, type CanvasPayload } from "../../lib/plansService";
+import { loadPlan, savePlan, linkPlanToEvent, getPlanRow, type CanvasPayload } from "../../lib/plansService";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../themes";
+import { colors, shadows } from "../../themes/designTokens";
 import "./toolbar.css";
 
 // ══════════════════════════════════════════════════════════════
@@ -63,11 +70,159 @@ const DRAFT_STORAGE_KEY = "landscapeManager_canvasDraft";
 const DRAFT_DEBOUNCE_MS = 1500;
 const PLAN_SAVE_DEBOUNCE_MS = 4000;
 
+/** Wheel delta → ~pixels for pan (respects line/page deltaMode). */
+function wheelDeltaToPixels(delta: number, deltaMode: number): number {
+  if (deltaMode === 1) return delta * 16;
+  if (deltaMode === 2) return delta * 120;
+  return delta;
+}
+
+const WHEEL_PAN_SENSITIVITY = 1;
+const ARROW_PAN_STEP_PX = 48;
+
 type Mode = "select" | "freeDraw" | "scale" | "move" | "drawFence" | "drawWall" | "drawKerb" | "drawFoundation" | "drawPathSlabs" | "drawPathConcreteSlabs" | "drawPathMonoblock" | "drawDrainage" | "drawCanalPipe" | "drawWaterPipe" | "drawCable";
+type PrimaryToolbarMode = "select" | "scale" | "move";
+
+function toolbarModeLabelKey(mode: Mode): "toolbar_select" | "toolbar_draw" | "toolbar_scale" | "toolbar_view" | "toolbar_mode" {
+  if (mode === "select") return "toolbar_select";
+  if (mode === "scale") return "toolbar_scale";
+  if (mode === "move") return "toolbar_view";
+  if (mode === "freeDraw") return "toolbar_mode";
+  return "toolbar_draw";
+}
+
+type ShapeCreationKind =
+  | "square"
+  | "rectangle"
+  | "triangle"
+  | "trapezoid"
+  | "pentagon"
+  | "hexagon"
+  | "octagon"
+  | "circle";
+
+function projectShapeToolbarLabelKey(type: ShapeCreationKind): string {
+  switch (type) {
+    case "square": return "toolbar_shape_square";
+    case "rectangle": return "toolbar_shape_rectangle";
+    case "triangle": return "toolbar_shape_triangle";
+    case "trapezoid": return "toolbar_shape_trapezoid";
+    case "pentagon": return "toolbar_shape_pentagon";
+    case "hexagon": return "toolbar_shape_hexagon";
+    case "octagon": return "toolbar_shape_octagon";
+    case "circle": return "toolbar_shape_circle";
+  }
+}
+
+function shapeNamePlaceholderKey(type: ShapeCreationKind): string {
+  switch (type) {
+    case "square": return "name_placeholder_patio";
+    case "rectangle": return "name_placeholder_terrace";
+    case "triangle": return "name_placeholder_flowerbed";
+    case "trapezoid": return "name_placeholder_border";
+    case "pentagon":
+    case "hexagon":
+    case "octagon":
+    case "circle": return "name_placeholder_border";
+  }
+}
+
+/** Outline-only icons for shapes menu (matches stroke style of rect / circle in toolbar). */
+function ShapeDropdownItemIcon({ type }: { type: ShapeCreationKind }): ReactNode {
+  const svgStyle = { width: 16, height: 16, flexShrink: 0, display: "block" as const };
+  switch (type) {
+    case "pentagon":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" style={svgStyle} aria-hidden>
+          <path d="M12 4 L19.61 9.53 L16.73 18.47 L7.27 18.47 L4.39 9.53 Z" />
+        </svg>
+      );
+    case "hexagon":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" style={svgStyle} aria-hidden>
+          <path d="M12 4 L18.93 8 L18.93 16 L12 20 L5.07 16 L5.07 8 Z" />
+        </svg>
+      );
+    case "octagon":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" style={svgStyle} aria-hidden>
+          <path d="M12 4 L17.66 6.34 L20 12 L17.66 17.66 L12 20 L6.34 17.66 L4 12 L6.34 6.34 Z" />
+        </svg>
+      );
+    case "square":
+      return <span style={{ fontSize: 14 }}>◻</span>;
+    case "rectangle":
+      return <span style={{ fontSize: 14 }}>▭</span>;
+    case "triangle":
+      return <span style={{ fontSize: 14 }}>△</span>;
+    case "trapezoid":
+      return <span style={{ fontSize: 14 }}>⏢</span>;
+    case "circle":
+      return <span style={{ fontSize: 14 }}>◯</span>;
+  }
+}
+
+function isPrimaryToolbarModeActive(mode: Mode, primary: PrimaryToolbarMode): boolean {
+  if (primary === "select") return mode === "select";
+  if (primary === "scale") return mode === "scale";
+  if (primary === "move") return mode === "move";
+  return false;
+}
+
+/** W tych trybach pokazujemy odległości wzdłuż krawędzi (jak przy najechaniu w select), także podczas rysowania. */
+function modeShowsEdgeDistanceWhileDrawing(mode: Mode): boolean {
+  return (
+    mode === "freeDraw" ||
+    mode === "drawFence" ||
+    mode === "drawWall" ||
+    mode === "drawKerb" ||
+    mode === "drawFoundation" ||
+    mode === "drawPathSlabs" ||
+    mode === "drawPathConcreteSlabs" ||
+    mode === "drawPathMonoblock" ||
+    mode === "drawDrainage" ||
+    mode === "drawCanalPipe" ||
+    mode === "drawWaterPipe" ||
+    mode === "drawCable"
+  );
+}
+
+/** Touch toolbar row uses horizontal scroll + overflow-y hidden, which clips absolute dropdowns; fixed placement keeps panels hit-testable above the canvas. */
+function useToolbarDropdownPanelStyle(
+  triggerRef: React.RefObject<HTMLDivElement | null>,
+  open: boolean,
+  isMobile: boolean,
+  minWidth: number
+): CSSProperties {
+  const [pos, setPos] = useState({ top: 0, left: 0, mw: minWidth });
+  useLayoutEffect(() => {
+    if (!open || !isMobile || !triggerRef.current) return;
+    const el = triggerRef.current;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left, mw: Math.max(minWidth, r.width) });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open, isMobile, triggerRef, minWidth]);
+  if (!isMobile) {
+    return { position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 50, minWidth };
+  }
+  return { position: "fixed", top: pos.top, left: pos.left, marginTop: 0, zIndex: 200, minWidth: pos.mw };
+}
+
 type ActiveLayer = 1 | 2 | 3 | 4 | 5;
 type ViewFilter = "all" | "linear" | "surface";
 
-const SURFACE_CALC_TYPES = ["slab", "deck", "grass", "turf", "paving"] as const;
+const SURFACE_CALC_TYPES = ["slab", "deck", "grass", "turf", "paving", "decorativeStones"] as const;
 /** View filter applies only to layer 2 elements. Stairs visible only on layer 2 & viewFilter "all". */
 function passesViewFilter(shape: Shape, viewFilter: ViewFilter, activeLayer: ActiveLayer): boolean {
   if (shape.layer !== 2) return true;
@@ -82,16 +237,474 @@ function passesViewFilter(shape: Shape, viewFilter: ViewFilter, activeLayer: Act
   return false;
 }
 
-const LINE_VERTEX_DRAW_SNAP_PX = 8;
-const LINE_EDGE_DRAW_SNAP_PX = 12;
+/** While drawing, no shape is excluded yet (first click) — same as {@link snapMagnet} but with L1/L2 + view filter. */
+const DRAWING_SNAP_EXCLUDE_NONE = -1;
 
-function drawSnapHalfOffsetM(drawingShape: Shape): number {
-  if (isPolygonLinearElement(drawingShape)) return getPolygonThicknessM(drawingShape) / 2;
-  if (isPathElement(drawingShape)) return (Number(drawingShape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6) / 2;
-  return (drawingShape.thickness ?? 0.10) / 2;
+/**
+ * Point/edge snap while drawing: same rules as {@link snapMagnet} (SNAP_MAGNET_PX, vertex then edge),
+ * filtered to layers 1–2 + view filter, plus vertices/edges of the current open chain.
+ * `drawingShapeIdx === DRAWING_SNAP_EXCLUDE_NONE` → do not exclude any shape (first point of a new element).
+ */
+function snapDrawingMagnet(
+  point: Point,
+  args: {
+    drawingShapeIdx: number;
+    shapes: Shape[];
+    localPtChain: Point[];
+    zoom: number;
+    viewFilter: ViewFilter;
+    activeLayer: ActiveLayer;
+  },
+): Point {
+  const { drawingShapeIdx, shapes, localPtChain, zoom, viewFilter, activeLayer } = args;
+  const th = SNAP_MAGNET_PX / zoom;
+  let bestDist = th;
+  let snapped: Point = { ...point };
+  let didSnap = false;
+
+  const considerPoint = (p: Point) => {
+    const d = distance(point, p);
+    if (d < bestDist) {
+      bestDist = d;
+      snapped = { ...p };
+      didSnap = true;
+    }
+  };
+
+  for (const p of localPtChain) considerPoint(p);
+
+  for (let si = 0; si < shapes.length; si++) {
+    if (drawingShapeIdx !== DRAWING_SNAP_EXCLUDE_NONE && si === drawingShapeIdx) continue;
+    const sh = shapes[si];
+    if (sh.layer !== 1 && sh.layer !== 2) continue;
+    if (!passesViewFilter(sh, viewFilter, activeLayer)) continue;
+    const pts = sh.points;
+    for (const p of pts) considerPoint(p);
+    const ecArc = sh.closed ? pts.length : pts.length - 1;
+    for (let ei = 0; ei < ecArc; ei++) {
+      const arcs = sh.edgeArcs?.[ei];
+      if (!arcs?.length) continue;
+      const A = pts[ei]!;
+      const B = pts[(ei + 1) % pts.length]!;
+      for (const ap of arcs) {
+        considerPoint(arcPointToWorldOnCurve(A, B, arcs, ap));
+      }
+    }
+  }
+
+  if (didSnap && bestDist < th * 0.6) return snapped;
+  if (didSnap) return snapped;
+
+  bestDist = th;
+  didSnap = false;
+  const considerEdge = (a: Point, b: Point) => {
+    const proj = projectOntoSegment(point, a, b);
+    if (proj.t > 0.01 && proj.t < 0.99 && proj.dist < bestDist) {
+      bestDist = proj.dist;
+      snapped = { ...proj.proj };
+      didSnap = true;
+    }
+  };
+
+  for (let i = 0; i < localPtChain.length - 1; i++) {
+    considerEdge(localPtChain[i]!, localPtChain[i + 1]!);
+  }
+
+  for (let si = 0; si < shapes.length; si++) {
+    if (drawingShapeIdx !== DRAWING_SNAP_EXCLUDE_NONE && si === drawingShapeIdx) continue;
+    const sh = shapes[si];
+    if (sh.layer !== 1 && sh.layer !== 2) continue;
+    if (!passesViewFilter(sh, viewFilter, activeLayer)) continue;
+    const pts = sh.points;
+    const ec = sh.closed ? pts.length : pts.length - 1;
+    for (let i = 0; i < ec; i++) {
+      const j = (i + 1) % pts.length;
+      const arcs = sh.edgeArcs?.[i];
+      if (arcs && arcs.length > 0) {
+        const pr = projectOntoArcEdge(point, pts[i]!, pts[j]!, arcs, 24);
+        if (pr.t > 0.02 && pr.t < 0.98 && pr.dist < bestDist) {
+          bestDist = pr.dist;
+          snapped = { ...pr.proj };
+          didSnap = true;
+        }
+      } else {
+        considerEdge(pts[i]!, pts[j]!);
+      }
+    }
+  }
+
+  return didSnap ? snapped : point;
 }
 
-/** Snap X/Y to vertices of current chain + layer 1 & 2; for polygon/path strip, snap to edges of closed refs with half-width offset outside. */
+/** Axis-alignment to vertices already placed in the current polygon chain (green guides while drawing). */
+const DRAW_SMART_GUIDE_PX = 8;
+
+/** Same as point-drag: snap X/Y to any vertex when close (orthogonal / 90°–180° guides to other points). */
+const DRAW_VERTEX_AXIS_ALIGN_PX = 10;
+
+/** Closest vertex refs for horizontal/vertical alignment (same geometry as {@link applyVertexAxisAlignWhileDrawing}). */
+function findVertexAxisAlignRefs(
+  ep: Point,
+  shapes: Shape[],
+  drawingShapeIdx: number,
+  zoom: number,
+): { xRef: Point | null; yRef: Point | null } {
+  const th = DRAW_VERTEX_AXIS_ALIGN_PX / zoom;
+  let bestDx = th, bestDy = th;
+  let xRef: Point | null = null, yRef: Point | null = null;
+  const ds = shapes[drawingShapeIdx];
+  const drawPts = ds?.points;
+  const wbl = ds?.elementType === "wall" ? (ds.calculatorInputs?.wallBaselinePolyline as Point[] | undefined) : undefined;
+  const selfChain = wbl && wbl.length > 0 ? wbl : drawPts;
+  const skipPi = selfChain && selfChain.length >= 2 ? selfChain.length - 1 : -1;
+
+  for (let si = 0; si < shapes.length; si++) {
+    const pts = si === drawingShapeIdx && selfChain && selfChain.length > 0 ? selfChain : shapes[si].points;
+    for (let pi = 0; pi < pts.length; pi++) {
+      if (si === drawingShapeIdx && pi === skipPi) continue;
+      const pt = pts[pi];
+      const dx = Math.abs(ep.x - pt.x);
+      const dy = Math.abs(ep.y - pt.y);
+      if (dx < bestDx) { bestDx = dx; xRef = pt; }
+      if (dy < bestDy) { bestDy = dy; yRef = pt; }
+    }
+  }
+  return { xRef, yRef };
+}
+
+function applyVertexAxisAlignWhileDrawing(
+  ep: Point,
+  shapes: Shape[],
+  drawingShapeIdx: number,
+  zoom: number,
+): Point {
+  const { xRef, yRef } = findVertexAxisAlignRefs(ep, shapes, drawingShapeIdx, zoom);
+  return { x: xRef?.x ?? ep.x, y: yRef?.y ?? ep.y };
+}
+
+/** When within {@link DRAW_SMART_GUIDE_PX}, snap X/Y to chain vertex axes so the point lies on the green guide lines (same as free polygon drawing). */
+function snapPointToDrawingChainAxes(ep: Point, chain: Point[], zoom: number): Point {
+  if (chain.length === 0) return ep;
+  const th = DRAW_SMART_GUIDE_PX / zoom;
+  let bestDx = th, bestDy = th;
+  let sx: number | null = null, sy: number | null = null;
+  for (const p of chain) {
+    const dx = Math.abs(ep.x - p.x);
+    const dy = Math.abs(ep.y - p.y);
+    if (dx < bestDx) { bestDx = dx; sx = p.x; }
+    if (dy < bestDy) { bestDy = dy; sy = p.y; }
+  }
+  return { x: sx ?? ep.x, y: sy ?? ep.y };
+}
+
+/**
+ * Distance label for smart guides: near the preview point (cursor), not the segment midpoint — easier to read while drawing.
+ * `stackIndex` offsets labels when several guides are active (e.g. corner snap).
+ */
+function screenPosForSmartGuideDistanceLabel(
+  guide: { axis: "x" | "y"; worldValue: number },
+  eMouse: Point,
+  worldToScreen: (wx: number, wy: number) => { x: number; y: number },
+  stackIndex: number,
+): { x: number; y: number } {
+  const snap = worldToScreen(eMouse.x, eMouse.y);
+  const stack = stackIndex * 13;
+  if (guide.axis === "x") {
+    const east = eMouse.x >= guide.worldValue;
+    return { x: snap.x + (east ? 22 : -22), y: snap.y - 15 - stack };
+  }
+  return { x: snap.x, y: snap.y - 15 - stack };
+}
+
+/**
+ * Strip tools already snap to ref edges via {@link snapWorldPointForLinearDrawing}.
+ * Independent X/Y pulls (vertex axis-align + chain axes) break slanted L1/L2 boundaries (wall/path sits half-on-half).
+ */
+function shouldSkipSnapPointToDrawingChainAxesForStrip(s: Shape): boolean {
+  return isPolygonLinearElement(s) || isPathElement(s) || s.elementType === "fence";
+}
+
+/** Half strip width in **canvas world units** (same as {@link computeThickPolyline} / {@link toPixels}). */
+function drawSnapHalfWidthWorld(drawingShape: Shape): number {
+  if (isPolygonLinearElement(drawingShape)) return toPixels(getPolygonThicknessM(drawingShape)) / 2;
+  if (isPathElement(drawingShape)) {
+    const wM = Number(drawingShape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
+    return toPixels(wM) / 2;
+  }
+  return toPixels(drawingShape.thickness ?? 0.10) / 2;
+}
+
+/** Largest closed L1 plot-like shape (excludes walls/fences) — interior hint when snapping a wall to an open chain on L1. */
+function dominantClosedLayer1InteriorCentroid(
+  shapes: Shape[],
+  drawingShapeIdx: number,
+  viewFilter: ViewFilter,
+  activeLayer: ActiveLayer,
+): Point | null {
+  let bestA = 0;
+  let bestC: Point | null = null;
+  for (let si = 0; si < shapes.length; si++) {
+    if (si === drawingShapeIdx) continue;
+    const sh = shapes[si];
+    if (sh.layer !== 1 || !sh.closed || sh.points.length < 3) continue;
+    if (!passesViewFilter(sh, viewFilter, activeLayer)) continue;
+    if (isPolygonLinearElement(sh) || sh.elementType === "fence" || isGroundworkLinear(sh)) continue;
+    const a = shoelaceArea(sh.points);
+    if (a > bestA) {
+      bestA = a;
+      bestC = centroid(sh.points);
+    }
+  }
+  return bestC;
+}
+
+/** Prototype shape matching the first-click linear tool so {@link drawSnapHalfWidthWorld} matches the created element. */
+function protoDrawingShapeForLinearMode(elementType: "fence" | "wall" | "kerb" | "foundation"): Shape {
+  const base: Shape = {
+    points: [],
+    closed: false,
+    label: "",
+    layer: 2,
+    lockedEdges: [],
+    lockedAngles: [],
+    heights: [],
+    elementType,
+    thickness: elementType === "foundation" ? 0.30 : 0.10,
+  };
+  if (elementType === "wall") {
+    return {
+      ...base,
+      calculatorType: "wall",
+      calculatorSubType: "block4",
+      calculatorInputs: {
+        layingMethod: "standing",
+        height: "1",
+        wallDrawBaseline: true,
+        wallDrawFace: "left",
+      },
+    };
+  }
+  if (elementType === "kerb") {
+    return {
+      ...base,
+      calculatorType: "kerbs",
+      calculatorSubType: "kl",
+      calculatorInputs: {},
+    };
+  }
+  return base;
+}
+
+function pathRibbonScalePayloadForCorner(shape: Shape, pts: Point[]): ScaleCornerInfo["pathRibbonScale"] | undefined {
+  if (!isPathElement(shape) || !shape.closed || !shape.calculatorInputs?.pathIsOutline) return undefined;
+  const inputs = shape.calculatorInputs;
+  const pathWM = Number(inputs.pathWidthM ?? 0.6) || 0.6;
+  const pc = inputs.pathCenterline as Point[] | undefined;
+  const po = inputs.pathCenterlineOriginal as Point[] | undefined;
+  let cl: Point[] | null = null;
+  if (pc && pc.length >= 2) cl = pc.map(p => ({ ...p }));
+  else if (po && po.length >= 2) cl = po.map(p => ({ ...p }));
+  else {
+    const ex = extractPathRibbonCenterlineFromOutline(pts);
+    if (ex.length >= 2) cl = ex.map(p => ({ ...p }));
+  }
+  if (!cl || cl.length < 2) return undefined;
+  const V = cl.length;
+  const storedSides = inputs.pathSegmentSides as ("left" | "right")[] | undefined;
+  const segmentSides: ("left" | "right")[] =
+    Array.isArray(storedSides) && storedSides.length === V - 1
+      ? storedSides.map(s => s)
+      : Array.from({ length: V - 1 }, () => "left" as const);
+  return { pathWidthM: pathWM, startCenterline: cl, segmentSides };
+}
+
+function computeScaleCornerFrame(
+  sc: ScaleCornerInfo,
+  world: Point,
+  shapes: Shape[],
+  zoom: number
+): { newPts: Point[]; ribbonCl: Point[] | undefined; ratio: number; ax: number; ay: number; snapOff: { x: number; y: number } } {
+  const currentDist = distance(sc.anchor, world);
+  const ratio = currentDist / sc.startDist;
+  const ax = sc.anchor.x, ay = sc.anchor.y;
+  const pr = sc.pathRibbonScale;
+  let newPts: Point[];
+  let ribbonCl: Point[] | undefined;
+  if (pr && pr.startCenterline.length >= 2) {
+    ribbonCl = pr.startCenterline.map(pt => ({
+      x: ax + (pt.x - ax) * ratio,
+      y: ay + (pt.y - ay) * ratio,
+    }));
+    const rebuilt = computePathOutlineFromSegmentSides(ribbonCl, pr.segmentSides, pr.pathWidthM);
+    newPts =
+      rebuilt.length >= 3
+        ? rebuilt
+        : sc.startPoints.map(pt => ({
+            x: ax + (pt.x - ax) * ratio,
+            y: ay + (pt.y - ay) * ratio,
+          }));
+  } else {
+    newPts = sc.startPoints.map(pt => ({
+      x: ax + (pt.x - ax) * ratio,
+      y: ay + (pt.y - ay) * ratio,
+    }));
+  }
+  const magThreshold = SNAP_MAGNET_PX / zoom;
+  const draggedPt = newPts[sc.pointIdx] ?? newPts[0]!;
+  const toMouse = { x: world.x - ax, y: world.y - ay };
+  const len = Math.sqrt(toMouse.x * toMouse.x + toMouse.y * toMouse.y);
+  const snapDir = len > 1 ? { x: toMouse.x / len, y: toMouse.y / len } : undefined;
+  const snap = snapMagnet(draggedPt, shapes, sc.shapeIdx, magThreshold, snapDir);
+  const snapOff = snap.didSnap ? { x: snap.snapped.x - draggedPt.x, y: snap.snapped.y - draggedPt.y } : { x: 0, y: 0 };
+  if (snap.didSnap) {
+    newPts = newPts.map(pt => ({ x: pt.x + snapOff.x, y: pt.y + snapOff.y }));
+    if (ribbonCl) ribbonCl = ribbonCl.map(pt => ({ x: pt.x + snapOff.x, y: pt.y + snapOff.y }));
+  }
+  return { newPts, ribbonCl, ratio, ax, ay, snapOff };
+}
+
+/** Baseline face polyline while drawing wall before points are converted to strip outline (handles on corners). */
+function getWallBaselinePolylineDuringDraw(s: Shape): Point[] | null {
+  const bl = s.calculatorInputs?.wallBaselinePolyline as Point[] | undefined;
+  if (bl && bl.length >= 1) return bl.map((p) => ({ ...p }));
+  return null;
+}
+
+/** During wall draw with strip outline, `points` is the band outline; use `wallBaselinePolyline` for snap, angles, and previews. */
+function wallBaselineChainForDrawing(s: Shape, fallbackPts: Point[]): Point[] {
+  const wbl = s.elementType === "wall" ? (s.calculatorInputs?.wallBaselinePolyline as Point[] | undefined) : undefined;
+  return wbl && wbl.length > 0 ? wbl : fallbackPts;
+}
+
+/** End wall/kerb/foundation as open strip polygon (corner handles on both sides), same thickness as closed loop. */
+function finalizePolygonLinearDrawingOpen(shapes: Shape[], idx: number): Shape | null {
+  const s = shapes[idx];
+  if (!isPolygonLinearElement(s) || s.points.length < 2) return null;
+  const pathPts = getLinearElementPath(s);
+  const thicknessPx = toPixels(getPolygonThicknessM(s));
+  const outline = computeThickPolyline(pathPts, thicknessPx);
+  if (outline.length < 4) return null;
+  const segLengths: number[] = [];
+  for (let i = 0; i < pathPts.length - 1; i++) {
+    segLengths.push(toMeters(distance(pathPts[i], pathPts[i + 1])));
+  }
+  const baseCalc = { ...(s.calculatorInputs ?? {}) };
+  delete baseCalc.wallDrawBaseline;
+  delete baseCalc.wallDrawFace;
+  delete baseCalc.wallBaselinePolyline;
+  const inputs: Record<string, unknown> = { ...baseCalc, segmentLengths: segLengths };
+  if (s.elementType === "wall") {
+    const defaultH = parseFloat(String(s.calculatorInputs?.height ?? "1")) || 1;
+    inputs.segmentHeights = segLengths.map(() => ({ startH: defaultH, endH: defaultH }));
+  }
+  return {
+    ...s,
+    points: outline,
+    closed: false,
+    linearOpenStripOutline: true,
+    drawingFinished: true,
+    calculatorInputs: inputs,
+  };
+}
+
+type LinearDrawSnapResult = { point: Point; wallFaceHint?: "left" | "right" };
+
+type SegmentProjection = ReturnType<typeof projectOntoSegment>;
+
+/** Direction from last chain point toward mouse — used to pick the correct edge at a polygon corner (two edges tie at dist 0). */
+function stripStrokeDirectionForTie(ep: Point, localPtChain: Point[]): { x: number; y: number } {
+  if (localPtChain.length >= 1) {
+    const dx = ep.x - localPtChain[localPtChain.length - 1]!.x;
+    const dy = ep.y - localPtChain[localPtChain.length - 1]!.y;
+    const l = Math.hypot(dx, dy);
+    if (l > 1e-12) return { x: dx / l, y: dy / l };
+  }
+  return { x: 1, y: 0 };
+}
+
+/**
+ * At a corner, several edges have the same min distance to `out` (often 0). Prefer the edge whose tangent
+ * aligns with stroke direction; if still tied, prefer the edge closest to `ep` (then tangent again).
+ */
+function pickEdgeAmongEqualOutDist(
+  edges: { i: number; j: number; pr: SegmentProjection }[],
+  poly: Point[],
+  ep: Point,
+  strokeDir: { x: number; y: number },
+  getSegment: (i: number) => [Point, Point],
+): { i: number; j: number; pr: SegmentProjection } {
+  if (edges.length === 1) return edges[0]!;
+  let minEp = Infinity;
+  let sub: typeof edges = [];
+  for (const e of edges) {
+    const [a, b] = getSegment(e.i);
+    const prEp = projectOntoSegment(ep, a, b);
+    if (prEp.t < 0 || prEp.t > 1) continue;
+    const d = prEp.dist;
+    if (d < minEp - 1e-12) {
+      minEp = d;
+      sub = [e];
+    } else if (Math.abs(d - minEp) < 1e-9) {
+      sub.push(e);
+    }
+  }
+  const pick = sub.length > 0 ? sub : edges;
+  let best = pick[0]!;
+  let bestScore = -1;
+  for (const e of pick) {
+    const pi = poly[e.i]!;
+    const pj = poly[e.j]!;
+    const edx = pj.x - pi.x;
+    const edy = pj.y - pi.y;
+    const el = Math.hypot(edx, edy);
+    const tx = el > 1e-12 ? edx / el : 1;
+    const ty = el > 1e-12 ? edy / el : 0;
+    const score = Math.abs(tx * strokeDir.x + ty * strokeDir.y);
+    if (score > bestScore) {
+      bestScore = score;
+      best = e;
+    }
+  }
+  return best;
+}
+
+function outSnappedToReferencePolygonVertex(
+  out: Point,
+  shapes: Shape[],
+  drawingShapeIdx: number,
+  viewFilter: ViewFilter,
+  activeLayer: ActiveLayer,
+  tol: number,
+): boolean {
+  for (let si = 0; si < shapes.length; si++) {
+    if (si === drawingShapeIdx) continue;
+    const sh = shapes[si];
+    if (sh.layer !== 1 && sh.layer !== 2) continue;
+    if (!passesViewFilter(sh, viewFilter, activeLayer)) continue;
+    const poly =
+      sh.closed && sh.points.length >= 3
+        ? isPolygonLinearElement(sh)
+          ? sh.points
+          : isPathElement(sh)
+            ? getPathPolygon(sh)
+            : sh.elementType === "polygon"
+              ? sh.points
+              : null
+        : null;
+    if (!poly) continue;
+    for (const v of poly) {
+      if (distance(out, v) < tol) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Magnet snap + edge snap for strip drawing (wall, fence, path…).
+ * Layer 1: snap on the reference edge; strip thickness goes **inward** (into the plot).
+ * Layer 2: snap offset by half width **outward** so the strip does not overlap the L2 reference.
+ * Path (slabs): use **on-edge** projection like L1 so centerline follows visible boundaries; halfW offset caused zig-zags when tracing adjacent edges.
+ */
 function snapWorldPointForLinearDrawing(
   ep: Point,
   args: {
@@ -103,65 +716,163 @@ function snapWorldPointForLinearDrawing(
     viewFilter: ViewFilter;
     activeLayer: ActiveLayer;
   },
-): Point {
+): LinearDrawSnapResult {
   const { drawingShapeIdx, shapes, localPtChain, drawingShape, zoom, viewFilter, activeLayer } = args;
-  const vTh = LINE_VERTEX_DRAW_SNAP_PX / zoom;
-  let bestDx = vTh, bestDy = vTh;
-  let sx: number | null = null, sy: number | null = null;
-  for (let i = 0; i < localPtChain.length; i++) {
-    const p = localPtChain[i];
-    const dx = Math.abs(ep.x - p.x);
-    const dy = Math.abs(ep.y - p.y);
-    if (dx < bestDx) { bestDx = dx; sx = p.x; }
-    if (dy < bestDy) { bestDy = dy; sy = p.y; }
-  }
-  for (let si = 0; si < shapes.length; si++) {
-    if (si === drawingShapeIdx) continue;
-    const sh = shapes[si];
-    if (sh.layer !== 1 && sh.layer !== 2) continue;
-    if (!passesViewFilter(sh, viewFilter, activeLayer)) continue;
-    for (const p of sh.points) {
-      const dx = Math.abs(ep.x - p.x);
-      const dy = Math.abs(ep.y - p.y);
-      if (dx < bestDx) { bestDx = dx; sx = p.x; }
-      if (dy < bestDy) { bestDy = dy; sy = p.y; }
-    }
-  }
-  const out = { x: sx ?? ep.x, y: sy ?? ep.y };
+  const out = snapDrawingMagnet(ep, {
+    drawingShapeIdx,
+    shapes,
+    localPtChain,
+    zoom,
+    viewFilter,
+    activeLayer,
+  });
 
   const useEdgeOutside =
     isPolygonLinearElement(drawingShape) || isPathElement(drawingShape) || drawingShape.elementType === "fence";
-  if (!useEdgeOutside) return out;
+  if (!useEdgeOutside) return { point: out };
 
-  const halfW = drawSnapHalfOffsetM(drawingShape);
-  const eTh = LINE_EDGE_DRAW_SNAP_PX / zoom;
-  let bestD = eTh;
-  let bestQ: Point | null = null;
+  const halfW = drawSnapHalfWidthWorld(drawingShape);
+  const eTh = SNAP_MAGNET_PX / zoom;
+  type EdgeSnapMeta = {
+    layer: LayerID;
+    proj: Point;
+    refCentroid: Point;
+    edgeTx: number;
+    edgeTy: number;
+    /** Layer 1: direction into the garden (open chain snap or L1 linear polygon ref). */
+    wallInteriorHint?: Point;
+  };
+  const edgeSnap = { bestD: eTh, bestQ: null as Point | null, bestEdgeMeta: null as EdgeSnapMeta | null };
 
-  const considerClosedPoly = (poly: Point[]) => {
+  const considerClosedPoly = (poly: Point[], layer: LayerID, refShape: Shape) => {
     const n = poly.length;
     if (n < 3) return;
+    const refCentroid = centroid(poly);
+    const l1InteriorHint =
+      layer === 1
+        ? isPolygonLinearElement(refShape)
+          ? dominantClosedLayer1InteriorCentroid(shapes, drawingShapeIdx, viewFilter, activeLayer) ?? refCentroid
+          : refCentroid
+        : undefined;
+    let minOutDist = Infinity;
+    const edgeCand: { i: number; j: number; pr: SegmentProjection }[] = [];
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
       const pr = projectOntoSegment(out, poly[i], poly[j]);
-      if (pr.dist >= bestD) continue;
       if (pr.t < 0 || pr.t > 1) continue;
-      const nrm = outwardUnitNormalForPolygonEdge(poly[i], poly[j], poly);
-      bestD = pr.dist;
-      bestQ = { x: pr.proj.x + nrm.x * halfW, y: pr.proj.y + nrm.y * halfW };
+      if (pr.dist < minOutDist - 1e-12) {
+        minOutDist = pr.dist;
+        edgeCand.length = 0;
+        edgeCand.push({ i, j, pr });
+      } else if (Math.abs(pr.dist - minOutDist) < 1e-9) {
+        edgeCand.push({ i, j, pr });
+      }
+    }
+    if (edgeCand.length === 0) return;
+    const strokeDir = stripStrokeDirectionForTie(ep, localPtChain);
+    const chosen = pickEdgeAmongEqualOutDist(
+      edgeCand,
+      poly,
+      ep,
+      strokeDir,
+      (ii) => [poly[ii]!, poly[((ii + 1) % n)]!],
+    );
+    const i = chosen.i;
+    const j = (i + 1) % n;
+    const pr = projectOntoSegment(out, poly[i], poly[j]);
+    if (pr.dist >= edgeSnap.bestD) return;
+    const nrm = outwardUnitNormalForPolygonEdge(poly[i], poly[j], poly);
+    const edx = poly[j].x - poly[i].x;
+    const edy = poly[j].y - poly[i].y;
+    const el = Math.hypot(edx, edy);
+    const edgeTx = el > 1e-12 ? edx / el : 1;
+    const edgeTy = el > 1e-12 ? edy / el : 0;
+    edgeSnap.bestD = pr.dist;
+    if (layer === 1) {
+      edgeSnap.bestQ = { x: pr.proj.x, y: pr.proj.y };
+      edgeSnap.bestEdgeMeta = {
+        layer,
+        proj: { ...pr.proj },
+        refCentroid,
+        edgeTx,
+        edgeTy,
+        wallInteriorHint: l1InteriorHint,
+      };
+    } else if (isPathElement(drawingShape)) {
+      edgeSnap.bestQ = { x: pr.proj.x, y: pr.proj.y };
+      edgeSnap.bestEdgeMeta = { layer, proj: { ...pr.proj }, refCentroid, edgeTx, edgeTy };
+    } else {
+      edgeSnap.bestQ = { x: pr.proj.x + nrm.x * halfW, y: pr.proj.y + nrm.y * halfW };
+      edgeSnap.bestEdgeMeta = { layer, proj: { ...pr.proj }, refCentroid, edgeTx, edgeTy };
     }
   };
 
-  const considerOpenCenterline = (pts: Point[]) => {
+  const considerOpenCenterline = (pts: Point[], layer: LayerID) => {
     const n = pts.length;
     if (n < 2) return;
+    const refCentroid = centroid(pts);
+    let minOutDist = Infinity;
+    const edgeCand: { i: number; j: number; pr: SegmentProjection }[] = [];
     for (let i = 0; i < n - 1; i++) {
-      const pr = projectOntoSegment(out, pts[i], pts[i + 1]);
-      if (pr.dist >= bestD) continue;
+      const j = i + 1;
+      const pr = projectOntoSegment(out, pts[i], pts[j]);
       if (pr.t < 0 || pr.t > 1) continue;
-      bestD = pr.dist;
-      bestQ = { ...pr.proj };
+      if (pr.dist < minOutDist - 1e-12) {
+        minOutDist = pr.dist;
+        edgeCand.length = 0;
+        edgeCand.push({ i, j, pr });
+      } else if (Math.abs(pr.dist - minOutDist) < 1e-9) {
+        edgeCand.push({ i, j, pr });
+      }
     }
+    if (edgeCand.length === 0) return;
+    const strokeDir = stripStrokeDirectionForTie(ep, localPtChain);
+    const chosen = pickEdgeAmongEqualOutDist(edgeCand, pts, ep, strokeDir, (ii) => [pts[ii]!, pts[ii + 1]!]);
+    const i = chosen.i;
+    const j = chosen.j;
+    const pr = projectOntoSegment(out, pts[i], pts[j]);
+    if (pr.dist >= edgeSnap.bestD) return;
+    const edx = pts[j].x - pts[i].x;
+    const edy = pts[j].y - pts[i].y;
+    const el = Math.hypot(edx, edy);
+    const edgeTx = el > 1e-12 ? edx / el : 1;
+    const edgeTy = el > 1e-12 ? edy / el : 0;
+    edgeSnap.bestD = pr.dist;
+    let qx = pr.proj.x;
+    let qy = pr.proj.y;
+    let wallInteriorHint: Point | undefined;
+    if (layer === 1) {
+      wallInteriorHint =
+        dominantClosedLayer1InteriorCentroid(shapes, drawingShapeIdx, viewFilter, activeLayer) ?? refCentroid;
+    } else if (isPathElement(drawingShape)) {
+      qx = pr.proj.x;
+      qy = pr.proj.y;
+    } else {
+      let nx = -edgeTy;
+      let ny = edgeTx;
+      let vx = pr.proj.x - refCentroid.x;
+      let vy = pr.proj.y - refCentroid.y;
+      if (localPtChain.length >= 1) {
+        const prev = localPtChain[localPtChain.length - 1];
+        vx = pr.proj.x - prev.x;
+        vy = pr.proj.y - prev.y;
+      }
+      if (nx * vx + ny * vy < 0) {
+        nx = -nx;
+        ny = -ny;
+      }
+      qx = pr.proj.x + nx * halfW;
+      qy = pr.proj.y + ny * halfW;
+    }
+    edgeSnap.bestQ = { x: qx, y: qy };
+    edgeSnap.bestEdgeMeta = {
+      layer,
+      proj: { ...pr.proj },
+      refCentroid,
+      edgeTx,
+      edgeTy,
+      ...(wallInteriorHint ? { wallInteriorHint } : {}),
+    };
   };
 
   for (let si = 0; si < shapes.length; si++) {
@@ -171,16 +882,64 @@ function snapWorldPointForLinearDrawing(
     if (!passesViewFilter(sh, viewFilter, activeLayer)) continue;
 
     if (sh.closed && sh.points.length >= 3) {
-      if (isPolygonLinearElement(sh)) considerClosedPoly(sh.points);
-      else if (isPathElement(sh)) considerClosedPoly(getPathPolygon(sh));
-      else if (sh.elementType === "polygon") considerClosedPoly(sh.points);
+      if (isPolygonLinearElement(sh)) considerClosedPoly(sh.points, sh.layer, sh);
+      else if (isPathElement(sh)) considerClosedPoly(getPathPolygon(sh), sh.layer, sh);
+      else if (sh.elementType === "polygon") considerClosedPoly(sh.points, sh.layer, sh);
     }
     if (isLinearElement(sh) && !isPolygonLinearElement(sh) && sh.points.length >= 2) {
-      considerOpenCenterline(getLinearElementPath(sh));
+      considerOpenCenterline(getLinearElementPath(sh), sh.layer);
     }
   }
 
-  return bestQ ?? out;
+  let resultPoint = edgeSnap.bestQ ?? out;
+  const vertexTol = Math.max(1e-6, (SNAP_MAGNET_PX / zoom) * 1e-3);
+  if (
+    useEdgeOutside &&
+    edgeSnap.bestQ &&
+    distance(out, edgeSnap.bestQ) > vertexTol &&
+    outSnappedToReferencePolygonVertex(out, shapes, drawingShapeIdx, viewFilter, activeLayer, vertexTol)
+  ) {
+    resultPoint = out;
+  }
+  const bestEdgeMeta = edgeSnap.bestEdgeMeta;
+
+  let wallFaceHint: "left" | "right" | undefined;
+  if (
+    drawingShape.elementType === "wall" &&
+    drawingShape.calculatorInputs?.wallDrawBaseline &&
+    bestEdgeMeta
+  ) {
+    const canHintL1 = bestEdgeMeta.layer === 1;
+    const canHintL2 = bestEdgeMeta.layer === 2 && localPtChain.length >= 1;
+    if (!canHintL1 && !canHintL2) {
+      // pierwszy punkt przy L2 — zostaw domyślny wallDrawFace
+    } else {
+      const nlx = -bestEdgeMeta.edgeTy;
+      const nly = bestEdgeMeta.edgeTx;
+      let tdx: number;
+      let tdy: number;
+      if (bestEdgeMeta.layer === 1) {
+        const hint = bestEdgeMeta.wallInteriorHint ?? bestEdgeMeta.refCentroid;
+        tdx = hint.x - bestEdgeMeta.proj.x;
+        tdy = hint.y - bestEdgeMeta.proj.y;
+      } else {
+        const prev = localPtChain[localPtChain.length - 1]!;
+        tdx = prev.x - bestEdgeMeta.proj.x;
+        tdy = prev.y - bestEdgeMeta.proj.y;
+      }
+      const tl = Math.hypot(tdx, tdy);
+      if (tl > 1e-9) {
+        tdx /= tl;
+        tdy /= tl;
+        const align = nlx * tdx + nly * tdy;
+        if (Math.abs(align) > 1e-4) {
+          wallFaceHint = align > 0 ? "right" : "left";
+        }
+      }
+    }
+  }
+
+  return wallFaceHint ? { point: resultPoint, wallFaceHint } : { point: resultPoint };
 }
 
 /** Layer 3: hit-test screen coords on the pattern rotation handle (same 14px box as LMB). Topmost shape wins. */
@@ -386,6 +1145,7 @@ const CALCULATOR_TYPE_I18N_SUFFIX: Record<string, string> = {
   foundation: "calculator_type_foundation",
   groundwork: "calculator_type_groundwork",
   steps: "calculator_type_steps",
+  decorativeStones: "calculator_type_decorativeStones",
 };
 
 function translateCalculatorTypeLabel(calculatorType: string, t: (key: string) => string): string {
@@ -459,6 +1219,337 @@ function applyPolygonPointsToShape(shape: Shape, newPts: Point[]): Shape {
   return s;
 }
 
+/** Same matching as inside MasterProject (for shared vertex move logic). */
+function linkedEntriesMatchForVertexMove(a: LinkedEntry, b: LinkedEntry): boolean {
+  if (isArcEntry(a) && isArcEntry(b)) return a.si === b.si && a.edgeIdx === b.edgeIdx && a.arcId === b.arcId;
+  if (!isArcEntry(a) && !isArcEntry(b)) return a.si === b.si && a.pi === b.pi;
+  return false;
+}
+
+/**
+ * Move one polygon vertex to a target world position — same geometry rules as interactive point drag
+ * (strip outline rebuild for walls/paths, path ribbon centerline, linked vertices).
+ * Used by "offset along line from point" so walls don't break when only one vertex moves.
+ */
+function moveVertexToTargetInShapes(
+  prevShapes: Shape[],
+  si: number,
+  pi: number,
+  target: Point,
+  linkedGroups: LinkedEntry[][],
+  pathRibbonDragStartOutline: Point[] | null,
+): Shape[] {
+  const n = [...prevShapes];
+  const s0 = n[si];
+  if (!s0 || pi < 0 || pi >= s0.points.length) return prevShapes;
+
+  const s = { ...n[si] };
+  const shape = s;
+  const pts = shape.points;
+
+  const dragEntry: LinkedEntry = { si, pi };
+  const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatchForVertexMove(lp, dragEntry)));
+
+  const stripThicknessPxFor = (sh: Shape): number | null => {
+    if (sh.lockedEdges && sh.lockedEdges.length > 0) return null;
+    if (sh.lockedAngles && sh.lockedAngles.length > 0) return null;
+    if (isPolygonLinearStripOutline(sh) && isPolygonLinearElement(sh)) {
+      return toPixels(getPolygonThicknessM(sh));
+    }
+    if (sh.closed && sh.points.length >= 4 && sh.points.length % 2 === 0 && isPathElement(sh) && sh.calculatorInputs?.pathIsOutline) {
+      return toPixels(Number(sh.calculatorInputs?.pathWidthM ?? 0.6) || 0.6);
+    }
+    return null;
+  };
+
+  if (group) {
+    let anchor: Point = { x: target.x, y: target.y };
+    const vertexMembers = group.filter(lp => !isArcEntry(lp));
+    const stripEntries = vertexMembers.filter(lp => stripThicknessPxFor(n[lp.si]!) != null);
+    stripEntries.sort((a, b) => {
+      if (a.si === si && a.pi === pi) return -1;
+      if (b.si === si && b.pi === pi) return 1;
+      return a.si - b.si;
+    });
+    const processedStripSi = new Set<number>();
+    for (const lp of stripEntries) {
+      if (processedStripSi.has(lp.si)) continue;
+      const sh = n[lp.si];
+      if (!sh) continue;
+      const tpx = stripThicknessPxFor(sh);
+      if (tpx == null) continue;
+      let reb: Point[] | null = null;
+      let rebPathCl: Point[] | null = null;
+      let stripAnchorIdx = lp.pi;
+      if (sh.linearOpenStripOutline && !sh.closed) {
+        reb = rebuildOpenStripOutlineFromVertexTarget(sh.points, lp.pi, anchor, tpx);
+      } else if (isPathElement(sh) && sh.closed && sh.calculatorInputs?.pathIsOutline) {
+        if (sh.points.length === 8 || sh.points.length === 4) {
+          const sidesL =
+            Array.isArray(sh.calculatorInputs.pathSegmentSides) &&
+            (sh.calculatorInputs.pathSegmentSides as ("left" | "right")[]).length === 3
+              ? (sh.calculatorInputs.pathSegmentSides as ("left" | "right")[])
+              : (["left", "left", "left"] as ("left" | "right")[]);
+          const pathWM = Number(sh.calculatorInputs.pathWidthM ?? 0.6) || 0.6;
+          const pc = sh.calculatorInputs.pathCenterline as Point[] | undefined;
+          const po = sh.calculatorInputs.pathCenterlineOriginal as Point[] | undefined;
+          let cl0: Point[] =
+            pc && pc.length === 4
+              ? pc.map(p => ({ ...p }))
+              : po && po.length === 4
+                ? po.map(p => ({ ...p }))
+                : (() => {
+                    const ex = extractPathRibbonCenterlineFromOutline(sh.points);
+                    return ex.length === 4 ? ex.map(p => ({ ...p })) : [];
+                  })();
+          if (cl0.length !== 4 && sh.points.length === 4) {
+            const recL = recoverCenterlineQuadFromPairFourRibbonOutline(sh.points, toPixels(pathWM) / 2);
+            if (recL && recL.length === 4) cl0 = recL.map(p => ({ ...p }));
+          }
+          if (cl0.length === 4) {
+            let vSolver = lp.pi;
+            if (sh.points.length === 4) {
+              const o8 = computePathOutlineFromSegmentSides(cl0, sidesL, pathWM);
+              if (o8.length === 8) {
+                let bd = Infinity;
+                for (let j = 0; j < 8; j++) {
+                  const d = distance(sh.points[lp.pi]!, o8[j]!);
+                  if (d < bd) {
+                    bd = d;
+                    vSolver = j;
+                  }
+                }
+              }
+            }
+            let solvedL = rebuildRectangularPathRibbonFromOutlineDrag(cl0, sidesL, pathWM, vSolver, anchor);
+            if (!solvedL && lp.si === si) {
+              const snapL = pathRibbonDragStartOutline;
+              if (snapL && snapL.length === sh.points.length) {
+                const pairsL = pathRibbonLengthAnchorPairsFromOutlineSnap(snapL, lp.pi, cl0, sidesL, pathWM);
+                if (pairsL && pairsL.length > 0) {
+                  solvedL = rebuildRectangularPathRibbonLengthAnchorsFixed(
+                    cl0,
+                    sidesL,
+                    pathWM,
+                    vSolver,
+                    anchor,
+                    pairsL,
+                  );
+                }
+              }
+            }
+            if (solvedL) {
+              reb = solvedL.outline;
+              rebPathCl = solvedL.centerline;
+              stripAnchorIdx = vSolver;
+            }
+          }
+        }
+        if (reb == null && !(isPathElement(sh) && sh.closed && sh.calculatorInputs?.pathIsOutline)) {
+          reb = rebuildPathClosedRibbonFromVertexTarget(sh.points, lp.pi, anchor, tpx);
+          stripAnchorIdx = lp.pi;
+        }
+      } else {
+        reb = rebuildClosedStripOutlineFromVertexTarget(sh.points, lp.pi, anchor, tpx);
+      }
+      if (reb) {
+        let nextSh: Shape = { ...sh, points: reb, calculatorResults: undefined };
+        if (isPathElement(sh) && sh.closed && sh.calculatorInputs?.pathIsOutline) {
+          if (rebPathCl && rebPathCl.length >= 2) {
+            nextSh = {
+              ...nextSh,
+              calculatorInputs: {
+                ...sh.calculatorInputs,
+                pathCenterline: rebPathCl.map(p => ({ ...p })),
+                pathCenterlineOriginal: rebPathCl.map(p => ({ ...p })),
+              },
+            };
+          } else {
+            const cl = extractPathRibbonCenterlineFromOutline(reb);
+            if (cl.length >= 2) {
+              nextSh = {
+                ...nextSh,
+                calculatorInputs: {
+                  ...sh.calculatorInputs,
+                  pathCenterline: cl.map(p => ({ ...p })),
+                  pathCenterlineOriginal: cl.map(p => ({ ...p })),
+                },
+              };
+            }
+          }
+        }
+        n[lp.si] = nextSh;
+        anchor = { ...reb[stripAnchorIdx]! };
+        processedStripSi.add(lp.si);
+      }
+    }
+    for (const lp of vertexMembers) {
+      if (processedStripSi.has(lp.si)) continue;
+      const shSkip = n[lp.si];
+      if (shSkip && isPathElement(shSkip) && shSkip.closed && shSkip.calculatorInputs?.pathIsOutline) continue;
+      const ls = { ...n[lp.si]! };
+      const lpts = [...ls.points];
+      lpts[lp.pi] = { ...anchor };
+      ls.points = lpts;
+      ls.calculatorResults = undefined;
+      n[lp.si] = ls;
+    }
+    for (const lp of group) {
+      if (!isArcEntry(lp) || linkedEntriesMatchForVertexMove(lp, dragEntry)) continue;
+      if (!n[lp.si]) continue;
+      const ls = { ...n[lp.si]! };
+      const lea = ls.edgeArcs ? [...ls.edgeArcs] : [];
+      const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
+      const li = lArcs.findIndex(a => a.id === lp.arcId);
+      if (li >= 0) {
+        const lA = ls.points[lp.edgeIdx];
+        const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
+        const { t: lt, offset: lo } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, anchor);
+        lArcs[li] = { ...lArcs[li]!, t: lt, offset: lo };
+        lea[lp.edgeIdx] = lArcs;
+        ls.edgeArcs = lea;
+        n[lp.si] = ls;
+      }
+    }
+    return n;
+  }
+
+  const closedPathRibbonDrag =
+    shape.closed &&
+    pts.length >= 4 &&
+    pts.length % 2 === 0 &&
+    isPathElement(shape) &&
+    Boolean(shape.calculatorInputs?.pathIsOutline);
+  const polygonStrip = isPolygonLinearStripOutline(shape);
+  const canStripRebuild =
+    (polygonStrip || closedPathRibbonDrag) &&
+    (!shape.lockedEdges || shape.lockedEdges.length === 0) &&
+    (!shape.lockedAngles || shape.lockedAngles.length === 0);
+
+  if (closedPathRibbonDrag) {
+    const pathWMDrag = Number(shape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
+    const pcDrag = shape.calculatorInputs?.pathCenterline as Point[] | undefined;
+    const poDrag = shape.calculatorInputs?.pathCenterlineOriginal as Point[] | undefined;
+    const clAny: Point[] | null =
+      pcDrag && pcDrag.length >= 2 ? pcDrag.map(p => ({ ...p }))
+      : poDrag && poDrag.length >= 2 ? poDrag.map(p => ({ ...p }))
+      : null;
+    if (clAny && clAny.length >= 2) {
+      const V = clAny.length;
+      const storedSides = shape.calculatorInputs?.pathSegmentSides as ("left" | "right")[] | undefined;
+      const sidesAny: ("left" | "right")[] =
+        Array.isArray(storedSides) && storedSides.length === V - 1
+          ? storedSides
+          : Array.from({ length: V - 1 }, () => "left" as const);
+      const expectedOutLen = 2 * V;
+      let viSolver = pi;
+      if (pts.length !== expectedOutLen) {
+        const o = computePathOutlineFromSegmentSides(clAny, sidesAny, pathWMDrag);
+        if (o.length === expectedOutLen) {
+          let bd = Infinity;
+          for (let j = 0; j < o.length; j++) {
+            const d = distance(pts[pi]!, o[j]!);
+            if (d < bd) {
+              bd = d;
+              viSolver = j;
+            }
+          }
+        }
+      }
+      let solvedGen: { outline: Point[]; centerline: Point[] } | null = null;
+      if (V === 2) {
+        solvedGen = rebuildPathRibbonSingleSegmentDrag(clAny, sidesAny, pathWMDrag, viSolver, target);
+      } else {
+        solvedGen = rebuildPathRibbonGeneralDrag(clAny, sidesAny, pathWMDrag, viSolver, target);
+      }
+      if (solvedGen) {
+        n[si] = {
+          ...s,
+          points: solvedGen.outline,
+          calculatorResults: undefined,
+          calculatorInputs: {
+            ...shape.calculatorInputs,
+            pathCenterline: solvedGen.centerline.map(p => ({ ...p })),
+            pathCenterlineOriginal: solvedGen.centerline.map(p => ({ ...p })),
+          },
+        };
+        return n;
+      }
+    }
+  }
+
+  if (canStripRebuild) {
+    const thicknessPx = isPathElement(shape) && closedPathRibbonDrag
+      ? toPixels(Number(shape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6)
+      : toPixels(getPolygonThicknessM(shape));
+    let rebuilt: Point[] | null = null;
+    if (closedPathRibbonDrag) {
+      rebuilt = null;
+    } else if (polygonStrip && !shape.closed && shape.linearOpenStripOutline) {
+      rebuilt = rebuildOpenStripOutlineFromVertexTarget(pts, pi, target, thicknessPx);
+    } else if (polygonStrip && shape.closed) {
+      rebuilt = rebuildClosedStripOutlineFromVertexTarget(pts, pi, target, thicknessPx);
+    }
+    if (rebuilt) {
+      let sNext: Shape = { ...s, points: rebuilt, calculatorResults: undefined };
+      if (closedPathRibbonDrag) {
+        const cl = extractPathRibbonCenterlineFromOutline(rebuilt);
+        if (cl.length >= 2) {
+          sNext = {
+            ...sNext,
+            calculatorInputs: {
+              ...shape.calculatorInputs,
+              pathCenterline: cl.map(p => ({ ...p })),
+              pathCenterlineOriginal: cl.map(p => ({ ...p })),
+            },
+          };
+        }
+      }
+      n[si] = sNext;
+      return n;
+    }
+  }
+
+  if (closedPathRibbonDrag) {
+    const dx = target.x - pts[pi]!.x;
+    const dy = target.y - pts[pi]!.y;
+    const newPts = pts.map(pt => ({ x: pt.x + dx, y: pt.y + dy }));
+    const pcF = shape.calculatorInputs?.pathCenterline as Point[] | undefined;
+    const poF = shape.calculatorInputs?.pathCenterlineOriginal as Point[] | undefined;
+    const tr = (arr: Point[]) => arr.map(pt => ({ x: pt.x + dx, y: pt.y + dy }));
+    n[si] = {
+      ...s,
+      points: newPts,
+      calculatorResults: undefined,
+      calculatorInputs: {
+        ...shape.calculatorInputs,
+        ...(pcF && pcF.length >= 2 ? { pathCenterline: tr(pcF) } : {}),
+        ...(poF && poF.length >= 2 ? { pathCenterlineOriginal: tr(poF) } : {}),
+      },
+    };
+    return n;
+  }
+
+  const np = [...s.points];
+  np[pi] = { x: target.x, y: target.y };
+  let sFinal: Shape = { ...s, points: np, calculatorResults: undefined };
+  if (closedPathRibbonDrag) {
+    const cl = extractPathRibbonCenterlineFromOutline(np);
+    if (cl.length >= 2) {
+      sFinal = {
+        ...sFinal,
+        calculatorInputs: {
+          ...shape.calculatorInputs,
+          pathCenterline: cl.map(p => ({ ...p })),
+          pathCenterlineOriginal: cl.map(p => ({ ...p })),
+        },
+      };
+    }
+  }
+  n[si] = sFinal;
+  return n;
+}
+
 /** Compute context menu position so it always fits on screen. Opens in the direction with most space. */
 function clampContextMenuPosition(clickX: number, clickY: number, menuWidth: number, menuHeight: number, padding = 8): { x: number; y: number } {
   const vw = window.innerWidth;
@@ -487,25 +1578,332 @@ function clampCenteredFixedDialog(clientX: number, clientY: number, dialogW: num
   return { left, top };
 }
 
+/** Kształty, których wszystkie wierzchołki są w zaznaczeniu prostokątem (to samo co „pełne” figury w marquee). */
+function getFullySelectedShapeIndicesFromPoints(selectedPoints: HitResult[], shapes: Shape[]): number[] {
+  const byShape = new Map<number, Set<number>>();
+  for (const sp of selectedPoints) {
+    if (!byShape.has(sp.shapeIdx)) byShape.set(sp.shapeIdx, new Set());
+    byShape.get(sp.shapeIdx)!.add(sp.pointIdx);
+  }
+  const out: number[] = [];
+  for (const [si, pis] of byShape) {
+    const pts = shapes[si]?.points;
+    if (!pts || pts.length === 0) continue;
+    if (pis.size === pts.length) out.push(si);
+  }
+  return out.sort((a, b) => a - b);
+}
+
+/** Vertex drag with optional rigid multi-select (rectangle / multi-point selection). */
+function buildPointDragInfoWithMultiSelect(
+  shapes: Shape[],
+  ptHit: HitResult,
+  world: Point,
+  selectedPoints: HitResult[],
+): { dragInfo: DragInfo; clearMultiSelection: boolean } {
+  const inMulti =
+    selectedPoints.length >= 2 &&
+    selectedPoints.some(sp => sp.shapeIdx === ptHit.shapeIdx && sp.pointIdx === ptHit.pointIdx);
+  let multiDragStartPositions: MultiDragVertexStart[] | undefined;
+  if (inMulti) {
+    const uniq = new Map<string, MultiDragVertexStart>();
+    for (const sp of selectedPoints) {
+      const k = `${sp.shapeIdx},${sp.pointIdx}`;
+      const sh = shapes[sp.shapeIdx];
+      if (!sh) continue;
+      const denseCache =
+        isLinearElement(sh) && isPolygonLinearStripOutline(sh) && sh.linearOpenStripOutline
+          ? computeLinearElementFillOutline(sh)
+          : undefined;
+      const p = getLinearElementVertexGripWorld(sh, sp.pointIdx, denseCache);
+      uniq.set(k, { shapeIdx: sp.shapeIdx, pointIdx: sp.pointIdx, x: p.x, y: p.y });
+    }
+    if (uniq.size >= 2) multiDragStartPositions = [...uniq.values()];
+  }
+  const clearMultiSelection = selectedPoints.length >= 2 && !inMulti;
+  const hitShape = shapes[ptHit.shapeIdx];
+  const denseForGrip =
+    hitShape && isLinearElement(hitShape) && isPolygonLinearStripOutline(hitShape) && hitShape.linearOpenStripOutline
+      ? computeLinearElementFillOutline(hitShape)
+      : undefined;
+  const startPoint = hitShape ? getLinearElementVertexGripWorld(hitShape, ptHit.pointIdx, denseForGrip) : { x: 0, y: 0 };
+  return {
+    dragInfo: {
+      shapeIdx: ptHit.shapeIdx,
+      pointIdx: ptHit.pointIdx,
+      startMouse: { ...world },
+      startPoint: { ...startPoint },
+      ...(multiDragStartPositions ? { multiDragStartPositions } : {}),
+    },
+    clearMultiSelection,
+  };
+}
+
+/** Path ribbon snapshots for rigid translate (slab/cobble pattern follows pathCenterline). */
+function snapshotPathRibbonForDrag(inp: Record<string, unknown> | undefined): { startPathCenterline?: Point[]; startPathCenterlineOriginal?: Point[] } {
+  const pc = inp?.pathCenterline as Point[] | undefined;
+  const po = inp?.pathCenterlineOriginal as Point[] | undefined;
+  return {
+    startPathCenterline: pc && pc.length >= 2 ? pc.map(p => ({ ...p })) : undefined,
+    startPathCenterlineOriginal: po && po.length >= 2 ? po.map(p => ({ ...p })) : undefined,
+  };
+}
+
+function applyPathRibbonSnapTranslation(
+  calculatorInputs: Record<string, unknown> | undefined,
+  snap: { startPathCenterline?: Point[]; startPathCenterlineOriginal?: Point[] },
+  dx: number,
+  dy: number
+): Record<string, unknown> | undefined {
+  if (!calculatorInputs) return calculatorInputs;
+  const { startPathCenterline: sPc, startPathCenterlineOriginal: sPo } = snap;
+  if ((!sPc || sPc.length < 2) && (!sPo || sPo.length < 2)) return calculatorInputs;
+  const next = { ...calculatorInputs };
+  if (sPc && sPc.length >= 2) {
+    next.pathCenterline = sPc.map(p => ({ x: p.x + dx, y: p.y + dy }));
+  }
+  if (sPo && sPo.length >= 2) {
+    next.pathCenterlineOriginal = sPo.map(p => ({ x: p.x + dx, y: p.y + dy }));
+  }
+  return next;
+}
+
+function linkedPathSnapshotForShape(shape: Shape, shapes: Shape[]): { shapeIdx: number; startPathCenterline?: Point[]; startPathCenterlineOriginal?: Point[] } | undefined {
+  const li = shape.linkedShapeIdx;
+  if (li == null || !shapes[li]) return undefined;
+  const snap = snapshotPathRibbonForDrag(shapes[li].calculatorInputs as Record<string, unknown>);
+  if (!snap.startPathCenterline && !snap.startPathCenterlineOriginal) return undefined;
+  return { shapeIdx: li, ...snap };
+}
+
+/** Layer-2 elements whose centroid lies inside any of the given L1 closed gardens (rigid garden drag). */
+function collectGardenDragChildrenForShapeIndices(shapeIndices: number[], shapes: Shape[]): { idx: number; startPoints: Point[]; startVizPieces: GrassPiece[] | null; startPathCenterline?: Point[]; startPathCenterlineOriginal?: Point[] }[] {
+  const children: { idx: number; startPoints: Point[]; startVizPieces: GrassPiece[] | null; startPathCenterline?: Point[]; startPathCenterlineOriginal?: Point[] }[] = [];
+  const seen = new Set<number>();
+  const indexSet = new Set(shapeIndices);
+  for (const si of shapeIndices) {
+    const hitShape = shapes[si];
+    if (!hitShape || hitShape.layer !== 1 || !hitShape.closed || hitShape.points.length < 3) continue;
+    for (let ci = 0; ci < shapes.length; ci++) {
+      if (indexSet.has(ci) || shapes[ci].layer !== 2) continue;
+      if (seen.has(ci)) continue;
+      const c = centroid(shapes[ci].points);
+      if (pointInPolygon(c, hitShape.points)) {
+        seen.add(ci);
+        children.push({
+          idx: ci,
+          startPoints: shapes[ci].points.map(p => ({ ...p })),
+          startVizPieces: shapes[ci].calculatorInputs?.vizPieces
+            ? (shapes[ci].calculatorInputs!.vizPieces as GrassPiece[]).map(p => ({ ...p }))
+            : null,
+          ...snapshotPathRibbonForDrag(shapes[ci].calculatorInputs as Record<string, unknown>),
+        });
+      }
+    }
+  }
+  return children;
+}
+
+/** One entry per vertex: frame on the edge ending at that vertex (same convention as Połącz ramki). */
+function remapFrameSidesEnabledAfterVertexInsert(
+  oldFse: boolean[] | undefined,
+  oldN: number,
+  edgeIdx: number,
+  insertIdx: number,
+): boolean[] | undefined {
+  if (!Array.isArray(oldFse) || oldFse.length === 0) return oldFse;
+  const padded = Array.from({ length: oldN }, (_, i) => oldFse[i] !== false);
+  const splitEndFlag = padded[(edgeIdx + 1) % oldN];
+  return [...padded.slice(0, insertIdx), splitEndFlag, ...padded.slice(insertIdx)];
+}
+
+type FrameLinkedEdgeEntry = { myEdgeIdx: number; otherShapeIdx: number; otherEdgeIdx: number };
+
+function shiftMyFrameLinksAfterEdgeInsert(links: FrameLinkedEdgeEntry[] | undefined, edgeIdx: number): FrameLinkedEdgeEntry[] | undefined {
+  if (!links || links.length === 0) return links;
+  return links.map(l => (l.myEdgeIdx > edgeIdx ? { ...l, myEdgeIdx: l.myEdgeIdx + 1 } : l));
+}
+
+/** Partner shapes store otherEdgeIdx → shift when target shape gains a vertex after edge `edgeIdx`. */
+function patchOtherShapesFrameLinksAfterVertexInsert(n: Shape[], targetSi: number, edgeIdx: number): void {
+  for (let i = 0; i < n.length; i++) {
+    if (i === targetSi) continue;
+    const sh = n[i];
+    const links = sh.calculatorInputs?.frameLinkedEdges as FrameLinkedEdgeEntry[] | undefined;
+    if (!links?.length) continue;
+    if (!links.some(l => l.otherShapeIdx === targetSi && l.otherEdgeIdx > edgeIdx)) continue;
+    const ci = { ...sh.calculatorInputs! };
+    ci.frameLinkedEdges = links.map(l =>
+      l.otherShapeIdx === targetSi && l.otherEdgeIdx > edgeIdx
+        ? { ...l, otherEdgeIdx: l.otherEdgeIdx + 1 }
+        : l
+    );
+    n[i] = { ...sh, calculatorInputs: ci };
+  }
+}
+
+/** After deleting shape index `deletedSi`, fix vertex links and frame links so indices stay valid. */
+function adjustLinkedGroupsAfterShapeDelete(groups: LinkedEntry[][], deletedSi: number): LinkedEntry[][] {
+  return groups
+    .map(g =>
+      g
+        .filter(e => e.si !== deletedSi)
+        .map(e => {
+          if (isArcEntry(e)) return e.si > deletedSi ? { ...e, si: e.si - 1 } : e;
+          return e.si > deletedSi ? { ...e, si: e.si - 1 } : e;
+        }),
+    )
+    .filter(g => g.length >= 2);
+}
+
+function remapShapesAfterShapeDelete(shapes: Shape[], deletedSi: number): Shape[] {
+  return shapes.map(sh => {
+    let out: Shape = sh;
+    const links = sh.calculatorInputs?.frameLinkedEdges as FrameLinkedEdgeEntry[] | undefined;
+    if (links?.length) {
+      const needsFix = links.some(l => l.otherShapeIdx === deletedSi || l.otherShapeIdx > deletedSi);
+      if (needsFix) {
+        const newLinks = links
+          .filter(l => l.otherShapeIdx !== deletedSi)
+          .map(l => (l.otherShapeIdx > deletedSi ? { ...l, otherShapeIdx: l.otherShapeIdx - 1 } : l));
+        out = {
+          ...out,
+          calculatorInputs: out.calculatorInputs ? { ...out.calculatorInputs, frameLinkedEdges: newLinks } : out.calculatorInputs,
+        };
+      }
+    }
+    const li = sh.linkedShapeIdx;
+    if (li == null) return out;
+    if (li === deletedSi) return { ...out, linkedShapeIdx: undefined };
+    if (li > deletedSi) return { ...out, linkedShapeIdx: li - 1 };
+    return out;
+  });
+}
+
+function shiftShapeIdxAfterDelete(idx: number | null, deletedSi: number): number | null {
+  if (idx == null) return null;
+  if (idx === deletedSi) return null;
+  return idx > deletedSi ? idx - 1 : idx;
+}
+
+/** One vertex removed → one edge gains arc control (same logic as context menu „Zmiana na arc point”). */
+function mergeOneVertexToArcPointState(
+  s: Shape,
+  pi: number,
+): { shape: Shape; newEdgeIdx: number; newArcId: string; mergedEdgeIdx: number } | null {
+  const pts = s.points;
+  const n = pts.length;
+  if (n < 4 || pi < 0 || pi >= n) return null;
+  const prev = (pi - 1 + n) % n;
+  const next = (pi + 1) % n;
+  const A = pts[prev];
+  const B = pts[next];
+  const V = pts[pi];
+  const { t: chordT } = worldToArcPoint(A, B, V);
+  const arcsPrev = (s.edgeArcs?.[prev] ?? []).map(a => ({ ...a, t: a.t * chordT }));
+  const arcsNext = (s.edgeArcs?.[pi] ?? []).map(a => ({ ...a, t: chordT + (1 - chordT) * a.t }));
+  const placeholder = { id: "__temp__", t: 0.5, offset: 0 };
+  const { t, offset } = worldToArcPointOnCurve(A, B, [...arcsPrev, ...arcsNext, placeholder], placeholder, V);
+  const newArc: ArcPoint = { id: crypto.randomUUID(), t, offset };
+  const newEdgeIdx = pi > 0 ? prev : n - 2;
+  const newPts = pts.filter((_, i) => i !== pi);
+  const arcsPrevM = (s.edgeArcs?.[prev] ?? []).map(a => ({ ...a, t: a.t * t }));
+  const arcsNextM = (s.edgeArcs?.[pi] ?? []).map(a => ({ ...a, t: t + (1 - t) * a.t }));
+  const merged = [...arcsPrevM, ...arcsNextM, newArc].sort((a, b) => a.t - b.t);
+  const oldArcs = s.edgeArcs || [];
+  const newEdgeArcs: (ArcPoint[] | null)[] = [];
+  for (let j = 0; j < n - 1; j++) {
+    if (j < prev) newEdgeArcs.push(oldArcs[j] ?? null);
+    else if (j === prev) newEdgeArcs.push(merged.length ? merged : null);
+    else newEdgeArcs.push(oldArcs[j + 1] ?? null);
+  }
+  let sh: Shape = {
+    ...s,
+    points: newPts,
+    edgeArcs: newEdgeArcs.some(a => a && a.length > 0) ? newEdgeArcs : undefined,
+  };
+  const nh = (s.heights || pts.map(() => 0)).filter((_, i) => i !== pi);
+  sh.heights = nh;
+  if (sh.elementType === "wall" && sh.calculatorInputs?.segmentHeights) {
+    const inputs = { ...sh.calculatorInputs };
+    const segHeights = [...(inputs.segmentHeights as Array<{ startH: number; endH: number }>)];
+    if (pi < segHeights.length) segHeights.splice(pi, 1);
+    inputs.segmentHeights = segHeights;
+    sh.calculatorInputs = inputs;
+  }
+  sh.lockedEdges = s.lockedEdges.filter(e => e.idx !== prev && e.idx !== pi).map(e => e.idx > pi ? { ...e, idx: e.idx - 1 } : e);
+  sh.lockedAngles = s.lockedAngles.filter(a => a !== pi).map(a => a > pi ? a - 1 : a);
+  if (isPolygonLinearStripOutline(sh) || (isPathElement(sh) && Boolean(sh.calculatorInputs?.pathIsOutline))) {
+    sh = applyStripParallelEdgeArcSync(sh);
+  }
+  return { shape: sh, newEdgeIdx, newArcId: newArc.id, mergedEdgeIdx: prev };
+}
+
+function mapLinkedGroupsAfterVertexToArc(
+  groups: LinkedEntry[][],
+  si: number,
+  n: number,
+  pi: number,
+  newEdgeIdx: number,
+  arcId: string,
+  mergedEdgeIdx: number,
+): LinkedEntry[][] {
+  return groups
+    .map(g =>
+      g.map(p => {
+        if (p.si === si && !isArcEntry(p) && p.pi === pi) return { si, pi: -1 as const, edgeIdx: newEdgeIdx, arcId };
+        if (p.si === si && !isArcEntry(p) && p.pi > pi) return { ...p, pi: p.pi - 1 };
+        if (p.si === si && isArcEntry(p) && p.edgeIdx > pi) return { ...p, edgeIdx: p.edgeIdx - 1 };
+        if (p.si === si && isArcEntry(p) && p.edgeIdx === mergedEdgeIdx) return p;
+        return p;
+      }),
+    )
+    .filter(g => g.length >= 2);
+}
+
 export default function MasterProject() {
   const navigate = useNavigate();
   const { planId: urlPlanId } = useParams<{ planId?: string }>();
   const { user } = useAuthStore();
   const currentPlanIdRef = useRef<string | null>(urlPlanId ?? null);
+  const [linkedEventId, setLinkedEventId] = useState<string | null>(null);
   const { t } = useTranslation(["project"]);
   const { currentTheme } = useTheme();
   const CC = currentTheme?.id === "light" ? C_LIGHT : C;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  /** Keep receiving pointer/mouse up after cursor leaves canvas (selection drag, pan, etc.). */
+  const canvasPointerCaptureIdRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mouseRafRef = useRef<number>(0);
+  /** Centerline (4 corners) at mousedown — secondary ribbon solvers use frozen outline anchors from snap. */
+  const pathRibbonDragStartClRef = useRef<Point[] | null>(null);
+  /** Outline points at mousedown (same length as shape.points) — length-neighbor anchor positions. */
+  const pathRibbonDragStartOutlineRef = useRef<Point[] | null>(null);
 
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [history, setHistory] = useState<Shape[][]>([]);
   const historyRef = useRef<Shape[][]>([]);
   const [selectedShapeIdx, setSelectedShapeIdx] = useState<number | null>(null);
+  /** Multi whole-shape selection (Ctrl+click). Empty = fall back to {@link selectedShapeIdx} only. */
+  const [selectedShapeIndices, setSelectedShapeIndices] = useState<number[]>([]);
+  /** Ostatnio zcommitowana lista — przy drugim Ctrl+klik zamknięcie handleMouseDown widzi jeszcze []; ref jest aktualizowany co render. */
+  const selectedShapeIndicesRef = useRef<number[]>([]);
+  selectedShapeIndicesRef.current = selectedShapeIndices;
+  const shapeSelectionSet = useMemo(() => {
+    if (selectedShapeIndices.length > 0) return new Set(selectedShapeIndices);
+    if (selectedShapeIdx !== null) return new Set([selectedShapeIdx]);
+    return new Set<number>();
+  }, [selectedShapeIndices, selectedShapeIdx]);
   const [mode, setMode] = useState<Mode>("select");
   const [drawingShapeIdx, setDrawingShapeIdx] = useState<number | null>(null);
   const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
+
+  useEffect(() => {
+    if (!dragInfo) {
+      pathRibbonDragStartClRef.current = null;
+      pathRibbonDragStartOutlineRef.current = null;
+    }
+  }, [dragInfo]);
   const [hoveredPoint, setHoveredPoint] = useState<HitResult | null>(null);
   const [hoveredEdge, setHoveredEdge] = useState<EdgeHitResult | null>(null);
   const [hoveredArcPoint, setHoveredArcPoint] = useState<{ shapeIdx: number; edgeIdx: number; arcPoint: ArcPoint } | null>(null);
@@ -599,7 +1997,12 @@ export default function MasterProject() {
   const [pathSegmentSideSelection, setPathSegmentSideSelection] = useState<{ shapeIdx: number; segmentSides: ("left" | "right" | null)[] } | null>(null);
   /** Path shapeIdx that was just drawn – triggers auto-calculate when PathCreationModal opens */
   const [pathJustFinishedForAutoCalc, setPathJustFinishedForAutoCalc] = useState<number | null>(null);
-  const [shapeCreationModal, setShapeCreationModal] = useState<{ type: "square" | "rectangle" | "triangle" | "trapezoid" } | null>(null);
+  const [shapeCreationModal, setShapeCreationModal] = useState<{ type: ShapeCreationKind } | null>(null);
+  const shapeCreationBackdropDismiss = useBackdropPointerDismiss(() => setShapeCreationModal(null), shapeCreationModal !== null);
+  const grassTrimBackdropDismiss = useBackdropPointerDismiss(() => setGrassTrimModal(null), grassTrimModal !== null);
+  const adjustmentFillBackdropDismiss = useBackdropPointerDismiss(() => setAdjustmentFillModal(null), adjustmentFillModal !== null);
+  const adjustmentExtendBackdropDismiss = useBackdropPointerDismiss(() => setAdjustmentExtendModal(null), adjustmentExtendModal !== null);
+  const adjustmentSpreadBackdropDismiss = useBackdropPointerDismiss(() => setAdjustmentSpreadModal(null), adjustmentSpreadModal !== null);
   const [setAngleModal, setSetAngleModal] = useState<{ shapeIdx: number; pointIdx: number } | null>(null);
   const [setAngleTargetValue, setSetAngleTargetValue] = useState("");
   const [setAngleMode, setSetAngleMode] = useState<"a" | "b" | "split">("split");
@@ -625,6 +2028,13 @@ export default function MasterProject() {
   const [showAllArcPoints, setShowAllArcPoints] = useState(false);
 
   const isMobile = useMemo(() => typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0), []);
+  const layersDropdownPanelStyle = useToolbarDropdownPanelStyle(layersDropdownRef, layersDropdownOpen, isMobile, 160);
+  const modeDropdownPanelStyle = useToolbarDropdownPanelStyle(modeDropdownRef, modeDropdownOpen, isMobile, 140);
+  const shapesDropdownPanelStyle = useToolbarDropdownPanelStyle(shapesDropdownRef, shapesDropdownOpen, isMobile, 140);
+  const pathDropdownPanelStyle = useToolbarDropdownPanelStyle(pathDropdownRef, pathDropdownOpen, isMobile, 140);
+  const linearDropdownPanelStyle = useToolbarDropdownPanelStyle(linearDropdownRef, linearDropdownOpen, isMobile, 140);
+  const stairsDropdownPanelStyle = useToolbarDropdownPanelStyle(stairsDropdownRef, stairsDropdownOpen, isMobile, 160);
+  const groundworkDropdownPanelStyle = useToolbarDropdownPanelStyle(groundworkDropdownRef, groundworkDropdownOpen, isMobile, 160);
   const pointRadiusEffective = isMobile ? POINT_RADIUS * 1.8 : POINT_RADIUS;
   const edgeHitThresholdEffective = isMobile ? EDGE_HIT_THRESHOLD * 1.8 : EDGE_HIT_THRESHOLD;
   const grassEdgeHitPxEffective = isMobile ? GRASS_EDGE_HIT_PX * 1.5 : GRASS_EDGE_HIT_PX;
@@ -632,13 +2042,22 @@ export default function MasterProject() {
   const [namePromptShapeIdx, setNamePromptShapeIdx] = useState<number | null>(null);
   const [projectSummaryContextMenu, setProjectSummaryContextMenu] = useState<{ shapeIdx: number; x: number; y: number } | null>(null);
   const [projectSummaryDisplayPos, setProjectSummaryDisplayPos] = useState<{ x: number; y: number } | null>(null);
-  const [shapeInputs, setShapeInputs] = useState({ side: "4", width: "6", height: "4", base: "5", top: "3", bottom: "6", name: "" });
+  const [shapeInputs, setShapeInputs] = useState({
+    side: "4",
+    width: "6",
+    height: "4",
+    base: "5",
+    top: "3",
+    bottom: "6",
+    diameter: "4",
+    name: "",
+  });
 
   const screenToWorld = useCallback((sx: number, sy: number): Point => ({ x: (sx - pan.x) / zoom, y: (sy - pan.y) / zoom }), [pan, zoom]);
   const worldToScreen = useCallback((wx: number, wy: number): Point => ({ x: wx * zoom + pan.x, y: wy * zoom + pan.y }), [pan, zoom]);
 
   const transformStartVizPiecesRef = useRef<GrassPiece[] | null>(null);
-  const gardenDragChildrenRef = useRef<{ idx: number; startPoints: Point[]; startVizPieces: GrassPiece[] | null }[]>([]);
+  const gardenDragChildrenRef = useRef<{ idx: number; startPoints: Point[]; startVizPieces: GrassPiece[] | null; startPathCenterline?: Point[]; startPathCenterlineOriginal?: Point[] }[]>([]);
   const projectSummaryMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const arcSnapLockedTargetRef = useRef<{ si: number; ei: number; arcId: string } | null>(null);
@@ -653,10 +2072,19 @@ export default function MasterProject() {
     return shapes[si]?.layer === activeLayer;
   }, [shapes, activeLayer]);
 
+  /** Include Layer 1 arc handles when snapping arc points in Layer 2 (garden reference). */
+  const isOnActiveLayerForArcSnap = useCallback(
+    (si: number): boolean => {
+      if (activeLayer === 2 && shapes[si]?.layer === 1) return true;
+      return isOnActiveLayer(si);
+    },
+    [shapes, activeLayer, isOnActiveLayer],
+  );
+
   /** Cache of arc point positions (on curve) for snap during drag */
   const arcPointPositionCache = useMemo(
-    () => buildArcPointPositionCache(shapes, isOnActiveLayer),
-    [shapes, isOnActiveLayer]
+    () => buildArcPointPositionCache(shapes, isOnActiveLayerForArcSnap),
+    [shapes, isOnActiveLayerForArcSnap],
   );
 
   /** For right-click scale: Layer 2 shapes when activeLayer=3, else normal active layer */
@@ -666,6 +2094,14 @@ export default function MasterProject() {
     if (activeLayer === 5) return shapes[si]?.layer === 1 || shapes[si]?.layer === 2;
     return shapes[si]?.layer === activeLayer;
   }, [shapes, activeLayer]);
+
+  /** For linking / snap-to-neighbor: map canvas toolbar layer to shape.layer (L3 edits L2; L5 uses L1+L2). */
+  const shapeLayerMatchesActiveCanvasLayer = useCallback((layer: LayerID): boolean => {
+    if (activeLayer === 3) return layer === 2;
+    if (activeLayer === 5) return layer === 1 || layer === 2;
+    if (activeLayer === 4) return layer === 2;
+    return layer === activeLayer;
+  }, [activeLayer]);
 
   useEffect(() => {
     if (!pointOffsetAlongLinePick) return;
@@ -703,22 +2139,67 @@ export default function MasterProject() {
     setDrawingShapeIdx(null);
   }, []);
 
+  /** Remove whole L2 shape and clear selection / pattern / object card (same as PPM „usuń” + Delete). */
+  const deleteLayer2ElementFromContext = useCallback((si: number) => {
+    saveHistory();
+    setShapes(p => remapShapesAfterShapeDelete(p.filter((_, i) => i !== si), si));
+    setLinkedGroups(prev => adjustLinkedGroupsAfterShapeDelete(prev, si));
+    setSelectedShapeIdx(null);
+    setSelectedPattern(prev => {
+      if (!prev) return null;
+      if (prev.shapeIdx === si) return null;
+      if (prev.shapeIdx > si) return { ...prev, shapeIdx: prev.shapeIdx - 1 };
+      return prev;
+    });
+    setObjectCardShapeIdx(prev => shiftShapeIdxAfterDelete(prev, si));
+    setResultsModalShapeIdx(prev => shiftShapeIdxAfterDelete(prev, si));
+    setContextMenu(null);
+  }, [saveHistory]);
+
   const onCalculatorInputsChange = useCallback((idx: number, inputs: Record<string, any>) => {
     setShapes(p => {
       const n = [...p];
       const s = n[idx];
       if (!s) return p;
       let merged = { ...(s.calculatorInputs ?? {}), ...inputs };
+      let allowPathWidthFromInputs = false;
       if (isPathElement(s)) {
         const pathKeys = ["pathWidthM", "pathCenterline", "pathSegmentSides", "pathIsOutline", "pathCenterlineOriginal", "vizSlabWidth", "vizSlabLength", "pathWidthMode"];
+        allowPathWidthFromInputs =
+          inputs.pathWidthM != null && inputs.pathWidthMode !== undefined && inputs.pathWidthMode !== null;
         for (const k of pathKeys) {
-          if (s.calculatorInputs?.[k] !== undefined) merged[k] = s.calculatorInputs[k];
+          if (s.calculatorInputs?.[k] === undefined) continue;
+          if (allowPathWidthFromInputs && (k === "pathWidthM" || k === "pathWidthMode") && inputs[k] !== undefined) {
+            merged[k] = inputs[k] as never;
+            continue;
+          }
+          merged[k] = s.calculatorInputs[k];
         }
         if (merged.pathWidthM == null && s.calculatorInputs?.pathWidthCm != null) {
           merged.pathWidthM = Number(s.calculatorInputs.pathWidthCm) / 100;
         }
       }
-      n[idx] = { ...s, calculatorInputs: merged };
+      let nextShape: Shape = { ...s, calculatorInputs: merged };
+      if (
+        allowPathWidthFromInputs &&
+        isPathElement(s) &&
+        merged.pathIsOutline &&
+        Array.isArray(merged.pathCenterline) &&
+        (merged.pathCenterline as Point[]).length >= 2
+      ) {
+        const prevW = Number(s.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
+        const nextW = Number(merged.pathWidthM ?? prevW) || prevW;
+        if (Math.abs(nextW - prevW) > 1e-5) {
+          const cl = merged.pathCenterline as Point[];
+          const segmentSides = merged.pathSegmentSides as ("left" | "right")[] | undefined;
+          const outline =
+            Array.isArray(segmentSides) && segmentSides.length === cl.length - 1
+              ? computePathOutlineFromSegmentSides(cl, segmentSides, nextW)
+              : computeThickPolyline(cl, toPixels(nextW));
+          if (outline.length >= 3) nextShape = { ...nextShape, points: outline };
+        }
+      }
+      n[idx] = nextShape;
       return n;
     });
   }, []);
@@ -782,21 +2263,13 @@ export default function MasterProject() {
     };
     function applyPayload(d: { shapes?: Shape[]; projectSettings?: ProjectSettings; pan?: Point; zoom?: number; activeLayer?: ActiveLayer; linkedGroups?: LinkedEntry[][] }) {
       if (d.shapes?.length) {
-        let migrated = d.shapes.map(s => ((s as { layer?: number }).layer === 0 ? { ...s, layer: 1 as LayerID } : s));
-        migrated = migrated.map(s => {
-          if (!isPolygonLinearElement(s) || s.closed || s.points.length < 2) return s;
-          const pathPts = getLinearElementPath(s);
-          const thicknessM = getPolygonThicknessM(s);
-          const outline = computeThickPolyline(pathPts, toPixels(thicknessM));
-          if (outline.length < 3) return s;
-          const segLengths = polygonToSegmentLengths(outline);
-          const inputs: Record<string, unknown> = { ...s.calculatorInputs, segmentLengths: segLengths };
-          if (s.elementType === "wall") {
-            const defaultH = parseFloat(String(s.calculatorInputs?.height ?? "1")) || 1;
-            inputs.segmentHeights = segLengths.map(() => ({ startH: defaultH, endH: defaultH }));
-          }
-          return { ...s, points: outline, closed: true, calculatorInputs: inputs };
-        });
+        const migrated = ensureCanvasElementIds(
+          d.shapes.map(s => {
+            let x: Shape = (s as { layer?: number }).layer === 0 ? { ...(s as Shape), layer: 1 as LayerID } : (s as Shape);
+            x = migrateLegacyCirclePolygon(x);
+            return x;
+          })
+        );
         setShapes(migrated);
         historyRef.current = [];
         setHistory([]);
@@ -809,6 +2282,18 @@ export default function MasterProject() {
       if (Array.isArray(d.linkedGroups)) setLinkedGroups(d.linkedGroups);
     }
     load();
+  }, [urlPlanId]);
+
+  useEffect(() => {
+    if (!urlPlanId) {
+      setLinkedEventId(null);
+      return;
+    }
+    const cid = useAuthStore.getState().getCompanyId();
+    if (!cid) return;
+    getPlanRow(supabase, urlPlanId, cid)
+      .then((row) => setLinkedEventId(row?.event_id ?? null))
+      .catch(() => setLinkedEventId(null));
   }, [urlPlanId]);
 
   // Auto-open project card on new project (when canvas loads with empty project)
@@ -980,8 +2465,17 @@ export default function MasterProject() {
               changed = true;
               return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [], vizFullSlabCount: fullSlabCount, vizWasteAreaCm2: wasteAreaCm2, vizReusedAreaCm2: reusedAreaCm2, cutSlabs: String(cutSlabCount) } };
             }
-          } else if (shape.calculatorType === "paving" && (inputs?.blockWidthCm || inputs?.blockLengthCm)) {
-            const { fullBlockCount, cutBlockCount, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(pathShape, inputs);
+          } else if (
+            shape.calculatorType === "paving" &&
+            (inputs?.blockWidthCm || inputs?.blockLengthCm || inputs?.monoblockLayoutMode === "mix")
+          ) {
+            const usePathCobble = inputs?.pathCenterline && !inputs?.monoblockLayoutMode?.includes("mix");
+            const cutsResult = usePathCobble
+              ? computePathCobbleCuts(pathShape, inputs)
+              : computeCobblestoneCuts(pathShape, inputs);
+            const fullBlockCount = "fullSlabCount" in cutsResult ? (cutsResult as any).fullSlabCount : (cutsResult as any).fullBlockCount;
+            const cutBlockCount = "cutSlabCount" in cutsResult ? (cutsResult as any).cutSlabCount : (cutsResult as any).cutBlockCount;
+            const { wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = cutsResult;
             const cur = shape.calculatorInputs;
             if (
               !arrEqual(cur?.vizWasteSatisfied as string[] | undefined, wasteSatisfiedPositions ?? []) ||
@@ -1009,7 +2503,15 @@ export default function MasterProject() {
           return { ...shape, calculatorInputs: { ...shape.calculatorInputs, vizWasteSatisfied: wasteSatisfiedPositions ?? [], vizFullSlabCount: fullSlabCount, vizWasteAreaCm2: wasteAreaCm2, vizReusedAreaCm2: reusedAreaCm2, cutSlabs: String(cutSlabCount) } };
         }
       }
-      if (!isPathElement(shape) && shape.calculatorType === "paving" && shape.closed && shape.points.length >= 3 && (shape.calculatorInputs?.blockWidthCm || shape.calculatorInputs?.blockLengthCm)) {
+      if (
+        !isPathElement(shape) &&
+        shape.calculatorType === "paving" &&
+        shape.closed &&
+        shape.points.length >= 3 &&
+        (shape.calculatorInputs?.blockWidthCm ||
+          shape.calculatorInputs?.blockLengthCm ||
+          shape.calculatorInputs?.monoblockLayoutMode === "mix")
+      ) {
         const inputs = { ...shape.calculatorInputs };
         const { fullBlockCount, cutBlockCount, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(shape, inputs);
         const cur = shape.calculatorInputs;
@@ -1083,41 +2585,57 @@ export default function MasterProject() {
       ctx.setLineDash([]);
     }
 
-    // Effective mouse with shift: paths use soft snap (any angle), others use strict 45/90
+    // Effective mouse with shift: strict 45°/90° from last vertex (same for path, wall, fence, etc.)
     const eMouseRaw = (() => {
       if (!shiftHeld || drawingShapeIdx === null || !shapes[drawingShapeIdx]) return mouseWorld;
-      const pts = shapes[drawingShapeIdx].points;
-      const s = shapes[drawingShapeIdx];
+      const ds = shapes[drawingShapeIdx];
+      const pts = ds.points;
       if (pts.length === 0) return mouseWorld;
-      return isPathElement(s) ? snapTo45Soft(pts[pts.length - 1], mouseWorld) : snapTo45(pts[pts.length - 1], mouseWorld);
+      const chain = wallBaselineChainForDrawing(ds, pts);
+      const lastRef = chain[chain.length - 1]!;
+      return snapTo45(lastRef, mouseWorld);
     })();
 
-    // Smart guides: free polygon = only current chain; fence/wall/kerb/foundation/path = L1+L2 vertices + edge snap (outside) on closed refs
-    const SMART_GUIDE_SNAP_PX = 8;
-    const smartGuides: { axis: "x" | "y"; worldValue: number; ptIdx: number }[] = [];
+    // Smart guides: free polygon = magnet + axis-align to current chain; linear/path = magnet (+ thick-edge) via snapWorldPointForLinearDrawing
+    const smartGuides: { axis: "x" | "y"; worldValue: number; ptIdx: number; refWorld?: Point }[] = [];
     let eMouse = { ...eMouseRaw };
     if (drawingShapeIdx !== null && shapes[drawingShapeIdx]) {
       const drawPts = shapes[drawingShapeIdx].points;
       const ds = shapes[drawingShapeIdx];
+      const snapChain = wallBaselineChainForDrawing(ds, drawPts);
       if (drawPts.length > 0) {
         if (isLinearElement(ds) || isPathElement(ds)) {
-          eMouse = snapWorldPointForLinearDrawing(eMouseRaw, {
+          const preLinear = shouldSkipSnapPointToDrawingChainAxesForStrip(ds)
+            ? eMouseRaw
+            : applyVertexAxisAlignWhileDrawing(eMouseRaw, shapes, drawingShapeIdx, zoom);
+          eMouse = snapWorldPointForLinearDrawing(preLinear, {
             drawingShapeIdx,
             shapes,
-            localPtChain: drawPts,
+            localPtChain: snapChain,
             drawingShape: ds,
             zoom,
             viewFilter,
             activeLayer,
-          });
+          }).point;
+          if (!shouldSkipSnapPointToDrawingChainAxesForStrip(ds)) {
+            eMouse = snapPointToDrawingChainAxes(eMouse, snapChain, zoom);
+          }
         } else {
-          const sgThreshold = SMART_GUIDE_SNAP_PX / zoom;
+          eMouse = snapDrawingMagnet(eMouseRaw, {
+            drawingShapeIdx,
+            shapes,
+            localPtChain: drawPts,
+            zoom,
+            viewFilter,
+            activeLayer,
+          });
+          const sgThreshold = DRAW_SMART_GUIDE_PX / zoom;
           let bestDx = sgThreshold, bestDy = sgThreshold;
           let snapXVal: number | null = null, snapYVal: number | null = null;
           let snapXIdx = -1, snapYIdx = -1;
           for (let i = 0; i < drawPts.length; i++) {
-            const dx = Math.abs(eMouseRaw.x - drawPts[i].x);
-            const dy = Math.abs(eMouseRaw.y - drawPts[i].y);
+            const dx = Math.abs(eMouse.x - drawPts[i].x);
+            const dy = Math.abs(eMouse.y - drawPts[i].y);
             if (dx < bestDx) { bestDx = dx; snapXVal = drawPts[i].x; snapXIdx = i; }
             if (dy < bestDy) { bestDy = dy; snapYVal = drawPts[i].y; snapYIdx = i; }
           }
@@ -1125,10 +2643,16 @@ export default function MasterProject() {
           if (snapYVal !== null) { eMouse.y = snapYVal; smartGuides.push({ axis: "y", worldValue: snapYVal, ptIdx: snapYIdx }); }
         }
         if (isLinearElement(ds) || isPathElement(ds)) {
-          const sgThreshold = SMART_GUIDE_SNAP_PX / zoom;
-          for (let i = 0; i < drawPts.length; i++) {
-            if (Math.abs(eMouse.x - drawPts[i].x) < sgThreshold) smartGuides.push({ axis: "x", worldValue: drawPts[i].x, ptIdx: i });
-            if (Math.abs(eMouse.y - drawPts[i].y) < sgThreshold) smartGuides.push({ axis: "y", worldValue: drawPts[i].y, ptIdx: i });
+          const sgThreshold = DRAW_SMART_GUIDE_PX / zoom;
+          for (let i = 0; i < snapChain.length; i++) {
+            if (Math.abs(eMouse.x - snapChain[i].x) < sgThreshold) smartGuides.push({ axis: "x", worldValue: snapChain[i].x, ptIdx: i });
+            if (Math.abs(eMouse.y - snapChain[i].y) < sgThreshold) smartGuides.push({ axis: "y", worldValue: snapChain[i].y, ptIdx: i });
+          }
+          // Strip tools skip axis snap (edge-follow); still show green guides to other vertices like terrain / free polygon
+          if (shouldSkipSnapPointToDrawingChainAxesForStrip(ds)) {
+            const { xRef, yRef } = findVertexAxisAlignRefs(eMouse, shapes, drawingShapeIdx, zoom);
+            if (xRef) smartGuides.push({ axis: "x", worldValue: xRef.x, ptIdx: -1, refWorld: { ...xRef } });
+            if (yRef) smartGuides.push({ axis: "y", worldValue: yRef.y, ptIdx: -1, refWorld: { ...yRef } });
           }
         }
       }
@@ -1141,18 +2665,49 @@ export default function MasterProject() {
       const draggedPt = shapes[dragInfo.shapeIdx]?.points[dragInfo.pointIdx];
       if (draggedPt) {
         const threshold = DRAG_GUIDE_SNAP_PX / zoom;
+        const dragSi = dragInfo.shapeIdx;
+        const dragPi = dragInfo.pointIdx;
+        /** When several vertices share the same axis (e.g. vertical wall), pick the neighbor along the chain, not index 0. */
+        const pickBetterAxisAlign = (
+          d: number,
+          si: number,
+          pi: number,
+          bestD: number,
+          bestSi: number,
+          bestPi: number,
+        ): boolean => {
+          const eps = 1e-12;
+          if (d < bestD - eps) return true;
+          if (Math.abs(d - bestD) > eps) return false;
+          const sameNew = si === dragSi;
+          const sameOld = bestSi === dragSi;
+          if (sameNew && sameOld) return Math.abs(pi - dragPi) < Math.abs(bestPi - dragPi);
+          if (sameNew && !sameOld) return true;
+          if (!sameNew && sameOld) return false;
+          return false;
+        };
         let bestDx = threshold, bestDy = threshold;
         let snapXVal: number | null = null, snapYVal: number | null = null;
         let snapXSi = -1, snapYSi = -1, snapXPi = -1, snapYPi = -1;
         for (let si = 0; si < shapes.length; si++) {
           const pts = shapes[si].points;
           for (let pi = 0; pi < pts.length; pi++) {
-            if (si === dragInfo.shapeIdx && pi === dragInfo.pointIdx) continue;
+            if (si === dragSi && pi === dragPi) continue;
             const pt = pts[pi];
             const dx = Math.abs(draggedPt.x - pt.x);
             const dy = Math.abs(draggedPt.y - pt.y);
-            if (dx < bestDx) { bestDx = dx; snapXVal = pt.x; snapXSi = si; snapXPi = pi; }
-            if (dy < bestDy) { bestDy = dy; snapYVal = pt.y; snapYSi = si; snapYPi = pi; }
+            if (pickBetterAxisAlign(dx, si, pi, bestDx, snapXSi, snapXPi)) {
+              bestDx = dx;
+              snapXVal = pt.x;
+              snapXSi = si;
+              snapXPi = pi;
+            }
+            if (pickBetterAxisAlign(dy, si, pi, bestDy, snapYSi, snapYPi)) {
+              bestDy = dy;
+              snapYVal = pt.y;
+              snapYSi = si;
+              snapYPi = pi;
+            }
           }
         }
         if (snapXVal !== null) dragAlignGuides.push({ axis: "x", worldValue: snapXVal, shapeIdx: snapXSi, ptIdx: snapXPi });
@@ -1175,6 +2730,7 @@ export default function MasterProject() {
 
     // ── Draw inactive layer shapes first (dimmed) ─────────
     shapes.forEach((shape, si) => {
+      if (shape.removedFromCanvas) return;
       if (activeLayer === 1 || activeLayer === 2) {
         if (shape.layer === activeLayer) return;
       }
@@ -1287,27 +2843,13 @@ export default function MasterProject() {
         }
       }
 
-      if (shape.closed && pts.length >= 3) {
-        const hasPatternLabel = shape.layer === 2 && (
-          ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth) ||
-          (shape.calculatorType === "paving" && shape.calculatorInputs) ||
-          (shape.calculatorType === "grass" && (shape.calculatorInputs?.vizPieces?.length ?? 0) > 0)
-        );
-        if (!hasPatternLabel) {
-          const effPts = getCachedPoly(si);
-          const area = areaM2(effPts);
-          const anchor = labelAnchorInsidePolygon(shape.points);
-          const sc = worldToScreen(anchor.x, anchor.y);
-          ctx.font = "bold 14px 'JetBrains Mono',monospace";
-          ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y);
-        }
-      }
+      // No centroid m² here for dimmed L1/L2 — L1 garden has no area badge; L2 uses main pass / patterns.
     });
 
     // ── Layer 3: draw patterns on top of grey Layer 2 shapes (hidden in geodesy mode) ──
     if (activeLayer === 3 && !geodesyEnabled) {
       shapes.forEach((shape, si) => {
+        if (shape.removedFromCanvas) return;
         if (!passesViewFilter(shape, viewFilter, activeLayer)) return;
         if (shape.layer !== 2) return;
         if (isPathElement(shape)) {
@@ -1315,8 +2857,9 @@ export default function MasterProject() {
           const outline = getPathPolygon(shape);
           if (outline.length < 3) return;
           const pathShape = { ...shape, points: outline, closed: true } as Shape;
-          const isSel = si === selectedShapeIdx;
+          const isSel = shapeSelectionSet.has(si);
           let pathSlabDrawn = false;
+          let pathCobbleDrawn = false;
           ctx.beginPath();
           const s0 = worldToScreen(outline[0].x, outline[0].y);
           ctx.moveTo(s0.x, s0.y);
@@ -1331,21 +2874,27 @@ export default function MasterProject() {
             const pathOffsetBySegOverride = (patternDragInfo?.shapeIdx === si && patternDragInfo?.isPath && pathPatternLongOffsetPreview != null)
               ? { [pathPatternLongOffsetPreview.segmentIdx]: pathPatternLongOffsetPreview.value }
               : undefined;
-            pathSlabDrawn = drawPathSlabPattern(ctx, pathShape, worldToScreen, zoom, true, !isSel, pathOffsetBySegOverride);
+            pathSlabDrawn = drawPathSlabPattern(ctx, pathShape, worldToScreen, zoom, true, !isSel, pathOffsetBySegOverride, shapes);
             if (!pathSlabDrawn) {
               drawSlabPattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel);
             }
-            if (shape.calculatorInputs?.framePieceWidthCm) {
-              drawSlabFrame(ctx, pathShape, worldToScreen, zoom);
+            if (shouldDrawSlabFrameViz(shape.calculatorInputs)) {
+              drawSlabFrame(ctx, pathShape, worldToScreen, zoom, shapes);
             }
           } else if (shape.calculatorType === "paving" && shape.calculatorInputs) {
+            const pathOffsetBySegOverride = (patternDragInfo?.shapeIdx === si && patternDragInfo?.isPath && pathPatternLongOffsetPreview != null)
+              ? { [pathPatternLongOffsetPreview.segmentIdx]: pathPatternLongOffsetPreview.value }
+              : undefined;
+            pathCobbleDrawn = drawPathCobblePattern(ctx, pathShape, worldToScreen, zoom, true, !isSel, pathOffsetBySegOverride, shapes);
+            if (!pathCobbleDrawn) {
+              const pathOffsetOverride = (patternDragInfo?.shapeIdx === si && patternDragInfo?.isPath && pathPatternLongOffsetPreview != null && pathPatternLongOffsetPreview.segmentIdx === 0)
+                ? pathPatternLongOffsetPreview.value
+                : undefined;
+              drawCobblestonePattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel, pathOffsetOverride);
+            }
             if (shape.calculatorInputs?.addFrameToMonoblock && shape.calculatorInputs?.framePieceWidthCm) {
               drawMonoblockFrame(ctx, pathShape, worldToScreen, zoom);
             }
-            const pathOffsetOverride = (patternDragInfo?.shapeIdx === si && patternDragInfo?.isPath && pathPatternLongOffsetPreview != null && pathPatternLongOffsetPreview.segmentIdx === 0)
-              ? pathPatternLongOffsetPreview.value
-              : undefined;
-            drawCobblestonePattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel, pathOffsetOverride);
           }
           ctx.strokeStyle = isSel ? "rgba(108,92,231,0.8)" : CC.layer2Edge;
           ctx.lineWidth = isSel ? 2.5 : 1.8;
@@ -1358,13 +2907,40 @@ export default function MasterProject() {
           }
           ctx.closePath();
           ctx.stroke();
+          if (
+            shape.calculatorInputs?.pathIsOutline &&
+            outline.length >= 3 &&
+            (shapeSelectionSet.has(si) || si === objectCardShapeIdx || selectedPattern?.shapeIdx === si)
+          ) {
+            const vtxR = POINT_RADIUS + 4;
+            for (let vi = 0; vi < outline.length; vi++) {
+              const sp = worldToScreen(outline[vi].x, outline[vi].y);
+              ctx.beginPath();
+              ctx.arc(sp.x, sp.y, vtxR + 3, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(255,255,255,0.95)";
+              ctx.fill();
+              ctx.strokeStyle = "#1a2538";
+              ctx.lineWidth = 2;
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.arc(sp.x, sp.y, vtxR, 0, Math.PI * 2);
+              ctx.fillStyle = CC.accent;
+              ctx.fill();
+              ctx.strokeStyle = CC.point;
+              ctx.lineWidth = 2;
+              ctx.stroke();
+            }
+          }
           if ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth && pathSlabDrawn) {
             drawPathSlabLabel(ctx, pathShape, worldToScreen, zoom);
+          }
+          if (shape.calculatorType === "paving" && shape.calculatorInputs && pathCobbleDrawn) {
+            drawPathCobbleLabel(ctx, pathShape, worldToScreen, zoom);
           }
           return;
         }
         if (!shape.closed || shape.points.length < 3) return;
-        const isSel = si === selectedShapeIdx;
+        const isSel = shapeSelectionSet.has(si);
         const slabOffset = patternDragInfo?.shapeIdx === si && patternDragInfo?.type === "slab" ? (patternDragPreview ?? patternDragInfo.startOffset) : undefined;
         const cobbleOffset = patternDragInfo?.shapeIdx === si && patternDragInfo?.type === "cobblestone" ? (patternDragPreview ?? patternDragInfo.startOffset) : undefined;
         const slabDir = patternRotateInfo?.shapeIdx === si && patternRotateInfo?.type === "slab" ? (patternRotatePreview ?? patternRotateInfo.startDirectionDeg) : undefined;
@@ -1375,23 +2951,26 @@ export default function MasterProject() {
         }
         if ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth) {
           drawSlabPattern(ctx, shape, worldToScreen, zoom, true, slabOffset, slabDir, !isSel);
-          if (shape.calculatorInputs?.framePieceWidthCm) {
-            drawSlabFrame(ctx, shape, worldToScreen, zoom);
+          if (shouldDrawSlabFrameViz(shape.calculatorInputs)) {
+            drawSlabFrame(ctx, shape, worldToScreen, zoom, shapes);
           }
         }
         if (shape.calculatorType === "paving" && shape.closed) {
+          drawCobblestonePattern(ctx, shape, worldToScreen, zoom, true, cobbleOffset, cobbleDir, !isSel);
           if (shape.calculatorInputs?.addFrameToMonoblock && shape.calculatorInputs?.framePieceWidthCm) {
             drawMonoblockFrame(ctx, shape, worldToScreen, zoom);
           }
-          drawCobblestonePattern(ctx, shape, worldToScreen, zoom, true, cobbleOffset, cobbleDir, !isSel);
         }
         if (shape.calculatorType === "grass") {
-          if (shape.calculatorInputs?.framePieceWidthCm) {
-            drawSlabFrame(ctx, shape, worldToScreen, zoom);
+          if (shouldDrawSlabFrameViz(shape.calculatorInputs)) {
+            drawSlabFrame(ctx, shape, worldToScreen, zoom, shapes);
           }
           if ((shape.calculatorInputs?.vizPieces?.length ?? 0) > 0) {
             drawGrassPieces(ctx, shape, worldToScreen, zoom, isSel, grassScaleInfo, si, isExportingRef.current, grassDir);
           }
+        }
+        if (shape.calculatorType === "decorativeStones") {
+          drawGravelPattern(ctx, shape, worldToScreen, zoom, !isSel);
         }
       });
       if (patternDragInfo && patternAlignedEdges.length > 0) {
@@ -1461,6 +3040,7 @@ export default function MasterProject() {
         }
       }
       shapes.forEach((shape, si) => {
+        if (shape.removedFromCanvas) return;
         if (!passesViewFilter(shape, viewFilter, activeLayer)) return;
         if (shape.layer !== 2 || !shape.closed || shape.points.length < 3) return;
         if (selectedPattern?.shapeIdx !== si || (selectedPattern?.type !== "slab" && selectedPattern?.type !== "cobblestone" && selectedPattern?.type !== "grass")) return;
@@ -1491,21 +3071,23 @@ export default function MasterProject() {
     }
 
     // ── Layer 4: Preparation — excavation breakdown on L2 elements ──
-    const PREPARATION_CALC_TYPES = ["slab", "paving", "grass", "turf", "foundation"];
+    const PREPARATION_CALC_TYPES = ["slab", "paving", "grass", "turf", "decorativeStones", "foundation"];
     if (activeLayer === 4) {
       shapes.forEach((shape) => {
+        if (shape.removedFromCanvas) return;
         if (shape.layer !== 2) return;
         if (!PREPARATION_CALC_TYPES.includes(shape.calculatorType ?? "")) return;
         drawExcavationLayers(ctx, shape, worldToScreen);
       });
       // Groundwork linear elements drawn on top of excavation
       shapes.forEach((shape, si) => {
+        if (shape.removedFromCanvas) return;
         if (shape.layer !== 2 || !isGroundworkLinear(shape)) return;
         if (!passesViewFilter(shape, viewFilter, activeLayer)) return;
         const pts = shape.points;
         if (pts.length < 1) return;
         if (pts.length >= 2) {
-          drawLinearElement(ctx, shape, worldToScreen, zoom, si === selectedShapeIdx, false, undefined);
+          drawLinearElement(ctx, shape, worldToScreen, zoom, shapeSelectionSet.has(si), false, undefined);
         }
         pts.forEach((p, pi) => {
           const sp = worldToScreen(p.x, p.y);
@@ -1548,6 +3130,7 @@ export default function MasterProject() {
     ) : undefined;
 
     shapes.forEach((shape, si) => {
+      if (shape.removedFromCanvas) return;
       if (!passesViewFilter(shape, viewFilter, activeLayer)) return;
       if (activeLayer === 5) { if (shape.layer !== 1 && shape.layer !== 2) return; }
       else if (activeLayer === 3) { if (shape.layer !== 2) return; }
@@ -1556,7 +3139,7 @@ export default function MasterProject() {
       if (activeLayer === 2 && shape.elementType === "foundation") return;
       const pts = shape.points;
       if (pts.length < 1) return;
-      const isSel = si === selectedShapeIdx;
+      const isSel = shapeSelectionSet.has(si);
       const isDraw = si === drawingShapeIdx;
       const isOpen = !shape.closed;
       const isL2 = shape.layer === 2;
@@ -1564,8 +3147,17 @@ export default function MasterProject() {
       const edgeHovColor = isOpen ? CC.openHover : isL2 ? CC.layer2 : CC.edgeHover;
 
       if (isPathElement(shape)) {
-        const pts = (shape.calculatorInputs?.pathIsOutline && shape.calculatorInputs?.pathCenterlineOriginal) ? (shape.calculatorInputs.pathCenterlineOriginal as Point[]) : (shape.calculatorInputs?.pathIsOutline && shape.calculatorInputs?.pathCenterline ? (shape.calculatorInputs.pathCenterline as Point[]) : shape.points);
         const outline = getPathPolygon(shape);
+        const derivedRibbonCl = getPathRibbonDerivedCenterline(shape);
+        // Match slab/cobble pattern: stored pathCenterline (ribbon edge) — not derived mid-outline, so dashed line aligns with pattern layout.
+        const pts: Point[] =
+          shape.calculatorInputs?.pathIsOutline && shape.calculatorInputs?.pathCenterlineOriginal
+            ? (shape.calculatorInputs.pathCenterlineOriginal as Point[])
+            : shape.calculatorInputs?.pathIsOutline && shape.calculatorInputs?.pathCenterline
+              ? (shape.calculatorInputs.pathCenterline as Point[])
+              : derivedRibbonCl && derivedRibbonCl.length >= 2
+                ? derivedRibbonCl
+                : shape.points;
         const pointsToShow = (shape.calculatorInputs?.pathIsOutline && shape.closed && outline.length >= 3) ? outline : pts;
         const inSegmentSideSelection = pathSegmentSideSelection && pathSegmentSideSelection.shapeIdx === si;
         if (inSegmentSideSelection) {
@@ -1574,9 +3166,14 @@ export default function MasterProject() {
           const animT = (Date.now() % 1200) / 1200;
           const dashOffset = animT * 12;
           const selSides = pathSegmentSideSelection!.segmentSides;
-          for (let i = 0; i < pts.length - 1; i++) {
-            const A = pts[i];
-            const B = pts[i + 1];
+          let segGuidePts = pts;
+          if (shape.calculatorInputs?.pathIsOutline && shape.closed && pts.length < 4 && outline.length >= 6) {
+            const ex = extractPathRibbonCenterlineFromOutline(outline);
+            if (ex.length === 4) segGuidePts = ex;
+          }
+          for (let i = 0; i < segGuidePts.length - 1; i++) {
+            const A = segGuidePts[i]!;
+            const B = segGuidePts[i + 1]!;
             const dx = B.x - A.x, dy = B.y - A.y;
             const len = Math.sqrt(dx * dx + dy * dy);
             const nx = len > 0.001 ? -dy / len : 0, ny = len > 0.001 ? dx / len : 0;
@@ -1652,14 +3249,31 @@ export default function MasterProject() {
               ctx.stroke();
             }
           } else if (shape.closed && outline.length >= 3) {
+            const outlineShape = { ...shape, points: outline, closed: true } as Shape;
+            const pathHasArcs = !!(shape.edgeArcs?.some((a) => a && a.length > 0));
             ctx.beginPath();
-            const s0 = worldToScreen(outline[0].x, outline[0].y);
-            ctx.moveTo(s0.x, s0.y);
-            for (let i = 1; i < outline.length; i++) {
-              const s = worldToScreen(outline[i].x, outline[i].y);
-              ctx.lineTo(s.x, s.y);
+            if (pathHasArcs) {
+              const effFill = getEffectivePolygon(outlineShape);
+              if (effFill.length >= 3) {
+                drawSmoothPolygonPath(ctx, effFill, worldToScreen);
+              } else {
+                const s0 = worldToScreen(outline[0].x, outline[0].y);
+                ctx.moveTo(s0.x, s0.y);
+                for (let i = 1; i < outline.length; i++) {
+                  const s = worldToScreen(outline[i].x, outline[i].y);
+                  ctx.lineTo(s.x, s.y);
+                }
+                ctx.closePath();
+              }
+            } else {
+              const s0 = worldToScreen(outline[0].x, outline[0].y);
+              ctx.moveTo(s0.x, s0.y);
+              for (let i = 1; i < outline.length; i++) {
+                const s = worldToScreen(outline[i].x, outline[i].y);
+                ctx.lineTo(s.x, s.y);
+              }
+              ctx.closePath();
             }
-            ctx.closePath();
             if (activeLayer !== 3) {
               ctx.fillStyle = isSel ? "rgba(108,92,231,0.15)" : CC.layer2Dim;
               ctx.fill();
@@ -1667,15 +3281,23 @@ export default function MasterProject() {
             if (activeLayer !== 3) {
               ctx.strokeStyle = isSel ? edgeHovColor : edgeColor;
               ctx.lineWidth = isSel ? 2.5 : 1.8;
-              ctx.beginPath();
-              const s0path = worldToScreen(outline[0].x, outline[0].y);
-              ctx.moveTo(s0path.x, s0path.y);
-              for (let i = 1; i < outline.length; i++) {
-                const s = worldToScreen(outline[i].x, outline[i].y);
-                ctx.lineTo(s.x, s.y);
+              if (pathHasArcs) {
+                const { points: effPts, edgeIndices } = getEffectivePolygonWithEdgeIndices(outlineShape);
+                drawSmoothPolygonStroke(ctx, effPts, edgeIndices, worldToScreen, () => ({
+                  strokeStyle: isSel ? edgeHovColor : edgeColor,
+                  lineWidth: isSel ? 2.5 : 1.8,
+                }));
+              } else {
+                ctx.beginPath();
+                const s0path = worldToScreen(outline[0].x, outline[0].y);
+                ctx.moveTo(s0path.x, s0path.y);
+                for (let i = 1; i < outline.length; i++) {
+                  const s = worldToScreen(outline[i].x, outline[i].y);
+                  ctx.lineTo(s.x, s.y);
+                }
+                ctx.closePath();
+                ctx.stroke();
               }
-              ctx.closePath();
-              ctx.stroke();
             }
           }
         }
@@ -1688,13 +3310,28 @@ export default function MasterProject() {
           ctx.fillStyle = isH || isD ? CC.layer2 : CC.layer2Edge; ctx.fill();
           ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
         });
-        if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5) && shape.edgeArcs && pts.length >= 2) {
+        if (
+          (isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5) &&
+          shape.edgeArcs &&
+          pts.length >= 2
+        ) {
           const linkedArcIdsForShape = new Set<string>();
           for (const g of linkedGroups) for (const p of g) { if (isArcEntry(p) && p.si === si && g.length >= 2) linkedArcIdsForShape.add(p.arcId); }
-          for (let i = 0; i < pts.length - 1; i++) {
-            const arcs = shape.edgeArcs[i];
-            if (arcs && arcs.length > 0) {
-              drawArcHandles(ctx, pts[i], pts[i + 1], arcs, (wx, wy) => worldToScreen(wx, wy), hoveredArcPoint?.arcPoint?.id ?? null, linkedArcIdsForShape);
+          if (shape.closed && shape.calculatorInputs?.pathIsOutline && outline.length >= 3) {
+            const no = outline.length;
+            for (let i = 0; i < no; i++) {
+              const j = (i + 1) % no;
+              const arcs = shape.edgeArcs[i];
+              if (arcs && arcs.length > 0) {
+                drawArcHandles(ctx, outline[i], outline[j], arcs, (wx, wy) => worldToScreen(wx, wy), hoveredArcPoint?.arcPoint?.id ?? null, linkedArcIdsForShape);
+              }
+            }
+          } else {
+            for (let i = 0; i < pts.length - 1; i++) {
+              const arcs = shape.edgeArcs[i];
+              if (arcs && arcs.length > 0) {
+                drawArcHandles(ctx, pts[i], pts[i + 1], arcs, (wx, wy) => worldToScreen(wx, wy), hoveredArcPoint?.arcPoint?.id ?? null, linkedArcIdsForShape);
+              }
             }
           }
         }
@@ -1705,8 +3342,78 @@ export default function MasterProject() {
           ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
           ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sm.x, sm.y); ctx.stroke();
           ctx.setLineDash([]);
+          for (let gi = 0; gi < smartGuides.length; gi++) {
+            const guide = smartGuides[gi]!;
+            const gPt = guide.refWorld ?? pts[guide.ptIdx];
+            if (!gPt) continue;
+            const ext = 5000;
+            if (guide.axis === "x") {
+              const sA = worldToScreen(guide.worldValue, Math.min(gPt.y, eMouse.y) - ext);
+              const sB = worldToScreen(guide.worldValue, Math.max(gPt.y, eMouse.y) + ext);
+              ctx.strokeStyle = "#27ae60"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+              ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke(); ctx.setLineDash([]);
+            } else {
+              const sA = worldToScreen(Math.min(gPt.x, eMouse.x) - ext, guide.worldValue);
+              const sB = worldToScreen(Math.max(gPt.x, eMouse.x) + ext, guide.worldValue);
+              ctx.strokeStyle = "#27ae60"; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+              ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke(); ctx.setLineDash([]);
+            }
+            const sp = worldToScreen(gPt.x, gPt.y);
+            ctx.fillStyle = "#27ae60";
+            ctx.beginPath();
+            ctx.moveTo(sp.x, sp.y - 5); ctx.lineTo(sp.x + 5, sp.y); ctx.lineTo(sp.x, sp.y + 5); ctx.lineTo(sp.x - 5, sp.y);
+            ctx.closePath(); ctx.fill();
+            const snapPt = worldToScreen(eMouse.x, eMouse.y);
+            ctx.beginPath();
+            ctx.moveTo(snapPt.x, snapPt.y - 4); ctx.lineTo(snapPt.x + 4, snapPt.y);
+            ctx.lineTo(snapPt.x, snapPt.y + 4); ctx.lineTo(snapPt.x - 4, snapPt.y);
+            ctx.closePath(); ctx.fill();
+            const lp = screenPosForSmartGuideDistanceLabel(guide, eMouse, worldToScreen, gi);
+            ctx.font = "11px 'JetBrains Mono',monospace";
+            ctx.fillStyle = "#27ae60"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+            ctx.fillText(formatLength(distance(gPt, eMouse)), lp.x, lp.y);
+          }
+          ctx.textBaseline = "alphabetic";
+          const liveLen = distance(last, eMouse);
+          const lmMid = midpoint(sl, sm);
+          ctx.font = "12px 'JetBrains Mono',monospace";
+          ctx.fillStyle = CC.text; ctx.textAlign = "center";
+          ctx.fillText(formatLength(liveLen), lmMid.x, lmMid.y - 12);
+          if (shiftHeld) {
+            const snapped = snapTo45(last, mouseWorld);
+            const dir = { x: snapped.x - last.x, y: snapped.y - last.y };
+            const dLen = Math.hypot(dir.x, dir.y);
+            if (dLen > 1) {
+              const nx = dir.x / dLen, ny = dir.y / dLen, ext = 5000;
+              const sA = worldToScreen(last.x - nx * ext, last.y - ny * ext);
+              const sB = worldToScreen(last.x + nx * ext, last.y + ny * ext);
+              ctx.strokeStyle = CC.snapLine; ctx.lineWidth = 1; ctx.setLineDash([2, 6]);
+              ctx.beginPath(); ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y); ctx.stroke();
+              ctx.setLineDash([]);
+            }
+          }
+          if (pts.length >= 2) {
+            const prev = pts[pts.length - 2];
+            const angle = angleDeg(prev, last, eMouse);
+            const sc = worldToScreen(last.x, last.y);
+            ctx.font = "11px 'JetBrains Mono',monospace";
+            ctx.fillStyle = CC.angleText; ctx.textAlign = "center";
+            ctx.fillText(angle.toFixed(1) + "°", sc.x, sc.y - 20);
+          }
+          if (pts.length >= 2) {
+            const ss = worldToScreen(pts[0].x, pts[0].y);
+            if (distance(sm, ss) < SNAP_TO_START_RADIUS) {
+              ctx.beginPath(); ctx.arc(ss.x, ss.y, 14, 0, Math.PI * 2);
+              ctx.strokeStyle = CC.accent; ctx.lineWidth = 2; ctx.stroke();
+              ctx.font = "10px 'JetBrains Mono',monospace";
+              ctx.fillStyle = CC.accent; ctx.fillText("Close", ss.x, ss.y - 20);
+            }
+          }
         }
-        if (isL2 && !inSegmentSideSelection) drawShapeObjectLabel(ctx, shape, worldToScreen, getPathLabel(shape), zoom);
+        if (isL2 && !inSegmentSideSelection) {
+          drawShapeObjectLabel(ctx, shape, worldToScreen, getPathLabel(shape), zoom);
+          drawPathRibbonMetrics(ctx, shape, worldToScreen, zoom);
+        }
         return;
       }
 
@@ -1718,7 +3425,10 @@ export default function MasterProject() {
         if (showGeodesy && geodesyLayerFilter(shape) && shape.elementType === "wall" && (shape.heights?.some((h: number) => Math.abs(h) > 0.0001))) {
           drawWallSlopeIndicators(ctx, shape, worldToScreen);
         }
-        pts.forEach((p, pi) => {
+        const gripDenseL2 =
+          isPolygonLinearStripOutline(shape) && shape.linearOpenStripOutline ? computeLinearElementFillOutline(shape) : undefined;
+        pts.forEach((_, pi) => {
+          const p = getLinearElementVertexGripWorld(shape, pi, gripDenseL2);
           const sp = worldToScreen(p.x, p.y);
           const isH = hoveredPoint && hoveredPoint.shapeIdx === si && hoveredPoint.pointIdx === pi;
           const isD = dragInfo && dragInfo.shapeIdx === si && dragInfo.pointIdx === pi;
@@ -1746,14 +3456,17 @@ export default function MasterProject() {
         }
         if (isL2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || "Element", zoom);
         if (isDraw && pts.length > 0) {
-          const last = pts[pts.length - 1];
+          const guideChain = wallBaselineChainForDrawing(shape, pts);
+          const last = guideChain.length > 0 ? guideChain[guideChain.length - 1]! : pts[pts.length - 1];
           const sl = worldToScreen(last.x, last.y);
           const sm = worldToScreen(eMouse.x, eMouse.y);
           ctx.strokeStyle = CC.open; ctx.lineWidth = 1.5; ctx.setLineDash([6, 4]);
           ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sm.x, sm.y); ctx.stroke();
           ctx.setLineDash([]);
-          for (const guide of smartGuides) {
-            const gPt = pts[guide.ptIdx];
+          for (let gi = 0; gi < smartGuides.length; gi++) {
+            const guide = smartGuides[gi]!;
+            const gPt = guide.refWorld ?? guideChain[guide.ptIdx] ?? pts[guide.ptIdx];
+            if (!gPt) continue;
             const ext = 5000;
             if (guide.axis === "x") {
               const sA = worldToScreen(guide.worldValue, Math.min(gPt.y, eMouse.y) - ext);
@@ -1770,16 +3483,39 @@ export default function MasterProject() {
             ctx.fillStyle = "#27ae60";
             ctx.beginPath(); ctx.moveTo(sp.x, sp.y - 5); ctx.lineTo(sp.x + 5, sp.y); ctx.lineTo(sp.x, sp.y + 5); ctx.lineTo(sp.x - 5, sp.y); ctx.closePath(); ctx.fill();
             const distM = distance(gPt, eMouse);
-            const lm = midpoint(worldToScreen(gPt.x, gPt.y), worldToScreen(eMouse.x, eMouse.y));
+            const lp = screenPosForSmartGuideDistanceLabel(guide, eMouse, worldToScreen, gi);
             ctx.font = "11px 'JetBrains Mono',monospace";
-            ctx.fillStyle = "#27ae60"; ctx.textAlign = "center";
-            ctx.fillText(formatLength(distM), lm.x, lm.y - 6);
+            ctx.fillStyle = "#27ae60"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+            ctx.fillText(formatLength(distM), lp.x, lp.y);
           }
+          ctx.textBaseline = "alphabetic";
           const liveLen = distance(last, eMouse);
           const lm = midpoint(sl, sm);
           ctx.font = "12px 'JetBrains Mono',monospace";
           ctx.fillStyle = CC.text; ctx.textAlign = "center";
           ctx.fillText(formatLength(liveLen), lm.x, lm.y - 12);
+          const wblDraw = shape.calculatorInputs?.wallBaselinePolyline as Point[] | undefined;
+          if (shape.elementType === "wall" && wblDraw && wblDraw.length >= 2 && guideChain.length >= 2) {
+            const prev = guideChain[guideChain.length - 2]!;
+            const angle = angleDeg(prev, last, eMouse);
+            const scAng = worldToScreen(last.x, last.y);
+            ctx.font = "11px 'JetBrains Mono',monospace";
+            ctx.fillStyle = CC.angleText; ctx.textAlign = "center";
+            ctx.fillText(angle.toFixed(1) + "°", scAng.x, scAng.y - 20);
+          }
+          if (isPolygonLinearElement(shape) && shape.points.length >= 2) {
+            const closeAnchor =
+              shape.elementType === "wall" && (shape.calculatorInputs?.wallBaselinePolyline as Point[] | undefined)?.[0]
+                ? (shape.calculatorInputs!.wallBaselinePolyline as Point[])[0]
+                : pts[0];
+            const ss = worldToScreen(closeAnchor.x, closeAnchor.y);
+            if (distance(sm, ss) < SNAP_TO_START_RADIUS) {
+              ctx.beginPath(); ctx.arc(ss.x, ss.y, 14, 0, Math.PI * 2);
+              ctx.strokeStyle = CC.accent; ctx.lineWidth = 2; ctx.stroke();
+              ctx.font = "10px 'JetBrains Mono',monospace";
+              ctx.fillStyle = CC.accent; ctx.fillText("Close", ss.x, ss.y - 20);
+            }
+          }
         }
         return;
       }
@@ -1983,8 +3719,8 @@ export default function MasterProject() {
         }
       }
 
-      // Angles (interior, labels inside shape) — hidden in geodesy mode
-      if (shape.closed && pts.length >= 3 && isSel && !showGeodesy) {
+      // Angles (interior, labels inside shape) — hidden in geodesy mode; hidden for circle (arc-only handles)
+      if (shape.closed && pts.length >= 3 && isSel && !showGeodesy && !isCircleArcHandlesOnlyShape(shape)) {
         for (let i = 0; i < pts.length; i++) {
           const prev = pts[(i - 1 + pts.length) % pts.length], curr = pts[i], next = pts[(i + 1) % pts.length];
           const angle = angleDeg(prev, curr, next);
@@ -2006,8 +3742,13 @@ export default function MasterProject() {
         }
       }
 
-      // Points
-      pts.forEach((p, pi) => {
+      // Points (circle arc-only: no vertex squares — only arc handles)
+      const gripDense =
+        isLinearElement(shape) && isPolygonLinearStripOutline(shape) && shape.linearOpenStripOutline
+          ? computeLinearElementFillOutline(shape)
+          : undefined;
+      if (!isCircleArcHandlesOnlyShape(shape)) pts.forEach((_, pi) => {
+        const p = getLinearElementVertexGripWorld(shape, pi, gripDense);
         const sp = worldToScreen(p.x, p.y);
         const isH = hoveredPoint && hoveredPoint.shapeIdx === si && hoveredPoint.pointIdx === pi;
         const isD = dragInfo && dragInfo.shapeIdx === si && dragInfo.pointIdx === pi;
@@ -2061,7 +3802,8 @@ export default function MasterProject() {
           (shape.calculatorType === "paving" && shape.calculatorInputs) ||
           (shape.calculatorType === "grass" && (shape.calculatorInputs?.vizPieces?.length ?? 0) > 0)
         );
-        if (!hasPatternLabel) {
+        // Centroid m²: hide for Layer 1 (garden) in both L1/L2 views; Layer 2 uses pattern label or none.
+        if (!hasPatternLabel && !isL2 && shape.layer !== 1) {
           const effPts = getCachedPoly(si);
           const area = areaM2(effPts);
           ctx.font = "bold 16px 'JetBrains Mono',monospace";
@@ -2159,8 +3901,10 @@ export default function MasterProject() {
         ctx.setLineDash([]);
 
         // Smart guide lines
-        for (const guide of smartGuides) {
-          const gPt = pts[guide.ptIdx];
+        for (let gi = 0; gi < smartGuides.length; gi++) {
+          const guide = smartGuides[gi]!;
+          const gPt = guide.refWorld ?? pts[guide.ptIdx];
+          if (!gPt) continue;
           const ext = 5000;
           if (guide.axis === "x") {
             const sA = worldToScreen(guide.worldValue, Math.min(gPt.y, eMouse.y) - ext);
@@ -2187,14 +3931,15 @@ export default function MasterProject() {
           ctx.lineTo(snapPt.x, snapPt.y + 4); ctx.lineTo(snapPt.x - 4, snapPt.y);
           ctx.closePath(); ctx.fill();
           const distM = distance(gPt, eMouse);
-          const lm = midpoint(sp, snapPt);
+          const lp = screenPosForSmartGuideDistanceLabel(guide, eMouse, worldToScreen, gi);
           ctx.font = "11px 'JetBrains Mono',monospace";
-          ctx.fillStyle = "#27ae60"; ctx.textAlign = "center";
-          ctx.fillText(formatLength(distM), lm.x, lm.y - 6);
+          ctx.fillStyle = "#27ae60"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+          ctx.fillText(formatLength(distM), lp.x, lp.y);
         }
+        ctx.textBaseline = "alphabetic";
 
         if (shiftHeld) {
-          const snapped = isPathElement(shapes[drawingShapeIdx]) ? snapTo45Soft(last, mouseWorld) : snapTo45(last, mouseWorld);
+          const snapped = snapTo45(last, mouseWorld);
           const dir = { x: snapped.x - last.x, y: snapped.y - last.y };
           const dLen = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
           if (dLen > 1) {
@@ -2349,8 +4094,13 @@ export default function MasterProject() {
 
     // Selected points highlight
     selectedPoints.forEach(({ shapeIdx: si, pointIdx: pi }) => {
-      if (shapes[si] && shapes[si].points[pi]) {
-        const p = shapes[si].points[pi];
+      const shSel = shapes[si];
+      if (shSel && shSel.points[pi]) {
+        const denseSel =
+          isLinearElement(shSel) && isPolygonLinearStripOutline(shSel) && shSel.linearOpenStripOutline
+            ? computeLinearElementFillOutline(shSel)
+            : undefined;
+        const p = getLinearElementVertexGripWorld(shSel, pi, denseSel);
         const sp = worldToScreen(p.x, p.y);
         ctx.beginPath(); ctx.arc(sp.x, sp.y, POINT_RADIUS + 4, 0, Math.PI * 2);
         ctx.strokeStyle = CC.danger; ctx.lineWidth = 2.5; ctx.stroke();
@@ -2467,7 +4217,7 @@ export default function MasterProject() {
     if (shiftHeld) hud += "  |  SNAP 45°";
     if (drawingShapeIdx !== null && mode === "freeDraw") hud += "  |  Drawing (Esc = cancel)";
     if (mode === "drawFence") hud += "  |  FENCE: click to place points, Esc to finish";
-    else if (mode === "drawWall") hud += "  |  WALL: click to place points, Esc to finish";
+    else if (mode === "drawWall") hud += "  |  WALL: outer face; snap sets side (L1→in, L2→away); Tab = flip; Esc / RMB = finish";
     else if (mode === "drawKerb") hud += "  |  KERB: click to place points, Esc to finish";
     else if (mode === "drawFoundation") hud += "  |  FOUNDATION: click to place points, Esc to finish";
     else if (mode === "drawPathSlabs") hud += pathSegmentSideSelection ? "  |  PATH: click green or orange side for each segment" : "  |  PATH (Slabs): click points (like wall), snap to start to finish, then pick sides";
@@ -2529,13 +4279,17 @@ export default function MasterProject() {
       if (pts && pts.length >= 2) {
         const i = hoveredEdge.edgeIdx;
         const j = (i + 1) % pts.length;
+        const A = pts[i];
+        const B = pts[j];
+        // Stale hover if vertex count changed but mousemove hasn't updated hit yet
+        if (i >= 0 && i < pts.length && A != null && B != null) {
         const arcs = s.edgeArcs?.[i];
-        const totalLen = calcEdgeLengthWithArcs(pts[i], pts[j], arcs);
+        const totalLen = calcEdgeLengthWithArcs(A, B, arcs);
         const distToA = hoveredEdge.t * totalLen;
         const distToB = (1 - hoveredEdge.t) * totalLen;
-        const sA = worldToScreen(pts[i].x, pts[i].y);
+        const sA = worldToScreen(A.x, A.y);
         const sProj = worldToScreen(hoveredEdge.pos.x, hoveredEdge.pos.y);
-        const sB = worldToScreen(pts[j].x, pts[j].y);
+        const sB = worldToScreen(B.x, B.y);
         const mid1 = midpoint(sA, sProj);
         const mid2 = midpoint(sProj, sB);
         const norm = edgeNormalAngle(sA, sB);
@@ -2559,8 +4313,23 @@ export default function MasterProject() {
         ctx.rotate(textAngle);
         ctx.fillText(formatLength(distToB), 0, 0);
         ctx.restore();
+        }
+        // Layer 1 garden as reference in Layer 2: show small gray vertices while hovering an edge (snap targets)
+        if (activeLayer === 2 && s.layer === 1 && pts.length >= 2) {
+          const dotR = Math.max(2.2, (POINT_RADIUS * 0.45) * (zoom > 0.5 ? 1 : 0.85));
+          for (let vi = 0; vi < pts.length; vi++) {
+            const sv = worldToScreen(pts[vi].x, pts[vi].y);
+            ctx.beginPath();
+            ctx.arc(sv.x, sv.y, dotR, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(140, 145, 160, 0.92)";
+            ctx.fill();
+            ctx.strokeStyle = "rgba(255,255,255,0.55)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
+        }
       }
-    }
 
     // Set angle overlay: dim canvas, show only edited shape with A/B labels and angle arc
     if (setAngleModal) {
@@ -2655,7 +4424,7 @@ export default function MasterProject() {
         ctx.fillText(t("project:dim_edit_point_b"), offBx, offBy);
       }
     }
-  }, [shapes, selectedShapeIdx, selectedPattern, patternDragInfo, patternDragPreview, pathPatternLongOffsetPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id, measureStart, measureEnd, pathSegmentSideSelection, shapeDragInfo, edgeDragInfo, pointOffsetAlongLinePick, offsetAlongLinePickPulse, isOnActiveLayer]);
+  }, [shapes, selectedShapeIdx, selectedShapeIndices, shapeSelectionSet, selectedPattern, objectCardShapeIdx, patternDragInfo, patternDragPreview, pathPatternLongOffsetPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id, measureStart, measureEnd, pathSegmentSideSelection, shapeDragInfo, edgeDragInfo, pointOffsetAlongLinePick, offsetAlongLinePickPulse, isOnActiveLayer]);
 
   // Clear height tooltip when disabling geodesy or switching away from layer 1
   useEffect(() => {
@@ -2676,13 +4445,25 @@ export default function MasterProject() {
     const r = th * (PIXELS_PER_METER / 80);
     if (selectedShapeIdx !== null && isOnActiveLayer(selectedShapeIdx) && passesViewFilter(shapes[selectedShapeIdx], viewFilter, activeLayer)) {
       const s = shapes[selectedShapeIdx];
-      for (let pi = s.points.length - 1; pi >= 0; pi--)
-        if (distance(wp, s.points[pi]) < r) return { shapeIdx: selectedShapeIdx, pointIdx: pi };
+      if (!isCircleArcHandlesOnlyShape(s)) {
+        const denseCache =
+          isLinearElement(s) && isPolygonLinearStripOutline(s) && s.linearOpenStripOutline
+            ? computeLinearElementFillOutline(s)
+            : undefined;
+        for (let pi = s.points.length - 1; pi >= 0; pi--)
+          if (distance(wp, getLinearElementVertexGripWorld(s, pi, denseCache)) < r) return { shapeIdx: selectedShapeIdx, pointIdx: pi };
+      }
     }
     for (let si = shapes.length - 1; si >= 0; si--) {
       if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
-      for (let pi = shapes[si].points.length - 1; pi >= 0; pi--)
-        if (distance(wp, shapes[si].points[pi]) < r) return { shapeIdx: si, pointIdx: pi };
+      const s = shapes[si];
+      if (isCircleArcHandlesOnlyShape(s)) continue;
+      const denseCache =
+        isLinearElement(s) && isPolygonLinearStripOutline(s) && s.linearOpenStripOutline
+          ? computeLinearElementFillOutline(s)
+          : undefined;
+      for (let pi = s.points.length - 1; pi >= 0; pi--)
+        if (distance(wp, getLinearElementVertexGripWorld(s, pi, denseCache)) < r) return { shapeIdx: si, pointIdx: pi };
     }
     return null;
   }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, viewFilter, pointRadiusEffective]);
@@ -2726,6 +4507,21 @@ export default function MasterProject() {
         return { shapeIdx: si, edgeIdx: i, pos: pr.proj, t: pr.t };
       return null;
     };
+    /** Layer 1 garden as snap reference while editing Layer 2: include edge interiors and near-vertex (corner) hits. */
+    const testEdgeLayer1Ref = (si: number, i: number) => {
+      const pts = shapes[si].points;
+      const j = (i + 1) % pts.length;
+      const arcs = shapes[si].edgeArcs?.[i];
+      const pr = arcs && arcs.length > 0
+        ? projectOntoArcEdge(wp, pts[i], pts[j], arcs, 24)
+        : projectOntoSegment(wp, pts[i], pts[j]);
+      if (pr.dist >= r) return null;
+      const nearA = distance(wp, pts[i]) < r;
+      const nearB = distance(wp, pts[j]) < r;
+      const interior = pr.t > 0.02 && pr.t < 0.98;
+      if (!interior && !nearA && !nearB) return null;
+      return { shapeIdx: si, edgeIdx: i, pos: pr.proj, t: pr.t };
+    };
     if (selectedShapeIdx !== null && isOnActiveLayer(selectedShapeIdx) && passesViewFilter(shapes[selectedShapeIdx], viewFilter, activeLayer)) {
       const ec = shapes[selectedShapeIdx].closed ? shapes[selectedShapeIdx].points.length : shapes[selectedShapeIdx].points.length - 1;
       for (let i = 0; i < ec; i++) {
@@ -2741,15 +4537,28 @@ export default function MasterProject() {
         if (result) return result;
       }
     }
+    if (activeLayer === 2) {
+      for (let si = shapes.length - 1; si >= 0; si--) {
+        const sh = shapes[si];
+        if (sh.removedFromCanvas || sh.layer !== 1 || !passesViewFilter(sh, viewFilter, activeLayer)) continue;
+        const pts = sh.points;
+        if (pts.length < 2) continue;
+        const ec = sh.closed ? pts.length : pts.length - 1;
+        for (let i = 0; i < ec; i++) {
+          const result = testEdgeLayer1Ref(si, i);
+          if (result) return result;
+        }
+      }
+    }
     return null;
-  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, viewFilter, edgeHitThresholdEffective]);
+  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, viewFilter, edgeHitThresholdEffective, activeLayer]);
 
   const hitTestPointForScale = useCallback((wp: Point): HitResult | null => {
     const th = pointRadiusEffective / zoom + 4;
     const r = th * (PIXELS_PER_METER / 80);
     if (selectedShapeIdx !== null && isOnActiveLayerForScale(selectedShapeIdx) && passesViewFilter(shapes[selectedShapeIdx], viewFilter, activeLayer)) {
       const s = shapes[selectedShapeIdx];
-      if (s.closed && !isLinearElement(s)) {
+      if (s.closed && !isLinearElement(s) && !isCircleArcHandlesOnlyShape(s)) {
         for (let pi = s.points.length - 1; pi >= 0; pi--)
           if (distance(wp, s.points[pi]) < r) return { shapeIdx: selectedShapeIdx, pointIdx: pi };
       }
@@ -2757,7 +4566,7 @@ export default function MasterProject() {
     for (let si = shapes.length - 1; si >= 0; si--) {
       if (!isOnActiveLayerForScale(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
       const s = shapes[si];
-      if (!s.closed || isLinearElement(s)) continue;
+      if (!s.closed || isLinearElement(s) || isCircleArcHandlesOnlyShape(s)) continue;
       for (let pi = s.points.length - 1; pi >= 0; pi--)
         if (distance(wp, s.points[pi]) < r) return { shapeIdx: si, pointIdx: pi };
     }
@@ -2800,9 +4609,19 @@ export default function MasterProject() {
   }, [shapes, zoom, isOnActiveLayerForScale, selectedShapeIdx, viewFilter]);
 
   const hitTestShape = useCallback((wp: Point): number | null => {
-    if (selectedShapeIdx !== null && isOnActiveLayer(selectedShapeIdx) && passesViewFilter(shapes[selectedShapeIdx], viewFilter, activeLayer)) {
-      const s = shapes[selectedShapeIdx];
-      if (isPathElement(s) && hitTestPathElement(wp, s, zoom)) return selectedShapeIdx;
+    const priorityList =
+      selectedShapeIndices.length > 0
+        ? [...selectedShapeIndices].sort((a, b) => b - a)
+        : selectedShapeIdx !== null
+          ? [selectedShapeIdx]
+          : [];
+    for (const priSi of priorityList) {
+      // Tylko kształty już zaznaczone — pozwól trafić w ciało mimo „nieaktywnej” warstwy paska (np. L1 przy widoku L3),
+      // żeby grupowe przesuwanie działało po przełączeniu warstwy.
+      if (!passesViewFilter(shapes[priSi], viewFilter, activeLayer)) continue;
+      const s = shapes[priSi];
+      if (s?.removedFromCanvas) continue;
+      if (isPathElement(s) && hitTestPathElement(wp, s, zoom)) return priSi;
       if (!isLinearElement(s)) {
         const pts = s.points;
         if (s.closed && pts.length >= 3) {
@@ -2811,17 +4630,19 @@ export default function MasterProject() {
             if ((pts[i].y > wp.y) !== (pts[j].y > wp.y) && wp.x < ((pts[j].x - pts[i].x) * (wp.y - pts[i].y)) / (pts[j].y - pts[i].y) + pts[i].x)
               inside = !inside;
           }
-          if (inside) return selectedShapeIdx;
+          if (inside) return priSi;
         }
-      } else if (hitTestLinearElement(wp, s, zoom)) return selectedShapeIdx;
+      } else if (hitTestLinearElement(wp, s, zoom)) return priSi;
     }
     // Prefer linear elements and paths over polygons when both could match
     for (let si = shapes.length - 1; si >= 0; si--) {
+      if (shapes[si]?.removedFromCanvas) continue;
       if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
       if (isPathElement(shapes[si]) && hitTestPathElement(wp, shapes[si], zoom)) return si;
       if (isLinearElement(shapes[si]) && hitTestLinearElement(wp, shapes[si], zoom)) return si;
     }
     for (let si = shapes.length - 1; si >= 0; si--) {
+      if (shapes[si]?.removedFromCanvas) continue;
       if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
       if (isLinearElement(shapes[si]) || isPathElement(shapes[si])) continue;
       const pts = shapes[si].points;
@@ -2834,11 +4655,12 @@ export default function MasterProject() {
       if (inside) return si;
     }
     return null;
-  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, viewFilter]);
+  }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, selectedShapeIndices, viewFilter, activeLayer]);
 
   const hitTestPattern = useCallback((wp: Point): { shapeIdx: number; type: "slab" | "grass" | "cobblestone"; grassJoinHit?: { pieceAIdx: number; pieceBIdx: number; edgeAIdx: number; isJoined: boolean }; grassPieceIdx?: number } | null => {
     for (let si = shapes.length - 1; si >= 0; si--) {
       const shape = shapes[si];
+      if (shape.removedFromCanvas) continue;
       if (shape.layer !== 2) continue;
       if (isPathElement(shape)) {
         if (!shape.closed || shape.points.length < 2) continue;
@@ -2875,6 +4697,8 @@ export default function MasterProject() {
       if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
       const s = shapes[si];
       if (s.closed || s.points.length < 1) continue;
+      // Wall/kerb/foundation: no auto "open end" hit — use point selection + context menu to continue drawing.
+      if (isPolygonLinearElement(s)) continue;
       if (distance(wp, s.points[s.points.length - 1]) < th) return { shapeIdx: si, end: "last" };
       if (distance(wp, s.points[0]) < th) return { shapeIdx: si, end: "first" };
     }
@@ -2885,6 +4709,7 @@ export default function MasterProject() {
   const hitTestArcPointGlobal = useCallback((wp: Point): { shapeIdx: number; edgeIdx: number; arcPoint: ArcPoint } | null => {
     const testShape = (si: number) => {
       const s = shapes[si];
+      if (s?.removedFromCanvas) return null;
       if (!isOnActiveLayer(si) || !passesViewFilter(s, viewFilter, activeLayer)) return null;
       const pts = s.points;
       const edgeCount = s.closed ? pts.length : pts.length - 1;
@@ -2897,20 +4722,27 @@ export default function MasterProject() {
       }
       return null;
     };
-    if (selectedShapeIdx !== null) {
-      const hit = testShape(selectedShapeIdx);
+    const arcPri =
+      selectedShapeIndices.length > 0
+        ? [...selectedShapeIndices].sort((a, b) => b - a)
+        : selectedShapeIdx !== null
+          ? [selectedShapeIdx]
+          : [];
+    const arcPriSet = new Set(arcPri);
+    for (const si of arcPri) {
+      const hit = testShape(si);
       if (hit) return hit;
     }
     // In L1/L2/L5 arcpoints are visible on all shapes — allow hit test on non-selected shapes too
     if (showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5) {
       for (let si = shapes.length - 1; si >= 0; si--) {
-        if (si === selectedShapeIdx) continue;
+        if (arcPriSet.has(si)) continue;
         const hit = testShape(si);
         if (hit) return hit;
       }
     }
     return null;
-  }, [shapes, selectedShapeIdx, zoom, isOnActiveLayer, viewFilter, showAllArcPoints, activeLayer]);
+  }, [shapes, selectedShapeIdx, selectedShapeIndices, zoom, isOnActiveLayer, viewFilter, showAllArcPoints, activeLayer]);
 
   const getWorldPos = useCallback((e: React.MouseEvent): Point => {
     const r = canvasRef.current!.getBoundingClientRect();
@@ -2985,19 +4817,26 @@ export default function MasterProject() {
           if (d > maxD) { maxD = d; anchor = { ...p }; }
         }
         const startDist = distance(anchor, world);
+        const pathRibbonScaleRmb = pathRibbonScalePayloadForCorner(shapes[si], pts);
         pendingRightClickScaleRef.current = {
           type: "corner",
           data: {
             shapeIdx: si, pointIdx: ptHit.pointIdx, anchor,
             startMouse: { ...world }, startPoints: pts.map(p => ({ ...p })),
             startDist: startDist < 1 ? 1 : startDist,
+            ...(pathRibbonScaleRmb ? { pathRibbonScale: pathRibbonScaleRmb } : {}),
           },
           startScreen,
         };
         return;
       }
       const edgeHit = hitTestEdgeForScale(world);
-      if (edgeHit && shapes[edgeHit.shapeIdx].closed) {
+      const rmbEdgeShape = edgeHit ? shapes[edgeHit.shapeIdx] : null;
+      if (
+        edgeHit &&
+        rmbEdgeShape?.closed &&
+        !(isPathElement(rmbEdgeShape) && rmbEdgeShape.calculatorInputs?.pathIsOutline)
+      ) {
         const si = edgeHit.shapeIdx;
         const pts = shapes[si].points;
         saveHistory();
@@ -3025,7 +4864,20 @@ export default function MasterProject() {
       return;
     }
     setContextMenu(null); setEditingDim(null); setSelectedPoints([]);
+    if (e.button === 0 || e.button === 1) {
+      const ne = e.nativeEvent;
+      if (ne instanceof PointerEvent && canvasRef.current) {
+        canvasPointerCaptureIdRef.current = ne.pointerId;
+        try {
+          canvasRef.current.setPointerCapture(ne.pointerId);
+        } catch {
+          /* already captured or unsupported */
+        }
+      }
+    }
     const world = getWorldPos(e);
+    /** Użyj też e.ctrlKey — stan ctrlHeld z keydown często nie zdąży się zaktualizować przed pierwszym kliknięciem. */
+    const multiMod = ctrlHeld || e.ctrlKey || e.metaKey;
 
     if (e.button === 1) { e.preventDefault(); setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }); return; }
 
@@ -3131,22 +4983,41 @@ export default function MasterProject() {
     if (drawingShapeIdx !== null && shapes[drawingShapeIdx]) {
       const pts = shapes[drawingShapeIdx].points;
       const s = shapes[drawingShapeIdx];
-
-      const snapFn = isPathElement(s) ? snapTo45Soft : snapTo45;
-      let ep = shiftHeld && pts.length > 0 ? snapFn(pts[pts.length - 1], world) : world;
+      const clickSnapChain = wallBaselineChainForDrawing(s, pts);
+      let ep =
+        shiftHeld && clickSnapChain.length > 0 ? snapTo45(clickSnapChain[clickSnapChain.length - 1]!, world) : world;
+      let wallFaceHintFromSnap: "left" | "right" | undefined;
 
       if (isLinearElement(s) || isPathElement(s)) {
-        ep = snapWorldPointForLinearDrawing(ep, {
+        if (!shouldSkipSnapPointToDrawingChainAxesForStrip(s)) {
+          ep = applyVertexAxisAlignWhileDrawing(ep, shapes, drawingShapeIdx, zoom);
+        }
+        const wallBl = s.elementType === "wall" ? (s.calculatorInputs?.wallBaselinePolyline as Point[] | undefined) : undefined;
+        const snapChain = wallBl && wallBl.length > 0 ? wallBl : pts;
+        const snapRes = snapWorldPointForLinearDrawing(ep, {
           drawingShapeIdx,
           shapes,
-          localPtChain: pts,
+          localPtChain: snapChain,
           drawingShape: s,
           zoom,
           viewFilter,
           activeLayer,
         });
+        ep = snapRes.point;
+        wallFaceHintFromSnap = snapRes.wallFaceHint;
+        if (!shouldSkipSnapPointToDrawingChainAxesForStrip(s)) {
+          ep = snapPointToDrawingChainAxes(ep, snapChain, zoom);
+        }
       } else {
-        const sgThreshold = 8 / zoom;
+        ep = snapDrawingMagnet(ep, {
+          drawingShapeIdx,
+          shapes,
+          localPtChain: pts,
+          zoom,
+          viewFilter,
+          activeLayer,
+        });
+        const sgThreshold = DRAW_SMART_GUIDE_PX / zoom;
         let bestSgDx = sgThreshold, bestSgDy = sgThreshold;
         let sgSnapX: number | null = null, sgSnapY: number | null = null;
         for (let i = 0; i < pts.length; i++) {
@@ -3169,11 +5040,15 @@ export default function MasterProject() {
         }
       }
       if (pts.length >= 2 && (isLinearElement(shapes[drawingShapeIdx]) || isPathElement(shapes[drawingShapeIdx]))) {
-        const ss = worldToScreen(pts[0].x, pts[0].y);
+        const s = shapes[drawingShapeIdx];
+        const closeAnchor =
+          s.elementType === "wall" && (s.calculatorInputs?.wallBaselinePolyline as Point[] | undefined)?.[0]
+            ? (s.calculatorInputs!.wallBaselinePolyline as Point[])[0]
+            : pts[0];
+        const ss = worldToScreen(closeAnchor.x, closeAnchor.y);
         const ms = worldToScreen(ep.x, ep.y);
         if (distance(ms, ss) < SNAP_TO_START_RADIUS) {
           saveHistory();
-          const s = shapes[drawingShapeIdx];
           const isGroundwork = isGroundworkLinear(s);
           const isPath = isPathElement(s);
           if (isPath) {
@@ -3207,18 +5082,31 @@ export default function MasterProject() {
           } else if (isPolygonLinearElement(s)) {
             saveHistory();
             const thicknessM = getPolygonThicknessM(s);
-            const outline = computeThickPolylineClosed(pts, toPixels(thicknessM));
+            const thicknessPx = toPixels(thicknessM);
+            let closedCenterPts = pts;
+            if (s.elementType === "wall" && s.calculatorInputs?.wallDrawBaseline) {
+              const half = thicknessPx / 2;
+              const face = s.calculatorInputs.wallDrawFace === "right" ? "right" : "left";
+              const wb = s.calculatorInputs?.wallBaselinePolyline as Point[] | undefined;
+              const baselineChain = wb && wb.length >= 2 ? wb : pts;
+              closedCenterPts = baselineFacePolylineToCenterline(baselineChain, half, face, true);
+            }
+            const outline = computeThickPolylineClosed(closedCenterPts, thicknessPx);
             if (outline.length >= 3) {
               const segLengths = polygonToSegmentLengths(outline);
               setShapes(p => {
                 const n = [...p];
                 const sh = n[drawingShapeIdx];
-                const inputs: Record<string, unknown> = { ...sh.calculatorInputs, segmentLengths: segLengths };
+                const baseCalc = { ...(sh.calculatorInputs ?? {}) };
+                delete baseCalc.wallDrawBaseline;
+                delete baseCalc.wallDrawFace;
+                delete baseCalc.wallBaselinePolyline;
+                const inputs: Record<string, unknown> = { ...baseCalc, segmentLengths: segLengths };
                 if (sh.elementType === "wall") {
                   const defaultH = parseFloat(String(sh.calculatorInputs?.height ?? "1")) || 1;
                   inputs.segmentHeights = segLengths.map(() => ({ startH: defaultH, endH: defaultH }));
                 }
-                n[drawingShapeIdx] = { ...sh, points: outline, closed: true, drawingFinished: true, calculatorInputs: inputs };
+                n[drawingShapeIdx] = { ...sh, points: outline, closed: true, linearOpenStripOutline: undefined, drawingFinished: true, calculatorInputs: inputs };
                 return n;
               });
             } else {
@@ -3233,10 +5121,46 @@ export default function MasterProject() {
       }
       saveHistory();
       setShapes(p => {
-        const n = [...p]; const sh = { ...n[drawingShapeIdx] };
-        sh.points = [...sh.points, { ...ep }];
+        const n = [...p];
+        const sh = { ...n[drawingShapeIdx] };
+        const inputs = { ...(sh.calculatorInputs ?? {}) };
         sh.heights = [...(sh.heights || []), 0];
-        n[drawingShapeIdx] = sh; return n;
+        if (wallFaceHintFromSnap && sh.elementType === "wall") {
+          inputs.wallDrawFace = wallFaceHintFromSnap;
+        }
+        if (sh.elementType === "wall" && inputs.wallDrawBaseline) {
+          const blStored = inputs.wallBaselinePolyline as Point[] | undefined;
+          const baseline =
+            blStored && blStored.length > 0 ? [...blStored, { ...ep }] : [...sh.points, { ...ep }];
+          if (baseline.length >= 2) {
+            const thicknessM = getPolygonThicknessM({ ...sh, calculatorInputs: inputs });
+            const thicknessPx = toPixels(thicknessM);
+            const half = thicknessPx / 2;
+            const face = inputs.wallDrawFace === "right" ? "right" : "left";
+            const centerPts = baselineFacePolylineToCenterline(baseline, half, face);
+            if (centerPts.length >= 2) {
+              const outline = computeThickPolyline(centerPts, thicknessPx);
+              if (outline.length >= 4) {
+                sh.points = outline;
+                sh.linearOpenStripOutline = true;
+                inputs.wallBaselinePolyline = baseline;
+              } else {
+                sh.points = baseline;
+                delete inputs.wallBaselinePolyline;
+                sh.linearOpenStripOutline = undefined;
+              }
+            } else {
+              sh.points = baseline;
+            }
+          } else {
+            sh.points = baseline;
+          }
+        } else {
+          sh.points = [...sh.points, { ...ep }];
+        }
+        sh.calculatorInputs = inputs;
+        n[drawingShapeIdx] = sh;
+        return n;
       });
       return;
     }
@@ -3474,6 +5398,56 @@ export default function MasterProject() {
             }
           }
         }
+        const ptHitL3 = hitTestPoint(world);
+        if (ptHitL3) {
+          saveHistory();
+          const hitShape = shapes[ptHitL3.shapeIdx];
+          if (hitShape.closed && isPathElement(hitShape) && hitShape.calculatorInputs?.pathIsOutline) {
+            const hp = hitShape.points;
+            if (hp.length === 8 || hp.length === 4) {
+              const pwm = Number(hitShape.calculatorInputs.pathWidthM ?? 0.6) || 0.6;
+              const cl0 = resolvePathRibbonRectCenterline4(
+                hp,
+                pwm,
+                hitShape.calculatorInputs.pathCenterline as Point[] | undefined,
+                hitShape.calculatorInputs.pathCenterlineOriginal as Point[] | undefined,
+              );
+              pathRibbonDragStartClRef.current = cl0.length === 4 ? cl0.map(p => ({ ...p })) : null;
+              pathRibbonDragStartOutlineRef.current = hp.map(p => ({ ...p }));
+            } else {
+              pathRibbonDragStartClRef.current = null;
+              pathRibbonDragStartOutlineRef.current = null;
+            }
+          } else {
+            pathRibbonDragStartClRef.current = null;
+            pathRibbonDragStartOutlineRef.current = null;
+          }
+          const { dragInfo: diL3, clearMultiSelection: clearMultiL3 } = buildPointDragInfoWithMultiSelect(shapes, ptHitL3, world, selectedPoints);
+          if (clearMultiL3) setSelectedPoints([]);
+          setDragInfo(diL3);
+          setSelectedShapeIdx(ptHitL3.shapeIdx);
+          return;
+        }
+        const arcHitL3 = hitTestArcPointGlobal(world);
+        if (arcHitL3) {
+          saveHistory();
+          const shapeA = shapes[arcHitL3.shapeIdx];
+          const A = shapeA.points[arcHitL3.edgeIdx];
+          const B = shapeA.points[(arcHitL3.edgeIdx + 1) % shapeA.points.length];
+          const arcsL3 = shapeA.edgeArcs?.[arcHitL3.edgeIdx] ?? [];
+          const startArcPointWorld = arcPointToWorldOnCurve(A, B, arcsL3, arcHitL3.arcPoint);
+          arcSnapLockedTargetRef.current = null;
+          arcSnapCacheRef.current = buildArcPointPositionCache(shapes, isOnActiveLayerForArcSnap);
+          setArcDragInfo({
+            shapeIdx: arcHitL3.shapeIdx,
+            edgeIdx: arcHitL3.edgeIdx,
+            arcPoint: arcHitL3.arcPoint,
+            startMouse: { ...world },
+            startArcPointWorld,
+          });
+          setSelectedShapeIdx(arcHitL3.shapeIdx);
+          return;
+        }
         const patternHit = hitTestPattern(world);
         if (patternHit) {
           setSelectedPattern(patternHit);
@@ -3524,7 +5498,40 @@ export default function MasterProject() {
                 }
               }
             }
+            if (!multiMod) {
+              const multiIndices =
+                selectedShapeIndices.length >= 2 && selectedShapeIndices.includes(patternHit.shapeIdx)
+                  ? [...new Set(selectedShapeIndices)].sort((a, b) => a - b)
+                  : null;
+              if (multiIndices) {
+                saveHistory();
+                transformStartVizPiecesRef.current = null;
+                const starts: MultiShapeDragStart[] = multiIndices.map(sidx => ({
+                  shapeIdx: sidx,
+                  startPoints: shapes[sidx].points.map(p => ({ ...p })),
+                  startVizPieces: shapes[sidx].calculatorInputs?.vizPieces
+                    ? (shapes[sidx].calculatorInputs!.vizPieces as GrassPiece[]).map(p => ({ ...p }))
+                    : null,
+                  ...snapshotPathRibbonForDrag(shapes[sidx].calculatorInputs as Record<string, unknown>),
+                  linkedPathSnapshot: linkedPathSnapshotForShape(shapes[sidx], shapes),
+                }));
+                setShapeDragInfo({
+                  shapeIdx: patternHit.shapeIdx,
+                  startMouse: { ...world },
+                  startPoints: shapes[patternHit.shapeIdx].points.map(p => ({ ...p })),
+                  multiShapeDragStarts: starts,
+                });
+                const gardenChildren = collectGardenDragChildrenForShapeIndices(multiIndices, shapes);
+                const excludeDrag = new Set(multiIndices);
+                gardenDragChildrenRef.current = gardenChildren.filter(c => !excludeDrag.has(c.idx));
+                setPatternDragPreview(null);
+                setPathPatternLongOffsetPreview(null);
+                setPatternAlignedEdges([]);
+                return;
+              }
+            }
             saveHistory();
+            setSelectedShapeIndices([]);
             const inp = shape.calculatorInputs ?? {};
             if (isPathElement(shape)) {
               const pathCenterline = inp.pathCenterline as Point[] | undefined;
@@ -3564,8 +5571,94 @@ export default function MasterProject() {
           return;
         }
         setSelectedPattern(null);
+        // Brak wzorca (np. zwykły L2 bez wizualizacji) — ta sama obsługa co poniżej: Ctrl + grupowy ruch całych kształtów.
+        const shapeHitL3 = hitTestShape(world);
+        if (shapeHitL3 !== null) {
+          if (multiMod) {
+            setSelectedPoints([]);
+            setSelectedShapeIndices(prev => {
+              const had = prev.includes(shapeHitL3);
+              const nextSet = new Set(prev);
+              if (had) nextSet.delete(shapeHitL3);
+              else nextSet.add(shapeHitL3);
+              const arr = [...nextSet].sort((a, b) => a - b);
+              const nextPrimary = arr.length === 0 ? null : had ? (arr[0] ?? null) : shapeHitL3;
+              setSelectedShapeIdx(nextPrimary);
+              return arr;
+            });
+            return;
+          }
+          saveHistory();
+          const latestIdxL3 = selectedShapeIndicesRef.current;
+          const fullMarqueeL3 = getFullySelectedShapeIndicesFromPoints(selectedPoints, shapes);
+          let multiIndicesL3 =
+            latestIdxL3.length >= 2 && latestIdxL3.includes(shapeHitL3)
+              ? [...new Set(latestIdxL3)].sort((a, b) => a - b)
+              : null;
+          if (multiIndicesL3 === null && fullMarqueeL3.length >= 2 && fullMarqueeL3.includes(shapeHitL3)) {
+            multiIndicesL3 = fullMarqueeL3;
+          }
+          if (multiIndicesL3) {
+            transformStartVizPiecesRef.current = null;
+            const startsL3: MultiShapeDragStart[] = multiIndicesL3.map(si => ({
+              shapeIdx: si,
+              startPoints: shapes[si].points.map(p => ({ ...p })),
+              startVizPieces: shapes[si].calculatorInputs?.vizPieces
+                ? (shapes[si].calculatorInputs!.vizPieces as GrassPiece[]).map(p => ({ ...p }))
+                : null,
+              ...snapshotPathRibbonForDrag(shapes[si].calculatorInputs as Record<string, unknown>),
+              linkedPathSnapshot: linkedPathSnapshotForShape(shapes[si], shapes),
+            }));
+            setSelectedShapeIndices(multiIndicesL3);
+            setSelectedShapeIdx(shapeHitL3);
+            setShapeDragInfo({
+              shapeIdx: shapeHitL3,
+              startMouse: { ...world },
+              startPoints: shapes[shapeHitL3].points.map(p => ({ ...p })),
+              multiShapeDragStarts: startsL3,
+            });
+            const gardenChildrenL3 = collectGardenDragChildrenForShapeIndices(multiIndicesL3, shapes);
+            const excludeDragL3 = new Set(multiIndicesL3);
+            gardenDragChildrenRef.current = gardenChildrenL3.filter(c => !excludeDragL3.has(c.idx));
+          } else {
+            setSelectedShapeIndices([]);
+            setSelectedShapeIdx(shapeHitL3);
+            setShapeDragInfo({
+              shapeIdx: shapeHitL3,
+              startMouse: { ...world },
+              startPoints: shapes[shapeHitL3].points.map(p => ({ ...p })),
+              ...snapshotPathRibbonForDrag(shapes[shapeHitL3].calculatorInputs as Record<string, unknown>),
+              linkedPathSnapshot: linkedPathSnapshotForShape(shapes[shapeHitL3], shapes),
+            });
+            const hitShapeL3 = shapes[shapeHitL3];
+            transformStartVizPiecesRef.current = hitShapeL3.calculatorInputs?.vizPieces
+              ? (hitShapeL3.calculatorInputs.vizPieces as GrassPiece[]).map(p => ({ ...p })) : null;
+            if (hitShapeL3.layer === 1 && hitShapeL3.closed && hitShapeL3.points.length >= 3) {
+              const childrenL3: typeof gardenDragChildrenRef.current = [];
+              for (let ci = 0; ci < shapes.length; ci++) {
+                if (ci === shapeHitL3 || shapes[ci].layer !== 2) continue;
+                const c = centroid(shapes[ci].points);
+                if (pointInPolygon(c, hitShapeL3.points)) {
+                  childrenL3.push({
+                    idx: ci,
+                    startPoints: shapes[ci].points.map(p => ({ ...p })),
+                    startVizPieces: shapes[ci].calculatorInputs?.vizPieces
+                      ? (shapes[ci].calculatorInputs!.vizPieces as GrassPiece[]).map(p => ({ ...p }))
+                      : null,
+                    ...snapshotPathRibbonForDrag(shapes[ci].calculatorInputs as Record<string, unknown>),
+                  });
+                }
+              }
+              gardenDragChildrenRef.current = childrenL3;
+            } else {
+              gardenDragChildrenRef.current = [];
+            }
+          }
+          return;
+        }
         setSelectedShapeIdx(null);
-        if (ctrlHeld) {
+        setSelectedShapeIndices([]);
+        if (multiMod) {
           const r = canvasRef.current!.getBoundingClientRect();
           const sx = e.clientX - r.left, sy = e.clientY - r.top;
           setSelectionRect({ startX: sx, startY: sy, endX: sx, endY: sy });
@@ -3598,13 +5691,78 @@ export default function MasterProject() {
         }
       }
 
-      // Open endpoints
-      const openEnd = hitTestOpenEnd(world);
-      if (openEnd) {
-        const { shapeIdx: si, end } = openEnd;
-        const pi = end === "first" ? 0 : shapes[si].points.length - 1;
-        setDragInfo({ shapeIdx: si, pointIdx: pi, startMouse: { ...world }, startPoint: { ...shapes[si].points[pi] }, isOpenEnd: true, openEndSide: end });
-        setSelectedShapeIdx(si);
+      /** Ctrl + multiselect albo prostokąt obejmujący co najmniej dwa pełne kształty (wszystkie wierzchołki) — pierwszeństwo grupowego ruchu z wypełnienia przed hitTestPoint. */
+      const indicesSnap = selectedShapeIndicesRef.current;
+      const fullShapeIndicesFromMarquee = getFullySelectedShapeIndicesFromPoints(selectedPoints, shapes);
+      const treatWholeShapeMulti =
+        indicesSnap.length >= 2 || fullShapeIndicesFromMarquee.length >= 2;
+      const shapeHitBeforeVertex = treatWholeShapeMulti ? hitTestShape(world) : null;
+      const skipVertexForWholeShapeMulti =
+        shapeHitBeforeVertex !== null &&
+        (indicesSnap.includes(shapeHitBeforeVertex) ||
+          fullShapeIndicesFromMarquee.includes(shapeHitBeforeVertex));
+
+      const ptHit = hitTestPoint(world);
+      if (ptHit && !skipVertexForWholeShapeMulti) {
+        saveHistory();
+        const hitShape = shapes[ptHit.shapeIdx];
+        if (hitShape.closed && isPathElement(hitShape) && hitShape.calculatorInputs?.pathIsOutline) {
+          const hp = hitShape.points;
+          if (hp.length === 8 || hp.length === 4) {
+            const pwm = Number(hitShape.calculatorInputs.pathWidthM ?? 0.6) || 0.6;
+            const cl0 = resolvePathRibbonRectCenterline4(
+              hp,
+              pwm,
+              hitShape.calculatorInputs.pathCenterline as Point[] | undefined,
+              hitShape.calculatorInputs.pathCenterlineOriginal as Point[] | undefined,
+            );
+            pathRibbonDragStartClRef.current = cl0.length === 4 ? cl0.map(p => ({ ...p })) : null;
+            pathRibbonDragStartOutlineRef.current = hp.map(p => ({ ...p }));
+          } else {
+            pathRibbonDragStartClRef.current = null;
+            pathRibbonDragStartOutlineRef.current = null;
+          }
+        } else {
+          pathRibbonDragStartClRef.current = null;
+          pathRibbonDragStartOutlineRef.current = null;
+        }
+        const inMulti =
+          selectedPoints.length >= 2 &&
+          selectedPoints.some(sp => sp.shapeIdx === ptHit.shapeIdx && sp.pointIdx === ptHit.pointIdx);
+        let multiDragStartPositions: MultiDragVertexStart[] | undefined;
+        if (inMulti) {
+          const uniq = new Map<string, MultiDragVertexStart>();
+          for (const sp of selectedPoints) {
+            const k = `${sp.shapeIdx},${sp.pointIdx}`;
+            const sh = shapes[sp.shapeIdx];
+            if (!sh) continue;
+            const denseCache =
+              isLinearElement(sh) && isPolygonLinearStripOutline(sh) && sh.linearOpenStripOutline
+                ? computeLinearElementFillOutline(sh)
+                : undefined;
+            const p = getLinearElementVertexGripWorld(sh, sp.pointIdx, denseCache);
+            uniq.set(k, { shapeIdx: sp.shapeIdx, pointIdx: sp.pointIdx, x: p.x, y: p.y });
+          }
+          if (uniq.size >= 2) multiDragStartPositions = [...uniq.values()];
+        }
+        if (selectedPoints.length >= 2 && !inMulti) setSelectedPoints([]);
+        const dragHitShape = shapes[ptHit.shapeIdx];
+        const denseDragStart =
+          dragHitShape && isLinearElement(dragHitShape) && isPolygonLinearStripOutline(dragHitShape) && dragHitShape.linearOpenStripOutline
+            ? computeLinearElementFillOutline(dragHitShape)
+            : undefined;
+        const vertexDragStart = dragHitShape
+          ? getLinearElementVertexGripWorld(dragHitShape, ptHit.pointIdx, denseDragStart)
+          : { x: 0, y: 0 };
+        setDragInfo({
+          shapeIdx: ptHit.shapeIdx,
+          pointIdx: ptHit.pointIdx,
+          startMouse: { ...world },
+          startPoint: { ...vertexDragStart },
+          ...(multiDragStartPositions ? { multiDragStartPositions } : {}),
+        });
+        setSelectedShapeIndices([]);
+        setSelectedShapeIdx(ptHit.shapeIdx);
         return;
       }
 
@@ -3617,17 +5775,20 @@ export default function MasterProject() {
         const arcs = shape.edgeArcs?.[arcHit.edgeIdx] ?? [];
         const startArcPointWorld = arcPointToWorldOnCurve(A, B, arcs, arcHit.arcPoint);
         arcSnapLockedTargetRef.current = null;
-        arcSnapCacheRef.current = buildArcPointPositionCache(shapes, isOnActiveLayer);
+        arcSnapCacheRef.current = buildArcPointPositionCache(shapes, isOnActiveLayerForArcSnap);
         setArcDragInfo({ shapeIdx: arcHit.shapeIdx, edgeIdx: arcHit.edgeIdx, arcPoint: arcHit.arcPoint, startMouse: { ...world }, startArcPointWorld });
         setSelectedShapeIdx(arcHit.shapeIdx);
         return;
       }
 
-      const ptHit = hitTestPoint(world);
-      if (ptHit) {
-        saveHistory();
-        setDragInfo({ shapeIdx: ptHit.shapeIdx, pointIdx: ptHit.pointIdx, startMouse: { ...world }, startPoint: { ...shapes[ptHit.shapeIdx].points[ptHit.pointIdx] } });
-        setSelectedShapeIdx(ptHit.shapeIdx); return;
+      // Open endpoints (fence / freeDraw chains — not polygon linear walls; those use point menu)
+      const openEnd = hitTestOpenEnd(world);
+      if (openEnd) {
+        const { shapeIdx: si, end } = openEnd;
+        const pi = end === "first" ? 0 : shapes[si].points.length - 1;
+        setDragInfo({ shapeIdx: si, pointIdx: pi, startMouse: { ...world }, startPoint: { ...shapes[si].points[pi] }, isOpenEnd: true, openEndSide: end });
+        setSelectedShapeIdx(si);
+        return;
       }
 
       const edgeHit = hitTestEdge(world);
@@ -3666,35 +5827,91 @@ export default function MasterProject() {
 
       const shapeHit = hitTestShape(world);
       if (shapeHit !== null) {
-        setSelectedShapeIdx(shapeHit);
+        if (multiMod) {
+          setSelectedPoints([]);
+          setSelectedShapeIndices(prev => {
+            const had = prev.includes(shapeHit);
+            const nextSet = new Set(prev);
+            if (had) nextSet.delete(shapeHit);
+            else nextSet.add(shapeHit);
+            const arr = [...nextSet].sort((a, b) => a - b);
+            const nextPrimary = arr.length === 0 ? null : had ? (arr[0] ?? null) : shapeHit;
+            setSelectedShapeIdx(nextPrimary);
+            return arr;
+          });
+          return;
+        }
         saveHistory();
-        setShapeDragInfo({ shapeIdx: shapeHit, startMouse: { ...world }, startPoints: shapes[shapeHit].points.map(p => ({ ...p })) });
-        const hitShape = shapes[shapeHit];
-        transformStartVizPiecesRef.current = hitShape.calculatorInputs?.vizPieces
-          ? (hitShape.calculatorInputs.vizPieces as GrassPiece[]).map(p => ({ ...p })) : null;
-        if (hitShape.layer === 1 && hitShape.closed && hitShape.points.length >= 3) {
-          const children: typeof gardenDragChildrenRef.current = [];
-          for (let ci = 0; ci < shapes.length; ci++) {
-            if (ci === shapeHit || shapes[ci].layer !== 2) continue;
-            const c = centroid(shapes[ci].points);
-            if (pointInPolygon(c, hitShape.points)) {
-              children.push({
-                idx: ci,
-                startPoints: shapes[ci].points.map(p => ({ ...p })),
-                startVizPieces: shapes[ci].calculatorInputs?.vizPieces
-                  ? (shapes[ci].calculatorInputs!.vizPieces as GrassPiece[]).map(p => ({ ...p })) : null,
-              });
-            }
-          }
-          gardenDragChildrenRef.current = children;
+        const latestIdx = selectedShapeIndicesRef.current;
+        const fullFromMarquee = getFullySelectedShapeIndicesFromPoints(selectedPoints, shapes);
+        let multiIndices =
+          latestIdx.length >= 2 && latestIdx.includes(shapeHit)
+            ? [...new Set(latestIdx)].sort((a, b) => a - b)
+            : null;
+        if (multiIndices === null && fullFromMarquee.length >= 2 && fullFromMarquee.includes(shapeHit)) {
+          multiIndices = fullFromMarquee;
+        }
+        if (multiIndices) {
+          transformStartVizPiecesRef.current = null;
+          const starts: MultiShapeDragStart[] = multiIndices.map(si => ({
+            shapeIdx: si,
+            startPoints: shapes[si].points.map(p => ({ ...p })),
+            startVizPieces: shapes[si].calculatorInputs?.vizPieces
+              ? (shapes[si].calculatorInputs!.vizPieces as GrassPiece[]).map(p => ({ ...p }))
+              : null,
+            ...snapshotPathRibbonForDrag(shapes[si].calculatorInputs as Record<string, unknown>),
+            linkedPathSnapshot: linkedPathSnapshotForShape(shapes[si], shapes),
+          }));
+          setSelectedShapeIndices(multiIndices);
+          setSelectedShapeIdx(shapeHit);
+          setShapeDragInfo({
+            shapeIdx: shapeHit,
+            startMouse: { ...world },
+            startPoints: shapes[shapeHit].points.map(p => ({ ...p })),
+            multiShapeDragStarts: starts,
+          });
+          const gardenChildren = collectGardenDragChildrenForShapeIndices(multiIndices, shapes);
+          const excludeDrag = new Set(multiIndices);
+          gardenDragChildrenRef.current = gardenChildren.filter(c => !excludeDrag.has(c.idx));
         } else {
-          gardenDragChildrenRef.current = [];
+          setSelectedShapeIndices([]);
+          setSelectedShapeIdx(shapeHit);
+          setShapeDragInfo({
+            shapeIdx: shapeHit,
+            startMouse: { ...world },
+            startPoints: shapes[shapeHit].points.map(p => ({ ...p })),
+            ...snapshotPathRibbonForDrag(shapes[shapeHit].calculatorInputs as Record<string, unknown>),
+            linkedPathSnapshot: linkedPathSnapshotForShape(shapes[shapeHit], shapes),
+          });
+          const hitShape = shapes[shapeHit];
+          transformStartVizPiecesRef.current = hitShape.calculatorInputs?.vizPieces
+            ? (hitShape.calculatorInputs.vizPieces as GrassPiece[]).map(p => ({ ...p })) : null;
+          if (hitShape.layer === 1 && hitShape.closed && hitShape.points.length >= 3) {
+            const children: typeof gardenDragChildrenRef.current = [];
+            for (let ci = 0; ci < shapes.length; ci++) {
+              if (ci === shapeHit || shapes[ci].layer !== 2) continue;
+              const c = centroid(shapes[ci].points);
+              if (pointInPolygon(c, hitShape.points)) {
+                children.push({
+                  idx: ci,
+                  startPoints: shapes[ci].points.map(p => ({ ...p })),
+                  startVizPieces: shapes[ci].calculatorInputs?.vizPieces
+                    ? (shapes[ci].calculatorInputs!.vizPieces as GrassPiece[]).map(p => ({ ...p })) : null,
+                  ...snapshotPathRibbonForDrag(shapes[ci].calculatorInputs as Record<string, unknown>),
+                });
+              }
+            }
+            gardenDragChildrenRef.current = children;
+          } else {
+            gardenDragChildrenRef.current = [];
+          }
         }
         return;
       }
 
       setSelectedShapeIdx(null);
-      if (ctrlHeld) {
+      setSelectedShapeIndices([]);
+      if (multiMod) {
         const r = canvasRef.current!.getBoundingClientRect();
         const sx = e.clientX - r.left, sy = e.clientY - r.top;
         setSelectionRect({ startX: sx, startY: sy, endX: sx, endY: sy });
@@ -3713,17 +5930,33 @@ export default function MasterProject() {
         }
         setDrawingShapeIdx(si); setSelectedShapeIdx(si); return;
       }
+      const w0 = snapDrawingMagnet(world, {
+        drawingShapeIdx: DRAWING_SNAP_EXCLUDE_NONE,
+        shapes,
+        localPtChain: [],
+        zoom,
+        viewFilter,
+        activeLayer,
+      });
       const newIdx = shapes.length;
-      setShapes(p => [...p, { points: [{ ...world }], closed: false, label: "Free Draw", layer: (activeLayer === 3 || activeLayer === 4 ? 2 : activeLayer) as LayerID, lockedEdges: [], lockedAngles: [], heights: [0], elementType: "polygon", thickness: 0 }]);
+      setShapes(p => [...p, { points: [{ ...w0 }], closed: false, label: "Free Draw", layer: (activeLayer === 3 || activeLayer === 4 ? 2 : activeLayer) as LayerID, lockedEdges: [], lockedAngles: [], heights: [0], elementType: "polygon", thickness: 0 }]);
       setDrawingShapeIdx(newIdx); setSelectedShapeIdx(newIdx);
     }
 
     // Path drawing modes (Slabs, Monoblock) — requires pathConfig from PathCreationModal
     if ((mode === "drawPathSlabs" || mode === "drawPathConcreteSlabs" || mode === "drawPathMonoblock") && pathConfig && drawingShapeIdx === null) {
       const elementType = mode === "drawPathSlabs" ? "pathSlabs" : mode === "drawPathConcreteSlabs" ? "pathConcreteSlabs" : "pathMonoblock";
+      const w0 = snapDrawingMagnet(world, {
+        drawingShapeIdx: DRAWING_SNAP_EXCLUDE_NONE,
+        shapes,
+        localPtChain: [],
+        zoom,
+        viewFilter,
+        activeLayer,
+      });
       const newIdx = shapes.length;
       setShapes(p => [...p, {
-        points: [{ ...world }], closed: false,
+        points: [{ ...w0 }], closed: false,
         label: mode === "drawPathSlabs" ? t("project:results_path_slabs") : mode === "drawPathConcreteSlabs" ? t("project:results_path_concrete_slabs") : t("project:results_path_monoblock"),
         layer: 2 as LayerID,
         lockedEdges: [], lockedAngles: [], heights: [0],
@@ -3743,14 +5976,25 @@ export default function MasterProject() {
         const { shapeIdx: si, end } = openEnd;
         if (isLinearElement(shapes[si]) && shapes[si].elementType === elementType) {
           if (end === "first") {
-            setShapes(p => { const n = [...p]; const s = { ...n[si] }; s.points = [...s.points].reverse(); n[si] = s; return n; });
+            setShapes(p => { const n = [...p]; const s = { ...n[si] }; s.points = [...s.points].reverse(); if (s.heights && s.heights.length === s.points.length) s.heights = [...s.heights].reverse(); n[si] = s; return n; });
           }
           setDrawingShapeIdx(si); setSelectedShapeIdx(si); return;
         }
       }
+      const protoLinear = protoDrawingShapeForLinearMode(elementType);
+      const snapFirst = snapWorldPointForLinearDrawing(world, {
+        drawingShapeIdx: DRAWING_SNAP_EXCLUDE_NONE,
+        shapes,
+        localPtChain: [],
+        drawingShape: protoLinear,
+        zoom,
+        viewFilter,
+        activeLayer,
+      });
+      const w0 = snapFirst.point;
       const newIdx = shapes.length;
       setShapes(p => [...p, {
-        points: [{ ...world }], closed: false,
+        points: [{ ...w0 }], closed: false,
         label: elementType.charAt(0).toUpperCase() + elementType.slice(1),
         layer: 2 as LayerID,
         lockedEdges: [], lockedAngles: [], heights: [0],
@@ -3759,7 +6003,12 @@ export default function MasterProject() {
         ...(elementType === "wall" ? {
           calculatorType: "wall" as const,
           calculatorSubType: "block4",
-          calculatorInputs: { layingMethod: "standing" as const, height: "1" },
+          calculatorInputs: {
+            layingMethod: "standing" as const,
+            height: "1",
+            wallDrawBaseline: true,
+            wallDrawFace: (snapFirst.wallFaceHint ?? "left") as "left" | "right",
+          },
         } : {}),
         ...(elementType === "kerb" ? {
           calculatorType: "kerbs" as const,
@@ -3793,9 +6042,17 @@ export default function MasterProject() {
           setDrawingShapeIdx(si); setSelectedShapeIdx(si); return;
         }
       }
+      const w0 = snapDrawingMagnet(world, {
+        drawingShapeIdx: DRAWING_SNAP_EXCLUDE_NONE,
+        shapes,
+        localPtChain: [],
+        zoom,
+        viewFilter,
+        activeLayer,
+      });
       const newIdx = shapes.length;
       setShapes(p => [...p, {
-        points: [{ ...world }], closed: false,
+        points: [{ ...w0 }], closed: false,
         label,
         layer: 2 as LayerID,
         lockedEdges: [], lockedAngles: [], heights: [0],
@@ -3820,17 +6077,24 @@ export default function MasterProject() {
           if (d > maxD) { maxD = d; anchor = { ...p }; }
         }
         const startDist = distance(anchor, world);
+        const pathRibbonScale = pathRibbonScalePayloadForCorner(shapes[si], pts);
         setScaleCorner({
           shapeIdx: si, pointIdx: ptHit.pointIdx, anchor,
           startMouse: { ...world }, startPoints: pts.map(p => ({ ...p })),
           startDist: startDist < 1 ? 1 : startDist,
+          ...(pathRibbonScale ? { pathRibbonScale } : {}),
         });
         transformStartVizPiecesRef.current = shapes[si].calculatorInputs?.vizPieces
           ? (shapes[si].calculatorInputs!.vizPieces as GrassPiece[]).map(p => ({ ...p })) : null;
         return;
       }
       const edgeHit = hitTestEdge(world);
-      if (edgeHit && shapes[edgeHit.shapeIdx].closed) {
+      const edgeShape = edgeHit ? shapes[edgeHit.shapeIdx] : null;
+      if (
+        edgeHit &&
+        edgeShape?.closed &&
+        !(isPathElement(edgeShape) && edgeShape.calculatorInputs?.pathIsOutline)
+      ) {
         const si = edgeHit.shapeIdx;
         const pts = shapes[si].points;
         saveHistory();
@@ -3854,19 +6118,27 @@ export default function MasterProject() {
         return;
       }
       const shapeHit = hitTestShape(world);
-      if (shapeHit !== null) { setSelectedShapeIdx(shapeHit); return; }
+      if (shapeHit !== null) { setSelectedShapeIdx(shapeHit); setSelectedShapeIndices([]); return; }
       setSelectedShapeIdx(null);
+      setSelectedShapeIndices([]);
       setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
     }
-  }, [mode, shapes, drawingShapeIdx, pathSegmentSideSelection, pathConfig, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, worldToScreen, saveHistory, selectedShapeIdx, isOnActiveLayer, activeLayer, editingGeodesyCard, measureStart, measureEnd, hoveredPoint, hoveredEdge, selectedPoints, selectionRect, editingDim, rotateInfo, patternDragInfo, patternRotateInfo, shapeDragInfo, edgeDragInfo, t, pointOffsetAlongLinePick, viewFilter]);
+  }, [mode, shapes, drawingShapeIdx, pathSegmentSideSelection, pathConfig, pan, zoom, shiftHeld, ctrlHeld, geodesyEnabled, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestShape, hitTestOpenEnd, hitTestPattern, hitTestPointForScale, hitTestEdgeForScale, hitTestGrassPieceEdge, hitTestArcPointGlobal, worldToScreen, saveHistory, selectedShapeIdx, selectedShapeIndices, isOnActiveLayer, activeLayer, editingGeodesyCard, measureStart, measureEnd, hoveredPoint, hoveredEdge, selectedPoints, selectionRect, editingDim, rotateInfo, patternDragInfo, patternRotateInfo, shapeDragInfo, edgeDragInfo, t, pointOffsetAlongLinePick, viewFilter]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const world = getWorldPos(e);
 
-    cancelAnimationFrame(mouseRafRef.current);
-    mouseRafRef.current = requestAnimationFrame(() => {
+    const hasActiveCanvasDrag = !!(dragInfo || shapeDragInfo || edgeDragInfo);
+    if (hasActiveCanvasDrag) {
+      cancelAnimationFrame(mouseRafRef.current);
+      mouseRafRef.current = null;
       setMouseWorld(world);
-    });
+    } else {
+      cancelAnimationFrame(mouseRafRef.current);
+      mouseRafRef.current = requestAnimationFrame(() => {
+        setMouseWorld(world);
+      });
+    }
 
     // Activate edge drag from pending edge hit (polygons + linear, not paths): drag = move that edge only
     const pendingEdge = pendingEdgeAddRef.current;
@@ -3913,29 +6185,55 @@ export default function MasterProject() {
         if (pending.type === "corner") {
           setScaleCorner(pending.data);
           const sc = pending.data;
-          const currentDist = distance(sc.anchor, world);
-          const ratio = currentDist / sc.startDist;
-          const ax = sc.anchor.x, ay = sc.anchor.y;
-          let newPts = sc.startPoints.map(pt => ({ x: ax + (pt.x - ax) * ratio, y: ay + (pt.y - ay) * ratio }));
-          const magThreshold = SNAP_MAGNET_PX / zoom;
-          const snap = snapMagnetShape(newPts, shapes, sc.shapeIdx, magThreshold);
-          if (snap.didSnap) newPts = newPts.map(pt => ({ x: pt.x + snap.offset.x, y: pt.y + snap.offset.y }));
-          setShapes(p => {
-            const n = [...p]; const s = { ...n[sc.shapeIdx] }; s.points = newPts;
-            if (transformStartVizPiecesRef.current && s.calculatorInputs?.vizPieces) {
-              const snapOff = snap.didSnap ? snap.offset : { x: 0, y: 0 };
-              const inputs = { ...s.calculatorInputs };
-              inputs.vizPieces = transformStartVizPiecesRef.current.map(pc => ({
-                ...pc,
-                x: ax + (pc.x - ax) * ratio + snapOff.x,
-                y: ay + (pc.y - ay) * ratio + snapOff.y,
-                widthM: pc.widthM * ratio,
-                lengthM: pc.lengthM * ratio,
-              }));
-              s.calculatorInputs = inputs;
-            }
-            n[sc.shapeIdx] = s; return n;
-          });
+          if (sc.pathRibbonScale) {
+            const { newPts, ribbonCl, ratio, ax, ay, snapOff } = computeScaleCornerFrame(sc, world, shapes, zoom);
+            setShapes(p => {
+              const n = [...p]; const s = { ...n[sc.shapeIdx] }; s.points = newPts;
+              if (ribbonCl && ribbonCl.length >= 2) {
+                s.calculatorInputs = {
+                  ...s.calculatorInputs,
+                  pathCenterline: ribbonCl.map(pt => ({ ...pt })),
+                  pathCenterlineOriginal: ribbonCl.map(pt => ({ ...pt })),
+                };
+              }
+              if (transformStartVizPiecesRef.current && s.calculatorInputs?.vizPieces) {
+                const inputs = { ...s.calculatorInputs };
+                inputs.vizPieces = transformStartVizPiecesRef.current.map(pc => ({
+                  ...pc,
+                  x: ax + (pc.x - ax) * ratio + snapOff.x,
+                  y: ay + (pc.y - ay) * ratio + snapOff.y,
+                  widthM: pc.widthM * ratio,
+                  lengthM: pc.lengthM * ratio,
+                }));
+                s.calculatorInputs = inputs;
+              }
+              n[sc.shapeIdx] = s; return n;
+            });
+          } else {
+            const currentDist = distance(sc.anchor, world);
+            const ratio = currentDist / sc.startDist;
+            const ax = sc.anchor.x, ay = sc.anchor.y;
+            let newPts = sc.startPoints.map(pt => ({ x: ax + (pt.x - ax) * ratio, y: ay + (pt.y - ay) * ratio }));
+            const magThreshold = SNAP_MAGNET_PX / zoom;
+            const snap = snapMagnetShape(newPts, shapes, sc.shapeIdx, magThreshold);
+            if (snap.didSnap) newPts = newPts.map(pt => ({ x: pt.x + snap.offset.x, y: pt.y + snap.offset.y }));
+            setShapes(p => {
+              const n = [...p]; const s = { ...n[sc.shapeIdx] }; s.points = newPts;
+              if (transformStartVizPiecesRef.current && s.calculatorInputs?.vizPieces) {
+                const snapOff = snap.didSnap ? snap.offset : { x: 0, y: 0 };
+                const inputs = { ...s.calculatorInputs };
+                inputs.vizPieces = transformStartVizPiecesRef.current.map(pc => ({
+                  ...pc,
+                  x: ax + (pc.x - ax) * ratio + snapOff.x,
+                  y: ay + (pc.y - ay) * ratio + snapOff.y,
+                  widthM: pc.widthM * ratio,
+                  lengthM: pc.lengthM * ratio,
+                }));
+                s.calculatorInputs = inputs;
+              }
+              n[sc.shapeIdx] = s; return n;
+            });
+          }
           return;
         }
         if (pending.type === "edge") {
@@ -4142,17 +6440,45 @@ export default function MasterProject() {
       }
       const finalP0 = { x: newP0.x + off.x, y: newP0.y + off.y };
       const finalP1 = { x: newP1.x + off.x, y: newP1.y + off.y };
-      setShapes(p => {
-        const n = [...p];
-        const s = { ...n[edgeDragInfo.shapeIdx] };
-        const np = [...s.points];
-        const endIdx = s.closed ? (edgeDragInfo.edgeIdx + 1) % np.length : edgeDragInfo.edgeIdx + 1;
-        np[edgeDragInfo.edgeIdx] = finalP0;
-        np[endIdx] = finalP1;
-        s.points = np;
-        n[edgeDragInfo.shapeIdx] = s;
-        if (s.linkedShapeIdx != null && n[s.linkedShapeIdx]) n[s.linkedShapeIdx] = { ...n[s.linkedShapeIdx], points: [...np] };
-        return n;
+      flushSync(() => {
+        setShapes(p => {
+          const n = [...p];
+          const s = { ...n[edgeDragInfo.shapeIdx] };
+          const pts = s.points;
+          const ei = edgeDragInfo.edgeIdx;
+          /** Strip rebuild adds delta to centerline from current outline — must be incremental vs pts, not total vs drag start (else each mousemove re-applies full offset). */
+          const deltaStrip = { x: finalP0.x - pts[ei].x, y: finalP0.y - pts[ei].y };
+          const stripLocked =
+            (s.lockedEdges && s.lockedEdges.length > 0) || (s.lockedAngles && s.lockedAngles.length > 0);
+          let rebuiltStrip: Point[] | null = null;
+          if (
+            isPolygonLinearStripOutline(s) &&
+            isPolygonLinearElement(s) &&
+            !stripLocked
+          ) {
+            const tpx = toPixels(getPolygonThicknessM(s));
+            if (s.closed) {
+              rebuiltStrip = rebuildClosedStripOutlineAfterEdgeTranslate(pts, ei, deltaStrip, tpx);
+            } else if (s.linearOpenStripOutline) {
+              rebuiltStrip = rebuildOpenStripOutlineAfterEdgeTranslate(pts, ei, deltaStrip, tpx);
+            }
+          }
+          if (rebuiltStrip) {
+            s.points = rebuiltStrip;
+            s.calculatorResults = undefined;
+          } else {
+            const np = [...s.points];
+            const endI = s.closed ? (edgeDragInfo.edgeIdx + 1) % np.length : edgeDragInfo.edgeIdx + 1;
+            np[edgeDragInfo.edgeIdx] = finalP0;
+            np[endI] = finalP1;
+            s.points = np;
+          }
+          n[edgeDragInfo.shapeIdx] = s;
+          if (s.linkedShapeIdx != null && n[s.linkedShapeIdx]) {
+            n[s.linkedShapeIdx] = { ...n[s.linkedShapeIdx], points: [...s.points] };
+          }
+          return n;
+        });
       });
       return;
     }
@@ -4162,34 +6488,121 @@ export default function MasterProject() {
       const dy = world.y - shapeDragInfo.startMouse.y;
       const movedPts = shapeDragInfo.startPoints.map(pt => ({ x: pt.x + dx, y: pt.y + dy }));
       const magThreshold = SNAP_MAGNET_PX / zoom;
-      const snap = snapMagnetShape(movedPts, shapes, shapeDragInfo.shapeIdx, magThreshold);
+      const multi = shapeDragInfo.multiShapeDragStarts;
+      /** Strip wall/kerb/foundation: many outline vertices + snapMagnetShape = rigid snap to foreign pts/edges → “jumpy” whole-shape drag. */
+      const stripLinearWholeDragNoMagnet = (si: number): boolean => {
+        const sh = shapes[si];
+        return !!(sh && isPolygonLinearStripOutline(sh) && isPolygonLinearElement(sh));
+      };
+      const noMagSnap = { offset: { x: 0, y: 0 }, didSnap: false, snapTarget: null as Point | null };
+      if (multi && multi.length >= 2) {
+        const excludeSet = new Set(multi.map(m => m.shapeIdx));
+        const skipMag = multi.some(m => stripLinearWholeDragNoMagnet(m.shapeIdx));
+        const snap = skipMag ? noMagSnap : snapMagnetShapeExcluding(movedPts, shapes, excludeSet, magThreshold);
+        const finalPts = snap.didSnap ? movedPts.map(pt => ({ x: pt.x + snap.offset.x, y: pt.y + snap.offset.y })) : movedPts;
+        const totalDx = finalPts[0].x - shapeDragInfo.startPoints[0].x;
+        const totalDy = finalPts[0].y - shapeDragInfo.startPoints[0].y;
+        flushSync(() => {
+          setShapes(p => {
+            const n = [...p];
+            for (const m of multi) {
+              const s = { ...n[m.shapeIdx] };
+              const newPts = m.startPoints.map(pt => ({ x: pt.x + totalDx, y: pt.y + totalDy }));
+              s.points = newPts;
+              const pathSnap = { startPathCenterline: m.startPathCenterline, startPathCenterlineOriginal: m.startPathCenterlineOriginal };
+              let inputs: Record<string, unknown> = { ...s.calculatorInputs } as Record<string, unknown>;
+              const pathMerged = applyPathRibbonSnapTranslation(inputs, pathSnap, totalDx, totalDy);
+              if (pathMerged) inputs = pathMerged;
+              if (m.startVizPieces && inputs.vizPieces) {
+                inputs = { ...inputs, vizPieces: (m.startVizPieces as GrassPiece[]).map(pc => ({ ...pc, x: pc.x + totalDx, y: pc.y + totalDy })) };
+              }
+              s.calculatorInputs = inputs as typeof s.calculatorInputs;
+              n[m.shapeIdx] = s;
+              const li = s.linkedShapeIdx;
+              if (li != null && n[li] && !excludeSet.has(li)) {
+                const ls = { ...n[li], points: [...newPts] };
+                const lp = m.linkedPathSnapshot;
+                if (lp && lp.shapeIdx === li) {
+                  const lm = applyPathRibbonSnapTranslation(ls.calculatorInputs as Record<string, unknown>, {
+                    startPathCenterline: lp.startPathCenterline,
+                    startPathCenterlineOriginal: lp.startPathCenterlineOriginal,
+                  }, totalDx, totalDy);
+                  if (lm) ls.calculatorInputs = lm as typeof ls.calculatorInputs;
+                }
+                n[li] = ls;
+              }
+            }
+            for (const child of gardenDragChildrenRef.current) {
+              if (excludeSet.has(child.idx)) continue;
+              const cs = { ...n[child.idx] };
+              cs.points = child.startPoints.map(pt => ({ x: pt.x + totalDx, y: pt.y + totalDy }));
+              const cSnap = { startPathCenterline: child.startPathCenterline, startPathCenterlineOriginal: child.startPathCenterlineOriginal };
+              let ci: Record<string, unknown> = { ...cs.calculatorInputs } as Record<string, unknown>;
+              const cPathMerged = applyPathRibbonSnapTranslation(ci, cSnap, totalDx, totalDy);
+              if (cPathMerged) ci = cPathMerged;
+              if (child.startVizPieces && ci.vizPieces) {
+                ci = { ...ci, vizPieces: child.startVizPieces.map(pc => ({ ...pc, x: pc.x + totalDx, y: pc.y + totalDy })) };
+              }
+              cs.calculatorInputs = ci as typeof cs.calculatorInputs;
+              n[child.idx] = cs;
+            }
+            return n;
+          });
+        });
+        return;
+      }
+      const skipMag = stripLinearWholeDragNoMagnet(shapeDragInfo.shapeIdx);
+      const snap = skipMag ? noMagSnap : snapMagnetShape(movedPts, shapes, shapeDragInfo.shapeIdx, magThreshold);
       const finalPts = snap.didSnap ? movedPts.map(pt => ({ x: pt.x + snap.offset.x, y: pt.y + snap.offset.y })) : movedPts;
       const totalDx = finalPts[0].x - shapeDragInfo.startPoints[0].x;
       const totalDy = finalPts[0].y - shapeDragInfo.startPoints[0].y;
-      setShapes(p => {
-        const n = [...p];
-        const s = { ...n[shapeDragInfo.shapeIdx] };
-        s.points = finalPts;
-        // Move vizPieces (grass) with element
-        if (transformStartVizPiecesRef.current && s.calculatorInputs?.vizPieces) {
-          const inputs = { ...s.calculatorInputs };
-          inputs.vizPieces = transformStartVizPiecesRef.current.map(pc => ({ ...pc, x: pc.x + totalDx, y: pc.y + totalDy }));
-          s.calculatorInputs = inputs;
-        }
-        n[shapeDragInfo.shapeIdx] = s;
-        if (s.linkedShapeIdx != null && n[s.linkedShapeIdx]) n[s.linkedShapeIdx] = { ...n[s.linkedShapeIdx], points: [...finalPts] };
-        // Garden: move children (Layer 2 inside garden)
-        for (const child of gardenDragChildrenRef.current) {
-          const cs = { ...n[child.idx] };
-          cs.points = child.startPoints.map(pt => ({ x: pt.x + totalDx, y: pt.y + totalDy }));
-          if (child.startVizPieces && cs.calculatorInputs?.vizPieces) {
-            const ci = { ...cs.calculatorInputs };
-            ci.vizPieces = child.startVizPieces.map(pc => ({ ...pc, x: pc.x + totalDx, y: pc.y + totalDy }));
-            cs.calculatorInputs = ci;
+      flushSync(() => {
+        setShapes(p => {
+          const n = [...p];
+          const s = { ...n[shapeDragInfo.shapeIdx] };
+          s.points = finalPts;
+          const pathSnap = {
+            startPathCenterline: shapeDragInfo.startPathCenterline,
+            startPathCenterlineOriginal: shapeDragInfo.startPathCenterlineOriginal,
+          };
+          let inputs: Record<string, unknown> = { ...s.calculatorInputs } as Record<string, unknown>;
+          const pathMerged = applyPathRibbonSnapTranslation(inputs, pathSnap, totalDx, totalDy);
+          if (pathMerged) inputs = pathMerged;
+          // Move vizPieces (grass) with element
+          if (transformStartVizPiecesRef.current && inputs.vizPieces) {
+            inputs = { ...inputs, vizPieces: transformStartVizPiecesRef.current.map(pc => ({ ...pc, x: pc.x + totalDx, y: pc.y + totalDy })) };
           }
-          n[child.idx] = cs;
-        }
-        return n;
+          s.calculatorInputs = inputs as typeof s.calculatorInputs;
+          n[shapeDragInfo.shapeIdx] = s;
+          if (s.linkedShapeIdx != null && n[s.linkedShapeIdx]) {
+            const li = s.linkedShapeIdx;
+            const ls = { ...n[li], points: [...finalPts] };
+            const lp = shapeDragInfo.linkedPathSnapshot;
+            if (lp && lp.shapeIdx === li) {
+              const lm = applyPathRibbonSnapTranslation(ls.calculatorInputs as Record<string, unknown>, {
+                startPathCenterline: lp.startPathCenterline,
+                startPathCenterlineOriginal: lp.startPathCenterlineOriginal,
+              }, totalDx, totalDy);
+              if (lm) ls.calculatorInputs = lm as typeof ls.calculatorInputs;
+            }
+            n[li] = ls;
+          }
+          // Garden: move children (Layer 2 inside garden)
+          for (const child of gardenDragChildrenRef.current) {
+            const cs = { ...n[child.idx] };
+            cs.points = child.startPoints.map(pt => ({ x: pt.x + totalDx, y: pt.y + totalDy }));
+            const cSnap = { startPathCenterline: child.startPathCenterline, startPathCenterlineOriginal: child.startPathCenterlineOriginal };
+            let ci: Record<string, unknown> = { ...cs.calculatorInputs } as Record<string, unknown>;
+            const cPathMerged = applyPathRibbonSnapTranslation(ci, cSnap, totalDx, totalDy);
+            if (cPathMerged) ci = cPathMerged;
+            if (child.startVizPieces && ci.vizPieces) {
+              ci = { ...ci, vizPieces: child.startVizPieces.map(pc => ({ ...pc, x: pc.x + totalDx, y: pc.y + totalDy })) };
+            }
+            cs.calculatorInputs = ci as typeof cs.calculatorInputs;
+            n[child.idx] = cs;
+          }
+          return n;
+        });
       });
       return;
     }
@@ -4216,25 +6629,15 @@ export default function MasterProject() {
       return;
     }
 
-    // Scale corner: proportional scaling from anchor
+    // Scale corner: proportional scaling from anchor (path ribbon: scale centerline only, fixed pathWidthM)
     if (scaleCorner) {
-      const currentDist = distance(scaleCorner.anchor, world);
-      const ratio = currentDist / scaleCorner.startDist;
-      const ax = scaleCorner.anchor.x, ay = scaleCorner.anchor.y;
-      let newPts = scaleCorner.startPoints.map(pt => ({
-        x: ax + (pt.x - ax) * ratio,
-        y: ay + (pt.y - ay) * ratio,
-      }));
-      const magThreshold = SNAP_MAGNET_PX / zoom;
-      const draggedPt = newPts[scaleCorner.pointIdx];
-      const toMouse = { x: world.x - ax, y: world.y - ay };
-      const len = Math.sqrt(toMouse.x * toMouse.x + toMouse.y * toMouse.y);
-      const snapDir = len > 1 ? { x: toMouse.x / len, y: toMouse.y / len } : undefined;
-      const snap = snapMagnet(draggedPt, shapes, scaleCorner.shapeIdx, magThreshold, snapDir);
-      const snapOff = snap.didSnap ? { x: snap.snapped.x - draggedPt.x, y: snap.snapped.y - draggedPt.y } : { x: 0, y: 0 };
-      if (snap.didSnap) newPts = newPts.map(pt => ({ x: pt.x + snapOff.x, y: pt.y + snapOff.y }));
+      const { newPts, ribbonCl, ratio, ax, ay, snapOff } = computeScaleCornerFrame(scaleCorner, world, shapes, zoom);
       setShapes(p => {
         const n = [...p]; const s = { ...n[scaleCorner.shapeIdx] }; s.points = newPts;
+        if (ribbonCl && ribbonCl.length >= 2) {
+          const inputs = { ...s.calculatorInputs, pathCenterline: ribbonCl.map(pt => ({ ...pt })), pathCenterlineOriginal: ribbonCl.map(pt => ({ ...pt })) };
+          s.calculatorInputs = inputs;
+        }
         if (transformStartVizPiecesRef.current && s.calculatorInputs?.vizPieces) {
           const inputs = { ...s.calculatorInputs };
           inputs.vizPieces = transformStartVizPiecesRef.current.map(pc => ({
@@ -4309,7 +6712,7 @@ export default function MasterProject() {
         }
         setShapes(p => {
           const n = [...p];
-          const s = { ...n[arcDragInfo.shapeIdx] };
+          let s = { ...n[arcDragInfo.shapeIdx] };
           const edgeArcs = s.edgeArcs ? [...s.edgeArcs] : [];
           if (!edgeArcs[arcDragInfo.edgeIdx]) edgeArcs[arcDragInfo.edgeIdx] = [];
           const arcs = [...(edgeArcs[arcDragInfo.edgeIdx]!)];
@@ -4317,6 +6720,23 @@ export default function MasterProject() {
           if (idx >= 0) arcs[idx] = { ...arcs[idx], t, offset };
           edgeArcs[arcDragInfo.edgeIdx] = arcs;
           s.edgeArcs = edgeArcs;
+          const ei = arcDragInfo.edgeIdx;
+          const pts = s.points;
+          const seg = stripPolygonEdgeToSegmentIndex(pts, ei);
+          if (seg !== null && isPolygonLinearStripOutline(s)) {
+            const par = stripOutlineParallelEdges(pts, seg);
+            const leftEi = seg;
+            const rightEi = stripOppositePolygonEdgeIndex(pts, leftEi);
+            if (par && rightEi != null && ei === rightEi) {
+              const rightList = s.edgeArcs?.[ei] ?? [];
+              const leftCanon = mirrorArcPointsToOppositeChord(par.rightA, par.rightB, par.leftA, par.leftB, rightList);
+              const lea = s.edgeArcs ? [...s.edgeArcs] : [];
+              while (lea.length < pts.length) lea.push(null);
+              lea[leftEi] = leftCanon.length ? leftCanon : null;
+              s.edgeArcs = lea;
+            }
+            s = applyStripParallelEdgeArcSync(s);
+          }
           n[arcDragInfo.shapeIdx] = s;
           const dragEntry: LinkedEntry = { si: arcDragInfo.shapeIdx, pi: -1 as const, edgeIdx: arcDragInfo.edgeIdx, arcId: arcDragInfo.arcPoint.id };
           const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
@@ -4361,6 +6781,11 @@ export default function MasterProject() {
     if (dragInfo) {
       let target = world;
       const shape = shapes[dragInfo.shapeIdx]; const pts = shape.points; const pi = dragInfo.pointIdx;
+      const movingKeys = new Set(
+        dragInfo.multiDragStartPositions && dragInfo.multiDragStartPositions.length >= 2
+          ? dragInfo.multiDragStartPositions.map(m => `${m.shapeIdx},${m.pointIdx}`)
+          : [`${dragInfo.shapeIdx},${dragInfo.pointIdx}`],
+      );
       const prevI = (pi - 1 + pts.length) % pts.length, nextI = (pi + 1) % pts.length;
 
       if (shiftHeld) {
@@ -4404,10 +6829,10 @@ export default function MasterProject() {
       let bestDx = alignThreshold, bestDy = alignThreshold;
       let snapXVal: number | null = null, snapYVal: number | null = null;
       for (let si = 0; si < shapes.length; si++) {
-        const pts = shapes[si].points;
-        for (let pi = 0; pi < pts.length; pi++) {
-          if (si === dragInfo.shapeIdx && pi === dragInfo.pointIdx) continue;
-          const pt = pts[pi];
+        const ptsAlign = shapes[si].points;
+        for (let pii = 0; pii < ptsAlign.length; pii++) {
+          if (movingKeys.has(`${si},${pii}`)) continue;
+          const pt = ptsAlign[pii];
           const dx = Math.abs(target.x - pt.x);
           const dy = Math.abs(target.y - pt.y);
           if (dx < bestDx) { bestDx = dx; snapXVal = pt.x; }
@@ -4420,38 +6845,357 @@ export default function MasterProject() {
       const magThreshold = SNAP_MAGNET_PX / zoom;
       const snap = snapMagnet(target, shapes, dragInfo.shapeIdx, magThreshold);
       if (snap.didSnap) target = snap.snapped;
-      setShapes(p => {
-        const n = [...p]; const s = { ...n[dragInfo.shapeIdx] }; const np = [...s.points];
-        np[dragInfo.pointIdx] = { x: target.x, y: target.y }; s.points = np; n[dragInfo.shapeIdx] = s;
-        // Move linked entries (vertices and arc points) too
-        const dragEntry: LinkedEntry = { si: dragInfo.shapeIdx, pi: dragInfo.pointIdx };
-        const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
-        if (group) {
-          for (const lp of group) {
-            if (linkedEntriesMatch(lp, dragEntry)) continue;
-            if (isArcEntry(lp)) {
-              if (n[lp.si]) {
-                const ls = { ...n[lp.si] };
-                const lea = ls.edgeArcs ? [...ls.edgeArcs] : [];
-                const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
-                const li = lArcs.findIndex(a => a.id === lp.arcId);
-                if (li >= 0) {
-                  const lA = ls.points[lp.edgeIdx];
-                  const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
-                  const { t: lt, offset: lo } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, target);
-                  lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
-                  lea[lp.edgeIdx] = lArcs;
-                  ls.edgeArcs = lea;
-                  n[lp.si] = ls;
+
+      const multi = dragInfo.multiDragStartPositions;
+      if (multi && multi.length >= 2) {
+        const ddx = target.x - dragInfo.startPoint.x;
+        const ddy = target.y - dragInfo.startPoint.y;
+        flushSync(() => {
+          setShapes(p => {
+            const n = [...p];
+            const byShape = new Map<number, Map<number, Point>>();
+            for (const m of multi) {
+              if (!byShape.has(m.shapeIdx)) byShape.set(m.shapeIdx, new Map());
+              byShape.get(m.shapeIdx)!.set(m.pointIdx, { x: m.x + ddx, y: m.y + ddy });
+            }
+            for (const [si, ptMap] of byShape) {
+              const s0 = n[si];
+              if (!s0) continue;
+              const lpts = [...s0.points];
+              for (const [ppi, np] of ptMap) {
+                if (ppi >= 0 && ppi < lpts.length) lpts[ppi] = { ...np };
+              }
+              let nextSh: Shape = { ...s0, points: lpts, calculatorResults: undefined };
+              if (isPathElement(nextSh) && nextSh.closed && nextSh.calculatorInputs?.pathIsOutline) {
+                const cl = extractPathRibbonCenterlineFromOutline(lpts);
+                if (cl.length >= 2) {
+                  nextSh = {
+                    ...nextSh,
+                    calculatorInputs: {
+                      ...nextSh.calculatorInputs,
+                      pathCenterline: cl.map(pt => ({ ...pt })),
+                      pathCenterlineOriginal: cl.map(pt => ({ ...pt })),
+                    },
+                  };
                 }
               }
-            } else if (n[lp.si]) {
-              const ls = { ...n[lp.si] }; const lpts = [...ls.points];
-              lpts[lp.pi] = { x: target.x, y: target.y }; ls.points = lpts; n[lp.si] = ls;
+              n[si] = nextSh;
+            }
+            return n;
+          });
+        });
+        return;
+      }
+
+      flushSync(() => {
+      setShapes(p => {
+        const n = [...p];
+        const s = { ...n[dragInfo.shapeIdx] };
+        const shape = s;
+        const pts = shape.points;
+        const pi = dragInfo.pointIdx;
+
+        const dragEntry: LinkedEntry = { si: dragInfo.shapeIdx, pi: dragInfo.pointIdx };
+        const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
+
+        const stripThicknessPxFor = (sh: Shape): number | null => {
+          if (sh.lockedEdges && sh.lockedEdges.length > 0) return null;
+          if (sh.lockedAngles && sh.lockedAngles.length > 0) return null;
+          if (isPolygonLinearStripOutline(sh) && isPolygonLinearElement(sh)) {
+            return toPixels(getPolygonThicknessM(sh));
+          }
+          if (sh.closed && sh.points.length >= 4 && sh.points.length % 2 === 0 && isPathElement(sh) && sh.calculatorInputs?.pathIsOutline) {
+            return toPixels(Number(sh.calculatorInputs?.pathWidthM ?? 0.6) || 0.6);
+          }
+          return null;
+        };
+
+        // Linked points: rebuild closed strip (wall/path outline) so thickness stays valid; sync others to final anchor.
+        if (group) {
+          let anchor: Point = { x: target.x, y: target.y };
+          const vertexMembers = group.filter(lp => !isArcEntry(lp));
+          const stripEntries = vertexMembers.filter(lp => stripThicknessPxFor(n[lp.si]) != null);
+          stripEntries.sort((a, b) => {
+            if (a.si === dragInfo.shapeIdx && a.pi === dragInfo.pointIdx) return -1;
+            if (b.si === dragInfo.shapeIdx && b.pi === dragInfo.pointIdx) return 1;
+            return a.si - b.si;
+          });
+          const processedStripSi = new Set<number>();
+          for (const lp of stripEntries) {
+            if (processedStripSi.has(lp.si)) continue;
+            const sh = n[lp.si];
+            const tpx = stripThicknessPxFor(sh);
+            if (tpx == null) continue;
+            let reb: Point[] | null = null;
+            let rebPathCl: Point[] | null = null;
+            let stripAnchorIdx = lp.pi;
+            if (sh.linearOpenStripOutline && !sh.closed) {
+              reb = rebuildOpenStripOutlineFromVertexTarget(sh.points, lp.pi, anchor, tpx);
+            } else if (isPathElement(sh) && sh.closed && sh.calculatorInputs?.pathIsOutline) {
+              if (sh.points.length === 8 || sh.points.length === 4) {
+                const sidesL =
+                  Array.isArray(sh.calculatorInputs.pathSegmentSides) &&
+                  (sh.calculatorInputs.pathSegmentSides as ("left" | "right")[]).length === 3
+                    ? (sh.calculatorInputs.pathSegmentSides as ("left" | "right")[])
+                    : (["left", "left", "left"] as ("left" | "right")[]);
+                const pathWM = Number(sh.calculatorInputs.pathWidthM ?? 0.6) || 0.6;
+                const pc = sh.calculatorInputs.pathCenterline as Point[] | undefined;
+                const po = sh.calculatorInputs.pathCenterlineOriginal as Point[] | undefined;
+                let cl0: Point[] =
+                  pc && pc.length === 4
+                    ? pc.map(p => ({ ...p }))
+                    : po && po.length === 4
+                      ? po.map(p => ({ ...p }))
+                      : (() => {
+                          const ex = extractPathRibbonCenterlineFromOutline(sh.points);
+                          return ex.length === 4 ? ex.map(p => ({ ...p })) : [];
+                        })();
+                if (cl0.length !== 4 && sh.points.length === 4) {
+                  const recL = recoverCenterlineQuadFromPairFourRibbonOutline(sh.points, toPixels(pathWM) / 2);
+                  if (recL && recL.length === 4) cl0 = recL.map(p => ({ ...p }));
+                }
+                if (cl0.length === 4) {
+                  let vSolver = lp.pi;
+                  if (sh.points.length === 4) {
+                    const o8 = computePathOutlineFromSegmentSides(cl0, sidesL, pathWM);
+                    if (o8.length === 8) {
+                      let bd = Infinity;
+                      for (let j = 0; j < 8; j++) {
+                        const d = distance(sh.points[lp.pi], o8[j]);
+                        if (d < bd) {
+                          bd = d;
+                          vSolver = j;
+                        }
+                      }
+                    }
+                  }
+                  let solvedL = rebuildRectangularPathRibbonFromOutlineDrag(cl0, sidesL, pathWM, vSolver, anchor);
+                  if (!solvedL && lp.si === dragInfo.shapeIdx) {
+                    const snapL = pathRibbonDragStartOutlineRef.current;
+                    if (snapL && snapL.length === sh.points.length) {
+                      const pairsL = pathRibbonLengthAnchorPairsFromOutlineSnap(snapL, lp.pi, cl0, sidesL, pathWM);
+                      if (pairsL && pairsL.length > 0) {
+                        solvedL = rebuildRectangularPathRibbonLengthAnchorsFixed(
+                          cl0,
+                          sidesL,
+                          pathWM,
+                          vSolver,
+                          anchor,
+                          pairsL,
+                        );
+                      }
+                    }
+                  }
+                  if (solvedL) {
+                    reb = solvedL.outline;
+                    rebPathCl = solvedL.centerline;
+                    stripAnchorIdx = vSolver;
+                  }
+                }
+              }
+              if (reb == null && !(isPathElement(sh) && sh.closed && sh.calculatorInputs?.pathIsOutline)) {
+                reb = rebuildPathClosedRibbonFromVertexTarget(sh.points, lp.pi, anchor, tpx);
+                stripAnchorIdx = lp.pi;
+              }
+            } else {
+              reb = rebuildClosedStripOutlineFromVertexTarget(sh.points, lp.pi, anchor, tpx);
+            }
+            if (reb) {
+              let nextSh: Shape = { ...sh, points: reb, calculatorResults: undefined };
+              if (isPathElement(sh) && sh.closed && sh.calculatorInputs?.pathIsOutline) {
+                if (rebPathCl && rebPathCl.length >= 2) {
+                  nextSh = {
+                    ...nextSh,
+                    calculatorInputs: {
+                      ...sh.calculatorInputs,
+                      pathCenterline: rebPathCl.map(p => ({ ...p })),
+                      pathCenterlineOriginal: rebPathCl.map(p => ({ ...p })),
+                    },
+                  };
+                } else {
+                  const cl = extractPathRibbonCenterlineFromOutline(reb);
+                  if (cl.length >= 2) {
+                    nextSh = {
+                      ...nextSh,
+                      calculatorInputs: {
+                        ...sh.calculatorInputs,
+                        pathCenterline: cl.map(p => ({ ...p })),
+                        pathCenterlineOriginal: cl.map(p => ({ ...p })),
+                      },
+                    };
+                  }
+                }
+              }
+              n[lp.si] = nextSh;
+              anchor = { ...reb[stripAnchorIdx] };
+              processedStripSi.add(lp.si);
+            }
+          }
+          for (const lp of vertexMembers) {
+            if (processedStripSi.has(lp.si)) continue;
+            const shSkip = n[lp.si];
+            if (shSkip && isPathElement(shSkip) && shSkip.closed && shSkip.calculatorInputs?.pathIsOutline) continue;
+            const ls = { ...n[lp.si] };
+            const lpts = [...ls.points];
+            lpts[lp.pi] = { ...anchor };
+            ls.points = lpts;
+            ls.calculatorResults = undefined;
+            n[lp.si] = ls;
+          }
+          for (const lp of group) {
+            if (!isArcEntry(lp) || linkedEntriesMatch(lp, dragEntry)) continue;
+            if (!n[lp.si]) continue;
+            const ls = { ...n[lp.si] };
+            const lea = ls.edgeArcs ? [...ls.edgeArcs] : [];
+            const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
+            const li = lArcs.findIndex(a => a.id === lp.arcId);
+            if (li >= 0) {
+              const lA = ls.points[lp.edgeIdx];
+              const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
+              const { t: lt, offset: lo } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, anchor);
+              lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
+              lea[lp.edgeIdx] = lArcs;
+              ls.edgeArcs = lea;
+              n[lp.si] = ls;
+            }
+          }
+          return n;
+        }
+
+        const closedPathRibbonDrag =
+          shape.closed &&
+          pts.length >= 4 &&
+          pts.length % 2 === 0 &&
+          isPathElement(shape) &&
+          Boolean(shape.calculatorInputs?.pathIsOutline);
+        const polygonStrip = isPolygonLinearStripOutline(shape);
+        const canStripRebuild =
+          (polygonStrip || closedPathRibbonDrag) &&
+          (!shape.lockedEdges || shape.lockedEdges.length === 0) &&
+          (!shape.lockedAngles || shape.lockedAngles.length === 0);
+
+        // General closed path ribbon drag — works for ANY centerline length (V=2,3,4,5…).
+        // Uses pc/po directly (even if length 2), no recovery needed.
+        if (closedPathRibbonDrag) {
+          const pathWMDrag = Number(shape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6;
+          const pcDrag = shape.calculatorInputs?.pathCenterline as Point[] | undefined;
+          const poDrag = shape.calculatorInputs?.pathCenterlineOriginal as Point[] | undefined;
+          const clAny: Point[] | null =
+            pcDrag && pcDrag.length >= 2 ? pcDrag.map(p => ({ ...p }))
+            : poDrag && poDrag.length >= 2 ? poDrag.map(p => ({ ...p }))
+            : null;
+          if (clAny && clAny.length >= 2) {
+            const V = clAny.length;
+            const storedSides = shape.calculatorInputs?.pathSegmentSides as ("left" | "right")[] | undefined;
+            const sidesAny: ("left" | "right")[] =
+              Array.isArray(storedSides) && storedSides.length === V - 1
+                ? storedSides
+                : Array.from({ length: V - 1 }, () => "left" as const);
+            const expectedOutLen = 2 * V;
+            let viSolver = pi;
+            if (pts.length !== expectedOutLen) {
+              const o = computePathOutlineFromSegmentSides(clAny, sidesAny, pathWMDrag);
+              if (o.length === expectedOutLen) {
+                let bd = Infinity;
+                for (let j = 0; j < o.length; j++) {
+                  const d = distance(pts[pi]!, o[j]!);
+                  if (d < bd) { bd = d; viSolver = j; }
+                }
+              }
+            }
+            let solvedGen: { outline: Point[]; centerline: Point[] } | null = null;
+            if (V === 2) {
+              solvedGen = rebuildPathRibbonSingleSegmentDrag(clAny, sidesAny, pathWMDrag, viSolver, target);
+            } else {
+              solvedGen = rebuildPathRibbonGeneralDrag(clAny, sidesAny, pathWMDrag, viSolver, target);
+            }
+            if (solvedGen) {
+              n[dragInfo.shapeIdx] = {
+                ...s,
+                points: solvedGen.outline,
+                calculatorResults: undefined,
+                calculatorInputs: {
+                  ...shape.calculatorInputs,
+                  pathCenterline: solvedGen.centerline.map(p => ({ ...p })),
+                  pathCenterlineOriginal: solvedGen.centerline.map(p => ({ ...p })),
+                },
+              };
+              return n;
             }
           }
         }
+
+        if (canStripRebuild) {
+          const thicknessPx = isPathElement(shape) && closedPathRibbonDrag
+            ? toPixels(Number(shape.calculatorInputs?.pathWidthM ?? 0.6) || 0.6)
+            : toPixels(getPolygonThicknessM(shape));
+          let rebuilt: Point[] | null = null;
+          if (closedPathRibbonDrag) {
+            rebuilt = null;
+          } else if (polygonStrip && !shape.closed && shape.linearOpenStripOutline) {
+            rebuilt = rebuildOpenStripOutlineFromVertexTarget(pts, pi, target, thicknessPx);
+          } else if (polygonStrip && shape.closed) {
+            rebuilt = rebuildClosedStripOutlineFromVertexTarget(pts, pi, target, thicknessPx);
+          }
+          if (rebuilt) {
+            let sNext: Shape = { ...s, points: rebuilt, calculatorResults: undefined };
+            if (closedPathRibbonDrag) {
+              const cl = extractPathRibbonCenterlineFromOutline(rebuilt);
+              if (cl.length >= 2) {
+                sNext = {
+                  ...sNext,
+                  calculatorInputs: {
+                    ...shape.calculatorInputs,
+                    pathCenterline: cl.map(p => ({ ...p })),
+                    pathCenterlineOriginal: cl.map(p => ({ ...p })),
+                  },
+                };
+              }
+            }
+            n[dragInfo.shapeIdx] = sNext;
+            return n;
+          }
+        }
+
+        if (closedPathRibbonDrag) {
+          const dx = target.x - pts[pi].x;
+          const dy = target.y - pts[pi].y;
+          const newPts = pts.map(p => ({ x: p.x + dx, y: p.y + dy }));
+          const pcF = shape.calculatorInputs?.pathCenterline as Point[] | undefined;
+          const poF = shape.calculatorInputs?.pathCenterlineOriginal as Point[] | undefined;
+          const tr = (arr: Point[]) => arr.map(p => ({ x: p.x + dx, y: p.y + dy }));
+          n[dragInfo.shapeIdx] = {
+            ...s,
+            points: newPts,
+            calculatorResults: undefined,
+            calculatorInputs: {
+              ...shape.calculatorInputs,
+              ...(pcF && pcF.length >= 2 ? { pathCenterline: tr(pcF) } : {}),
+              ...(poF && poF.length >= 2 ? { pathCenterlineOriginal: tr(poF) } : {}),
+            },
+          };
+          return n;
+        }
+
+        const np = [...s.points];
+        np[dragInfo.pointIdx] = { x: target.x, y: target.y };
+        let sFinal: Shape = { ...s, points: np, calculatorResults: undefined };
+        if (closedPathRibbonDrag) {
+          const cl = extractPathRibbonCenterlineFromOutline(np);
+          if (cl.length >= 2) {
+            sFinal = {
+              ...sFinal,
+              calculatorInputs: {
+                ...shape.calculatorInputs,
+                pathCenterline: cl.map(p => ({ ...p })),
+                pathCenterlineOriginal: cl.map(p => ({ ...p })),
+              },
+            };
+          }
+        }
+        n[dragInfo.shapeIdx] = sFinal;
         return n;
+      });
       });
       return;
     }
@@ -4463,10 +7207,26 @@ export default function MasterProject() {
       const arcHit = hitTestArcPointGlobal(world);
       setHoveredArcPoint(arcHit);
       setHoveredEdge(pt || arcHit ? null : hitTestEdge(world));
+    } else if (modeShowsEdgeDistanceWhileDrawing(mode)) {
+      setHoveredHeightPoint(null);
+      const pt = hitTestPoint(world);
+      const arcHit = hitTestArcPointGlobal(world);
+      setHoveredPoint(null);
+      setHoveredArcPoint(null);
+      setHoveredEdge(pt || arcHit ? null : hitTestEdge(world));
     }
-  }, [isPanning, panStart, dragInfo, arcDragInfo, draggingGrassPiece, grassScaleInfo, patternDragInfo, patternRotateInfo, mode, shapes, shiftHeld, drawingShapeIdx, selectionRect, shapeDragInfo, edgeDragInfo, rotateInfo, scaleCorner, scaleEdge, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestArcPointGlobal, zoom, geodesyEnabled, saveHistory, arcPointPositionCache, linkedGroups, isOnActiveLayer]);
+  }, [isPanning, panStart, dragInfo, arcDragInfo, draggingGrassPiece, grassScaleInfo, patternDragInfo, patternRotateInfo, mode, shapes, shiftHeld, drawingShapeIdx, selectionRect, shapeDragInfo, edgeDragInfo, rotateInfo, scaleCorner, scaleEdge, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestArcPointGlobal, zoom, pan, canvasSize.w, canvasSize.h, geodesyEnabled, saveHistory, arcPointPositionCache, linkedGroups, isOnActiveLayer]);
 
   const handleMouseUp = useCallback(() => {
+    const capId = canvasPointerCaptureIdRef.current;
+    canvasPointerCaptureIdRef.current = null;
+    if (capId != null && canvasRef.current) {
+      try {
+        if (canvasRef.current.hasPointerCapture(capId)) canvasRef.current.releasePointerCapture(capId);
+      } catch {
+        /* */
+      }
+    }
     pendingRightClickScaleRef.current = null; // Clear pending if user released without dragging
 
     // Pending edge: click without drag = select only; drag = move that edge
@@ -4591,6 +7351,7 @@ export default function MasterProject() {
       const selected: HitResult[] = [];
       const layerFilter = activeLayer === 3 ? isOnActiveLayerForScale : isOnActiveLayer;
       shapes.forEach((shape, si) => {
+        if (shape.removedFromCanvas) return;
         if (!layerFilter(si) || !passesViewFilter(shape, viewFilter, activeLayer)) return;
         shape.points.forEach((p, pi) => {
           const sp = worldToScreen(p.x, p.y);
@@ -4634,6 +7395,21 @@ export default function MasterProject() {
     transformStartVizPiecesRef.current = null;
     gardenDragChildrenRef.current = [];
   }, [selectionRect, shapes, worldToScreen, dragInfo, mouseWorld, patternDragInfo, patternDragPreview, pathPatternLongOffsetPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, shapeDragInfo, rotateInfo, scaleCorner, scaleEdge, isOnActiveLayer, isOnActiveLayerForScale, activeLayer, zoom, draggingGrassPiece, grassNearEdge, grassScaleInfo, viewFilter, arcDragInfo]);
+
+  /** Po setPointerCapture na canvasie mouseup nad toolbarem nie trafia w canvas — kończymy gest globalnie, żeby toolbar znowu reagował. */
+  const handleMouseUpRef = useRef(handleMouseUp);
+  handleMouseUpRef.current = handleMouseUp;
+  useEffect(() => {
+    const onWindowPointerUp = () => {
+      handleMouseUpRef.current();
+    };
+    window.addEventListener("pointerup", onWindowPointerUp, true);
+    window.addEventListener("mouseup", onWindowPointerUp, true);
+    return () => {
+      window.removeEventListener("pointerup", onWindowPointerUp, true);
+      window.removeEventListener("mouseup", onWindowPointerUp, true);
+    };
+  }, []);
 
   /** Touch support for mobile: map touch events to mouse handlers + pinch zoom */
   const touchToMouseEvent = useCallback((touch: { clientX: number; clientY: number }, button: number, buttons: number): React.MouseEvent<HTMLCanvasElement> => {
@@ -4849,6 +7625,23 @@ export default function MasterProject() {
       }
     }
 
+    // Ctrl/Cmd + wheel: vertical pan (wheel up → pan up / content moves up on screen)
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const dy = wheelDeltaToPixels(e.deltaY, e.deltaMode) * WHEEL_PAN_SENSITIVITY;
+      setPan(p => ({ x: p.x, y: p.y - dy }));
+      return;
+    }
+
+    // Shift + wheel: horizontal pan (wheel up → left, wheel down → right)
+    if (e.shiftKey) {
+      e.preventDefault();
+      const primary = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      const dx = wheelDeltaToPixels(primary, e.deltaMode) * WHEEL_PAN_SENSITIVITY;
+      setPan(p => ({ x: p.x - dx, y: p.y }));
+      return;
+    }
+
     e.preventDefault();
     const r = canvas.getBoundingClientRect();
     const sx = e.clientX - r.left, sy = e.clientY - r.top;
@@ -4912,25 +7705,12 @@ export default function MasterProject() {
           });
         } else if (isPolygonLinearElement(s)) {
           saveHistory();
-          const pathPts = getLinearElementPath(s);
-          const thicknessM = getPolygonThicknessM(s);
-          const outline = computeThickPolylineClosed(pathPts, toPixels(thicknessM));
-          if (outline.length >= 3) {
-            const segLengths = polygonToSegmentLengths(outline);
-            setShapes(p => {
-              const n = [...p];
-              const sh = n[drawingShapeIdx];
-              const inputs: Record<string, unknown> = { ...sh.calculatorInputs, segmentLengths: segLengths };
-              if (sh.elementType === "wall") {
-                const defaultH = parseFloat(String(sh.calculatorInputs?.height ?? "1")) || 1;
-                inputs.segmentHeights = segLengths.map(() => ({ startH: defaultH, endH: defaultH }));
-              }
-              n[drawingShapeIdx] = { ...sh, points: outline, closed: true, drawingFinished: true, calculatorInputs: inputs };
-              return n;
-            });
-          } else {
-            setShapes(p => { const n = [...p]; const sh = { ...n[drawingShapeIdx], drawingFinished: true }; n[drawingShapeIdx] = sh; return n; });
-          }
+          setShapes(p => {
+            const n = [...p];
+            const done = finalizePolygonLinearDrawingOpen(n, drawingShapeIdx);
+            if (done) n[drawingShapeIdx] = done;
+            return n;
+          });
         } else {
           setShapes(p => { const n = [...p]; const sh = { ...n[drawingShapeIdx], drawingFinished: true }; n[drawingShapeIdx] = sh; return n; });
         }
@@ -5199,8 +7979,13 @@ export default function MasterProject() {
       if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
       const shape = shapes[si];
       const pts = shape.points;
-      if (isLinearElement(shape) && isPolygonLinearElement(shape) && shape.closed && pts.length >= 4) {
-        // Linear elements (Wall, Fence, etc.): labels drawn at centerline midpoint + offset 14 (linearElements.ts)
+      if (
+        isLinearElement(shape) &&
+        isPolygonLinearElement(shape) &&
+        (shape.closed || shape.linearOpenStripOutline) &&
+        pts.length >= 4
+      ) {
+        // Wall/kerb/foundation stored as strip outline: dim hit follows centerline midpoints (linearElements.ts)
         const centerlinePts = polygonToCenterline(pts);
         if (centerlinePts.length < 2) continue;
         const segCount = centerlinePts.length - 1;
@@ -5224,8 +8009,8 @@ export default function MasterProject() {
         }
         continue;
       }
-      if (isLinearElement(shape) && !shape.closed && pts.length >= 2) {
-        // Polyline linear elements: labels at midpoint + offset 14
+      if (isLinearElement(shape) && !shape.closed && !shape.linearOpenStripOutline && pts.length >= 2) {
+        // Polyline linear elements (centerline storage): labels at midpoint + offset 14
         const linearOffset = 14;
         for (let i = 0; i < pts.length - 1; i++) {
           const mid = midpoint(pts[i], pts[i + 1]);
@@ -5292,14 +8077,30 @@ export default function MasterProject() {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       // Don't intercept when typing in an input
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") {
+      const targetEl = e.target as HTMLElement;
+      const tag = targetEl?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || targetEl?.isContentEditable) {
         if (e.key === "Escape") {
           setEditingDim(null);
           setEditingGeodesyCard(null);
           setPointOffsetAlongLinePick(null);
           setPointOffsetAlongLineModal(null);
         }
+        return;
+      }
+      // Arrow keys: pan canvas (Shift = larger step). Skip with Ctrl/Meta/Alt so browser/UI shortcuts keep working.
+      if (
+        (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault();
+        const step = e.shiftKey ? ARROW_PAN_STEP_PX * 3 : ARROW_PAN_STEP_PX;
+        if (e.key === "ArrowLeft") setPan(p => ({ ...p, x: p.x + step }));
+        else if (e.key === "ArrowRight") setPan(p => ({ ...p, x: p.x - step }));
+        else if (e.key === "ArrowUp") setPan(p => ({ ...p, y: p.y + step }));
+        else setPan(p => ({ ...p, y: p.y - step }));
         return;
       }
       // Layer shortcuts: 1–5 → switch layer
@@ -5315,6 +8116,40 @@ export default function MasterProject() {
         if (geodesyEnabled) setEditingGeodesyCard(null);
         e.preventDefault();
         return;
+      }
+      if (e.key === "Tab" && drawingShapeIdx !== null && mode === "drawWall") {
+        const ds = shapes[drawingShapeIdx];
+        if (ds?.elementType === "wall" && ds.calculatorInputs?.wallDrawBaseline) {
+          e.preventDefault();
+          setShapes(p => {
+            const n = [...p];
+            const sh = { ...n[drawingShapeIdx] };
+            const cur = sh.calculatorInputs?.wallDrawFace === "right" ? "right" : "left";
+            const nextFace = cur === "left" ? "right" : "left";
+            const wb = sh.calculatorInputs?.wallBaselinePolyline as Point[] | undefined;
+            const inputs = { ...(sh.calculatorInputs ?? {}), wallDrawFace: nextFace };
+            if (wb && wb.length >= 2) {
+              const thicknessM = getPolygonThicknessM({ ...sh, calculatorInputs: inputs });
+              const thicknessPx = toPixels(thicknessM);
+              const half = thicknessPx / 2;
+              const centerPts = baselineFacePolylineToCenterline(wb, half, nextFace);
+              if (centerPts.length >= 2) {
+                const outline = computeThickPolyline(centerPts, thicknessPx);
+                if (outline.length >= 4) {
+                  sh.points = outline;
+                  sh.linearOpenStripOutline = true;
+                  sh.calculatorInputs = inputs;
+                  n[drawingShapeIdx] = sh;
+                  return n;
+                }
+              }
+            }
+            sh.calculatorInputs = inputs;
+            n[drawingShapeIdx] = sh;
+            return n;
+          });
+          return;
+        }
       }
       if (e.key === "Escape") {
         if (arcDragInfo) {
@@ -5334,6 +8169,15 @@ export default function MasterProject() {
         }
         if (drawingShapeIdx !== null) {
           const s = shapes[drawingShapeIdx];
+          if (s && s.points.length >= 2 && isPolygonLinearElement(s)) {
+            saveHistory();
+            setShapes(p => {
+              const n = [...p];
+              const done = finalizePolygonLinearDrawingOpen(n, drawingShapeIdx);
+              if (done) n[drawingShapeIdx] = done;
+              return n;
+            });
+          }
           if (s && s.points.length >= 2 && (isLinearElement(s) || isPathElement(s)) && (["Wall", "Fence", "Kerb", "Foundation"].includes(s.label || "") || isPathElement(s)) && !s.namePromptShown) {
             setNamePromptShapeIdx(drawingShapeIdx);
           }
@@ -5365,15 +8209,18 @@ export default function MasterProject() {
           });
           setSelectedPoints([]); setSelectedShapeIdx(null); return;
         }
-        if (selectedShapeIdx !== null && drawingShapeIdx === null) {
-          saveHistory();
-          setShapes(p => p.filter((_, i) => i !== selectedShapeIdx)); setSelectedShapeIdx(null);
+        if (drawingShapeIdx !== null) return;
+        const siDel =
+          selectedShapeIdx ??
+          (activeLayer === 3 ? (objectCardShapeIdx ?? selectedPattern?.shapeIdx ?? null) : null);
+        if (siDel !== null && shapes[siDel]) {
+          deleteLayer2ElementFromContext(siDel);
         }
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [mode, selectedShapeIdx, drawingShapeIdx, selectedPoints, saveHistory, undo, shapes, pathSegmentSideSelection, arcDragInfo, measureStart, activeLayer, geodesyEnabled]);
+  }, [mode, selectedShapeIdx, drawingShapeIdx, selectedPoints, saveHistory, undo, shapes, pathSegmentSideSelection, arcDragInfo, measureStart, activeLayer, geodesyEnabled, deleteLayer2ElementFromContext, objectCardShapeIdx, selectedPattern]);
 
   // Canvas modals: Escape = close (grassTrim, adjustmentFill, adjustmentExtend, adjustmentSpread)
   useEffect(() => {
@@ -5406,11 +8253,15 @@ export default function MasterProject() {
       if (e.key === "Enter") {
         e.preventDefault();
         const { type } = shapeCreationModal;
-        const label = (shapeInputs.name || "").trim() || (type === "square" ? t("project:toolbar_shape_square") : type === "rectangle" ? t("project:toolbar_shape_rectangle") : type === "triangle" ? t("project:toolbar_shape_triangle") : t("project:toolbar_shape_trapezoid"));
+        const label = (shapeInputs.name || "").trim() || t(`project:${projectShapeToolbarLabelKey(type)}`);
         if (type === "square") addShape((cx2, cy2, l) => ({ ...makeSquare(cx2, cy2, l, parseFloat(shapeInputs.side) || 4), label }));
         else if (type === "rectangle") addShape((cx2, cy2, l) => ({ ...makeRectangle(cx2, cy2, l, parseFloat(shapeInputs.width) || 6, parseFloat(shapeInputs.height) || 4), label }));
         else if (type === "triangle") addShape((cx2, cy2, l) => ({ ...makeTriangle(cx2, cy2, l, parseFloat(shapeInputs.base) || 5, parseFloat(shapeInputs.height) || 4), label }));
-        else addShape((cx2, cy2, l) => ({ ...makeTrapezoid(cx2, cy2, l, parseFloat(shapeInputs.top) || 3, parseFloat(shapeInputs.bottom) || 6, parseFloat(shapeInputs.height) || 4), label }));
+        else if (type === "trapezoid") addShape((cx2, cy2, l) => ({ ...makeTrapezoid(cx2, cy2, l, parseFloat(shapeInputs.top) || 3, parseFloat(shapeInputs.bottom) || 6, parseFloat(shapeInputs.height) || 4), label }));
+        else if (type === "pentagon") addShape((cx2, cy2, l) => ({ ...makeRegularPolygon(cx2, cy2, l, 5, parseFloat(shapeInputs.side) || 4), label }));
+        else if (type === "hexagon") addShape((cx2, cy2, l) => ({ ...makeRegularPolygon(cx2, cy2, l, 6, parseFloat(shapeInputs.side) || 4), label }));
+        else if (type === "octagon") addShape((cx2, cy2, l) => ({ ...makeRegularPolygon(cx2, cy2, l, 8, parseFloat(shapeInputs.side) || 4), label }));
+        else if (type === "circle") addShape((cx2, cy2, l) => ({ ...makeCircle(cx2, cy2, l, parseFloat(shapeInputs.diameter) || 4), label }));
         setShapeCreationModal(null);
       }
     };
@@ -5421,17 +8272,6 @@ export default function MasterProject() {
   const removePoint = (si: number, pi: number) => {
     removeEntryAndLinked({ si, pi });
   };
-
-  /** Usuwa cały kształt warstwy 2 — jak Delete przy zaznaczonym elemencie w warstwie 2. */
-  const deleteLayer2ElementFromContext = useCallback((si: number) => {
-    saveHistory();
-    setShapes(p => p.filter((_, i) => i !== si));
-    setSelectedShapeIdx(null);
-    setSelectedPattern(prev => (prev?.shapeIdx === si ? null : prev));
-    setObjectCardShapeIdx(prev => (prev === si ? null : prev));
-    setResultsModalShapeIdx(prev => (prev === si ? null : prev));
-    setContextMenu(null);
-  }, [saveHistory]);
 
   /** Remove an entry and all its linked entries (vertices + arc points). */
   const removeEntryAndLinked = (entry: LinkedEntry) => {
@@ -5451,6 +8291,7 @@ export default function MasterProject() {
       for (const [osi, list] of byShape) {
         list.vertices.sort((a, b) => b - a);
         let s = n[osi];
+        if (!s) continue;
         for (const pi of list.vertices) {
           const newPts = [...s.points]; newPts.splice(pi, 1);
           const minPts = isLinearElement(s) ? 2 : (s.closed ? 3 : 2);
@@ -5472,10 +8313,21 @@ export default function MasterProject() {
         }
         if (!removedShapeIndices.has(osi)) {
           for (const { edgeIdx, arcId } of list.arcs) {
-            const edgeArcs = s.edgeArcs ? [...s.edgeArcs] : [];
-            const arcs = (edgeArcs[edgeIdx] ?? []).filter(a => a.id !== arcId);
-            edgeArcs[edgeIdx] = arcs.length > 0 ? arcs : null;
-            s = { ...s, edgeArcs };
+            const pts = s.points;
+            const seg = stripPolygonEdgeToSegmentIndex(pts, edgeIdx);
+            if (seg !== null && isPolygonLinearStripOutline(s)) {
+              const edgeArcs = s.edgeArcs ? [...s.edgeArcs] : [];
+              const leftEi = seg;
+              const arcs = (edgeArcs[leftEi] ?? []).filter(a => a.id !== arcId);
+              edgeArcs[leftEi] = arcs.length > 0 ? arcs : null;
+              s = { ...s, edgeArcs };
+              s = applyStripParallelEdgeArcSync(s);
+            } else {
+              const edgeArcs = s.edgeArcs ? [...s.edgeArcs] : [];
+              const arcs = (edgeArcs[edgeIdx] ?? []).filter(a => a.id !== arcId);
+              edgeArcs[edgeIdx] = arcs.length > 0 ? arcs : null;
+              s = { ...s, edgeArcs };
+            }
           }
           n[osi] = s;
         }
@@ -5577,7 +8429,7 @@ export default function MasterProject() {
 
     saveHistory();
 
-    // Polygon wall/kerb/foundation: map edge to segment and remove 4 points
+    // Polygon wall/kerb/foundation (closed strip): map edge to segment and remove paired outline points
     if (isPolygonLinearElement(s) && s.closed && nPts >= 6) {
       const segIdx = polygonEdgeToSegmentIndex(pts, edgeIdx);
       if (segIdx < 0) return;
@@ -5588,6 +8440,32 @@ export default function MasterProject() {
         const n = [...p];
         const sh = { ...n[si] };
         sh.points = newOutline;
+        sh.calculatorInputs = { ...sh.calculatorInputs, segmentLengths: segLengths };
+        if (sh.elementType === "wall" && sh.calculatorInputs?.segmentHeights) {
+          const segH = sh.calculatorInputs.segmentHeights as Array<{ startH: number; endH: number }>;
+          sh.calculatorInputs.segmentHeights = segH.filter((_, i) => i !== segIdx);
+        }
+        sh.calculatorResults = undefined;
+        n[si] = sh;
+        return n;
+      });
+      setContextMenu(null);
+      return;
+    }
+
+    // Open strip wall/kerb/foundation: rebuild from merged centerline
+    if (isPolygonLinearElement(s) && s.linearOpenStripOutline && nPts >= 6) {
+      const segIdx = openStripEdgeToCenterSegment(pts, edgeIdx);
+      if (segIdx === null) return;
+      const tpx = toPixels(getPolygonThicknessM(s));
+      const newOutline = removeOpenStripSegmentAndRebuild(pts, segIdx, tpx);
+      if (!newOutline || newOutline.length < 4) return;
+      const segLengths = polygonToSegmentLengths(newOutline);
+      setShapes(p => {
+        const n = [...p];
+        const sh = { ...n[si] };
+        sh.points = newOutline;
+        sh.linearOpenStripOutline = true;
         sh.calculatorInputs = { ...sh.calculatorInputs, segmentLengths: segLengths };
         if (sh.elementType === "wall" && sh.calculatorInputs?.segmentHeights) {
           const segH = sh.calculatorInputs.segmentHeights as Array<{ startH: number; endH: number }>;
@@ -5767,12 +8645,17 @@ export default function MasterProject() {
 
   // Find ALL nearby points from other shapes to link with
   const findAllNearbyPoints = (si: number, pi: number): { si: number; pi: number }[] => {
-    const pt = shapes[si].points[pi];
+    const shRef = shapes[si];
+    const denseRef =
+      shRef && isLinearElement(shRef) && isPolygonLinearStripOutline(shRef) && shRef.linearOpenStripOutline
+        ? computeLinearElementFillOutline(shRef)
+        : undefined;
+    const pt = shRef ? getLinearElementVertexGripWorld(shRef, pi, denseRef) : shapes[si].points[pi];
     const th = SNAP_MAGNET_PX / zoom * (PIXELS_PER_METER / 80);
     const out: { si: number; pi: number }[] = [];
     for (let osi = 0; osi < shapes.length; osi++) {
       if (osi === si) continue;
-      if (shapes[osi].layer !== activeLayer) continue;
+      if (!shapeLayerMatchesActiveCanvasLayer(shapes[osi].layer)) continue;
       for (let opi = 0; opi < shapes[osi].points.length; opi++) {
         if (distance(pt, shapes[osi].points[opi]) < th) out.push({ si: osi, pi: opi });
       }
@@ -5787,7 +8670,7 @@ export default function MasterProject() {
     const out: { si: number; edgeIdx: number; pos: Point; t: number }[] = [];
     for (let osi = 0; osi < shapes.length; osi++) {
       if (osi === si) continue;
-      if (shapes[osi].layer !== activeLayer) continue;
+      if (!shapeLayerMatchesActiveCanvasLayer(shapes[osi].layer)) continue;
       const s = shapes[osi];
       const pts = s.points;
       const edgeCount = s.closed ? pts.length : pts.length - 1;
@@ -5819,7 +8702,7 @@ export default function MasterProject() {
     const out: { si: number; edgeIdx: number; pos: Point; t: number }[] = [];
     for (let osi = 0; osi < shapes.length; osi++) {
       if (osi === excludeSi) continue;
-      if (shapes[osi].layer !== activeLayer) continue;
+      if (!shapeLayerMatchesActiveCanvasLayer(shapes[osi].layer)) continue;
       const s = shapes[osi];
       const pts = s.points;
       const edgeCount = s.closed ? pts.length : pts.length - 1;
@@ -5840,10 +8723,10 @@ export default function MasterProject() {
     const th = SNAP_MAGNET_PX / zoom * (PIXELS_PER_METER / 80);
     const out: LinkedEntry[] = [];
     for (let osi = 0; osi < shapes.length; osi++) {
-      if (shapes[osi].layer !== activeLayer) continue;
+      if (!shapeLayerMatchesActiveCanvasLayer(shapes[osi].layer)) continue;
       const s = shapes[osi];
       for (let pi = 0; pi < s.points.length; pi++) {
-        if (distance(worldPos, s.points[pi]) < th) out.push({ si: osi, pi });
+        if (!isCircleArcHandlesOnlyShape(s) && distance(worldPos, s.points[pi]) < th) out.push({ si: osi, pi });
       }
       if (s.edgeArcs) {
         for (let ei = 0; ei < s.edgeArcs.length; ei++) {
@@ -6021,7 +8904,17 @@ export default function MasterProject() {
           }
           updates.lockedEdges = (s.lockedEdges || []).map(e2 => e2.idx >= insertIdx ? { ...e2, idx: e2.idx + 1 } : e2);
           updates.lockedAngles = (s.lockedAngles || []).map(a => a >= insertIdx ? a + 1 : a);
+          const oldN = pts.length;
+          if (s.calculatorInputs) {
+            const ci = { ...s.calculatorInputs, ...updates.calculatorInputs };
+            const newFse = remapFrameSidesEnabledAfterVertexInsert(ci.frameSidesEnabled as boolean[] | undefined, oldN, e.edgeIdx, insertIdx);
+            if (newFse) ci.frameSidesEnabled = newFse;
+            const fle = shiftMyFrameLinksAfterEdgeInsert(ci.frameLinkedEdges as FrameLinkedEdgeEntry[] | undefined, e.edgeIdx);
+            if (fle) ci.frameLinkedEdges = fle;
+            updates.calculatorInputs = ci;
+          }
           n[osi] = { ...s, ...updates };
+          patchOtherShapesFrameLinksAfterVertexInsert(n, osi, e.edgeIdx);
           toLink.push({ si: osi, pi: insertIdx });
           insertions.push({ si: osi, insertIdx });
         }
@@ -6086,6 +8979,8 @@ export default function MasterProject() {
     const insertPos = { ...shapes[si1].points[pi1] };
     setShapes(p => {
       const n = [...p]; const s = { ...n[si2] }; const np = [...s.points];
+      const oldN = s.points.length;
+      const insertIdx = edgeIdx + 1;
       np.splice(edgeIdx + 1, 0, insertPos);
       const nh = [...(s.heights || Array(s.points.length).fill(0))]; nh.splice(edgeIdx + 1, 0, 0);
       s.points = np; s.heights = nh;
@@ -6104,6 +8999,15 @@ export default function MasterProject() {
       }
       s.lockedEdges = s.lockedEdges.filter(e => e.idx !== edgeIdx).map(e => e.idx > edgeIdx ? { ...e, idx: e.idx + 1 } : e);
       s.lockedAngles = s.lockedAngles.map(a => a > edgeIdx ? a + 1 : a);
+      if (s.calculatorInputs) {
+        const ci = { ...s.calculatorInputs };
+        const newFse = remapFrameSidesEnabledAfterVertexInsert(ci.frameSidesEnabled as boolean[] | undefined, oldN, edgeIdx, insertIdx);
+        if (newFse) ci.frameSidesEnabled = newFse;
+        const fle = shiftMyFrameLinksAfterEdgeInsert(ci.frameLinkedEdges as FrameLinkedEdgeEntry[] | undefined, edgeIdx);
+        if (fle) ci.frameLinkedEdges = fle;
+        s.calculatorInputs = ci;
+      }
+      patchOtherShapesFrameLinksAfterVertexInsert(n, si2, edgeIdx);
       n[si2] = s; return n;
     });
     const newPi = edgeIdx + 1;
@@ -6237,13 +9141,10 @@ export default function MasterProject() {
     }
     saveHistory();
     setShapes(p => {
-      const n = [...p];
       const si = m.moveShapeIdx;
       const pi = m.movePointIdx;
-      const s = { ...n[si] };
-      const np = [...s.points];
       const anchor = p[m.anchorShapeIdx]?.points[m.anchorPointIdx];
-      const cur = np[pi];
+      const cur = p[si]?.points[pi];
       if (!anchor || !cur) return p;
       const vx = cur.x - anchor.x;
       const vy = cur.y - anchor.y;
@@ -6253,43 +9154,11 @@ export default function MasterProject() {
       const uy = vy / L;
       const newPxLen = toPixels(val);
       const newPos = { x: anchor.x + ux * newPxLen, y: anchor.y + uy * newPxLen };
-      np[pi] = newPos;
-      const dragEntry: LinkedEntry = { si, pi };
-      const group = linkedGroups.find(g => g.some(lp => linkedEntriesMatch(lp, dragEntry)));
-      if (group) {
-        for (const lp of group) {
-          if (linkedEntriesMatch(lp, dragEntry)) continue;
-          if (!n[lp.si]) continue;
-          if (lp.si === si && !isArcEntry(lp)) {
-            np[lp.pi] = { ...newPos };
-            continue;
-          }
-          const ls = { ...n[lp.si] };
-          if (isArcEntry(lp)) {
-            const lea = ls.edgeArcs ? [...ls.edgeArcs] : [];
-            const lArcs = lea[lp.edgeIdx] ? [...lea[lp.edgeIdx]!] : [];
-            const li = lArcs.findIndex(a => a.id === lp.arcId);
-            if (li >= 0) {
-              const lA = ls.points[lp.edgeIdx];
-              const lB = ls.points[(lp.edgeIdx + 1) % ls.points.length];
-              const { t: lt, offset: lo } = worldToArcPointOnCurve(lA, lB, lArcs, lArcs[li]!, newPos);
-              lArcs[li] = { ...lArcs[li], t: lt, offset: lo };
-              lea[lp.edgeIdx] = lArcs;
-              ls.edgeArcs = lea;
-              n[lp.si] = ls;
-            }
-          } else {
-            const lpts = [...ls.points];
-            lpts[lp.pi] = { ...newPos };
-            ls.points = lpts;
-            n[lp.si] = ls;
-          }
-        }
-      }
-      s.points = np;
-      n[si] = s;
-      if (s.linkedShapeIdx != null && n[s.linkedShapeIdx]) {
-        n[s.linkedShapeIdx] = { ...n[s.linkedShapeIdx], points: [...np] };
+      let n = moveVertexToTargetInShapes(p, si, pi, newPos, linkedGroups, null);
+      const s = n[si];
+      if (s && s.linkedShapeIdx != null && n[s.linkedShapeIdx]) {
+        n = [...n];
+        n[s.linkedShapeIdx] = { ...n[s.linkedShapeIdx]!, points: [...s.points] };
       }
       return n;
     });
@@ -6389,6 +9258,33 @@ export default function MasterProject() {
     }
     setIsSubmitting(true);
     try {
+      let eventIdForLinkedPlan = linkedEventId;
+      const planId = currentPlanIdRef.current;
+      if (!eventIdForLinkedPlan && planId) {
+        try {
+          const row = await getPlanRow(supabase, planId, companyId);
+          eventIdForLinkedPlan = row?.event_id ?? null;
+        } catch {
+          eventIdForLinkedPlan = null;
+        }
+      }
+
+      if (eventIdForLinkedPlan) {
+        if (!window.confirm(t("project:sync_event_confirm"))) {
+          return;
+        }
+        await syncCanvasToEvent({
+          supabase,
+          eventId: eventIdForLinkedPlan,
+          companyId,
+          userId: user?.id,
+          shapes,
+        });
+        clearDraft();
+        navigate(`/events/${eventIdForLinkedPlan}`);
+        return;
+      }
+
       const eventId = await submitProject({
         shapes,
         projectSettings,
@@ -6397,7 +9293,6 @@ export default function MasterProject() {
         userId: user?.id,
       });
       clearDraft();
-      const planId = currentPlanIdRef.current;
       if (planId) {
         try {
           await linkPlanToEvent(supabase, planId, eventId, companyId);
@@ -6407,7 +9302,13 @@ export default function MasterProject() {
       }
       navigate(`/events/${eventId}`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to create project");
+      const msg =
+        err instanceof Error
+          ? err.message
+          : err && typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "Failed to create project";
+      alert(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -6509,7 +9410,7 @@ export default function MasterProject() {
       )}
       {/* Toolbar — CAD Dark Professional */}
       <div className="toolbar-cad">
-        {/* Row 1: Layers dropdown + Geodesy */}
+        {/* Row 1: Layers */}
         <div className="toolbar-row">
           <div className="tool-group">
             <div ref={layersDropdownRef} style={{ position: "relative" }}>
@@ -6519,7 +9420,7 @@ export default function MasterProject() {
                 <svg className="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
               </button>
               {layersDropdownOpen && (
-                <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 160 }}>
+                <div style={{ ...layersDropdownPanelStyle, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
                   {[
                     { layer: 1 as ActiveLayer, key: "garden_label", dotClass: "garden", count: l1Count },
                     { layer: 2 as ActiveLayer, key: "elements_label", dotClass: "elements", count: l2Count },
@@ -6545,70 +9446,57 @@ export default function MasterProject() {
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              className={`geodesy-toggle ${geodesyEnabled ? "on" : "off"}`}
-              onClick={() => { setGeodesyEnabled(v => !v); if (geodesyEnabled) setEditingGeodesyCard(null); }}
-              title={geodesyEnabled ? t("project:toolbar_geodesy_on_tooltip") : t("project:toolbar_geodesy_off_tooltip")}
-            >
-              <span className="geodesy-indicator" />
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M8 3l4 8 5-5 7 11H0z" />
-              </svg>
-              {t("project:toolbar_geodesy")}
-            </button>
           </div>
           <div className="tb-spacer" />
         </div>
 
         {/* Row 2: Tools + Drawing + View filters + Delete + Counter — scrollable on mobile */}
         <div className={`toolbar-row ${isMobile ? "toolbar-row-scroll" : ""}`}>
-          {/* Mode dropdown: Select, Draw, Scale, View */}
+          {/* Mode dropdown: Select, Scale, View (Rysuj jest obok kształtów na warstwach 1–2) */}
           <div className="tool-group">
             <div ref={modeDropdownRef} style={{ position: "relative" }}>
-              <button type="button" className={`dropdown-trigger ${modeDropdownOpen || mode === "select" || mode === "freeDraw" || mode === "scale" || mode === "move" ? "active" : ""}`} onClick={() => setModeDropdownOpen(v => !v)}>
+              <button type="button" className={`dropdown-trigger ${modeDropdownOpen || mode === "select" || mode === "scale" || mode === "move" ? "active" : ""}`} onClick={() => setModeDropdownOpen(v => !v)}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  {mode === "freeDraw" && <><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" /><circle cx="11" cy="11" r="2" /></>}
                   {mode === "scale" && <><path d="M21 3L3 21" /><path d="M21 3h-6" /><path d="M21 3v6" /><path d="M3 21h6" /><path d="M3 21v-6" /></>}
                   {mode === "move" && <><path d="M5 9l-3 3 3 3" /><path d="M9 5l3-3 3 3" /><path d="M15 19l-3 3-3-3" /><path d="M19 9l3 3-3 3" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></>}
-                  {(mode === "select" || (mode !== "freeDraw" && mode !== "scale" && mode !== "move")) && <><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" /><path d="M13 13l6 6" /></>}
+                  {(mode === "select" || mode === "freeDraw" || (mode !== "scale" && mode !== "move")) && <><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" /><path d="M13 13l6 6" /></>}
                 </svg>
-                {t("project:toolbar_mode")}
+                {t(`project:${toolbarModeLabelKey(mode)}`)}
                 <svg className="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
               </button>
               {modeDropdownOpen && (
-                <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 140 }}>
-                  {[
+                <div style={{ ...modeDropdownPanelStyle, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
+                  {([
                     { mode: "select" as const, key: "toolbar_select" },
-                    { mode: "freeDraw" as const, key: "toolbar_draw" },
                     { mode: "scale" as const, key: "toolbar_scale" },
                     { mode: "move" as const, key: "toolbar_view" },
-                  ].map(({ mode: m, key }) => (
+                  ] as const).map(({ mode: m, key }) => {
+                    const rowActive = isPrimaryToolbarModeActive(mode, m);
+                    return (
                     <button key={key} type="button"
                       onClick={() => {
                         if (m === "select") { setDrawingShapeIdx(null); setMode("select"); }
-                        else if (m === "freeDraw") { setMode("freeDraw"); setSelectedShapeIdx(null); }
                         else if (m === "scale") { setDrawingShapeIdx(null); setMode("scale"); }
                         else if (m === "move") { setDrawingShapeIdx(null); setMode("move"); setSelectedShapeIdx(null); }
                         setModeDropdownOpen(false);
                       }}
                       style={{
                         display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px",
-                        border: "none", background: (mode === m || (m === "select" && mode === "select" && !drawingShapeIdx)) ? "rgba(108,92,231,0.2)" : "transparent", color: "#dfe6f0",
+                        border: "none", background: rowActive ? "rgba(108,92,231,0.2)" : "transparent", color: "#dfe6f0",
                         cursor: "pointer", fontSize: 13, fontFamily: "inherit", borderRadius: 4, textAlign: "left",
                       }}
-                      onMouseEnter={(e) => { if (mode !== m && !(m === "select" && mode === "select")) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = (mode === m || (m === "select" && mode === "select" && !drawingShapeIdx)) ? "rgba(108,92,231,0.2)" : "transparent"; }}
+                      onMouseEnter={(e) => { if (!rowActive) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = rowActive ? "rgba(108,92,231,0.2)" : "transparent"; }}
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 18, height: 18, flexShrink: 0 }}>
                         {m === "select" && <><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" /><path d="M13 13l6 6" /></>}
-                        {m === "freeDraw" && <><path d="M12 19l7-7 3 3-7 7-3-3z" /><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" /><path d="M2 2l7.586 7.586" /><circle cx="11" cy="11" r="2" /></>}
                         {m === "scale" && <><path d="M21 3L3 21" /><path d="M21 3h-6" /><path d="M21 3v6" /><path d="M3 21h6" /><path d="M3 21v-6" /></>}
                         {m === "move" && <><path d="M5 9l-3 3 3 3" /><path d="M9 5l3-3 3 3" /><path d="M15 19l-3 3-3-3" /><path d="M19 9l3 3-3 3" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></>}
                       </svg>
                       {t(`project:${key}`)}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -6616,8 +9504,44 @@ export default function MasterProject() {
 
           <div className="tb-sep" />
 
+          {(activeLayer === 1 || activeLayer === 2) && (
+            <>
+              <div className="tool-group">
+                <button
+                  type="button"
+                  className={`geodesy-toggle ${geodesyEnabled ? "on" : "off"}`}
+                  onClick={() => { setGeodesyEnabled(v => !v); if (geodesyEnabled) setEditingGeodesyCard(null); }}
+                  title={geodesyEnabled ? t("project:toolbar_geodesy_on_tooltip") : t("project:toolbar_geodesy_off_tooltip")}
+                >
+                  <span className="geodesy-indicator" />
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 3l4 8 5-5 7 11H0z" />
+                  </svg>
+                  {t("project:toolbar_geodesy")}
+                </button>
+              </div>
+              <div className="tb-sep" />
+            </>
+          )}
+
           {/* Drawing tools */}
           <div className="tool-group">
+            {(activeLayer === 1 || activeLayer === 2) && (
+              <button
+                type="button"
+                className={`dropdown-trigger ${mode === "freeDraw" ? "active" : ""}`}
+                onClick={() => { setMode("freeDraw"); setSelectedShapeIdx(null); }}
+                title={t("project:toolbar_draw")}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                  <path d="M2 2l7.586 7.586" />
+                  <circle cx="11" cy="11" r="2" />
+                </svg>
+                {t("project:toolbar_draw")}
+              </button>
+            )}
             {(activeLayer === 1 || activeLayer === 2) && (
               <div ref={shapesDropdownRef} style={{ position: "relative" }}>
                 <button type="button" className={`dropdown-trigger ${shapesDropdownOpen ? "active" : ""}`} onClick={() => setShapesDropdownOpen(v => !v)}>
@@ -6628,18 +9552,22 @@ export default function MasterProject() {
                   <svg className="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                 </button>
                 {shapesDropdownOpen && (
-                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 140 }}>
+                  <div style={{ ...shapesDropdownPanelStyle, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
                     {[
-                      { type: "square" as const, icon: "◻", key: "toolbar_shape_square" },
-                      { type: "rectangle" as const, icon: "▭", key: "toolbar_shape_rectangle" },
-                      { type: "triangle" as const, icon: "△", key: "toolbar_shape_triangle" },
-                      { type: "trapezoid" as const, icon: "⏢", key: "toolbar_shape_trapezoid" },
-                    ].map(({ type, icon, key }) => (
+                      { type: "square" as const, key: "toolbar_shape_square" },
+                      { type: "rectangle" as const, key: "toolbar_shape_rectangle" },
+                      { type: "triangle" as const, key: "toolbar_shape_triangle" },
+                      { type: "trapezoid" as const, key: "toolbar_shape_trapezoid" },
+                      { type: "pentagon" as const, key: "toolbar_shape_pentagon" },
+                      { type: "hexagon" as const, key: "toolbar_shape_hexagon" },
+                      { type: "octagon" as const, key: "toolbar_shape_octagon" },
+                      { type: "circle" as const, key: "toolbar_shape_circle" },
+                    ].map(({ type, key }) => (
                       <button key={key} type="button" onClick={() => { setShapeCreationModal({ type }); setShapesDropdownOpen(false); }}
                         style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "8px 12px", border: "none", background: "transparent", color: "#dfe6f0", cursor: "pointer", fontSize: 13, fontFamily: "inherit", borderRadius: 4, textAlign: "left" }}
                         onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
                         onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}>
-                        <span style={{ fontSize: 14 }}>{icon}</span>
+                        <ShapeDropdownItemIcon type={type} />
                         {t(`project:${key}`)}
                       </button>
                     ))}
@@ -6657,7 +9585,7 @@ export default function MasterProject() {
                   <svg className="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                 </button>
                 {pathDropdownOpen && (
-                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 140 }}>
+                  <div style={{ ...pathDropdownPanelStyle, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
                     {[
                       { subType: "slabs" as const, icon: "▦", key: "toolbar_path_slabs", color: CC.layer2Edge },
                       { subType: "concreteSlabs" as const, icon: "▣", key: "toolbar_path_concrete_slabs", color: CC.layer2Edge },
@@ -6691,7 +9619,7 @@ export default function MasterProject() {
                   <svg className="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                 </button>
                 {linearDropdownOpen && (
-                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 140 }}>
+                  <div style={{ ...linearDropdownPanelStyle, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
                     {[
                       { mode: "drawFence" as const, icon: "⌇", key: "toolbar_linear_fence", color: CC.fence },
                       { mode: "drawWall" as const, icon: "▥", key: "toolbar_linear_wall", color: CC.wall },
@@ -6726,7 +9654,7 @@ export default function MasterProject() {
                   <svg className="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                 </button>
                 {stairsDropdownOpen && (
-                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 160 }}>
+                  <div style={{ ...stairsDropdownPanelStyle, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
                     {[
                       { subType: "standard" as const, key: "toolbar_stairs_standard" },
                       { subType: "l_shape" as const, key: "toolbar_stairs_l_shape" },
@@ -6781,7 +9709,7 @@ export default function MasterProject() {
                   <svg className="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                 </button>
                 {groundworkDropdownOpen && (
-                  <div style={{ position: "absolute", top: "100%", left: 0, marginTop: 4, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 50, minWidth: 160 }}>
+                  <div style={{ ...groundworkDropdownPanelStyle, background: "#1a2538", border: "1px solid #1e2b40", borderRadius: 6, padding: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
                     {[
                       { mode: "drawDrainage" as const, icon: "⌇", key: "toolbar_groundwork_drainage", color: CC.drainage },
                       { mode: "drawCanalPipe" as const, icon: "⌇", key: "toolbar_groundwork_canal_pipe", color: CC.canalPipe },
@@ -6840,7 +9768,22 @@ export default function MasterProject() {
           <div className="tb-sep" />
 
           {selectedShapeIdx !== null && !drawingShapeIdx && (
-            <button type="button" className="delete-btn" onClick={() => { saveHistory(); setShapes(p => p.filter((_, i) => i !== selectedShapeIdx)); setSelectedShapeIdx(null); }}>
+            <button type="button" className="delete-btn" onClick={() => {
+              if (selectedShapeIdx == null) return;
+              const si = selectedShapeIdx;
+              saveHistory();
+              setShapes(p => remapShapesAfterShapeDelete(p.filter((_, i) => i !== si), si));
+              setLinkedGroups(prev => adjustLinkedGroupsAfterShapeDelete(prev, si));
+              setSelectedShapeIdx(null);
+              setSelectedPattern(prev => {
+                if (!prev) return null;
+                if (prev.shapeIdx === si) return null;
+                if (prev.shapeIdx > si) return { ...prev, shapeIdx: prev.shapeIdx - 1 };
+                return prev;
+              });
+              setObjectCardShapeIdx(prev => shiftShapeIdxAfterDelete(prev, si));
+              setResultsModalShapeIdx(prev => shiftShapeIdxAfterDelete(prev, si));
+            }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                 <line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" />
@@ -6864,7 +9807,7 @@ export default function MasterProject() {
       <div ref={containerRef} style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden" }}>
         <canvas ref={canvasRef} style={{ width: canvasSize.w, height: canvasSize.h, cursor, display: "block", touchAction: "none" }}
           onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp} onContextMenu={handleContextMenu} onDoubleClick={handleDoubleClick} />
+          onContextMenu={handleContextMenu} onDoubleClick={handleDoubleClick} />
 
         {/* Porada + Skróty */}
         <div style={{ position: "absolute", bottom: 12, right: 12, zIndex: 40, display: "flex", gap: 6, alignItems: "center" }}>
@@ -6942,7 +9885,7 @@ export default function MasterProject() {
         </div>
 
         {contextMenu && contextMenu.patternRotationHandle && (
-          <div ref={contextMenuRef} style={{ position: "fixed", left: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).x, top: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", minWidth: 160 }}>
+          <div ref={contextMenuRef} style={{ position: "fixed", left: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).x, top: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: shadows.xl, minWidth: 160 }}>
             <div style={{ fontSize: 11, color: CC.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${CC.panelBorder}`, marginBottom: 4 }}>
               {t("project:pattern_rotation_ctx_title")}
             </div>
@@ -6972,7 +9915,7 @@ export default function MasterProject() {
           </div>
         )}
         {contextMenu && !contextMenu.patternRotationHandle && (
-          <div ref={contextMenuRef} style={{ position: "fixed", left: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).x, top: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", minWidth: 160 }}>
+          <div ref={contextMenuRef} style={{ position: "fixed", left: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).x, top: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: shadows.xl, minWidth: 160 }}>
             <div style={{ fontSize: 11, color: CC.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${CC.panelBorder}`, marginBottom: 4 }}>
               {contextMenu.adjustmentEmpty && t("project:adjustment_empty_area")}
               {contextMenu.adjustmentOverflow && (() => {
@@ -7291,6 +10234,81 @@ export default function MasterProject() {
             )}
             {/* Point menu */}
             {contextMenu.pointIdx >= 0 && (<>
+              {(() => {
+                const s = shapes[contextMenu.shapeIdx];
+                if (!s || !isLinearElement(s) || s.closed || s.layer !== 2) return null;
+                if (isPathElement(s) || isGroundworkLinear(s)) return null;
+                if (s.points.length < 2) return null;
+                if (drawingShapeIdx === contextMenu.shapeIdx) return null;
+                const linearDrawMode: Mode | null =
+                  s.elementType === "fence" ? "drawFence"
+                  : s.elementType === "wall" ? "drawWall"
+                  : s.elementType === "kerb" ? "drawKerb"
+                  : s.elementType === "foundation" ? "drawFoundation"
+                  : null;
+                if (!linearDrawMode) return null;
+                return (
+                  <CtxItem
+                    label={t("project:ctx_continue_linear_drawing")}
+                    color={CC.accent}
+                    onClick={() => {
+                      const si = contextMenu.shapeIdx;
+                      const pi = contextMenu.pointIdx;
+                      saveHistory();
+                      setShapes(prev => {
+                        const n = [...prev];
+                        const sh0 = n[si];
+                        if (!sh0) return prev;
+                        let sh: Shape = { ...sh0 };
+                        const clicked = { ...sh.points[pi] };
+                        if (isPolygonLinearElement(sh) && sh.linearOpenStripOutline && isOpenStripPolygonOutline(sh.points)) {
+                          const cl = extractCenterlineFromOpenStripOutline(sh.points);
+                          if (cl.length < 2) return prev;
+                          let chain = cl.map(p => ({ ...p }));
+                          const d0 = distance(clicked, cl[0]);
+                          const d1 = distance(clicked, cl[cl.length - 1]);
+                          if (d0 < d1) chain.reverse();
+                          const h0 = sh.heights?.[0] ?? 0;
+                          const segLengths: number[] = [];
+                          for (let i = 0; i < chain.length - 1; i++) segLengths.push(toMeters(distance(chain[i], chain[i + 1])));
+                          const inputs: Record<string, unknown> = { ...sh.calculatorInputs, segmentLengths: segLengths };
+                          if (sh.elementType === "wall") {
+                            const defaultH = parseFloat(String(sh.calculatorInputs?.height ?? "1")) || 1;
+                            inputs.segmentHeights = segLengths.map(() => ({ startH: defaultH, endH: defaultH }));
+                          }
+                          sh = {
+                            ...sh,
+                            points: chain,
+                            linearOpenStripOutline: undefined,
+                            heights: chain.map(() => h0),
+                            drawingFinished: undefined,
+                            edgeArcs: undefined,
+                            calculatorInputs: inputs,
+                          };
+                        } else {
+                          let pts = sh.points.map(p => ({ ...p }));
+                          let heights = sh.heights;
+                          const p0 = pts[0];
+                          const pL = pts[pts.length - 1];
+                          const d0 = distance(clicked, p0);
+                          const d1 = distance(clicked, pL);
+                          if (d0 < d1) {
+                            pts = [...pts].reverse();
+                            if (heights && heights.length === pts.length) heights = [...heights].reverse();
+                          }
+                          sh = { ...sh, points: pts, heights: heights ?? sh.heights, drawingFinished: undefined };
+                        }
+                        n[si] = sh;
+                        return n;
+                      });
+                      setMode(linearDrawMode);
+                      setDrawingShapeIdx(si);
+                      setSelectedShapeIdx(si);
+                      setContextMenu(null);
+                    }}
+                  />
+                );
+              })()}
               {(shapes[contextMenu.shapeIdx]?.layer === 1 || shapes[contextMenu.shapeIdx]?.layer === 2) &&
                 (shapes[contextMenu.shapeIdx]?.points.length ?? 0) >= 2 && (
                 <CtxItem
@@ -7307,8 +10325,80 @@ export default function MasterProject() {
                 <CtxItem label="〰 Zmiana na arc point" color={CC.accent} onClick={() => {
                   saveHistory();
                   const si = contextMenu.shapeIdx, pi = contextMenu.pointIdx;
-                  const s = shapes[si]; const pts = s.points;
+                  const s = shapes[si];
+                  const pts = s.points;
                   const n = pts.length;
+                  const piOpp = stripOppositeVertexIndex(pts, pi);
+                  /** Path ribbon (same 2V layout as strip, but `isPolygonLinearStripOutline` is wall-only). */
+                  const pathRibbonArcPair =
+                    isPathElement(s) &&
+                    Boolean(s.calculatorInputs?.pathIsOutline) &&
+                    piOpp != null &&
+                    piOpp !== pi;
+                  const doPair =
+                    piOpp != null &&
+                    piOpp !== pi &&
+                    (isPolygonLinearStripOutline(s) || pathRibbonArcPair);
+                  if (doPair) {
+                    const r1 = mergeOneVertexToArcPointState(s, pi);
+                    if (!r1) {
+                      setContextMenu(null);
+                      return;
+                    }
+                    const pi2 = piOpp > pi ? piOpp - 1 : piOpp;
+                    const r2 = mergeOneVertexToArcPointState(r1.shape, pi2);
+                    if (!r2) {
+                      if (pathRibbonArcPair) {
+                        setContextMenu(null);
+                        return;
+                      }
+                      setShapes(p => {
+                        const n2 = [...p];
+                        n2[si] = r1.shape;
+                        return n2;
+                      });
+                      setLinkedGroups(lg =>
+                        mapLinkedGroupsAfterVertexToArc(lg, si, n, pi, r1.newEdgeIdx, r1.newArcId, r1.mergedEdgeIdx),
+                      );
+                      setContextMenu(null);
+                      return;
+                    }
+                    setShapes(p => {
+                      const n2 = [...p];
+                      let sh = { ...r2.shape };
+                      if (pathRibbonArcPair && isPathElement(sh) && sh.calculatorInputs?.pathIsOutline) {
+                        const cl = extractPathRibbonCenterlineFromOutline(sh.points);
+                        if (cl.length >= 2) {
+                          const ns = cl.length - 1;
+                          const prevSides = sh.calculatorInputs.pathSegmentSides as ("left" | "right")[] | undefined;
+                          const defaultSide =
+                            prevSides?.find((x) => x === "left" || x === "right") ?? "left";
+                          const newSides: ("left" | "right")[] =
+                            prevSides && prevSides.length === ns
+                              ? prevSides.map((x) => (x === "left" || x === "right" ? x : defaultSide))
+                              : (Array(ns).fill(defaultSide) as ("left" | "right")[]);
+                          sh = {
+                            ...sh,
+                            calculatorInputs: {
+                              ...sh.calculatorInputs,
+                              pathCenterline: cl.map((p) => ({ ...p })),
+                              pathCenterlineOriginal: cl.map((p) => ({ ...p })),
+                              pathSegmentSides: newSides,
+                            },
+                          };
+                        }
+                      }
+                      n2[si] = sh;
+                      return n2;
+                    });
+                    setLinkedGroups(lg => {
+                      let g = mapLinkedGroupsAfterVertexToArc(lg, si, n, pi, r1.newEdgeIdx, r1.newArcId, r1.mergedEdgeIdx);
+                      g = mapLinkedGroupsAfterVertexToArc(g, si, n - 1, pi2, r2.newEdgeIdx, r2.newArcId, r2.mergedEdgeIdx);
+                      return g;
+                    });
+                    setContextMenu(null);
+                    return;
+                  }
                   const prev = (pi - 1 + n) % n, next = (pi + 1) % n;
                   const A = pts[prev], B = pts[next], V = pts[pi];
                   const { t: chordT } = worldToArcPoint(A, B, V);
@@ -7317,14 +10407,14 @@ export default function MasterProject() {
                   const placeholder = { id: "__temp__", t: 0.5, offset: 0 };
                   const { t, offset } = worldToArcPointOnCurve(A, B, [...arcsPrev, ...arcsNext, placeholder], placeholder, V);
                   const newArc: ArcPoint = { id: crypto.randomUUID(), t, offset };
-                  // The merged edge index in the new shape (after removing the vertex)
                   const newEdgeIdx = pi > 0 ? prev : n - 2;
                   setShapes(p => {
-                    const n2 = [...p]; const sh = { ...n2[si] };
+                    const n2 = [...p];
+                    let sh = { ...n2[si] };
                     const newPts = pts.filter((_, i) => i !== pi);
-                    const arcsPrev = (sh.edgeArcs?.[prev] ?? []).map(a => ({ ...a, t: a.t * t }));
-                    const arcsNext = (sh.edgeArcs?.[pi] ?? []).map(a => ({ ...a, t: t + (1 - t) * a.t }));
-                    const merged = [...arcsPrev, ...arcsNext, newArc].sort((a, b) => a.t - b.t);
+                    const arcsPrevM = (sh.edgeArcs?.[prev] ?? []).map(a => ({ ...a, t: a.t * t }));
+                    const arcsNextM = (sh.edgeArcs?.[pi] ?? []).map(a => ({ ...a, t: t + (1 - t) * a.t }));
+                    const merged = [...arcsPrevM, ...arcsNextM, newArc].sort((a, b) => a.t - b.t);
                     const oldArcs = sh.edgeArcs || [];
                     const newEdgeArcs: (ArcPoint[] | null)[] = [];
                     for (let j = 0; j < n - 1; j++) {
@@ -7345,9 +10435,33 @@ export default function MasterProject() {
                     }
                     sh.lockedEdges = sh.lockedEdges.filter(e => e.idx !== prev && e.idx !== pi).map(e => e.idx > pi ? { ...e, idx: e.idx - 1 } : e);
                     sh.lockedAngles = sh.lockedAngles.filter(a => a !== pi).map(a => a > pi ? a - 1 : a);
+                    if (isPolygonLinearStripOutline(sh) || (isPathElement(sh) && Boolean(sh.calculatorInputs?.pathIsOutline))) {
+                      sh = applyStripParallelEdgeArcSync(sh);
+                    }
+                    if (isPathElement(sh) && sh.calculatorInputs?.pathIsOutline) {
+                      const cl = extractPathRibbonCenterlineFromOutline(sh.points);
+                      if (cl.length >= 2) {
+                        const ns = cl.length - 1;
+                        const prevSides = sh.calculatorInputs.pathSegmentSides as ("left" | "right")[] | undefined;
+                        const defaultSide =
+                          prevSides?.find((x) => x === "left" || x === "right") ?? "left";
+                        const newSides: ("left" | "right")[] =
+                          prevSides && prevSides.length === ns
+                            ? prevSides.map((x) => (x === "left" || x === "right" ? x : defaultSide))
+                            : (Array(ns).fill(defaultSide) as ("left" | "right")[]);
+                        sh = {
+                          ...sh,
+                          calculatorInputs: {
+                            ...sh.calculatorInputs,
+                            pathCenterline: cl.map((p) => ({ ...p })),
+                            pathCenterlineOriginal: cl.map((p) => ({ ...p })),
+                            pathSegmentSides: newSides,
+                          },
+                        };
+                      }
+                    }
                     n2[si] = sh; return n2;
                   });
-                  // Update linked groups: vertex {si,pi} becomes arc {si, newEdgeIdx, newArc.id}; shift other pi on same shape
                   const mergedEdgeIdx = prev;
                   setLinkedGroups(lg => lg.map(g => g.map(p => {
                     if (p.si === si && !isArcEntry(p) && p.pi === pi)
@@ -7393,6 +10507,117 @@ export default function MasterProject() {
                   return <CtxItem label={t("project:ctx_link_all_at_point")} color={CC.accent} onClick={() => linkAllAtPoint(contextMenu.shapeIdx, contextMenu.pointIdx)} />;
                 }
                 return null;
+              })()}
+              {/* Frame link / unlink between touching shapes */}
+              {(() => {
+                const si = contextMenu.shapeIdx;
+                const s = shapes[si];
+                if (!s || !s.closed || s.points.length < 3) return null;
+                const hasFrame = getTotalFrameInsetWidthCm(s.calculatorInputs) > 0;
+                if (!hasFrame) return null;
+                const partners = findAllSharedFrameEdgePartners(shapes, si)
+                  .filter(p => getTotalFrameInsetWidthCm(shapes[p.otherIdx]?.calculatorInputs) > 0);
+                if (partners.length === 0) return null;
+                const existingLinks = (s.calculatorInputs?.frameLinkedEdges ?? []) as { myEdgeIdx: number; otherShapeIdx: number; otherEdgeIdx: number }[];
+                const alreadyLinkedOthers = new Set(existingLinks.map(l => l.otherShapeIdx));
+                const unlinked = partners.filter(p => !alreadyLinkedOthers.has(p.otherIdx));
+                const linked = partners.filter(p => alreadyLinkedOthers.has(p.otherIdx));
+                return (
+                  <>
+                    {unlinked.map(({ otherIdx, edges }) => {
+                      const other = shapes[otherIdx];
+                      const name = other?.label || other?.calculatorType || other?.elementType || "";
+                      return (
+                        <CtxItem
+                          key={`flink-${otherIdx}`}
+                          label={`🔗 Połącz ramki: ${name}`}
+                          color={CC.accent}
+                          onClick={() => {
+                            saveHistory();
+                            setShapes(prev => {
+                              const n = [...prev];
+                              const sA = { ...n[si] };
+                              const sB = { ...n[otherIdx] };
+                              const inpA = { ...(sA.calculatorInputs ?? {}) };
+                              const inpB = { ...(sB.calculatorInputs ?? {}) };
+                              const nEdgesA = sA.points.length;
+                              const nEdgesB = sB.points.length;
+                              const fseA: boolean[] = Array.isArray(inpA.frameSidesEnabled) && (inpA.frameSidesEnabled as boolean[]).length >= nEdgesA
+                                ? [...inpA.frameSidesEnabled as boolean[]]
+                                : Array.from({ length: nEdgesA }, (_, k) => (Array.isArray(inpA.frameSidesEnabled) ? (inpA.frameSidesEnabled as boolean[])[k] !== false : true));
+                              const fseB: boolean[] = Array.isArray(inpB.frameSidesEnabled) && (inpB.frameSidesEnabled as boolean[]).length >= nEdgesB
+                                ? [...inpB.frameSidesEnabled as boolean[]]
+                                : Array.from({ length: nEdgesB }, (_, k) => (Array.isArray(inpB.frameSidesEnabled) ? (inpB.frameSidesEnabled as boolean[])[k] !== false : true));
+                              const linksA: { myEdgeIdx: number; otherShapeIdx: number; otherEdgeIdx: number }[] = [...(inpA.frameLinkedEdges ?? [])];
+                              const linksB: { myEdgeIdx: number; otherShapeIdx: number; otherEdgeIdx: number }[] = [...(inpB.frameLinkedEdges ?? [])];
+                              for (const { edgeA, edgeB } of edges) {
+                                const fseIdxA = (edgeA + 1) % nEdgesA;
+                                const fseIdxB = (edgeB + 1) % nEdgesB;
+                                if (fseIdxA < fseA.length) fseA[fseIdxA] = false;
+                                if (fseIdxB < fseB.length) fseB[fseIdxB] = false;
+                                if (!linksA.some(l => l.myEdgeIdx === edgeA && l.otherShapeIdx === otherIdx))
+                                  linksA.push({ myEdgeIdx: edgeA, otherShapeIdx: otherIdx, otherEdgeIdx: edgeB });
+                                if (!linksB.some(l => l.myEdgeIdx === edgeB && l.otherShapeIdx === si))
+                                  linksB.push({ myEdgeIdx: edgeB, otherShapeIdx: si, otherEdgeIdx: edgeA });
+                              }
+                              inpA.frameSidesEnabled = fseA;
+                              inpA.frameLinkedEdges = linksA;
+                              inpB.frameSidesEnabled = fseB;
+                              inpB.frameLinkedEdges = linksB;
+                              n[si] = { ...sA, calculatorInputs: inpA };
+                              n[otherIdx] = { ...sB, calculatorInputs: inpB };
+                              return n;
+                            });
+                            setContextMenu(null);
+                          }}
+                        />
+                      );
+                    })}
+                    {linked.map(({ otherIdx, edges }) => {
+                      const other = shapes[otherIdx];
+                      const name = other?.label || other?.calculatorType || other?.elementType || "";
+                      return (
+                        <CtxItem
+                          key={`funlink-${otherIdx}`}
+                          label={`✂ Rozłącz ramki: ${name}`}
+                          color={CC.text}
+                          onClick={() => {
+                            saveHistory();
+                            setShapes(prev => {
+                              const n = [...prev];
+                              const sA = { ...n[si] };
+                              const sB = { ...n[otherIdx] };
+                              const inpA = { ...(sA.calculatorInputs ?? {}) };
+                              const inpB = { ...(sB.calculatorInputs ?? {}) };
+                              const nEdgesA = sA.points.length;
+                              const nEdgesB = sB.points.length;
+                              const fseA: boolean[] = Array.isArray(inpA.frameSidesEnabled) && (inpA.frameSidesEnabled as boolean[]).length >= nEdgesA
+                                ? [...inpA.frameSidesEnabled as boolean[]]
+                                : Array.from({ length: nEdgesA }, (_, k) => (Array.isArray(inpA.frameSidesEnabled) ? (inpA.frameSidesEnabled as boolean[])[k] !== false : true));
+                              const fseB: boolean[] = Array.isArray(inpB.frameSidesEnabled) && (inpB.frameSidesEnabled as boolean[]).length >= nEdgesB
+                                ? [...inpB.frameSidesEnabled as boolean[]]
+                                : Array.from({ length: nEdgesB }, (_, k) => (Array.isArray(inpB.frameSidesEnabled) ? (inpB.frameSidesEnabled as boolean[])[k] !== false : true));
+                              for (const { edgeA, edgeB } of edges) {
+                                const fseIdxA = (edgeA + 1) % nEdgesA;
+                                const fseIdxB = (edgeB + 1) % nEdgesB;
+                                if (fseIdxA < fseA.length) fseA[fseIdxA] = true;
+                                if (fseIdxB < fseB.length) fseB[fseIdxB] = true;
+                              }
+                              inpA.frameSidesEnabled = fseA;
+                              inpA.frameLinkedEdges = ((inpA.frameLinkedEdges ?? []) as any[]).filter((l: any) => l.otherShapeIdx !== otherIdx);
+                              inpB.frameSidesEnabled = fseB;
+                              inpB.frameLinkedEdges = ((inpB.frameLinkedEdges ?? []) as any[]).filter((l: any) => l.otherShapeIdx !== si);
+                              n[si] = { ...sA, calculatorInputs: inpA };
+                              n[otherIdx] = { ...sB, calculatorInputs: inpB };
+                              return n;
+                            });
+                            setContextMenu(null);
+                          }}
+                        />
+                      );
+                    })}
+                  </>
+                );
               })()}
               {shapes[contextMenu.shapeIdx]?.layer === 2 && (
                 <>
@@ -7508,27 +10733,71 @@ export default function MasterProject() {
                   insertPointOnEdge(contextMenu.shapeIdx, contextMenu.edgeIdx, contextMenu.edgePos!, contextMenu.edgeT!);
                 }} />
               )}
-              {!isLinearElement(shapes[contextMenu.shapeIdx]) && !isPathElement(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx]?.closed && contextMenu.edgePos !== undefined && contextMenu.edgeT !== undefined && (shapes[contextMenu.shapeIdx].layer === 1 || shapes[contextMenu.shapeIdx].layer === 2) && (
-                <CtxItem label="〰 Dodaj arc point" color={CC.accent} onClick={() => {
-                  saveHistory();
-                  const si = contextMenu.shapeIdx, ei = contextMenu.edgeIdx;
-                  const pts = shapes[si].points;
-                  const A = pts[ei], B = pts[(ei + 1) % pts.length];
-                  const arcList = shapes[si].edgeArcs?.[ei] ?? [];
-                  const placeholder = { id: "__temp__", t: 0.5, offset: 0 };
-                  const { t, offset } = worldToArcPointOnCurve(A, B, [...arcList, placeholder], placeholder, contextMenu.edgePos!);
-                  setShapes(p => {
-                    const n = [...p]; const s = { ...n[si] };
-                    const edgeArcs = s.edgeArcs ? [...s.edgeArcs] : [];
-                    if (!edgeArcs[ei]) edgeArcs[ei] = [];
-                    const arcs = [...(edgeArcs[ei]!), { id: crypto.randomUUID(), t, offset }].sort((a, b) => a.t - b.t);
-                    edgeArcs[ei] = arcs;
-                    s.edgeArcs = edgeArcs;
-                    n[si] = s; return n;
-                  });
-                  setContextMenu(null);
-                }} />
-              )}
+              {contextMenu.edgePos !== undefined && contextMenu.edgeT !== undefined && (() => {
+                const sh = shapes[contextMenu.shapeIdx];
+                if (!sh) return null;
+                const polyOk =
+                  !isLinearElement(sh) && !isPathElement(sh) && sh.closed && (sh.layer === 1 || sh.layer === 2);
+                const stripWallOk =
+                  isPolygonLinearStripOutline(sh) && isLinearElement(sh) && (sh.closed || Boolean(sh.linearOpenStripOutline)) && sh.layer === 2;
+                if (!polyOk && !stripWallOk) return null;
+                return (
+                  <CtxItem label="〰 Dodaj arc point" color={CC.accent} onClick={() => {
+                    saveHistory();
+                    const si = contextMenu.shapeIdx, ei = contextMenu.edgeIdx;
+                    const s0 = shapes[si];
+                    const pts = s0.points;
+                    const seg = stripPolygonEdgeToSegmentIndex(pts, ei);
+                    const placeholder = { id: "__temp__", t: 0.5, offset: 0 };
+                    setShapes(p => {
+                      const n2 = [...p];
+                      let s = { ...n2[si] };
+                      const pts2 = s.points;
+                      const nPts = pts2.length;
+                      if (seg !== null && isPolygonLinearStripOutline(s)) {
+                        const par = stripOutlineParallelEdges(pts2, seg);
+                        if (!par) {
+                          n2[si] = s;
+                          return n2;
+                        }
+                        const leftEi = seg;
+                        const onLeft = ei === leftEi;
+                        const A = onLeft ? par.leftA : par.rightA;
+                        const B = onLeft ? par.leftB : par.rightB;
+                        const arcListClicked = s.edgeArcs?.[ei] ?? [];
+                        const { t, offset } = worldToArcPointOnCurve(A, B, [...arcListClicked, placeholder], placeholder, contextMenu.edgePos!);
+                        const newArc: ArcPoint = { id: crypto.randomUUID(), t, offset };
+                        const mergedClicked = [...arcListClicked, newArc].sort((a, b) => a.t - b.t);
+                        const ea = s.edgeArcs ? [...s.edgeArcs] : [];
+                        while (ea.length < nPts) ea.push(null);
+                        const canonicalLeft = onLeft
+                          ? mergedClicked
+                          : mirrorArcPointsToOppositeChord(par.rightA, par.rightB, par.leftA, par.leftB, mergedClicked);
+                        ea[leftEi] = canonicalLeft.length ? canonicalLeft : null;
+                        s.edgeArcs = ea;
+                        s = applyStripParallelEdgeArcSync(s);
+                      } else {
+                        const Bidx2 = s.closed ? (ei + 1) % nPts : ei + 1;
+                        if (Bidx2 >= nPts) {
+                          n2[si] = s;
+                          return n2;
+                        }
+                        const A = pts2[ei], B = pts2[Bidx2];
+                        const arcList = s.edgeArcs?.[ei] ?? [];
+                        const { t, offset } = worldToArcPointOnCurve(A, B, [...arcList, placeholder], placeholder, contextMenu.edgePos!);
+                        const edgeArcs = s.edgeArcs ? [...s.edgeArcs] : [];
+                        if (!edgeArcs[ei]) edgeArcs[ei] = [];
+                        const arcs = [...(edgeArcs[ei]!), { id: crypto.randomUUID(), t, offset }].sort((a, b) => a.t - b.t);
+                        edgeArcs[ei] = arcs;
+                        s.edgeArcs = edgeArcs;
+                      }
+                      n2[si] = s;
+                      return n2;
+                    });
+                    setContextMenu(null);
+                  }} />
+                );
+              })()}
               {shapes[contextMenu.shapeIdx]?.layer === 2 && (
                 <>
                   <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
@@ -7546,6 +10815,13 @@ export default function MasterProject() {
                 <CtxItem label="✕ Usuń segment" color={CC.danger} onClick={() => { saveHistory(); removeLinearSegment(contextMenu.shapeIdx, contextMenu.edgeIdx); setContextMenu(null); setSelectedShapeIdx(null); }} />
               )}
               {isLinearElement(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx].layer === 2 && (
+                <>
+                  <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
+                  <CtxItem label={t("project:ctx_remove_element")} color={CC.danger} onClick={() => deleteLayer2ElementFromContext(contextMenu.shapeIdx)} />
+                </>
+              )}
+              {!isLinearElement(shapes[contextMenu.shapeIdx]) && shapes[contextMenu.shapeIdx]?.layer === 2 &&
+                !contextMenu.adjustmentEmpty && !contextMenu.adjustmentOverflow && !contextMenu.adjustmentOverlap && (
                 <>
                   <div style={{ height: 1, background: CC.panelBorder, margin: "4px 0" }} />
                   <CtxItem label={t("project:ctx_remove_element")} color={CC.danger} onClick={() => deleteLayer2ElementFromContext(contextMenu.shapeIdx)} />
@@ -7576,6 +10852,7 @@ export default function MasterProject() {
                     }}
                   />
                 )}
+                <CtxItem label={t("project:ctx_remove_element")} color={CC.danger} onClick={() => deleteLayer2ElementFromContext(contextMenu.shapeIdx)} />
               </>
             )}
             {/* Shape-level menu (Layer 2) */}
@@ -7643,24 +10920,14 @@ export default function MasterProject() {
                   color={CC.accent}
                   onClick={() => { setObjectCardShapeIdx(contextMenu.shapeIdx); setContextMenu(null); }}
                 />
-                {shapes[contextMenu.shapeIdx]?.calculatorType && !isGroundworkLinear(shapes[contextMenu.shapeIdx]) && (
-                  <CtxItem label={t("project:remove_calculator")} color={CC.danger} onClick={() => {
-                    setShapes(p => {
-                      const n = [...p]; const s = { ...n[contextMenu.shapeIdx] };
-                      s.calculatorType = undefined; s.calculatorSubType = undefined;
-                      s.calculatorInputs = undefined; s.calculatorResults = undefined;
-                      n[contextMenu.shapeIdx] = s; return n;
-                    });
-                    setContextMenu(null);
-                  }} />
-                )}
+                <CtxItem label={t("project:ctx_remove_element")} color={CC.danger} onClick={() => deleteLayer2ElementFromContext(contextMenu.shapeIdx)} />
               </>
             )}
           </div>
         )}
 
         {projectSummaryContextMenu !== null && shapes[projectSummaryContextMenu.shapeIdx] && (
-          <div ref={projectSummaryMenuRef} style={{ position: "fixed", left: (projectSummaryDisplayPos ?? { x: projectSummaryContextMenu.x, y: projectSummaryContextMenu.y }).x, top: (projectSummaryDisplayPos ?? { x: projectSummaryContextMenu.x, y: projectSummaryContextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.5)", minWidth: 160 }}>
+          <div ref={projectSummaryMenuRef} style={{ position: "fixed", left: (projectSummaryDisplayPos ?? { x: projectSummaryContextMenu.x, y: projectSummaryContextMenu.y }).x, top: (projectSummaryDisplayPos ?? { x: projectSummaryContextMenu.x, y: projectSummaryContextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: shadows.xl, minWidth: 160 }}>
             <div style={{ fontSize: 11, color: CC.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${CC.panelBorder}`, marginBottom: 4 }}>
               {shapes[projectSummaryContextMenu.shapeIdx].label || translateCalculatorTypeLabel(shapes[projectSummaryContextMenu.shapeIdx].calculatorType ?? "", t) || t("project:summary_fallback_element")}
             </div>
@@ -7668,9 +10935,19 @@ export default function MasterProject() {
               <CtxItem label={`📊 ${t("project:path_view_results")}`} color="#a29bfe" onClick={() => { setResultsModalShapeIdx(projectSummaryContextMenu.shapeIdx); setProjectSummaryContextMenu(null); }} />
             )}
             <CtxItem label={t("project:ctx_remove_element")} color={CC.danger} onClick={() => {
+              const si = projectSummaryContextMenu.shapeIdx;
               saveHistory();
-              setShapes(p => p.filter((_, i) => i !== projectSummaryContextMenu.shapeIdx));
+              setShapes(p => remapShapesAfterShapeDelete(p.filter((_, i) => i !== si), si));
+              setLinkedGroups(prev => adjustLinkedGroupsAfterShapeDelete(prev, si));
               setSelectedShapeIdx(null);
+              setSelectedPattern(prev => {
+                if (!prev) return null;
+                if (prev.shapeIdx === si) return null;
+                if (prev.shapeIdx > si) return { ...prev, shapeIdx: prev.shapeIdx - 1 };
+                return prev;
+              });
+              setObjectCardShapeIdx(prev => shiftShapeIdxAfterDelete(prev, si));
+              setResultsModalShapeIdx(prev => shiftShapeIdxAfterDelete(prev, si));
               setProjectSummaryContextMenu(null);
             }} />
             <CtxItem label="✏️ Zmień nazwę" color={CC.accent} onClick={() => {
@@ -7712,7 +10989,7 @@ export default function MasterProject() {
             dialogTop = editingDim.y - DIM_EDIT_DIALOG_H / 2;
           }
           return (
-            <div style={{ position: "fixed", left: dialogLeft, top: dialogTop, zIndex: 200, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, boxShadow: "0 8px 32px rgba(0,0,0,0.5)", width: DIM_EDIT_DIALOG_W, boxSizing: "border-box" }} onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === "Enter") applyDimEdit(); if (e.key === "Escape") setEditingDim(null); }}>
+            <div style={{ position: "fixed", left: dialogLeft, top: dialogTop, zIndex: 200, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, boxShadow: shadows.modal, width: DIM_EDIT_DIALOG_W, boxSizing: "border-box" }} onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === "Enter") applyDimEdit(); if (e.key === "Escape") setEditingDim(null); }}>
               <div style={{ fontWeight: 600, marginBottom: 16, color: CC.text }}>{t("project:dim_edit_title")}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
                 <span style={{ fontSize: 13, color: CC.text }}>{t("project:dim_edit_length")}:</span>
@@ -7774,7 +11051,7 @@ export default function MasterProject() {
                 border: `1px solid ${CC.panelBorder}`,
                 borderRadius: 8,
                 padding: 20,
-                boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                boxShadow: shadows.modal,
                 width: OFFSET_ALONG_LINE_DIALOG_W,
                 maxHeight: viewportBudget,
                 overflowY: "auto",
@@ -7875,25 +11152,36 @@ export default function MasterProject() {
         })() : null}
 
         {shapeCreationModal && (
-          <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setShapeCreationModal(null)}>
-            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 320, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+          <div ref={shapeCreationBackdropDismiss.backdropRef} className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onPointerDown={shapeCreationBackdropDismiss.onBackdropPointerDown}>
+            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 320, boxShadow: shadows.modal }} onPointerDownCapture={shapeCreationBackdropDismiss.onPanelPointerDownCapture} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 16, color: CC.text }}>
-                {shapeCreationModal.type === "square" && t("project:toolbar_shape_square")}
-                {shapeCreationModal.type === "rectangle" && t("project:toolbar_shape_rectangle")}
-                {shapeCreationModal.type === "triangle" && t("project:toolbar_shape_triangle")}
-                {shapeCreationModal.type === "trapezoid" && t("project:toolbar_shape_trapezoid")}
+                {t(`project:${projectShapeToolbarLabelKey(shapeCreationModal.type)}`)}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 20 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_name_label")}</span>
                   <input type="text" value={shapeInputs.name} onChange={e => setShapeInputs(p => ({ ...p, name: e.target.value }))}
-                    placeholder={shapeCreationModal.type === "square" ? t("project:name_placeholder_patio") : shapeCreationModal.type === "rectangle" ? t("project:name_placeholder_terrace") : shapeCreationModal.type === "triangle" ? t("project:name_placeholder_flowerbed") : t("project:name_placeholder_border")}
+                    placeholder={t(`project:${shapeNamePlaceholderKey(shapeCreationModal.type)}`)}
                     style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
                 </label>
                 {shapeCreationModal.type === "square" && (
                   <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_side_m")}</span>
                     <input type="number" min="0.1" step="0.1" value={shapeInputs.side} onChange={e => setShapeInputs(p => ({ ...p, side: e.target.value }))}
+                      style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
+                  </label>
+                )}
+                {(shapeCreationModal.type === "pentagon" || shapeCreationModal.type === "hexagon" || shapeCreationModal.type === "octagon") && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_side_length_m")}</span>
+                    <input type="number" min="0.1" step="0.1" value={shapeInputs.side} onChange={e => setShapeInputs(p => ({ ...p, side: e.target.value }))}
+                      style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
+                  </label>
+                )}
+                {shapeCreationModal.type === "circle" && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 120, fontSize: 13, color: CC.text }}>{t("project:shape_modal_diameter_m")}</span>
+                    <input type="number" min="0.1" step="0.1" value={shapeInputs.diameter} onChange={e => setShapeInputs(p => ({ ...p, diameter: e.target.value }))}
                       style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }} />
                   </label>
                 )}
@@ -7949,11 +11237,15 @@ export default function MasterProject() {
                 <button
                   onClick={() => {
                     const { type } = shapeCreationModal;
-                    const label = (shapeInputs.name || "").trim() || (type === "square" ? t("project:toolbar_shape_square") : type === "rectangle" ? t("project:toolbar_shape_rectangle") : type === "triangle" ? t("project:toolbar_shape_triangle") : t("project:toolbar_shape_trapezoid"));
+                    const label = (shapeInputs.name || "").trim() || t(`project:${projectShapeToolbarLabelKey(type)}`);
                     if (type === "square") addShape((cx2, cy2, l) => ({ ...makeSquare(cx2, cy2, l, parseFloat(shapeInputs.side) || 4), label }));
                     else if (type === "rectangle") addShape((cx2, cy2, l) => ({ ...makeRectangle(cx2, cy2, l, parseFloat(shapeInputs.width) || 6, parseFloat(shapeInputs.height) || 4), label }));
                     else if (type === "triangle") addShape((cx2, cy2, l) => ({ ...makeTriangle(cx2, cy2, l, parseFloat(shapeInputs.base) || 5, parseFloat(shapeInputs.height) || 4), label }));
-                    else addShape((cx2, cy2, l) => ({ ...makeTrapezoid(cx2, cy2, l, parseFloat(shapeInputs.top) || 3, parseFloat(shapeInputs.bottom) || 6, parseFloat(shapeInputs.height) || 4), label }));
+                    else if (type === "trapezoid") addShape((cx2, cy2, l) => ({ ...makeTrapezoid(cx2, cy2, l, parseFloat(shapeInputs.top) || 3, parseFloat(shapeInputs.bottom) || 6, parseFloat(shapeInputs.height) || 4), label }));
+                    else if (type === "pentagon") addShape((cx2, cy2, l) => ({ ...makeRegularPolygon(cx2, cy2, l, 5, parseFloat(shapeInputs.side) || 4), label }));
+                    else if (type === "hexagon") addShape((cx2, cy2, l) => ({ ...makeRegularPolygon(cx2, cy2, l, 6, parseFloat(shapeInputs.side) || 4), label }));
+                    else if (type === "octagon") addShape((cx2, cy2, l) => ({ ...makeRegularPolygon(cx2, cy2, l, 8, parseFloat(shapeInputs.side) || 4), label }));
+                    else if (type === "circle") addShape((cx2, cy2, l) => ({ ...makeCircle(cx2, cy2, l, parseFloat(shapeInputs.diameter) || 4), label }));
                     setShapeCreationModal(null);
                   }}
                   style={{ padding: "8px 16px", background: CC.accent, border: "none", borderRadius: 6, color: CC.bg, cursor: "pointer", fontSize: 13 }}
@@ -8177,7 +11469,7 @@ export default function MasterProject() {
           const dialogLeft = rect ? Math.max(rect.left + 20, Math.min(rect.right - 280, rect.left + rect.width * 0.6)) : 20;
           const dialogTop = rect ? Math.max(rect.top + 20, Math.min(rect.bottom - 320, rect.top + rect.height * 0.4)) : 20;
           return (
-            <div style={{ position: "fixed", left: dialogLeft, top: dialogTop, zIndex: 200, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, boxShadow: "0 8px 32px rgba(0,0,0,0.5)", minWidth: 260 }} onClick={e => e.stopPropagation()}>
+            <div style={{ position: "fixed", left: dialogLeft, top: dialogTop, zIndex: 200, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, boxShadow: shadows.modal, minWidth: 260 }} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 16, color: CC.text }}>{t("project:set_angle_modal_title")}</div>
               <div style={{ fontSize: 13, color: CC.textDim, marginBottom: 8 }}>{t("project:set_angle_current")}: {currentAngle.toFixed(1)}°</div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
@@ -8216,8 +11508,8 @@ export default function MasterProject() {
         })()}
 
         {grassTrimModal && (
-          <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setGrassTrimModal(null)}>
-            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+          <div ref={grassTrimBackdropDismiss.backdropRef} className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onPointerDown={grassTrimBackdropDismiss.onBackdropPointerDown}>
+            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: shadows.modal }} onPointerDownCapture={grassTrimBackdropDismiss.onPanelPointerDownCapture} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>Łączenie rolek trawy</div>
               <p style={{ fontSize: 13, color: CC.textDim, marginBottom: 16, lineHeight: 1.5 }}>
                 Przy łączeniu rolek, aby uzyskać najlepszy efekt, ucinamy boki które się łączą o 3 cm (3 rzędy trawy).
@@ -8299,8 +11591,8 @@ export default function MasterProject() {
         )}
 
         {adjustmentFillModal && (
-          <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentFillModal(null)}>
-            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+          <div ref={adjustmentFillBackdropDismiss.backdropRef} className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onPointerDown={adjustmentFillBackdropDismiss.onBackdropPointerDown}>
+            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: shadows.modal }} onPointerDownCapture={adjustmentFillBackdropDismiss.onPanelPointerDownCapture} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:adjustment_fill_pick")}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
                 {findTouchingElementsForEmptyArea(shapes, adjustmentData.emptyAreas[adjustmentFillModal.emptyAreaIdx] ?? []).map(si => {
@@ -8335,8 +11627,8 @@ export default function MasterProject() {
         )}
 
         {adjustmentExtendModal && (
-          <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentExtendModal(null)}>
-            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+          <div ref={adjustmentExtendBackdropDismiss.backdropRef} className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onPointerDown={adjustmentExtendBackdropDismiss.onBackdropPointerDown}>
+            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: shadows.modal }} onPointerDownCapture={adjustmentExtendBackdropDismiss.onPanelPointerDownCapture} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:adjustment_extend_pick", { defaultValue: "Wybierz element do dosunięcia" })}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
                 {findTouchingElementsForEmptyArea(shapes, adjustmentData.emptyAreas[adjustmentExtendModal.emptyAreaIdx] ?? []).map(si => {
@@ -8371,8 +11663,8 @@ export default function MasterProject() {
         )}
 
         {adjustmentSpreadModal && (
-          <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={() => setAdjustmentSpreadModal(null)}>
-            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+          <div ref={adjustmentSpreadBackdropDismiss.backdropRef} className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onPointerDown={adjustmentSpreadBackdropDismiss.onBackdropPointerDown}>
+            <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 400, boxShadow: shadows.modal }} onPointerDownCapture={adjustmentSpreadBackdropDismiss.onPanelPointerDownCapture} onClick={e => e.stopPropagation()}>
               <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:adjustment_spread_pick")}</div>
               <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
                 {[adjustmentSpreadModal.shapeIdxA, adjustmentSpreadModal.shapeIdxB].map(si => {
@@ -8711,10 +12003,11 @@ function NamePromptModal({ initialLabel, onConfirm, onCancel }: { initialLabel: 
   const CC = currentTheme?.id === "light" ? C_LIGHT : C;
   const [val, setVal] = useState(initialLabel);
   const inputRef = useRef<HTMLInputElement>(null);
+  const backdropDismiss = useBackdropPointerDismiss(onCancel, true);
   useEffect(() => { inputRef.current?.focus(); }, []);
   return (
-    <div className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onClick={onCancel}>
-      <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 360, boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+    <div ref={backdropDismiss.backdropRef} className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onPointerDown={backdropDismiss.onBackdropPointerDown}>
+      <div className="canvas-modal-content" style={{ background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 8, padding: 20, maxWidth: 360, boxShadow: shadows.modal }} onPointerDownCapture={backdropDismiss.onPanelPointerDownCapture} onClick={e => e.stopPropagation()}>
         <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:name_prompt_title")}</div>
         <input
           ref={inputRef}

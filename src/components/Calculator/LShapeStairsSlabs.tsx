@@ -40,6 +40,7 @@ interface LShapeStairResult {
   materials: any[];
   stepDimensions: StepDimension[];
   sideOverhang: number;
+  firstStepFrontMasonryExtensionCm?: number;
 }
 
 interface WasteMaterial {
@@ -72,6 +73,7 @@ interface LShapeStairsSlabsProps {
   onAdhesiveMaterialsCalculated?: (materials: any[]) => void;
   onSlabsTransportCalculated?: (transportHours: number) => void;
   onInstallationTasksCalculated?: (tasks: any[]) => void;
+  lastStepMode?: 'standard' | 'frontOnly';
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -93,7 +95,8 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
   onCutsCalculated,
   onAdhesiveMaterialsCalculated,
   onSlabsTransportCalculated,
-  onInstallationTasksCalculated
+  onInstallationTasksCalculated,
+  lastStepMode = 'standard',
 }) => {
   const { t } = useTranslation(['calculator', 'utilities', 'common']);
 
@@ -155,7 +158,7 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
     if (stairResult) {
       calculateSlabs();
     }
-  }, [stairResult, selectedSlabDimension, selectedPlacement, gapBetweenSlabs, selectedCutting, adhesiveThickness, cornerJoint, topDominantArm, frontDominantArm, stepConfig]);
+  }, [stairResult, selectedSlabDimension, selectedPlacement, gapBetweenSlabs, selectedCutting, adhesiveThickness, cornerJoint, topDominantArm, frontDominantArm, stepConfig, lastStepMode]);
 
   // ─── MAIN SLAB CALCULATION ──────────────────────────────────────────────
 
@@ -221,12 +224,23 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
      * ALL matching waste pieces are removed from pool regardless of their individual sizes.
      * No remainders are generated from front consumption.
      */
+    const wasteMatchesStepArmOrPlatformTop = (
+      w: { source: string },
+      stepLabel: string,
+      armLabel: string,
+      acceptPlatformTopWaste: boolean
+    ) =>
+      w.source.includes(stepLabel + ' ') &&
+      w.source.includes('Top') &&
+      (w.source.includes(armLabel) || (acceptPlatformTopWaste && w.source.includes('Platform')));
+
     const tryUseFrontFromWaste = (
       frontWidth: number,
       frontHeight: number,
       stepLabel: string,
       armLabel: string,
-      surfaceType: 'front'
+      surfaceType: 'front',
+      acceptPlatformTopWaste = false
     ): {
       reused: true;
       slabsNeeded: number;
@@ -240,10 +254,7 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
       if (frontWidth <= 0 || frontHeight <= 0) return null;
 
       const armTopWaste = wasteList.filter(w => {
-        const matchesSource =
-          w.source.includes(stepLabel + ' ') &&
-          w.source.includes(armLabel) &&
-          w.source.includes('Top');
+        const matchesSource = wasteMatchesStepArmOrPlatformTop(w, stepLabel, armLabel, acceptPlatformTopWaste);
         const fitsHeight = w.width >= frontHeight || w.length >= frontHeight;
         const bothUseful = w.width > 1 && w.length > 1;
         return matchesSource && fitsHeight && bothUseful;
@@ -269,20 +280,20 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
             dimParts.push(`1x(${slabWidth}x${frontHeight.toFixed(1)}cm)`);
             trackSlabDimension(slabWidth, frontHeight, 1);
             trackSurfaceArea(slabWidth, frontHeight, surfaceType, 1);
-            if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(frontHeight, 'length', 1); }
+            if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(slabWidth, 'length', 1); }
           }
         } else {
           for (let p = 0; p < fullSlabsCount; p++) {
             dimParts.push(`1x(${slabWidth}x${frontHeight.toFixed(1)}cm)`);
             trackSlabDimension(slabWidth, frontHeight, 1);
             trackSurfaceArea(slabWidth, frontHeight, surfaceType, 1);
-            if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(frontHeight, 'length', 1); }
+            if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(slabWidth, 'length', 1); }
           }
           dimParts.push(`1x(${remainingWidth.toFixed(1)}x${frontHeight.toFixed(1)}cm)`);
           trackSlabDimension(remainingWidth, frontHeight, 1);
           trackSurfaceArea(remainingWidth, frontHeight, surfaceType, 1);
-          cuts += 1; trackCut(remainingWidth, 'width', 1);
-          if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(frontHeight, 'length', 1); }
+          cuts += 1; trackCut(frontHeight, 'width', 1);
+          if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(remainingWidth, 'length', 1); }
         }
       } else {
         if (slabsNeededWithoutGaps > 1) {
@@ -297,29 +308,29 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
               dimParts.push(`1x(${slabWidth}x${frontHeight.toFixed(1)}cm)`);
               trackSlabDimension(slabWidth, frontHeight, 1);
               trackSurfaceArea(slabWidth, frontHeight, surfaceType, 1);
-              if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(frontHeight, 'length', 1); }
+              if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(slabWidth, 'length', 1); }
             }
           } else {
             for (let p = 0; p < fullSlabsCount; p++) {
               dimParts.push(`1x(${slabWidth}x${frontHeight.toFixed(1)}cm)`);
               trackSlabDimension(slabWidth, frontHeight, 1);
               trackSurfaceArea(slabWidth, frontHeight, surfaceType, 1);
-              if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(frontHeight, 'length', 1); }
+              if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(slabWidth, 'length', 1); }
             }
             for (let p = 0; p < 2; p++) {
               dimParts.push(`1x(${equalPieceWidth.toFixed(1)}x${frontHeight.toFixed(1)}cm)`);
               trackSlabDimension(equalPieceWidth, frontHeight, 1);
               trackSurfaceArea(equalPieceWidth, frontHeight, surfaceType, 1);
-              cuts += 1; trackCut(equalPieceWidth, 'width', 1);
-              if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(frontHeight, 'length', 1); }
+              cuts += 1; trackCut(frontHeight, 'width', 1);
+              if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(equalPieceWidth, 'length', 1); }
             }
           }
         } else {
           dimParts.push(`1x(${frontWidth.toFixed(1)}x${frontHeight.toFixed(1)}cm)`);
           trackSlabDimension(frontWidth, frontHeight, 1);
           trackSurfaceArea(frontWidth, frontHeight, surfaceType, 1);
-          cuts += 1; trackCut(frontWidth, 'width', 1);
-          if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(frontHeight, 'length', 1); }
+          cuts += 1; trackCut(frontHeight, 'width', 1);
+          if (needsCut(slabLength, frontHeight)) { cuts += 1; trackCut(frontWidth, 'length', 1); }
         }
       }
 
@@ -331,11 +342,7 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
 
       for (let idx = wasteList.length - 1; idx >= 0; idx--) {
         const w = wasteList[idx];
-        if (
-          w.source.includes(stepLabel + ' ') &&
-          w.source.includes(armLabel) &&
-          w.source.includes('Top')
-        ) {
+        if (wasteMatchesStepArmOrPlatformTop(w, stepLabel, armLabel, acceptPlatformTopWaste)) {
           wasteList.splice(idx, 1);
         }
       }
@@ -406,11 +413,11 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
         let cuts = 0;
         if (needsCut(useRotated ? selectedWaste.length : selectedWaste.width, surfaceDepth)) {
           cuts += 1;
-          trackCut(surfaceDepth, 'length', 1);
+          trackCut(surfaceWidth, 'length', 1);
         }
         if (needsCut(useRotated ? selectedWaste.width : selectedWaste.length, surfaceWidth)) {
           cuts += 1;
-          trackCut(surfaceWidth, 'width', 1);
+          trackCut(surfaceDepth, 'width', 1);
         }
 
         const slabW = subtractCornerGapFromLastSlab ? Math.max(0, surfaceWidth - gapCm) : surfaceWidth;
@@ -567,6 +574,20 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
         return { slabsNeeded: 0, newSlabsNeeded: 0, dimensions: '-', dimensionsParts: [{ text: '-', fromWaste: false }], cuts: 0, wasteUsed: false, wasteSource: '' };
       }
 
+      const pushDepthTrimOffcut = (count: number) => {
+        if (count <= 0 || !needsCut(slabLength, surfaceDepth)) return;
+        const offcutLen = slabLength - surfaceDepth;
+        if (offcutLen <= 1) return;
+        for (let k = 0; k < count; k++) {
+          wasteList.push({
+            width: slabWidth,
+            length: offcutLen,
+            source: `${stepLabel} ${armLabel} ${surfaceType}`,
+            canBeRotated: true
+          });
+        }
+      };
+
       let slabsNeeded = 0;
       let newSlabsNeeded = 0;
       let dimensions = '';
@@ -666,7 +687,8 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
               slabsNeeded = slabsNeededWithoutGaps;
               if (needsCut(slabLength, surfaceDepth)) {
                 cuts += slabsNeeded;
-                trackCut(surfaceDepth, 'length', slabsNeeded);
+                trackCut(slabWidth, 'length', slabsNeeded);
+                pushDepthTrimOffcut(slabsNeeded);
               }
             const lastSlabW = subtractCornerGapFromLastSlab ? slabWidth - gapCm : slabWidth;
             if (subtractCornerGapFromLastSlab && slabsNeeded > 1) {
@@ -693,13 +715,13 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
               if (pieceWaste) {
                 consumeWaste(pieceWaste, slabWidth, surfaceDepth);
                 cuts += 1;
-                trackCut(surfaceDepth, 'length', 1);
+                trackCut(slabWidth, 'length', 1);
                 dimParts.push({ w: slabWidth, d: surfaceDepth, fromWaste: true, wasteSource: pieceWaste.source });
               } else {
                 newSlabsCount++;
                 if (needsCut(slabLength, surfaceDepth)) {
                   cuts += 1;
-                  trackCut(surfaceDepth, 'length', 1);
+                  trackCut(slabWidth, 'length', 1);
                   wasteList.push({
                     width: slabWidth,
                     length: slabLength - surfaceDepth,
@@ -715,16 +737,16 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
             if (cutPieceWaste) {
               consumeWaste(cutPieceWaste, remainingWidth, surfaceDepth);
               cuts += 1;
-              trackCut(remainingWidth, 'width', 1);
+              trackCut(surfaceDepth, 'width', 1);
               if (needsCut(slabLength, surfaceDepth)) {
                 cuts += 1;
-                trackCut(surfaceDepth, 'length', 1);
+                trackCut(lastSlabWidth, 'length', 1);
               }
               dimParts.push({ w: lastSlabWidth, d: surfaceDepth, fromWaste: true, wasteSource: cutPieceWaste.source });
             } else {
               newSlabsCount++;
               cuts += 1;
-              trackCut(remainingWidth, 'width', 1);
+              trackCut(surfaceDepth, 'width', 1);
               if (remainingWidth > 0.1 && remainingWidth < slabWidth) {
                 wasteList.push({
                   width: slabWidth - remainingWidth,
@@ -735,7 +757,7 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
               }
               if (needsCut(slabLength, surfaceDepth)) {
                 cuts += 1;
-                trackCut(surfaceDepth, 'length', 1);
+                trackCut(lastSlabWidth, 'length', 1);
                 wasteList.push({
                   width: remainingWidth,
                   length: slabLength - surfaceDepth,
@@ -785,7 +807,8 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
                 slabsNeeded = Math.max(1, slabsNeededWithoutGaps - 1);
                 if (needsCut(slabLength, surfaceDepth)) {
                   cuts += slabsNeeded;
-                  trackCut(surfaceDepth, 'length', slabsNeeded);
+                  trackCut(slabWidth, 'length', slabsNeeded);
+                  pushDepthTrimOffcut(slabsNeeded);
                 }
               const lastSlabW = subtractCornerGapFromLastSlab ? slabWidth - gapCm : slabWidth;
               if (subtractCornerGapFromLastSlab && slabsNeeded > 1) {
@@ -812,13 +835,13 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
               if (pieceWaste) {
                 consumeWaste(pieceWaste, slabWidth, surfaceDepth);
                 cuts += 1;
-                trackCut(surfaceDepth, 'length', 1);
+                trackCut(slabWidth, 'length', 1);
                 dimPartsTwo.push({ w: slabWidth, d: surfaceDepth, fromWaste: true, wasteSource: pieceWaste.source });
               } else {
                 newSlabsCountTwo++;
                 if (needsCut(slabLength, surfaceDepth)) {
                   cuts += 1;
-                  trackCut(surfaceDepth, 'length', 1);
+                  trackCut(slabWidth, 'length', 1);
                   wasteList.push({
                     width: slabWidth,
                     length: slabLength - surfaceDepth,
@@ -836,16 +859,16 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
               if (pieceWaste) {
                 consumeWaste(pieceWaste, equalPieceWidth, surfaceDepth);
                 cuts += 1;
-                trackCut(equalPieceWidth, 'width', 1);
+                trackCut(surfaceDepth, 'width', 1);
                 if (needsCut(slabLength, surfaceDepth)) {
                   cuts += 1;
-                  trackCut(surfaceDepth, 'length', 1);
+                  trackCut(equalPieceWidth, 'length', 1);
                 }
                 dimPartsTwo.push({ w: displayW, d: surfaceDepth, fromWaste: true, wasteSource: pieceWaste.source });
               } else {
                 newSlabsCountTwo++;
                 cuts += 1;
-                trackCut(equalPieceWidth, 'width', 1);
+                trackCut(surfaceDepth, 'width', 1);
                 if (equalPieceWidth > 0.1 && equalPieceWidth < slabWidth) {
                   wasteList.push({
                     width: slabWidth - equalPieceWidth,
@@ -856,7 +879,7 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
                 }
                 if (needsCut(slabLength, surfaceDepth)) {
                   cuts += 1;
-                  trackCut(surfaceDepth, 'length', 1);
+                  trackCut(equalPieceWidth, 'length', 1);
                   wasteList.push({
                     width: equalPieceWidth,
                     length: slabLength - surfaceDepth,
@@ -899,7 +922,7 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
           } else {
             slabsNeeded = 1;
             cuts += 1;
-            trackCut(surfaceWidth, 'width', 1);
+            trackCut(surfaceDepth, 'width', 1);
 
             if (surfaceWidth > 0.1 && surfaceWidth < slabWidth) {
               wasteList.push({
@@ -912,7 +935,7 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
 
             if (needsCut(slabLength, surfaceDepth)) {
               cuts += 1;
-              trackCut(surfaceDepth, 'length', 1);
+              trackCut(surfaceWidth, 'length', 1);
               wasteList.push({
                 width: surfaceWidth,
                 length: slabLength - surfaceDepth,
@@ -934,7 +957,8 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
 
         if (needsCut(slabLength, surfaceDepth)) {
           cuts += slabsNeeded;
-          trackCut(surfaceDepth, 'length', slabsNeeded);
+          trackCut(slabWidth, 'length', slabsNeeded);
+          pushDepthTrimOffcut(slabsNeeded);
         }
 
         const lastSlabW = subtractCornerGapFromLastSlab ? slabWidth - gapCm : slabWidth;
@@ -966,6 +990,113 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
       };
     };
 
+    /**
+     * Stack platform depth into row bands (along arm B). Uses same slab-count / gap model as
+     * calculateSlabsForSurface along width: n = ceil((D+gap)/(slabLength+gap)).
+     * oneCut: greedy bands of ≤ slabLength (legacy).
+     * twoCuts: same split as width two-cut — (n−2) full slabLength bands + two equal end bands (or oneCut fallback).
+     */
+    const computePlatformRowHeights = (D: number): number[] => {
+      if (D <= 0.1) return [];
+      const unit = slabLength;
+      const n = Math.ceil((D + gapCm) / (unit + gapCm));
+      const totalGaps = (n - 1) * gapCm;
+
+      const oneCutDepthRows = (): number[] => {
+        const rowH: number[] = [];
+        let rem = D;
+        let rowIndex = 0;
+        while (rem > 0.1) {
+          if (rowIndex > 0) rem -= gapCm;
+          if (rem <= 0.1) break;
+          const h = Math.min(unit, rem);
+          rowH.push(h);
+          rem -= h;
+          rowIndex++;
+        }
+        return rowH;
+      };
+
+      if (n <= 1) return [D];
+
+      if (selectedCutting !== 'twoCuts') {
+        return oneCutDepthRows();
+      }
+
+      if (n > 1) {
+        const fullSlabsCount = n - 2;
+        const remainingDepth = D - fullSlabsCount * unit - totalGaps;
+        const equalPiece = remainingDepth / 2;
+        if (remainingDepth <= 0.1 || equalPiece <= 0.1) {
+          return oneCutDepthRows();
+        }
+        const rows: number[] = [];
+        for (let i = 0; i < fullSlabsCount; i++) rows.push(unit);
+        rows.push(equalPiece, equalPiece);
+        return rows;
+      }
+
+      return oneCutDepthRows();
+    };
+
+    /**
+     * Platform A×B: rows along arm B; each row tiled along arm A via calculateSlabsForSurface.
+     */
+    const calculatePlatformSurfaceInRows = (
+      platWidthCm: number,
+      platDepthCm: number,
+      stepLabel: string
+    ) => {
+      const rowHeights = computePlatformRowHeights(platDepthCm);
+
+      if (rowHeights.length === 0) {
+        return {
+          newSlabsNeeded: 0,
+          slabsNeeded: 0,
+          dimensions: '-',
+          dimensionsParts: [{ text: '-', fromWaste: false }],
+          cuts: 0,
+          wasteUsed: false,
+          wasteSource: '',
+          platformRowCount: 0,
+        };
+      }
+
+      let totalNew = 0;
+      let anyWaste = false;
+      const dimPartsOut: { text: string; fromWaste: boolean }[] = [];
+
+      for (let r = 0; r < rowHeights.length; r++) {
+        const rowH = rowHeights[r];
+        const armLabel = `Platform Top row ${r + 1}`;
+        let rowRes = tryReuseWaste(platWidthCm, rowH, 'top', stepLabel, armLabel, false, undefined);
+        if (!rowRes) {
+          rowRes = calculateSlabsForSurface(platWidthCm, rowH, 'top', stepLabel, armLabel, false);
+        } else {
+          totalCuts += rowRes.cuts;
+          anyWaste = true;
+        }
+        totalNew += rowRes.newSlabsNeeded;
+        const prefix = t('calculator:platform_slab_row_prefix', { n: r + 1, depth: rowH.toFixed(1) });
+        const parts = rowRes.dimensionsParts ?? [{ text: rowRes.dimensions, fromWaste: false }];
+        if (parts.some(p => p.fromWaste)) anyWaste = true;
+        const rowLine = `${prefix} ${parts.map(p => p.text).join(' + ')}`;
+        dimPartsOut.push({ text: rowLine, fromWaste: parts.some(p => p.fromWaste) });
+      }
+
+      const dimensions = dimPartsOut.map(d => d.text).join('\n');
+      return {
+        newSlabsNeeded: totalNew,
+        slabsNeeded: totalNew,
+        dimensions,
+        dimensionsParts: dimPartsOut,
+        cuts: 0,
+        wasteUsed: anyWaste,
+        wasteSource: '',
+        platformRowCount: rowHeights.length,
+      };
+    };
+
     // ── Process each step ─────────────────────────────────────────────────
 
     for (let i = 0; i < stairResult.totalSteps; i++) {
@@ -992,140 +1123,261 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
       const armA_slabLength = stepDim.armA_length;
       const armB_slabLength = stepDim.armB_length;
 
-      let topArmA_width: number, topArmA_depth: number, topArmB_width: number, topArmB_depth: number;
-      let frontArmA_width: number, frontArmA_height: number, frontArmB_width: number, frontArmB_height: number;
-
-      if (cornerJoint === 'buttJoint') {
-        if (topDominantArm === 'armA') {
-          // Arm A covers the corner - full length
-          topArmA_width = armA_slabLength;
-          topArmA_depth = topSlabDepth;
-
-          // Arm B is shorter - subtract topSlabDepth (arm A's depth occupies corner) and fuga
-          topArmB_width = armB_slabLength - topSlabDepth - gapCm;
-          topArmB_depth = topSlabDepth;
-        } else {
-          // Arm B covers the corner
-          topArmB_width = armB_slabLength;
-          topArmB_depth = topSlabDepth;
-
-          // Arm A is shorter
-          topArmA_width = armA_slabLength - topSlabDepth - gapCm;
-          topArmA_depth = topSlabDepth;
-        }
-      } else {
-        // 45° mitre - both arms extend to the corner point
-        topArmA_width = armA_slabLength;
-        topArmA_depth = topSlabDepth;
-        topArmB_width = armB_slabLength;
-        topArmB_depth = topSlabDepth;
-
-        // Add 45° cut for each step (one cut per arm at the corner), excluding platform
-        if (!stepDim.isPlatform) {
-          totalCuts += 2;
-          trackCut(topSlabDepth, 'length', 2);
-        }
-      }
-
-      const topArmASubtractGap = cornerJoint === 'buttJoint' && topDominantArm === 'armB';
-      const topArmBSubtractGap = cornerJoint === 'buttJoint' && topDominantArm === 'armA';
+      let topArmA_width = 0;
+      let topArmA_depth = 0;
+      let topArmB_width = 0;
+      let topArmB_depth = 0;
+      let frontArmA_width: number;
+      let frontArmA_height: number;
+      let frontArmB_width: number;
+      let frontArmB_height: number;
 
       // Front height: reduce by slabThicknessTop when frontsOnTop and not first step
-      const effectiveFrontHeight = (stepConfig === 'frontsOnTop' && i > 0)
+      let effectiveFrontHeight = (stepConfig === 'frontsOnTop' && i > 0)
         ? Math.max(0, individualStepHeight - (slabThicknessTop ?? 0))
         : individualStepHeight;
+      if (i === 0) {
+        effectiveFrontHeight += stairResult.firstStepFrontMasonryExtensionCm ?? 0;
+      }
       frontArmA_height = effectiveFrontHeight;
       frontArmB_height = effectiveFrontHeight;
 
-      if (frontDominantArm === 'armA') {
-        // Front A is full length of arm A (murowany bok)
+      if (cornerJoint === 'buttJoint') {
+        if (frontDominantArm === 'armA') {
+          frontArmA_width = armA_slabLength - overhangFront;
+          frontArmB_width = armB_slabLength - overhangFront - slabThicknessFront - gapCm;
+        } else {
+          frontArmB_width = armB_slabLength - overhangFront;
+          frontArmA_width = armA_slabLength - overhangFront - slabThicknessFront - gapCm;
+        }
+      } else {
+        // mitre45: both fronts full width to the corner (minus overhang only), same as dominant on butt joint
         frontArmA_width = armA_slabLength - overhangFront;
-
-        // Front B is shorter - subtract slab thickness of front A and fuga
-        frontArmB_width = armB_slabLength - overhangFront - slabThicknessFront - gapCm;
-      } else {
-        // Front B is full length
         frontArmB_width = armB_slabLength - overhangFront;
-
-        // Front A is shorter
-        frontArmA_width = armA_slabLength - overhangFront - slabThicknessFront - gapCm;
       }
 
-      // Top A: reuse waste (exclude Arm B) → new slabs
-      let topArmAResult = tryReuseWaste(topArmA_width, topArmA_depth, 'top', stepLabel, 'Arm A Top', topArmASubtractGap, ['Arm B']);
-      if (!topArmAResult) {
-        topArmAResult = calculateSlabsForSurface(
-          topArmA_width, topArmA_depth, 'top', stepLabel, 'Arm A Top', topArmASubtractGap
-        );
+      if (stepDim.isPlatform && lastStepMode === 'frontOnly') {
+        const platformW = armA_slabLength;
+        const platformD = armB_slabLength;
+
+        let frontArmAResult = tryUseFrontFromWaste(frontArmA_width, frontArmA_height, stepLabel, 'Arm A', 'front', true);
+        if (!frontArmAResult) {
+          frontArmAResult = calculateSlabsForSurface(
+            frontArmA_width, frontArmA_height, 'front', stepLabel, 'Arm A Front'
+          );
+        }
+
+        let frontArmBResult = tryUseFrontFromWaste(frontArmB_width, frontArmB_height, stepLabel, 'Arm B', 'front', true);
+        if (!frontArmBResult) {
+          frontArmBResult = calculateSlabsForSurface(
+            frontArmB_width, frontArmB_height, 'front', stepLabel, 'Arm B Front'
+          );
+        }
+
+        totalFrontSlabs += frontArmAResult.newSlabsNeeded + frontArmBResult.newSlabsNeeded;
+
+        stepResults.push({
+          step: i + 1,
+          isPlatform: true,
+          mergedPlatformTop: true,
+          lastStepTopExcluded: true,
+          topPlatform_slabsNeeded: 0,
+          topPlatform_dimensions: t('calculator:last_step_top_excluded_short'),
+          topPlatform_dimensionsParts: [{ text: t('calculator:last_step_top_excluded_short'), fromWaste: false }],
+          topPlatform_width: platformW,
+          topPlatform_depth: platformD,
+          topPlatform_wasteUsed: false,
+          topPlatform_wasteSource: '',
+          platformRowCount: 0,
+          topArmA_slabsNeeded: 0,
+          topArmA_dimensions: '—',
+          topArmA_dimensionsParts: [{ text: '—', fromWaste: false }],
+          topArmA_width: 0,
+          topArmA_depth: 0,
+          topArmA_wasteUsed: false,
+          topArmA_wasteSource: '',
+          topArmB_slabsNeeded: 0,
+          topArmB_dimensions: '—',
+          topArmB_dimensionsParts: [{ text: '—', fromWaste: false }],
+          topArmB_width: 0,
+          topArmB_depth: 0,
+          topArmB_wasteUsed: false,
+          topArmB_wasteSource: '',
+          frontArmA_slabsNeeded: frontArmAResult.newSlabsNeeded,
+          frontArmA_dimensions: frontArmAResult.dimensions,
+          frontArmA_dimensionsParts: (frontArmAResult as any).dimensionsParts ?? [{ text: frontArmAResult.dimensions, fromWaste: false }],
+          frontArmA_width: frontArmA_width,
+          frontArmA_height: frontArmA_height,
+          frontArmA_wasteUsed: frontArmAResult.wasteUsed,
+          frontArmA_wasteSource: frontArmAResult.wasteSource,
+          frontArmB_slabsNeeded: frontArmBResult.newSlabsNeeded,
+          frontArmB_dimensions: frontArmBResult.dimensions,
+          frontArmB_dimensionsParts: (frontArmBResult as any).dimensionsParts ?? [{ text: frontArmBResult.dimensions, fromWaste: false }],
+          frontArmB_width: frontArmB_width,
+          frontArmB_height: frontArmB_height,
+          frontArmB_wasteUsed: frontArmBResult.wasteUsed,
+          frontArmB_wasteSource: frontArmBResult.wasteSource,
+        });
+      } else if (stepDim.isPlatform) {
+        // Platform top: one rectangular surface (arm A × arm B), same as tiling the platform in rows
+        const platformW = armA_slabLength;
+        const platformD = armB_slabLength;
+
+        const topPlatformResult = calculatePlatformSurfaceInRows(platformW, platformD, stepLabel);
+
+        let frontArmAResult = tryUseFrontFromWaste(frontArmA_width, frontArmA_height, stepLabel, 'Arm A', 'front', true);
+        if (!frontArmAResult) {
+          frontArmAResult = calculateSlabsForSurface(
+            frontArmA_width, frontArmA_height, 'front', stepLabel, 'Arm A Front'
+          );
+        }
+
+        let frontArmBResult = tryUseFrontFromWaste(frontArmB_width, frontArmB_height, stepLabel, 'Arm B', 'front', true);
+        if (!frontArmBResult) {
+          frontArmBResult = calculateSlabsForSurface(
+            frontArmB_width, frontArmB_height, 'front', stepLabel, 'Arm B Front'
+          );
+        }
+
+        totalTopSlabs += topPlatformResult.newSlabsNeeded;
+        totalFrontSlabs += frontArmAResult.newSlabsNeeded + frontArmBResult.newSlabsNeeded;
+
+        stepResults.push({
+          step: i + 1,
+          isPlatform: true,
+          mergedPlatformTop: true,
+          lastStepTopExcluded: false,
+          topPlatform_slabsNeeded: topPlatformResult.newSlabsNeeded,
+          topPlatform_dimensions: topPlatformResult.dimensions,
+          topPlatform_dimensionsParts: (topPlatformResult as any).dimensionsParts ?? [{ text: topPlatformResult.dimensions, fromWaste: false }],
+          topPlatform_width: platformW,
+          topPlatform_depth: platformD,
+          topPlatform_wasteUsed: topPlatformResult.wasteUsed,
+          topPlatform_wasteSource: topPlatformResult.wasteSource,
+          platformRowCount: topPlatformResult.platformRowCount,
+          topArmA_slabsNeeded: 0,
+          topArmA_dimensions: '—',
+          topArmA_dimensionsParts: [{ text: '—', fromWaste: false }],
+          topArmA_width: 0,
+          topArmA_depth: 0,
+          topArmA_wasteUsed: false,
+          topArmA_wasteSource: '',
+          topArmB_slabsNeeded: 0,
+          topArmB_dimensions: '—',
+          topArmB_dimensionsParts: [{ text: '—', fromWaste: false }],
+          topArmB_width: 0,
+          topArmB_depth: 0,
+          topArmB_wasteUsed: false,
+          topArmB_wasteSource: '',
+          frontArmA_slabsNeeded: frontArmAResult.newSlabsNeeded,
+          frontArmA_dimensions: frontArmAResult.dimensions,
+          frontArmA_dimensionsParts: (frontArmAResult as any).dimensionsParts ?? [{ text: frontArmAResult.dimensions, fromWaste: false }],
+          frontArmA_width: frontArmA_width,
+          frontArmA_height: frontArmA_height,
+          frontArmA_wasteUsed: frontArmAResult.wasteUsed,
+          frontArmA_wasteSource: frontArmAResult.wasteSource,
+          frontArmB_slabsNeeded: frontArmBResult.newSlabsNeeded,
+          frontArmB_dimensions: frontArmBResult.dimensions,
+          frontArmB_dimensionsParts: (frontArmBResult as any).dimensionsParts ?? [{ text: frontArmBResult.dimensions, fromWaste: false }],
+          frontArmB_width: frontArmB_width,
+          frontArmB_height: frontArmB_height,
+          frontArmB_wasteUsed: frontArmBResult.wasteUsed,
+          frontArmB_wasteSource: frontArmBResult.wasteSource,
+        });
       } else {
-        totalCuts += topArmAResult.cuts;
+        if (cornerJoint === 'buttJoint') {
+          if (topDominantArm === 'armA') {
+            topArmA_width = armA_slabLength;
+            topArmA_depth = topSlabDepth;
+            topArmB_width = armB_slabLength - topSlabDepth - gapCm;
+            topArmB_depth = topSlabDepth;
+          } else {
+            topArmB_width = armB_slabLength;
+            topArmB_depth = topSlabDepth;
+            topArmA_width = armA_slabLength - topSlabDepth - gapCm;
+            topArmA_depth = topSlabDepth;
+          }
+        } else {
+          topArmA_width = armA_slabLength;
+          topArmA_depth = topSlabDepth;
+          topArmB_width = armB_slabLength;
+          topArmB_depth = topSlabDepth;
+          totalCuts += 2;
+          trackCut(topSlabDepth, 'length', 2);
+        }
+
+        const topArmASubtractGap = cornerJoint === 'buttJoint' && topDominantArm === 'armB';
+        const topArmBSubtractGap = cornerJoint === 'buttJoint' && topDominantArm === 'armA';
+
+        let topArmAResult = tryReuseWaste(topArmA_width, topArmA_depth, 'top', stepLabel, 'Arm A Top', topArmASubtractGap, ['Arm B']);
+        if (!topArmAResult) {
+          topArmAResult = calculateSlabsForSurface(
+            topArmA_width, topArmA_depth, 'top', stepLabel, 'Arm A Top', topArmASubtractGap
+          );
+        } else {
+          totalCuts += topArmAResult.cuts;
+        }
+
+        let frontArmAResult = tryUseFrontFromWaste(frontArmA_width, frontArmA_height, stepLabel, 'Arm A', 'front');
+        if (!frontArmAResult) {
+          frontArmAResult = calculateSlabsForSurface(
+            frontArmA_width, frontArmA_height, 'front', stepLabel, 'Arm A Front'
+          );
+        }
+
+        let topArmBResult = tryReuseWaste(topArmB_width, topArmB_depth, 'top', stepLabel, 'Arm B Top', topArmBSubtractGap, ['Arm A']);
+        if (!topArmBResult) {
+          topArmBResult = calculateSlabsForSurface(
+            topArmB_width, topArmB_depth, 'top', stepLabel, 'Arm B Top', topArmBSubtractGap
+          );
+        } else {
+          totalCuts += topArmBResult.cuts;
+        }
+
+        let frontArmBResult = tryUseFrontFromWaste(frontArmB_width, frontArmB_height, stepLabel, 'Arm B', 'front');
+        if (!frontArmBResult) {
+          frontArmBResult = calculateSlabsForSurface(
+            frontArmB_width, frontArmB_height, 'front', stepLabel, 'Arm B Front'
+          );
+        }
+
+        totalTopSlabs += topArmAResult.newSlabsNeeded + topArmBResult.newSlabsNeeded;
+        totalFrontSlabs += frontArmAResult.newSlabsNeeded + frontArmBResult.newSlabsNeeded;
+
+        stepResults.push({
+          step: i + 1,
+          isPlatform: false,
+          mergedPlatformTop: false,
+          topArmA_slabsNeeded: topArmAResult.newSlabsNeeded,
+          topArmA_dimensions: topArmAResult.dimensions,
+          topArmA_dimensionsParts: (topArmAResult as any).dimensionsParts ?? [{ text: topArmAResult.dimensions, fromWaste: false }],
+          topArmA_width: topArmA_width,
+          topArmA_depth: topArmA_depth,
+          topArmA_wasteUsed: topArmAResult.wasteUsed,
+          topArmA_wasteSource: topArmAResult.wasteSource,
+          topArmB_slabsNeeded: topArmBResult.newSlabsNeeded,
+          topArmB_dimensions: topArmBResult.dimensions,
+          topArmB_dimensionsParts: (topArmBResult as any).dimensionsParts ?? [{ text: topArmBResult.dimensions, fromWaste: false }],
+          topArmB_width: topArmB_width,
+          topArmB_depth: topArmB_depth,
+          topArmB_wasteUsed: topArmBResult.wasteUsed,
+          topArmB_wasteSource: topArmBResult.wasteSource,
+          frontArmA_slabsNeeded: frontArmAResult.newSlabsNeeded,
+          frontArmA_dimensions: frontArmAResult.dimensions,
+          frontArmA_dimensionsParts: (frontArmAResult as any).dimensionsParts ?? [{ text: frontArmAResult.dimensions, fromWaste: false }],
+          frontArmA_width: frontArmA_width,
+          frontArmA_height: frontArmA_height,
+          frontArmA_wasteUsed: frontArmAResult.wasteUsed,
+          frontArmA_wasteSource: frontArmAResult.wasteSource,
+          frontArmB_slabsNeeded: frontArmBResult.newSlabsNeeded,
+          frontArmB_dimensions: frontArmBResult.dimensions,
+          frontArmB_dimensionsParts: (frontArmBResult as any).dimensionsParts ?? [{ text: frontArmBResult.dimensions, fromWaste: false }],
+          frontArmB_width: frontArmB_width,
+          frontArmB_height: frontArmB_height,
+          frontArmB_wasteUsed: frontArmBResult.wasteUsed,
+          frontArmB_wasteSource: frontArmBResult.wasteSource,
+        });
       }
-
-      // Front A: use waste from this step's Arm A Top → new slabs
-      let frontArmAResult = tryUseFrontFromWaste(frontArmA_width, frontArmA_height, stepLabel, 'Arm A', 'front');
-      if (!frontArmAResult) {
-        frontArmAResult = calculateSlabsForSurface(
-          frontArmA_width, frontArmA_height, 'front', stepLabel, 'Arm A Front'
-        );
-      }
-
-      // Top B: reuse waste (exclude Arm A) → new slabs
-      let topArmBResult = tryReuseWaste(topArmB_width, topArmB_depth, 'top', stepLabel, 'Arm B Top', topArmBSubtractGap, ['Arm A']);
-      if (!topArmBResult) {
-        topArmBResult = calculateSlabsForSurface(
-          topArmB_width, topArmB_depth, 'top', stepLabel, 'Arm B Top', topArmBSubtractGap
-        );
-      } else {
-        totalCuts += topArmBResult.cuts;
-      }
-
-      // Front B: use waste from this step's Arm B Top → new slabs
-      let frontArmBResult = tryUseFrontFromWaste(frontArmB_width, frontArmB_height, stepLabel, 'Arm B', 'front');
-      if (!frontArmBResult) {
-        frontArmBResult = calculateSlabsForSurface(
-          frontArmB_width, frontArmB_height, 'front', stepLabel, 'Arm B Front'
-        );
-      }
-
-      // ── Accumulate totals (only count NEW slabs, not reused waste) ───────
-
-      totalTopSlabs += topArmAResult.newSlabsNeeded + topArmBResult.newSlabsNeeded;
-      totalFrontSlabs += frontArmAResult.newSlabsNeeded + frontArmBResult.newSlabsNeeded;
-
-      stepResults.push({
-        step: i + 1,
-        isPlatform: stepDim.isPlatform,
-        // Top slabs
-        topArmA_slabsNeeded: topArmAResult.newSlabsNeeded,
-        topArmA_dimensions: topArmAResult.dimensions,
-        topArmA_dimensionsParts: (topArmAResult as any).dimensionsParts ?? [{ text: topArmAResult.dimensions, fromWaste: false }],
-        topArmA_width: topArmA_width,
-        topArmA_depth: topArmA_depth,
-        topArmA_wasteUsed: topArmAResult.wasteUsed,
-        topArmA_wasteSource: topArmAResult.wasteSource,
-        topArmB_slabsNeeded: topArmBResult.newSlabsNeeded,
-        topArmB_dimensions: topArmBResult.dimensions,
-        topArmB_dimensionsParts: (topArmBResult as any).dimensionsParts ?? [{ text: topArmBResult.dimensions, fromWaste: false }],
-        topArmB_width: topArmB_width,
-        topArmB_depth: topArmB_depth,
-        topArmB_wasteUsed: topArmBResult.wasteUsed,
-        topArmB_wasteSource: topArmBResult.wasteSource,
-        // Front slabs
-        frontArmA_slabsNeeded: frontArmAResult.newSlabsNeeded,
-        frontArmA_dimensions: frontArmAResult.dimensions,
-        frontArmA_dimensionsParts: (frontArmAResult as any).dimensionsParts ?? [{ text: frontArmAResult.dimensions, fromWaste: false }],
-        frontArmA_width: frontArmA_width,
-        frontArmA_height: frontArmA_height,
-        frontArmA_wasteUsed: frontArmAResult.wasteUsed,
-        frontArmA_wasteSource: frontArmAResult.wasteSource,
-        frontArmB_slabsNeeded: frontArmBResult.newSlabsNeeded,
-        frontArmB_dimensions: frontArmBResult.dimensions,
-        frontArmB_dimensionsParts: (frontArmBResult as any).dimensionsParts ?? [{ text: frontArmBResult.dimensions, fromWaste: false }],
-        frontArmB_width: frontArmB_width,
-        frontArmB_height: frontArmB_height,
-        frontArmB_wasteUsed: frontArmBResult.wasteUsed,
-        frontArmB_wasteSource: frontArmBResult.wasteSource,
-      });
     }
 
     // ── Calculate adhesive ────────────────────────────────────────────────
@@ -1200,7 +1452,7 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
   // ── Calculate slab transport ──────────────────────────────────────────
 
   useEffect(() => {
-    if (calculateTransport && selectedTransportCarrier && slabCalculationResult) {
+    if (calculateTransport && slabCalculationResult) {
       const totalSlabs = slabCalculationResult.totalSlabs || 0;
       if (totalSlabs > 0) {
         const slabsPerTrip = 2;
@@ -1212,7 +1464,7 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
         }
       }
     }
-  }, [calculateTransport, selectedTransportCarrier, slabCalculationResult]);
+  }, [calculateTransport, slabCalculationResult]);
 
   // ── Calculate installation tasks ──────────────────────────────────────
 
@@ -1359,18 +1611,20 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
             </div>
           )}
 
-          {/* Front dominant arm */}
-          <div>
-            <h4 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.xs }}>{t('calculator:lshape_front_slab_dominant_arm')}</h4>
-            <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
-              {armDominanceOptions.map((option) => (
-                <label key={option.id} style={{ display: "flex", alignItems: "center", cursor: "pointer", minHeight: 44, padding: `${spacing.xs}px 0` }}>
-                  <input type="radio" checked={frontDominantArm === option.id} onChange={() => setFrontDominantArm(option.id)} style={{ width: 16, height: 16, accentColor: colors.accentBlue }} />
-                  <span style={{ marginLeft: spacing.xs, fontSize: fontSizes.sm, color: colors.textMuted }}>{t(option.labelKey)}</span>
-                </label>
-              ))}
+          {/* Front dominant arm (butt joint only) */}
+          {cornerJoint === 'buttJoint' && (
+            <div>
+              <h4 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing.xs }}>{t('calculator:lshape_front_slab_dominant_arm')}</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: spacing.xs }}>
+                {armDominanceOptions.map((option) => (
+                  <label key={option.id} style={{ display: "flex", alignItems: "center", cursor: "pointer", minHeight: 44, padding: `${spacing.xs}px 0` }}>
+                    <input type="radio" checked={frontDominantArm === option.id} onChange={() => setFrontDominantArm(option.id)} style={{ width: 16, height: 16, accentColor: colors.accentBlue }} />
+                    <span style={{ marginLeft: spacing.xs, fontSize: fontSizes.sm, color: colors.textMuted }}>{t(option.labelKey)}</span>
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Right column */}
@@ -1417,7 +1671,11 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
             <p className="font-semibold">
               {t('calculator:lshape_corner_label')} {cornerJoint === 'mitre45' ? t('calculator:lshape_corner_info_mitre') : t('calculator:lshape_corner_info_butt', { arm: topDominantArm === 'armA' ? t('calculator:lshape_arm_a') : t('calculator:lshape_arm_b') })}
             </p>
-            <p>{t('calculator:lshape_front_dominant', { arm: frontDominantArm === 'armA' ? t('calculator:lshape_arm_a') : t('calculator:lshape_arm_b') })}</p>
+            {cornerJoint === 'buttJoint' ? (
+              <p>{t('calculator:lshape_front_dominant', { arm: frontDominantArm === 'armA' ? t('calculator:lshape_arm_a') : t('calculator:lshape_arm_b') })}</p>
+            ) : (
+              <p>{t('calculator:lshape_front_info_mitre')}</p>
+            )}
           </div>
 
           {/* Step-by-step slab details table */}
@@ -1436,86 +1694,148 @@ const LShapeStairsSlabs: React.FC<LShapeStairsSlabsProps> = ({
               <tbody>
                 {slabCalculationResult.stepResults.map((result: any) => (
                   <React.Fragment key={`step-${result.step}`}>
-                    {/* Top Arm A */}
-                    <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }} rowSpan={4}>
-                        {result.step}
-                        {result.isPlatform && <span style={{ fontSize: fontSizes.xs, color: colors.accentBlue, display: "block" }}>{t('calculator:lshape_platform_label')}</span>}
-                      </td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_top_surface')}</td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
-                        {t('calculator:lshape_arm_a')} {cornerJoint === 'buttJoint' && topDominantArm === 'armA' ? '★' : ''}
-                      </td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.topArmA_slabsNeeded}</td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
-                        {(result.topArmA_dimensionsParts ?? [{ text: result.topArmA_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
-                          <span key={pi}>
-                            {pi > 0 && ' + '}
-                            <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
-                          </span>
-                        ))}
-                      </td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
-                        {result.topArmA_width.toFixed(1)} × {result.topArmA_depth.toFixed(1)}
-                      </td>
-                    </tr>
-                    {/* Top Arm B */}
-                    <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_top_surface')}</td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
-                        {t('calculator:lshape_arm_b')} {cornerJoint === 'buttJoint' && topDominantArm === 'armB' ? '★' : ''}
-                      </td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.topArmB_slabsNeeded}</td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
-                        {(result.topArmB_dimensionsParts ?? [{ text: result.topArmB_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
-                          <span key={pi}>
-                            {pi > 0 && ' + '}
-                            <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
-                          </span>
-                        ))}
-                      </td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
-                        {result.topArmB_width.toFixed(1)} × {result.topArmB_depth.toFixed(1)}
-                      </td>
-                    </tr>
-                    {/* Front Arm A */}
-                    <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_front_surface')}</td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
-                        {t('calculator:lshape_arm_a')} {frontDominantArm === 'armA' ? '★' : ''}
-                      </td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.frontArmA_slabsNeeded}</td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
-                        {(result.frontArmA_dimensionsParts ?? [{ text: result.frontArmA_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
-                          <span key={pi}>
-                            {pi > 0 && ' + '}
-                            <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
-                          </span>
-                        ))}
-                      </td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
-                        {result.frontArmA_width.toFixed(1)} × {result.frontArmA_height.toFixed(1)}
-                      </td>
-                    </tr>
-                    {/* Front Arm B */}
-                    <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_front_surface')}</td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
-                        {t('calculator:lshape_arm_b')} {frontDominantArm === 'armB' ? '★' : ''}
-                      </td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.frontArmB_slabsNeeded}</td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
-                        {(result.frontArmB_dimensionsParts ?? [{ text: result.frontArmB_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
-                          <span key={pi}>
-                            {pi > 0 && ' + '}
-                            <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
-                          </span>
-                        ))}
-                      </td>
-                      <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
-                        {result.frontArmB_width.toFixed(1)} × {result.frontArmB_height.toFixed(1)}
-                      </td>
-                    </tr>
+                    {result.mergedPlatformTop ? (
+                      <>
+                        <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }} rowSpan={3}>
+                            {result.step}
+                            <span style={{ fontSize: fontSizes.xs, color: colors.accentBlue, display: "block" }}>{t('calculator:lshape_platform_label')}</span>
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_top_surface')}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_platform_label')}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.topPlatform_slabsNeeded}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
+                            {(result.topPlatform_dimensionsParts ?? [{ text: result.topPlatform_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
+                              <span key={pi} style={{ display: 'block', marginTop: pi > 0 ? spacing.xs : 0, lineHeight: 1.4 }}>
+                                <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
+                              </span>
+                            ))}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
+                            {result.lastStepTopExcluded ? t('calculator:last_step_top_excluded_short') : `${result.topPlatform_width.toFixed(1)} × ${result.topPlatform_depth.toFixed(1)}`}
+                          </td>
+                        </tr>
+                        <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_front_surface')}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
+                            {t('calculator:lshape_arm_a')} {frontDominantArm === 'armA' ? '★' : ''}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.frontArmA_slabsNeeded}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
+                            {(result.frontArmA_dimensionsParts ?? [{ text: result.frontArmA_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
+                              <span key={pi}>
+                                {pi > 0 && ' + '}
+                                <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
+                              </span>
+                            ))}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
+                            {result.frontArmA_width.toFixed(1)} × {result.frontArmA_height.toFixed(1)}
+                          </td>
+                        </tr>
+                        <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_front_surface')}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
+                            {t('calculator:lshape_arm_b')} {frontDominantArm === 'armB' ? '★' : ''}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.frontArmB_slabsNeeded}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
+                            {(result.frontArmB_dimensionsParts ?? [{ text: result.frontArmB_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
+                              <span key={pi}>
+                                {pi > 0 && ' + '}
+                                <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
+                              </span>
+                            ))}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
+                            {result.frontArmB_width.toFixed(1)} × {result.frontArmB_height.toFixed(1)}
+                          </td>
+                        </tr>
+                      </>
+                    ) : (
+                      <>
+                        {/* Top Arm A */}
+                        <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }} rowSpan={4}>
+                            {result.step}
+                            {result.isPlatform && <span style={{ fontSize: fontSizes.xs, color: colors.accentBlue, display: "block" }}>{t('calculator:lshape_platform_label')}</span>}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_top_surface')}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
+                            {t('calculator:lshape_arm_a')} {cornerJoint === 'buttJoint' && topDominantArm === 'armA' ? '★' : ''}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.topArmA_slabsNeeded}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
+                            {(result.topArmA_dimensionsParts ?? [{ text: result.topArmA_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
+                              <span key={pi}>
+                                {pi > 0 && ' + '}
+                                <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
+                              </span>
+                            ))}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
+                            {result.topArmA_width.toFixed(1)} × {result.topArmA_depth.toFixed(1)}
+                          </td>
+                        </tr>
+                        {/* Top Arm B */}
+                        <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_top_surface')}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
+                            {t('calculator:lshape_arm_b')} {cornerJoint === 'buttJoint' && topDominantArm === 'armB' ? '★' : ''}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.topArmB_slabsNeeded}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
+                            {(result.topArmB_dimensionsParts ?? [{ text: result.topArmB_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
+                              <span key={pi}>
+                                {pi > 0 && ' + '}
+                                <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
+                              </span>
+                            ))}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
+                            {result.topArmB_width.toFixed(1)} × {result.topArmB_depth.toFixed(1)}
+                          </td>
+                        </tr>
+                        {/* Front Arm A */}
+                        <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_front_surface')}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
+                            {t('calculator:lshape_arm_a')} {frontDominantArm === 'armA' ? '★' : ''}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.frontArmA_slabsNeeded}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
+                            {(result.frontArmA_dimensionsParts ?? [{ text: result.frontArmA_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
+                              <span key={pi}>
+                                {pi > 0 && ' + '}
+                                <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
+                              </span>
+                            ))}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
+                            {result.frontArmA_width.toFixed(1)} × {result.frontArmA_height.toFixed(1)}
+                          </td>
+                        </tr>
+                        {/* Front Arm B */}
+                        <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{t('calculator:lshape_front_surface')}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>
+                            {t('calculator:lshape_arm_b')} {frontDominantArm === 'armB' ? '★' : ''}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textMuted }}>{result.frontArmB_slabsNeeded}</td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px` }}>
+                            {(result.frontArmB_dimensionsParts ?? [{ text: result.frontArmB_dimensions, fromWaste: false }]).map((part: { text: string; fromWaste: boolean }, pi: number) => (
+                              <span key={pi}>
+                                {pi > 0 && ' + '}
+                                <span style={{ color: part.fromWaste ? colors.green : colors.textPrimary }}>{part.text}</span>
+                              </span>
+                            ))}
+                          </td>
+                          <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
+                            {result.frontArmB_width.toFixed(1)} × {result.frontArmB_height.toFixed(1)}
+                          </td>
+                        </tr>
+                      </>
+                    )}
                   </React.Fragment>
                 ))}
               </tbody>

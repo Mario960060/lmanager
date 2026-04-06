@@ -112,3 +112,76 @@ export async function linkPlanToEvent(
     .eq("company_id", companyId);
   if (error) throw error;
 }
+
+export async function getPlanRow(
+  supabase: SupabaseClient<Database>,
+  planId: string,
+  companyId: string
+): Promise<{ id: string; event_id: string | null; title: string } | null> {
+  const { data, error } = await supabase
+    .from("plans")
+    .select("id, event_id, title")
+    .eq("id", planId)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function getPlanIdForEvent(
+  supabase: SupabaseClient<Database>,
+  eventId: string,
+  companyId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("plans")
+    .select("id")
+    .eq("event_id", eventId)
+    .eq("company_id", companyId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.id ?? null;
+}
+
+/** Marks layer-2 element as removed from project (still in JSON for sync / audit). */
+export async function markCanvasElementRemovedOnPlan(
+  supabase: SupabaseClient<Database>,
+  params: { planId: string; companyId: string; userId: string | undefined; canvasElementId: string }
+): Promise<void> {
+  const row = await getPlanRow(supabase, params.planId, params.companyId);
+  if (!row) return;
+  const payload = await loadPlan(supabase, params.planId);
+  const shapes = (payload.shapes as { canvasElementId?: string; removedFromCanvas?: boolean }[]) ?? [];
+  const next = shapes.map((s) =>
+    s.canvasElementId === params.canvasElementId ? { ...s, removedFromCanvas: true } : s
+  );
+  await savePlan(supabase, {
+    planId: params.planId,
+    companyId: params.companyId,
+    userId: params.userId,
+    title: row.title,
+    payload: { ...payload, shapes: next },
+  });
+}
+
+/** Removes shapes from plan payload entirely (no task/material history). */
+export async function removeCanvasElementsFromPlanHard(
+  supabase: SupabaseClient<Database>,
+  params: { planId: string; companyId: string; userId: string | undefined; canvasElementIds: string[] }
+): Promise<void> {
+  const row = await getPlanRow(supabase, params.planId, params.companyId);
+  if (!row) return;
+  const payload = await loadPlan(supabase, params.planId);
+  const idSet = new Set(params.canvasElementIds);
+  const shapes = ((payload.shapes as { canvasElementId?: string }[]) ?? []).filter(
+    (s) => !s.canvasElementId || !idSet.has(s.canvasElementId)
+  );
+  await savePlan(supabase, {
+    planId: params.planId,
+    companyId: params.companyId,
+    userId: params.userId,
+    title: row.title,
+    payload: { ...payload, shapes },
+  });
+}

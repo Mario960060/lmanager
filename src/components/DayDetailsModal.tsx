@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { Plus, Package, AlertCircle, Wrench, ClipboardList, ChevronDown, ChevronUp } from 'lucide-react';
+import { translateTaskName, translateUnit } from '../lib/translationMap';
+import { Plus, Package, AlertCircle, Wrench, ClipboardList, ChevronDown, ChevronUp, Timer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import CalendarMaterialModal from './CalendarMaterialModal';
 import CalendarEquipmentModal from './CalendarEquipmentModal';
+import UnifiedEventDayModal, { type UnifiedDayTab } from './UnifiedEventDayModal';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
 import { Modal, Button } from '../themes/uiComponents';
 
@@ -142,6 +144,165 @@ function CollapsibleSection({
   );
 }
 
+type PlannedTaskViewRow = {
+  rowKey: string;
+  tasksDoneId: string;
+  folderId: string | null;
+  display: string;
+  quantity: number | null;
+  unitLabel: string;
+  priority: number;
+  hourStart: number | null;
+  hourEnd: number | null;
+};
+
+type TaskFolderLite = { id: string; name: string; sort_order: number | null; event_id?: string | null };
+
+function isExcavationPrepFolderName(f: Pick<TaskFolderLite, 'name' | 'sort_order'>): boolean {
+  if ((f.sort_order ?? 0) < 0) return true;
+  const n = (f.name || '').toLowerCase();
+  if (n.includes('excavation') && n.includes('preparation')) return true;
+  if (n.includes('digging') && n.includes('preparation')) return true;
+  if (n.includes('kopan') && (n.includes('przygotow') || n.includes('preparation'))) return true;
+  return false;
+}
+
+function sortPlannedDisplayFolderKeys(
+  keys: (string | '__none__')[],
+  folderById: Map<string, TaskFolderLite>
+): (string | '__none__')[] {
+  const hasNone = keys.includes('__none__');
+  const real = keys.filter((k): k is string => k !== '__none__');
+  real.sort((a, b) => {
+    const fa = folderById.get(a);
+    const fb = folderById.get(b);
+    const ae = fa && isExcavationPrepFolderName(fa);
+    const be = fb && isExcavationPrepFolderName(fb);
+    if (ae !== be) return ae ? -1 : 1;
+    const soa = fa?.sort_order ?? 0;
+    const sob = fb?.sort_order ?? 0;
+    if (soa !== sob) return soa - sob;
+    return (fa?.name || a).localeCompare(fb?.name || b);
+  });
+  return hasNone ? [...real, '__none__'] : real;
+}
+
+function PlannedTasksGroupedList({
+  rows,
+  folders,
+  t,
+}: {
+  rows: PlannedTaskViewRow[];
+  folders: TaskFolderLite[];
+  t: (k: string) => string;
+}) {
+  const folderById = useMemo(() => new Map(folders.map((f) => [f.id, f])), [folders]);
+
+  const { grouped, sortedKeys } = useMemo(() => {
+    const g = new Map<string | '__none__', PlannedTaskViewRow[]>();
+    for (const r of rows) {
+      const fid = r.folderId;
+      const key: string | '__none__' = fid && folderById.has(fid) ? fid : '__none__';
+      if (!g.has(key)) g.set(key, []);
+      g.get(key)!.push(r);
+    }
+    for (const arr of g.values()) {
+      arr.sort((a, b) => (b.priority !== a.priority ? b.priority - a.priority : a.display.localeCompare(b.display)));
+    }
+    const keys = Array.from(g.keys()).filter((k) => (g.get(k)?.length ?? 0) > 0);
+    const sorted = sortPlannedDisplayFolderKeys(keys, folderById);
+    return { grouped: g, sortedKeys: sorted };
+  }, [rows, folderById]);
+
+  if (sortedKeys.length === 0) return null;
+
+  return (
+    <>
+      {sortedKeys.map((key, idx) => {
+        const list = grouped.get(key)!;
+        const title =
+          key === '__none__' ? t('dashboard:day_plan_tasks_no_folder') : (folderById.get(key)?.name ?? '');
+        return (
+          <div key={String(key)} style={{ marginTop: idx === 0 ? 0 : 14 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: colors.accentBlue,
+                fontFamily: fonts.display,
+                letterSpacing: '0.02em',
+                marginBottom: 6,
+                paddingLeft: 2,
+              }}
+            >
+              {title}
+            </div>
+            <div style={{ paddingLeft: 6 }}>
+              {list.map((pt) => (
+                <PlannedTaskLine key={pt.rowKey} row={pt} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function PlannedTaskLine({ row }: { row: PlannedTaskViewRow }) {
+  const hasHours = row.hourStart !== null && row.hourEnd !== null;
+  const fmtHour = (h: number) => `${String(h).padStart(2, '0')}:00`;
+  const qtyPart =
+    row.quantity !== null && !Number.isNaN(row.quantity) && row.quantity !== 0
+      ? ` — ${row.quantity}${row.unitLabel ? ` ${row.unitLabel}` : ''}`
+      : '';
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 0',
+        borderBottom: '1px solid rgba(255,255,255,0.04)',
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 4 }}>
+        <span style={{ fontSize: 12.5, color: colors.textPrimary, fontWeight: 600 }}>{row.display}</span>
+        {qtyPart ? (
+          <span style={{ fontSize: 12.5, color: colors.textDim, fontWeight: 500 }}>{qtyPart}</span>
+        ) : null}
+      </div>
+      <div style={{ display: 'flex', gap: 1, flexShrink: 0 }} aria-hidden>
+        {[1, 2, 3].map((star) => (
+          <span
+            key={star}
+            style={{
+              fontSize: 13,
+              color: row.priority >= star ? colors.amber : colors.textFaint,
+              lineHeight: 1,
+            }}
+          >
+            ★
+          </span>
+        ))}
+      </div>
+      <div
+        style={{
+          minWidth: 100,
+          flexShrink: 0,
+          textAlign: 'right',
+          fontSize: 12,
+          fontWeight: 600,
+          color: hasHours ? colors.textSecondary : colors.textFaint,
+          fontFamily: fonts.display,
+        }}
+      >
+        {hasHours ? `${fmtHour(row.hourStart!)}–${fmtHour(row.hourEnd!)}` : '—'}
+      </div>
+    </div>
+  );
+}
+
 function ItemRow({
   item,
   unitLabel,
@@ -202,17 +363,64 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
   const [showEquipmentModal, setShowEquipmentModal] = useState(false);
   const [selectedEventForMaterial, setSelectedEventForMaterial] = useState<string | null>(null);
   const [selectedEventForEquipment, setSelectedEventForEquipment] = useState<string | null>(null);
+  const [unifiedDayModal, setUnifiedDayModal] = useState<{ event: Event; tab: UnifiedDayTab } | null>(null);
 
   const eventIds = events.map(e => e.id).filter(Boolean);
+  const planDateStr = format(date, 'yyyy-MM-dd');
 
-  // Fetch tasks count per event
-  const { data: tasksData = [] } = useQuery({
-    queryKey: ['tasks_done_count', eventIds, companyId],
+  const { data: plannedBlocksForDay = [] } = useQuery({
+    queryKey: ['calendar_day_plan_day_details', planDateStr, eventIds.join(','), companyId],
     queryFn: async () => {
-      if (eventIds.length === 0) return [];
+      if (eventIds.length === 0 || !companyId) return [];
+      const { data, error } = await supabase
+        .from('calendar_day_plan_blocks')
+        .select(
+          `
+          id,
+          event_id,
+          start_hour,
+          end_hour,
+          sort_order,
+          calendar_day_plan_block_tasks!block_id (
+            tasks_done_id,
+            planned_quantity,
+            priority,
+            sort_order
+          )
+        `
+        )
+        .eq('company_id', companyId)
+        .eq('plan_date', planDateStr)
+        .in('event_id', eventIds);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!companyId && eventIds.length > 0,
+  });
+
+  const plannedTaskCountByEvent = useMemo(() => {
+    const m: Record<string, Set<string>> = {};
+    for (const row of plannedBlocksForDay as Array<{
+      event_id?: string | null;
+      calendar_day_plan_block_tasks?: Array<{ tasks_done_id?: string | null }> | null;
+    }>) {
+      const eid = row.event_id;
+      if (!eid) continue;
+      if (!m[eid]) m[eid] = new Set();
+      for (const tr of row.calendar_day_plan_block_tasks || []) {
+        if (tr.tasks_done_id) m[eid].add(tr.tasks_done_id);
+      }
+    }
+    return Object.fromEntries(Object.entries(m).map(([k, set]) => [k, set.size])) as Record<string, number>;
+  }, [plannedBlocksForDay]);
+
+  const { data: tasksDoneForEvents = [] } = useQuery({
+    queryKey: ['tasks_done_day_details', eventIds.join(','), companyId],
+    queryFn: async () => {
+      if (!companyId || eventIds.length === 0) return [];
       const { data, error } = await supabase
         .from('tasks_done')
-        .select('event_id')
+        .select('id, name, task_name, unit, event_id, folder_id')
         .eq('company_id', companyId)
         .in('event_id', eventIds);
       if (error) throw error;
@@ -221,12 +429,82 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
     enabled: !!companyId && eventIds.length > 0,
   });
 
-  const tasksCountByEvent = (Array.isArray(tasksData) ? tasksData : []).reduce((acc: Record<string, number>, row: { event_id?: string | null }) => {
-    if (row.event_id) {
-      acc[row.event_id] = (acc[row.event_id] || 0) + 1;
+  const { data: taskFoldersForDayDetails = [] } = useQuery({
+    queryKey: ['task_folders_day_details', eventIds.join(','), companyId],
+    queryFn: async () => {
+      if (!companyId || eventIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from('task_folders')
+        .select('id, name, sort_order, event_id')
+        .eq('company_id', companyId)
+        .in('event_id', eventIds)
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      return (data || []) as TaskFolderLite[];
+    },
+    enabled: !!companyId && eventIds.length > 0,
+  });
+
+  const plannedTasksListByEvent = useMemo(() => {
+    type BlockRow = {
+      id: string;
+      event_id?: string | null;
+      start_hour: number | null;
+      end_hour: number | null;
+      sort_order: number;
+      calendar_day_plan_block_tasks?: Array<{
+        tasks_done_id?: string | null;
+        planned_quantity?: number | null;
+        priority?: number | null;
+        sort_order?: number | null;
+      }> | null;
+    };
+    type TdRow = { id: string; name: string | null; task_name: string | null; unit: string | null };
+    const tasksById = new Map((tasksDoneForEvents as TdRow[]).map((r) => [r.id, r]));
+    const result: Record<string, PlannedTaskViewRow[]> = {};
+
+    const blocks = [...(plannedBlocksForDay as BlockRow[])].sort((a, z) => (a.sort_order ?? 0) - (z.sort_order ?? 0));
+    let seq = 0;
+    for (const block of blocks) {
+      const eid = block.event_id;
+      if (!eid) continue;
+      if (!result[eid]) result[eid] = [];
+      const hs = block.start_hour !== null && block.end_hour !== null ? block.start_hour : null;
+      const he = block.start_hour !== null && block.end_hour !== null ? block.end_hour : null;
+      const taskRows = [...(block.calendar_day_plan_block_tasks || [])].sort(
+        (a, z) => (a.sort_order ?? 0) - (z.sort_order ?? 0)
+      );
+      for (const tr of taskRows) {
+        const tid = tr.tasks_done_id;
+        if (!tid) continue;
+        const td = tasksById.get(tid);
+        const raw = td?.name || td?.task_name || '';
+        const display = translateTaskName(raw, t) || raw || t('dashboard:day_plan_untitled_task');
+        const unitRaw = td?.unit || '';
+        const unitLabel = unitRaw ? translateUnit(unitRaw, t) : '';
+        const pq = tr.planned_quantity;
+        const quantity = pq !== null && pq !== undefined && !Number.isNaN(Number(pq)) ? Number(pq) : null;
+        result[eid].push({
+          rowKey: `${block.id}-${tid}-${seq++}`,
+          tasksDoneId: tid,
+          folderId: td?.folder_id ?? null,
+          display,
+          quantity: quantity !== null && quantity !== 0 ? quantity : null,
+          unitLabel,
+          priority: tr.priority != null ? Math.min(3, Math.max(1, tr.priority)) : 1,
+          hourStart: hs,
+          hourEnd: he,
+        });
+      }
     }
-    return acc;
-  }, {});
+    for (const eid of Object.keys(result)) {
+      result[eid].sort((a, b) => {
+        if (b.priority !== a.priority) return b.priority - a.priority;
+        return 0;
+      });
+    }
+    return result;
+  }, [plannedBlocksForDay, tasksDoneForEvents, t]);
 
   // Fetch day notes
   const { data: notes = [] } = useQuery({
@@ -335,7 +613,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
 
   const EventCard = ({ event }: { event: Event }) => {
     const st = statusConfig[event.status] || statusConfig.planned;
-    const taskCount = tasksCountByEvent[event.id] || 0;
+    const taskCount = plannedTaskCountByEvent[event.id] ?? 0;
     const eventMaterials = materialsByProject[event.id] || [];
     const eventEquipment = equipmentByProject[event.id] || [];
     const matItems = eventMaterials.map((m: any) => ({
@@ -350,6 +628,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
       unit: t('event:unit_singular'),
       notes: e.notes,
     }));
+    const plannedTasksList = plannedTasksListByEvent[event.id] ?? [];
 
     return (
       <div
@@ -398,7 +677,7 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: colors.textDim, fontWeight: 500 }}>
               <ClipboardList size={13} style={{ opacity: 0.6 }} />
-              {taskCount} {t('dashboard:tasks')}
+              {taskCount} {t('dashboard:planned_tasks_label')}
             </div>
             {eventMaterials.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: colors.textDim, fontWeight: 500 }}>
@@ -414,48 +693,87 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
             <button
-              onClick={() => handleAddMaterial(event.id)}
+              type="button"
+              onClick={() => setUnifiedDayModal({ event, tab: 'plan' })}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                padding: '7px 14px',
+                padding: '9px 14px',
+                minHeight: 44,
                 borderRadius: radii.lg,
-                border: 'none',
+                border: `1px solid ${colors.accentBlueBorder}`,
                 cursor: 'pointer',
                 fontSize: 12,
                 fontWeight: 600,
                 fontFamily: fonts.body,
-                color: '#fff',
-                background: colors.green,
+                color: colors.accentBlue,
+                background: colors.accentBlueBg,
               }}
             >
-              <Package size={13} />
-              {t('event:add_material')}
+              <Timer size={15} />
+              {t('dashboard:day_plan_plan_day')}
             </button>
             <button
-              onClick={() => handleAddEquipment(event.id)}
+              type="button"
+              onClick={() => setUnifiedDayModal({ event, tab: 'materials' })}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                padding: '7px 14px',
+                padding: '9px 14px',
+                minHeight: 44,
                 borderRadius: radii.lg,
-                border: 'none',
+                border: `1px solid ${colors.greenBorder}`,
                 cursor: 'pointer',
                 fontSize: 12,
                 fontWeight: 600,
                 fontFamily: fonts.body,
-                color: '#fff',
-                background: colors.orange,
+                color: colors.green,
+                background: colors.greenBg,
               }}
             >
-              <Wrench size={13} />
-              {t('event:require_equipment')}
+              <Package size={15} />
+              {t('dashboard:day_plan_tab_materials')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setUnifiedDayModal({ event, tab: 'equipment' })}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '9px 14px',
+                minHeight: 44,
+                borderRadius: radii.lg,
+                border: `1px solid ${colors.amber}`,
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 600,
+                fontFamily: fonts.body,
+                color: colors.amber,
+                background: 'rgba(245, 158, 11, 0.12)',
+              }}
+            >
+              <Wrench size={15} />
+              {t('dashboard:day_plan_tab_equipment')}
             </button>
           </div>
+
+          <CollapsibleSection
+            icon={<ClipboardList size={14} />}
+            label={t('event:required_tasks')}
+            count={plannedTasksList.length}
+            accentColor={colors.accentBlue}
+          >
+            <PlannedTasksGroupedList
+              rows={plannedTasksList}
+              folders={taskFoldersForDayDetails.filter((f) => f.event_id === event.id)}
+              t={t}
+            />
+          </CollapsibleSection>
 
           <CollapsibleSection
             icon={<Package size={14} />}
@@ -845,6 +1163,25 @@ const DayDetailsModal: React.FC<DayDetailsModalProps> = ({ date, events, equipme
           onClose={() => {
             setShowEquipmentModal(false);
             setSelectedEventForEquipment(null);
+          }}
+        />
+      )}
+
+      {unifiedDayModal && (
+        <UnifiedEventDayModal
+          event={{
+            id: unifiedDayModal.event.id,
+            title: unifiedDayModal.event.title,
+            description: unifiedDayModal.event.description,
+          }}
+          date={date}
+          initialTab={unifiedDayModal.tab}
+          statusAccentColor={(statusConfig[unifiedDayModal.event.status] || statusConfig.planned).color}
+          onClose={() => {
+            setUnifiedDayModal(null);
+            queryClient.invalidateQueries({ queryKey: ['calendar_day_plan_day_details', planDateStr] });
+            queryClient.invalidateQueries({ queryKey: ['calendar_materials', date, companyId] });
+            queryClient.invalidateQueries({ queryKey: ['calendar_equipment', date, companyId] });
           }}
         />
       )}

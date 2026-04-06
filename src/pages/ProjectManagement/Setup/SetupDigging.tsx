@@ -5,6 +5,7 @@ import { colors } from '../../../themes/designTokens';
 import { supabase } from '../../../lib/supabase';
 import { useAuthStore } from '../../../lib/store';
 import { Truck, X, Search, Info, Trash2, Settings, Save } from 'lucide-react';
+import { carrierSpeeds, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../../constants/materialCapacity';
 
 interface DiggingEquipment {
   id: string;
@@ -51,18 +52,10 @@ const dumperBarrowSizes = [
   { value: 10, label: '10 (+)' },
 ];
 
-// Default speeds for carriers (barrows/dumpers) in meters per hour
-const defaultSpeeds: { [key: number]: number } = {
-  0.1: 3000,
-  0.125: 2750,
-  0.15: 2500,
-  0.3: 1500,
-  0.5: 1500,
-  1: 4000,
-  3: 6000,
-  5: 7000,
-  10: 8000
-};
+// Default speeds for carriers (barrows/dumpers) in meters per hour — same as carrierSpeeds in materialCapacity
+const defaultSpeeds: { [key: number]: number } = Object.fromEntries(
+  carrierSpeeds.map((c) => [c.size, c.speed])
+) as { [key: number]: number };
 
 // Time estimates for excavators (hours per ton)
 const soilDiggerTimeEstimates = [
@@ -149,6 +142,9 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
   // Add digging equipment mutation
   const addEquipmentMutation = useMutation({
     mutationFn: async (equipment: Omit<DiggingEquipment, 'id' | 'created_at' | 'updated_at' | 'status' | 'in_use_quantity'> & { "size (in tones)": number; speed_m_per_hour?: number }) => {
+      const freshCompanyId = useAuthStore.getState().getCompanyId();
+      if (!freshCompanyId) throw new Error('No company ID available');
+
       const sizeInTones = equipment["size (in tones)"];
       
       // First, add to setup_digging table
@@ -163,7 +159,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
           in_use_quantity: 0,
           "size (in tones)": sizeInTones,
           speed_m_per_hour: equipment.speed_m_per_hour || null,
-          company_id: companyId
+          company_id: freshCompanyId
         }])
         .select();
       
@@ -189,7 +185,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
           quantity: equipment.quantity,
           status: 'free_to_use',
           in_use_quantity: 0,
-          company_id: companyId
+          company_id: freshCompanyId
         }]);
       
       if (equipmentError) {
@@ -207,7 +203,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
           .from('event_tasks')
           .select('id')
           .eq('name', excavationTaskName)
-          .eq('company_id', companyId);
+          .eq('company_id', freshCompanyId);
         
         if (!existingExcavationTasks || existingExcavationTasks.length === 0) {
           const { error: taskError } = await supabase
@@ -217,7 +213,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
               description: t('form:time_per_person'),
               unit: "tons",
               estimated_hours: soilTimeEstimate.timePerTon,
-              company_id: companyId
+              company_id: freshCompanyId
             });
           
           if (taskError) {
@@ -231,7 +227,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
           .from('event_tasks')
           .select('id')
           .eq('name', tape1TaskName)
-          .eq('company_id', companyId);
+          .eq('company_id', freshCompanyId);
         
         if (!existingTape1Tasks || existingTape1Tasks.length === 0) {
           const { error: tape1Error } = await supabase
@@ -241,7 +237,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
               description: t('form:time_per_person'),
               unit: "tons",
               estimated_hours: tape1TimeEstimate.timePerTon,
-              company_id: companyId
+              company_id: freshCompanyId
             });
           
           if (tape1Error) {
@@ -274,6 +270,9 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
   // Delete digging equipment mutation
   const deleteEquipmentMutation = useMutation({
     mutationFn: async (id: string) => {
+      const freshCompanyId = useAuthStore.getState().getCompanyId();
+      if (!freshCompanyId) throw new Error('No company ID available');
+
       // Get the equipment details first
       const { data: equipmentData } = await supabase
         .from('setup_digging')
@@ -289,12 +288,13 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
       
       if (error) throw error;
       
-      // Also delete from equipment table by name
+      // Also delete from equipment table by name + company
       if (equipmentData) {
         await supabase
           .from('equipment')
           .delete()
-          .eq('name', equipmentData.name);
+          .eq('name', equipmentData.name)
+          .eq('company_id', freshCompanyId);
       }
     },
     onSuccess: () => {
@@ -306,6 +306,9 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
   // Edit digging equipment mutation
   const editEquipmentMutation = useMutation({
     mutationFn: async (equipment: DiggingEquipment) => {
+      const freshCompanyId = useAuthStore.getState().getCompanyId();
+      if (!freshCompanyId) throw new Error('No company ID available');
+
       // Get the original name first
       const { data: originalData } = await supabase
         .from('setup_digging')
@@ -329,8 +332,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
       
       if (error) throw error;
       
-      // Also update equipment table by original name
-      // Equipment type: excavators = machine; barrows/dumpers split by size (< 0.29t = tools, >= 0.29t = machines)
+      // Also update equipment table by original name + company
       if (originalData) {
         const sizeInTones = equipment["size (in tones)"] ?? 0;
         const equipmentTypeForTable =
@@ -345,7 +347,8 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
             type: equipmentTypeForTable,
             quantity: equipment.quantity
           })
-          .eq('name', originalData.name);
+          .eq('name', originalData.name)
+          .eq('company_id', freshCompanyId);
       }
       
       return data;
@@ -441,7 +444,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
       ...newEquipment,
       type,
       "size (in tones)": defaultSize,
-      speed_m_per_hour: type === 'barrows_dumpers' ? (defaultSpeeds[defaultSize] || 4000) : undefined
+      speed_m_per_hour: type === 'barrows_dumpers' ? (defaultSpeeds[defaultSize] || DEFAULT_CARRIER_SPEED_M_PER_H) : undefined
     });
   };
 
@@ -515,7 +518,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                     setNewEquipment({
                       ...newEquipment, 
                       "size (in tones)": newSize,
-                      speed_m_per_hour: newEquipment.type === 'barrows_dumpers' ? (defaultSpeeds[newSize] || 4000) : undefined
+                      speed_m_per_hour: newEquipment.type === 'barrows_dumpers' ? (defaultSpeeds[newSize] || DEFAULT_CARRIER_SPEED_M_PER_H) : undefined
                     });
                   }}
                   className="w-full p-2 border rounded text-sm"
@@ -535,13 +538,13 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                 <label className="block text-sm font-medium mb-1" style={{ color: colors.textSecondary }}>
                   {t('form:speed_m_h_label')}
                   <span className="text-xs ml-2" style={{ color: colors.textSubtle }}>
-                    {t('form:default_speed_info', { default: defaultSpeeds[newEquipment["size (in tones)"]] || 4000 })}
+                    {t('form:default_speed_info', { default: defaultSpeeds[newEquipment["size (in tones)"]] || DEFAULT_CARRIER_SPEED_M_PER_H })}
                   </span>
                 </label>
                 <input
                   type="number"
                   min="100"
-                  placeholder={t('form:default_speed_info', { default: defaultSpeeds[newEquipment["size (in tones)"]] || 4000 })}
+                  placeholder={t('form:default_speed_info', { default: defaultSpeeds[newEquipment["size (in tones)"]] || DEFAULT_CARRIER_SPEED_M_PER_H })}
                   value={newEquipment.speed_m_per_hour || ''}
                   onChange={(e) => setNewEquipment({
                     ...newEquipment, 
@@ -685,7 +688,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
                           <input
                             type="number"
                             min="100"
-                            placeholder={`${defaultSpeeds[editEquipment?.["size (in tones)"] || 0] || 4000}`}
+                            placeholder={`${defaultSpeeds[editEquipment?.["size (in tones)"] || 0] || DEFAULT_CARRIER_SPEED_M_PER_H}`}
                             value={editEquipment?.speed_m_per_hour || ''}
                             onChange={(e) => setEditEquipment({
                               ...editEquipment!, 
@@ -752,10 +755,10 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
       <div className="rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
         {/* Header */}
-        <div className="p-4 border-b flex justify-between items-center">
+        <div className="px-3 py-3 md:p-4 border-b flex justify-between items-center">
           <div className="flex items-center">
             <Truck className="w-5 h-5 mr-2" style={{ color: colors.textSecondary }} />
             <h2 className="text-lg font-semibold">{t('form:excavators_barrows_dumpers_title')}</h2>
@@ -769,7 +772,7 @@ const SetupDigging: React.FC<SetupDiggingProps> = ({ onClose, wizardMode = false
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto">
+        <div className="px-3 py-3 md:p-6 overflow-y-auto">
           {contentMarkup}
         </div>
       </div>

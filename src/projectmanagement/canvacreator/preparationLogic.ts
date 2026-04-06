@@ -7,10 +7,10 @@ import { Shape, Point, pointInPolygon, toPixels, toMeters, areaM2, projectOntoSe
 import { getEffectivePolygon } from "./arcMath";
 import { getExcavationBreakdown } from "./canvasRenderers";
 import { buildHeightInterpolationCache, interpolateHeightCached, interpolateHeightAtPoint } from "./geodesy";
-import { computeThickPolyline, getPathPolygon, getPolygonLinearOutline, polygonToCenterline, isPolygonLinearElement } from "./linearElements";
+import { computeThickPolyline, getPathPolygon, getPolygonLinearOutline, polygonToCenterline, isPolygonLinearElement, isPolygonLinearStripOutline } from "./linearElements";
 
 const GRID_SIZE = 20;
-const SUPPORTED_CALC_TYPES = ["slab", "concreteSlabs", "paving", "grass", "turf", "foundation"] as const;
+const SUPPORTED_CALC_TYPES = ["slab", "concreteSlabs", "paving", "grass", "turf", "decorativeStones", "foundation"] as const;
 
 // Soil densities t/m³ (plan: clay 1.5, sand 1.6, rock 2.2)
 const SOIL_DENSITY: Record<string, number> = {
@@ -74,7 +74,7 @@ function getElementSurfaceHeightM(shape: Shape, pt: Point): number | null {
   if (shape.elementType === "foundation") {
     let pts: Point[];
     let heights: number[];
-    if (isPolygonLinearElement(shape) && shape.closed && shape.points.length >= 3) {
+    if (isPolygonLinearElement(shape) && (isPolygonLinearStripOutline(shape) || (shape.closed && shape.points.length >= 3))) {
       pts = polygonToCenterline(shape.points);
       heights = shape.heights ?? pts.map(() => 0);
     } else {

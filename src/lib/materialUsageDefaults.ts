@@ -5,7 +5,7 @@
 
 const STORAGE_KEY = "landscapeManager_materialUsageDefaults";
 
-export type CalculatorKey = "paving_calculator" | "slab_calculator" | "concrete_slabs_calculator" | "artificial_grass_calculator" | "natural_turf_calculator" | "wall_calculator";
+export type CalculatorKey = "paving_calculator" | "slab_calculator" | "concrete_slabs_calculator" | "artificial_grass_calculator" | "natural_turf_calculator" | "wall_calculator" | "decorative_stones_calculator";
 
 export interface ThicknessConfig {
   [calcKey: string]: Record<string, number>;
@@ -32,6 +32,7 @@ const DEFAULT_THICKNESS: ThicknessConfig = {
   concrete_slabs_calculator: { type1_thickness: 10, sand_thickness: 5, concrete_slab_thickness: 6 },
   artificial_grass_calculator: { type1_thickness: 10, sand_thickness: 5 },
   natural_turf_calculator: { type1_thickness: 10, soil_thickness: 5 },
+  decorative_stones_calculator: { type1_thickness: 10, decorative_stones_depth: 5 },
   wall_calculator: {},
 };
 
@@ -104,6 +105,8 @@ function calcTypeToKey(calculatorType: string): CalculatorKey | null {
       return "natural_turf_calculator";
     case "wall":
       return "wall_calculator";
+    case "decorativeStones":
+      return "decorative_stones_calculator";
     default:
       return null;
   }
@@ -132,6 +135,7 @@ export function getCalculatorInputDefaults(
   if (thickness.slab_thickness != null) result.slabThicknessCm = String(thickness.slab_thickness);
   if (thickness.monoblock_height != null) result.monoBlocksHeightCm = String(thickness.monoblock_height);
   if (thickness.concrete_slab_thickness != null) result.concreteSlabThicknessCm = String(thickness.concrete_slab_thickness);
+  if (thickness.decorative_stones_depth != null) result.decorativeDepthCm = String(thickness.decorative_stones_depth);
 
   return result;
 }

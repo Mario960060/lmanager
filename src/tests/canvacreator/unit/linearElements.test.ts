@@ -7,6 +7,13 @@ import {
   polygonToSegmentLengths,
   polygonToCenterline,
   hitTestLinearElement,
+  pathClosedOutlineToWallStripOutline,
+  wallStripOutlineToPathClosedOutline,
+  extractCenterlineFromOpenStripOutline,
+  rebuildPathRibbonPairTranslateHalf,
+  extractPathRibbonCenterlineFromOutline,
+  computePathOutlineFromSegmentSides,
+  rebuildRectangularPathRibbonFromOutlineDrag,
 } from "../../../projectmanagement/canvacreator/linearElements";
 import { Shape, C, toPixels } from "../../../projectmanagement/canvacreator/geometry";
 
@@ -127,7 +134,92 @@ describe("computeThickPolyline", () => {
     const lens = polygonToSegmentLengths(closedOutline);
     expect(lens).toHaveLength(4);
     expect(lens.every((L) => L > 1e-6)).toBe(true);
+    // openU is 4 corners → 4 centerline vertices → outline 2×4 points; 3 run segments.
+    expect(openOutline.length).toBe(8);
     expect(polygonToSegmentLengths(openOutline)).toHaveLength(3);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// Path closed outline ↔ wall strip (2V vs 2V+2)
+// ══════════════════════════════════════════════════════════════
+describe("pathClosedOutline wall strip conversion", () => {
+  it("round-trips wall strip outline through path layout and back", () => {
+    const center = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 80 },
+      { x: 0, y: 80 },
+    ];
+    const wall = computeThickPolylineClosed(center, 20);
+    expect(wall.length).toBe(10);
+    const path = wallStripOutlineToPathClosedOutline(wall);
+    expect(path).not.toBeNull();
+    expect(path!.length).toBe(8);
+    const wall2 = pathClosedOutlineToWallStripOutline(path!);
+    expect(wall2).not.toBeNull();
+    expect(wall2!.length).toBe(wall.length);
+    for (let i = 0; i < wall.length; i++) {
+      expect(wall2![i].x).toBeCloseTo(wall[i].x, 5);
+      expect(wall2![i].y).toBeCloseTo(wall[i].y, 5);
+    }
+    const cl = extractCenterlineFromOpenStripOutline(path!);
+    expect(cl.length).toBe(4);
+  });
+});
+
+describe("extractPathRibbonCenterlineFromOutline", () => {
+  it("uses open-strip pairing for flat 8-point path outline (4 centers, not 3)", () => {
+    const center = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 50 },
+      { x: 0, y: 50 },
+    ];
+    const wall = computeThickPolylineClosed(center, 20);
+    const path = wallStripOutlineToPathClosedOutline(wall);
+    expect(path).not.toBeNull();
+    const cl = extractPathRibbonCenterlineFromOutline(path!);
+    expect(cl.length).toBe(4);
+  });
+});
+
+describe("rebuildRectangularPathRibbonFromOutlineDrag", () => {
+  it("hits outline target while keeping a rectangular centerline", () => {
+    const cl = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 50 },
+      { x: 0, y: 50 },
+    ];
+    const sides: ("left" | "right")[] = ["left", "left", "left"];
+    const outline0 = computePathOutlineFromSegmentSides(cl, sides, 0.6);
+    expect(outline0.length).toBe(8);
+    const vi = 1;
+    // Drag target must stay within the solver tolerance (see tolSnap2 in linearElements.ts);
+    // a large offset can fail to converge within maxIter and returns null.
+    const target = { x: outline0[vi].x + 1, y: outline0[vi].y - 0.5 };
+    const res = rebuildRectangularPathRibbonFromOutlineDrag(cl, sides, 0.6, vi, target);
+    expect(res).not.toBeNull();
+    const err = Math.hypot(res!.outline[vi].x - target.x, res!.outline[vi].y - target.y);
+    expect(err).toBeLessThan(6);
+  });
+});
+
+describe("rebuildPathRibbonPairTranslateHalf", () => {
+  it("moves opposite ribbon corner by the same delta", () => {
+    const q = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 4 },
+      { x: 0, y: 4 },
+    ];
+    const out = rebuildPathRibbonPairTranslateHalf(q, 1, { x: 12, y: 1 });
+    expect(out).not.toBeNull();
+    expect(out![1].x).toBe(12);
+    expect(out![1].y).toBe(1);
+    expect(out![2].x).toBe(12);
+    expect(out![2].y).toBe(5);
   });
 });
 

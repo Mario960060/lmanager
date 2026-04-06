@@ -359,7 +359,7 @@
   "contact_instagram_label": "instagram.com/aitomatic_future",
   "contact_email_label": "asdasd@gmail.com",
   
-  "setup_digging_warning": "Equipment Name and Description will be shown in Equipment. Create here ONLY Excavators and Carriers (wheel barrow, petrol barrows and dumpers) and make sure u click create tasks button on the top after adding any equipment",
+  "setup_digging_warning": "Equipment Name and Description will be shown in Equipment. Create here ONLY Excavators and Carriers and Barrows",
   "add_equipment_button_text": "Add Equipment",
   "excavator_type": "Excavator",
   "barrows_dumpers_type": "Barrows/Dumpers",

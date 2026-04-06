@@ -5,11 +5,11 @@
 import React, { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Clock, Package, Wrench, ChevronRight, Pencil } from "lucide-react";
-import { C } from "../geometry";
 import { Shape } from "../geometry";
 import { isGroundworkLinear, isPathElement } from "../linearElements";
 import { translateTaskName, translateUnit, translateMaterialName } from "../../../lib/translationMap";
-import { colors, spacing, radii, shadows } from "../../../themes/designTokens";
+import { colors, spacing, radii, shadows, accentAlpha } from "../../../themes/designTokens";
+import { useBackdropPointerDismiss } from "../../../hooks/useBackdropPointerDismiss";
 
 interface ResultsModalProps {
   shape: Shape;
@@ -29,6 +29,7 @@ const TYPE_KEYS: Record<string, string> = {
   foundation: "results_type_foundation",
   deck: "results_type_deck",
   turf: "results_type_turf",
+  decorativeStones: "results_type_decorative_stones",
   drainage: "results_type_drainage",
   canalPipe: "results_type_canal_pipe",
   waterPipe: "results_type_water_pipe",
@@ -37,6 +38,7 @@ const TYPE_KEYS: Record<string, string> = {
 
 const SUBTYPE_KEYS: Record<string, string> = {
   brick: "results_subtype_brick",
+  double_wall: "results_subtype_double_wall",
   block4: "results_subtype_block4",
   block7: "results_subtype_block7",
   sleeper: "results_subtype_sleeper",
@@ -48,11 +50,13 @@ const SUBTYPE_KEYS: Record<string, string> = {
   horizontal: "results_subtype_horizontal",
   venetian: "results_subtype_venetian",
   composite: "results_subtype_composite",
+  composite_deck: "results_subtype_composite_deck",
   l_shape: "results_subtype_l_shape",
   u_shape: "results_subtype_u_shape",
 };
 
 export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEdit, onRename }) => {
+  const backdropDismiss = useBackdropPointerDismiss(onClose, true);
   const { t } = useTranslation(["project", "calculator", "common", "units"]);
   const r = shape.calculatorResults;
   if (!r) return null;
@@ -98,17 +102,19 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
 
   return (
     <div
+      ref={backdropDismiss.backdropRef}
       className="canvas-modal-backdrop"
       style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: spacing["3xl"] }}
-      onMouseDown={onClose}
+      onPointerDown={backdropDismiss.onBackdropPointerDown}
     >
       <div
         className="canvas-modal-content"
-        style={{ background: C.panel, border: `1px solid ${C.panelBorder}`, borderRadius: 10, width: "100%", maxWidth: "min(96vw, 900px)", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,0.6)", overflow: "hidden" }}
-        onMouseDown={e => e.stopPropagation()}
+        style={{ background: colors.bgElevated, border: `1px solid ${colors.borderDefault}`, borderRadius: 10, width: "100%", maxWidth: "min(96vw, 900px)", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,0.6)", overflow: "hidden" }}
+        onPointerDownCapture={backdropDismiss.onPanelPointerDownCapture}
+        onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: `1px solid ${C.panelBorder}` }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: `1px solid ${colors.borderDefault}` }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 0 }}>
             {editingName && canEditName ? (
               <input
@@ -117,21 +123,21 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
                 onChange={e => setNameValue(e.target.value)}
                 onBlur={() => { if (nameValue.trim()) onRename?.(nameValue.trim()); setEditingName(false); }}
                 onKeyDown={e => { if (e.key === "Enter") { if (nameValue.trim()) onRename?.(nameValue.trim()); setEditingName(false); } if (e.key === "Escape") { setNameValue(shape.label || defaultName); setEditingName(false); } }}
-                style={{ width: "100%", padding: "4px 8px", background: C.bg, border: `1px solid ${C.accent}`, borderRadius: 4, color: C.text, fontSize: 15, fontWeight: 700 }}
+                style={{ width: "100%", padding: "4px 8px", background: colors.bgInput, border: `1px solid ${colors.accentBlue}`, borderRadius: 4, color: colors.textPrimary, fontSize: 15, fontWeight: 700 }}
               />
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: C.text }}>{nameValue || t("project:results_object")}</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: colors.textPrimary }}>{nameValue || t("project:results_object")}</div>
                 {canEditName && (
-                  <button onClick={() => setEditingName(true)} style={{ background: "transparent", border: "none", cursor: "pointer", color: C.textDim, padding: 2, display: "flex" }} title={t("project:results_edit_name")}>
+                  <button onClick={() => setEditingName(true)} style={{ background: "transparent", border: "none", cursor: "pointer", color: colors.textDim, padding: 2, display: "flex" }} title={t("project:results_edit_name")}>
                     <Pencil size={14} />
                   </button>
                 )}
               </div>
             )}
-            <div style={{ fontSize: 12, color: C.accent, fontWeight: 500 }}>{fullType}</div>
+            <div style={{ fontSize: 12, color: colors.accentBlue, fontWeight: 500 }}>{fullType}</div>
           </div>
-          <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", color: C.textDim, padding: 4, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 4 }}>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", color: colors.textDim, padding: 4, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 4 }}>
             <X size={18} />
           </button>
         </div>
@@ -141,9 +147,9 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
 
           {/* Total hours + amount */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <StatCard icon={<Clock size={15} />} label={t("project:results_total_labour")} value={fmtH(totalHours)} color={C.accent} />
+            <StatCard icon={<Clock size={15} />} label={t("project:results_total_labour")} value={fmtH(totalHours)} color={colors.accentBlue} />
             {r.amount != null && (
-              <StatCard icon={<Package size={15} />} label={r.unit ? translateUnit(r.unit, t) : "units"} value={fmtQ(r.amount)} color={colors.purple} />
+              <StatCard icon={<Package size={15} />} label={r.unit ? translateUnit(r.unit, t) : t("units:pieces")} value={fmtQ(r.amount)} color={colors.purple} />
             )}
           </div>
 
@@ -158,11 +164,11 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
                   return (
                     <div key={i} style={{ padding: `${spacing.sm}px ${spacing.xs}px`, background: i % 2 === 1 ? colors.bgTableRowAlt : undefined, borderBottom: i < tasks.length - 1 ? `1px solid ${colors.borderLight}` : "none" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                        <span style={{ fontSize: 12, color: C.text, flex: 1, paddingRight: 8 }}>{name}</span>
-                        <span style={{ fontSize: 12, color: C.accent, fontWeight: 600, whiteSpace: "nowrap" }}>{fmtH(task.hours)}</span>
+                        <span style={{ fontSize: 12, color: colors.textPrimary, flex: 1, paddingRight: 8 }}>{name}</span>
+                        <span style={{ fontSize: 12, color: colors.accentBlue, fontWeight: 600, whiteSpace: "nowrap" }}>{fmtH(task.hours)}</span>
                       </div>
                       <div style={{ height: 3, background: colors.borderLight, borderRadius: 2 }}>
-                        <div style={{ height: "100%", width: `${Math.min(100, pct)}%`, background: C.accent, borderRadius: 2 }} />
+                        <div style={{ height: "100%", width: `${Math.min(100, pct)}%`, background: colors.accentBlue, borderRadius: 2 }} />
                       </div>
                     </div>
                   );
@@ -178,16 +184,16 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
                 <thead>
                   <tr>
                     {[t("project:results_material"), t("project:results_qty"), t("project:results_unit")].map(h => (
-                      <th key={h} style={{ textAlign: "left", padding: "4px 8px", color: C.textDim, fontWeight: 500, fontSize: 11, borderBottom: `1px solid ${C.panelBorder}` }}>{h}</th>
+                      <th key={h} style={{ textAlign: "left", padding: "4px 8px", color: colors.textDim, fontWeight: 500, fontSize: 11, borderBottom: `1px solid ${colors.borderDefault}` }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {materials.map((m, i) => (
                     <tr key={i} style={{ borderBottom: `1px solid ${colors.borderLight}`, background: i % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
-                      <td style={{ padding: "6px 8px", color: C.text }}>{translateMaterialName(m.name, t)}</td>
-                      <td style={{ padding: "6px 8px", color: C.accent, fontWeight: 600 }}>{fmtQ(m.quantity)}</td>
-                      <td style={{ padding: "6px 8px", color: C.textDim }}>{translateUnit(m.unit, t)}</td>
+                      <td style={{ padding: "6px 8px", color: colors.textPrimary }}>{translateMaterialName(m.name, t)}</td>
+                      <td style={{ padding: "6px 8px", color: colors.accentBlue, fontWeight: 600 }}>{fmtQ(m.quantity)}</td>
+                      <td style={{ padding: "6px 8px", color: colors.textDim }}>{translateUnit(m.unit, t)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -197,18 +203,18 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
         </div>
 
         {/* Footer */}
-        <div style={{ padding: "12px 16px", borderTop: `1px solid ${C.panelBorder}`, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <div style={{ padding: "12px 16px", borderTop: `1px solid ${colors.borderDefault}`, display: "flex", gap: 8, justifyContent: "flex-end" }}>
           {!isGroundworkLinear(shape) && (
             <button
               onClick={onEdit}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: C.button, border: `1px solid ${C.panelBorder}`, borderRadius: 6, color: C.text, fontSize: 13, cursor: "pointer", fontWeight: 500 }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: colors.bgOverlay, border: `1px solid ${colors.borderDefault}`, borderRadius: 6, color: colors.textPrimary, fontSize: 13, cursor: "pointer", fontWeight: 500 }}
             >
               {t("project:results_edit")} <ChevronRight size={14} />
             </button>
           )}
           <button
             onClick={onClose}
-            style={{ padding: "7px 14px", background: C.accent + "22", border: `1px solid ${C.accent}44`, borderRadius: 6, color: C.accent, fontSize: 13, cursor: "pointer", fontWeight: 600 }}
+            style={{ padding: "7px 14px", background: accentAlpha(0.13), border: `1px solid ${accentAlpha(0.27)}`, borderRadius: 6, color: colors.accentBlue, fontSize: 13, cursor: "pointer", fontWeight: 600 }}
           >
             {t("project:results_close")}
           </button>
@@ -221,8 +227,8 @@ export const ResultsModal: React.FC<ResultsModalProps> = ({ shape, onClose, onEd
 // ── helpers ──────────────────────────────────────────────────
 
 const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string; color: string }> = ({ icon, label, value, color }) => (
-  <div style={{ background: "rgba(0,0,0,0.25)", border: `1px solid ${C.panelBorder}`, borderRadius: 8, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 5, color: C.textDim, fontSize: 11, fontWeight: 500 }}>
+  <div style={{ background: colors.bgCardInner, border: `1px solid ${colors.borderDefault}`, borderRadius: 8, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 5, color: colors.textDim, fontSize: 11, fontWeight: 500 }}>
       {icon} {label}
     </div>
     <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
@@ -231,10 +237,10 @@ const StatCard: React.FC<{ icon: React.ReactNode; label: string; value: string; 
 
 const Section: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
   <div>
-    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, color: C.textDim, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, color: colors.textDim, fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
       {icon} {title}
     </div>
-    <div style={{ background: "rgba(0,0,0,0.2)", border: `1px solid ${C.panelBorder}`, borderRadius: radii.lg, padding: `${spacing.lg}px ${spacing.xs}px ${spacing.xs}px` }}>
+    <div style={{ background: colors.bgCardInner, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, padding: `${spacing.lg}px ${spacing.xs}px ${spacing.xs}px` }}>
       {children}
     </div>
   </div>

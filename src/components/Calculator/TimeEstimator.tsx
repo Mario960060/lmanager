@@ -191,7 +191,7 @@ const TimeEstimator = () => {
             </div>
           </div>
 
-          <Button variant="accent" color={colors.accentBlue} onClick={calculateTime} disabled={!quantity || !workers}>
+          <Button variant="primary" fullWidth onClick={calculateTime} disabled={!quantity || !workers}>
             {t('calculator:calculate_button')}
           </Button>
 

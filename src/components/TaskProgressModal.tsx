@@ -13,9 +13,11 @@ interface TaskProgressModalProps {
   task: TaskDone | null;
   onClose: () => void;
   createdAt?: string;
+  /** Folder was removed from project (canvas sync) — no new progress entries */
+  progressLocked?: boolean;
 }
 
-const TaskProgressModal: React.FC<TaskProgressModalProps> = ({ task, onClose, createdAt }) => {
+const TaskProgressModal: React.FC<TaskProgressModalProps> = ({ task, onClose, createdAt, progressLocked }) => {
   const { t } = useTranslation(['common', 'form', 'utilities', 'event', 'calculator']);
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -124,6 +126,7 @@ const TaskProgressModal: React.FC<TaskProgressModalProps> = ({ task, onClose, cr
   });
 
   const handleSubmit = () => {
+    if (progressLocked) return;
     if (!task?.id || !amountCompleted || !hoursSpent) return;
 
     const amount = parseFloat(amountCompleted);
@@ -158,17 +161,23 @@ const TaskProgressModal: React.FC<TaskProgressModalProps> = ({ task, onClose, cr
           </div>
         </div>
 
+        {progressLocked && (
+          <p style={{ fontSize: fontSizes.sm, color: colors.textMuted, marginBottom: spacing.sm }}>
+            {t('event:progress_locked_hint')}
+          </p>
+        )}
+
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, marginBottom: 6 }}>
             <Label>{t('event:amount_completed')}</Label>
             <span style={{ background: colors.bgOverlay, color: colors.textFaint, fontSize: fontSizes.sm, padding: '2px 8px', borderRadius: radii.sm, fontWeight: fontWeights.medium }}>{unit}</span>
           </div>
-          <TextInput type="text" value={amountCompleted} onChange={setAmountCompleted} placeholder={t('event:enter_completed_amount', { defaultValue: `Wpisz ukończoną ilość w ${unit}` }).replace('{unit}', unit)} />
+          <TextInput type="text" value={amountCompleted} onChange={setAmountCompleted} disabled={progressLocked} placeholder={t('event:enter_completed_amount', { defaultValue: `Wpisz ukończoną ilość w ${unit}` }).replace('{unit}', unit)} />
         </div>
 
         <div>
           <Label style={{ marginBottom: 6 }}>{t('event:hours_spent')}</Label>
-          <TextInput type="text" value={hoursSpent} onChange={setHoursSpent} placeholder={t('event:enter_hours_spent', { defaultValue: 'np. 2.5' })} />
+          <TextInput type="text" value={hoursSpent} onChange={setHoursSpent} disabled={progressLocked} placeholder={t('event:enter_hours_spent', { defaultValue: 'np. 2.5' })} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: spacing.sm }}>
             {[1, 2, 4, 8].map(h => (
               <button
@@ -189,7 +198,7 @@ const TaskProgressModal: React.FC<TaskProgressModalProps> = ({ task, onClose, cr
         </div>
 
         <Button variant="primary" fullWidth onClick={handleSubmit}
-          disabled={addProgressEntryMutation.isPending || !amountCompleted || !hoursSpent || parseFloat(amountCompleted) <= 0 || parseFloat(hoursSpent) <= 0}
+          disabled={progressLocked || addProgressEntryMutation.isPending || !amountCompleted || !hoursSpent || parseFloat(amountCompleted) <= 0 || parseFloat(hoursSpent) <= 0}
         >
           {addProgressEntryMutation.isPending ? t('event:updating') : t('event:update_progress')}
         </Button>

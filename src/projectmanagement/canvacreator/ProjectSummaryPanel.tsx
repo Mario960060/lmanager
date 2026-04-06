@@ -6,7 +6,7 @@ import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight, ChevronLeft, Check, HelpCircle, FileDown } from "lucide-react";
 import { Shape } from "./geometry";
-import { C } from "./geometry";
+import { colors } from "../../themes/designTokens";
 import { computeAutoFill } from "./objectCard/autoFill";
 import { getTypeBadgeText, getTypeBadgeColor } from "./canvasRenderers";
 import { isLinearElement } from "./linearElements";
@@ -47,8 +47,8 @@ export default function ProjectSummaryPanel({
     return (
       <div style={{
         width: 40,
-        background: C.panel,
-        borderLeft: `1px solid ${C.panelBorder}`,
+        background: colors.bgElevated,
+        borderLeft: `1px solid ${colors.borderDefault}`,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -60,13 +60,13 @@ export default function ProjectSummaryPanel({
             background: "none",
             border: "none",
             cursor: "pointer",
-            color: C.textDim,
+            color: colors.textDim,
             padding: 4,
           }}
         >
           <ChevronRight size={20} />
         </button>
-        <div style={{ fontSize: 11, color: C.textDim, marginTop: 8, transform: "rotate(-90deg)", whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: 11, color: colors.textDim, marginTop: 8, transform: "rotate(-90deg)", whiteSpace: "nowrap" }}>
           {t("project:summary_count", { count: layer2Shapes.length })}
         </div>
       </div>
@@ -76,8 +76,8 @@ export default function ProjectSummaryPanel({
   return (
     <div style={{
       width: 280,
-      background: C.panel,
-      borderLeft: `1px solid ${C.panelBorder}`,
+      background: colors.bgElevated,
+      borderLeft: `1px solid ${colors.borderDefault}`,
       display: "flex",
       flexDirection: "column",
       flexShrink: 0,
@@ -88,12 +88,12 @@ export default function ProjectSummaryPanel({
         alignItems: "center",
         justifyContent: "space-between",
         padding: "12px 16px",
-        borderBottom: `1px solid ${C.panelBorder}`,
+        borderBottom: `1px solid ${colors.borderDefault}`,
       }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{t("project:project_summary_title")}</span>
+        <span style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary }}>{t("project:project_summary_title")}</span>
         <button
           onClick={() => setCollapsed(true)}
-          style={{ background: "none", border: "none", cursor: "pointer", color: C.textDim, padding: 4 }}
+          style={{ background: "none", border: "none", cursor: "pointer", color: colors.textDim, padding: 4 }}
         >
           <ChevronLeft size={18} />
         </button>
@@ -101,7 +101,7 @@ export default function ProjectSummaryPanel({
 
       <div style={{ flex: 1, overflow: "auto", padding: 12, maxHeight: "clamp(200px, 45vh, 520px)", minHeight: 0 }}>
         {layer2Shapes.length === 0 ? (
-          <div style={{ fontSize: 13, color: C.textDim, textAlign: "center", padding: 24 }}>
+          <div style={{ fontSize: 13, color: colors.textDim, textAlign: "center", padding: 24 }}>
             {t("project:no_elements_layer2")}
           </div>
         ) : (
@@ -126,15 +126,15 @@ export default function ProjectSummaryPanel({
                   style={{
                     padding: "10px 12px",
                     marginBottom: 8,
-                    background: C.bg,
+                    background: colors.bgInput,
                     borderRadius: 8,
-                    border: `1px solid ${C.panelBorder}`,
+                    border: `1px solid ${colors.borderDefault}`,
                     fontSize: 12,
                     cursor: isClickable ? "pointer" : "default",
                     transition: "border-color 0.15s",
                   }}
-                  onMouseEnter={e => { if (isClickable) e.currentTarget.style.borderColor = C.accent + "66"; }}
-                  onMouseLeave={e => { if (isClickable) e.currentTarget.style.borderColor = C.panelBorder; }}
+                  onMouseEnter={e => { if (isClickable) e.currentTarget.style.borderColor = colors.accentBlue + "66"; }}
+                  onMouseLeave={e => { if (isClickable) e.currentTarget.style.borderColor = colors.borderDefault; }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                     <span
@@ -149,14 +149,14 @@ export default function ProjectSummaryPanel({
                     >
                       {getTypeBadgeText(shape.calculatorType)}
                     </span>
-                    <span style={{ color: C.text, flex: 1 }}>{shape.label}</span>
+                    <span style={{ color: colors.textPrimary, flex: 1 }}>{shape.label}</span>
                     {hasResults ? (
-                      <Check size={14} color={C.accent} />
+                      <Check size={14} color={colors.accentBlue} />
                     ) : (
-                      <HelpCircle size={14} color={C.textDim} />
+                      <HelpCircle size={14} color={colors.textDim} />
                     )}
                   </div>
-                  <div style={{ color: C.textDim, fontSize: 11 }}>
+                  <div style={{ color: colors.textDim, fontSize: 11 }}>
                     {t("project:area_hours_materials", { area: areaOrLength, hours: hours.toFixed(1), matCount })}
                   </div>
                 </div>
@@ -166,21 +166,21 @@ export default function ProjectSummaryPanel({
             <div style={{
               marginTop: 12,
               padding: "12px",
-              background: C.bg,
+              background: colors.bgInput,
               borderRadius: 8,
-              border: `1px solid ${C.panelBorder}`,
+              border: `1px solid ${colors.borderDefault}`,
               fontSize: 13,
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: C.textDim }}>{t("project:total_hours")}</span>
-                <span style={{ color: C.text, fontWeight: 600 }}>{totalHours.toFixed(1)}</span>
+                <span style={{ color: colors.textDim }}>{t("project:total_hours")}</span>
+                <span style={{ color: colors.textPrimary, fontWeight: 600 }}>{totalHours.toFixed(1)}</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: C.textDim }}>{t("project:total_materials")}</span>
-                <span style={{ color: C.text, fontWeight: 600 }}>{totalMaterials}</span>
+                <span style={{ color: colors.textDim }}>{t("project:total_materials")}</span>
+                <span style={{ color: colors.textPrimary, fontWeight: 600 }}>{totalMaterials}</span>
               </div>
               {withoutResults > 0 && (
-                <div style={{ fontSize: 11, color: C.open, marginTop: 8 }}>
+                <div style={{ fontSize: 11, color: colors.orange, marginTop: 8 }}>
                   {t("project:elements_without_calculator", { count: withoutResults })}
                 </div>
               )}
@@ -189,17 +189,17 @@ export default function ProjectSummaryPanel({
         )}
       </div>
 
-      <div style={{ padding: 12, borderTop: `1px solid ${C.panelBorder}`, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ padding: 12, borderTop: `1px solid ${colors.borderDefault}`, display: "flex", flexDirection: "column", gap: 8 }}>
         {onDownloadPDF && (
           <button
             onClick={onDownloadPDF}
             style={{
               width: "100%",
               padding: "10px 16px",
-              background: C.button,
-              border: `1px solid ${C.panelBorder}`,
+              background: colors.bgOverlay,
+              border: `1px solid ${colors.borderDefault}`,
               borderRadius: 8,
-              color: C.text,
+              color: colors.textPrimary,
               fontSize: 13,
               fontWeight: 500,
               cursor: "pointer",
@@ -219,10 +219,10 @@ export default function ProjectSummaryPanel({
           style={{
             width: "100%",
             padding: "12px 20px",
-            background: layer2Shapes.length > 0 && !isSubmitting ? C.accent : C.button,
+            background: layer2Shapes.length > 0 && !isSubmitting ? colors.accentBlue : colors.bgOverlay,
             border: "none",
             borderRadius: 8,
-            color: layer2Shapes.length > 0 && !isSubmitting ? "#fff" : C.textDim,
+            color: layer2Shapes.length > 0 && !isSubmitting ? "#fff" : colors.textDim,
             fontSize: 14,
             fontWeight: 600,
             cursor: layer2Shapes.length > 0 && !isSubmitting ? "pointer" : "default",

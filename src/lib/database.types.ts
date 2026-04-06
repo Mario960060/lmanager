@@ -1,6 +1,3 @@
-Need to install the following packages:
-supabase@2.72.8
-Ok to proceed? (y) 
 export type Json =
   | string
   | number
@@ -386,6 +383,112 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_day_plan_block_tasks: {
+        Row: {
+          block_id: string
+          company_id: string
+          created_at: string | null
+          id: string
+          planned_quantity: number | null
+          priority: number
+          sort_order: number
+          tasks_done_id: string
+        }
+        Insert: {
+          block_id: string
+          company_id: string
+          created_at?: string | null
+          id?: string
+          planned_quantity?: number | null
+          priority?: number
+          sort_order?: number
+          tasks_done_id: string
+        }
+        Update: {
+          block_id?: string
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          planned_quantity?: number | null
+          priority?: number
+          sort_order?: number
+          tasks_done_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_day_plan_block_tasks_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_day_plan_blocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_day_plan_block_tasks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_day_plan_block_tasks_tasks_done_id_fkey"
+            columns: ["tasks_done_id"]
+            isOneToOne: false
+            referencedRelation: "tasks_done"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_day_plan_blocks: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          end_hour: number | null
+          event_id: string
+          id: string
+          plan_date: string
+          sort_order: number
+          start_hour: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          end_hour?: number | null
+          event_id: string
+          id?: string
+          plan_date: string
+          sort_order?: number
+          start_hour?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          end_hour?: number | null
+          event_id?: string
+          id?: string
+          plan_date?: string
+          sort_order?: number
+          start_hour?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_day_plan_blocks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_day_plan_blocks_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
             referencedColumns: ["id"]
           },
         ]
@@ -820,6 +923,65 @@ export type Database = {
           },
         ]
       }
+      event_members: {
+        Row: {
+          id: string
+          event_id: string
+          user_id: string
+          company_id: string
+          role: string
+          assigned_by: string | null
+          assigned_at: string | null
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          user_id: string
+          company_id?: string
+          role?: string
+          assigned_by?: string | null
+          assigned_at?: string | null
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          user_id?: string
+          company_id?: string
+          role?: string
+          assigned_by?: string | null
+          assigned_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_members_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_members_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_members_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plans: {
         Row: {
           id: string
@@ -1183,6 +1345,7 @@ export type Database = {
       materials_delivered: {
         Row: {
           amount: number
+          canvas_element_id: string | null
           company_id: string | null
           created_at: string | null
           event_id: string | null
@@ -1195,6 +1358,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          canvas_element_id?: string | null
           company_id?: string | null
           created_at?: string | null
           event_id?: string | null
@@ -1207,6 +1371,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          canvas_element_id?: string | null
           company_id?: string | null
           created_at?: string | null
           event_id?: string | null
@@ -1357,6 +1522,7 @@ export type Database = {
       }
       task_folders: {
         Row: {
+          canvas_element_id: string | null
           color: string | null
           company_id: string | null
           created_at: string | null
@@ -1364,10 +1530,13 @@ export type Database = {
           id: string
           name: string
           parent_folder_id: string | null
+          progress_locked: boolean
+          removed_from_project_at: string | null
           sort_order: number | null
           updated_at: string | null
         }
         Insert: {
+          canvas_element_id?: string | null
           color?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -1375,10 +1544,13 @@ export type Database = {
           id?: string
           name: string
           parent_folder_id?: string | null
+          progress_locked?: boolean
+          removed_from_project_at?: string | null
           sort_order?: number | null
           updated_at?: string | null
         }
         Update: {
+          canvas_element_id?: string | null
           color?: string | null
           company_id?: string | null
           created_at?: string | null
@@ -1386,6 +1558,8 @@ export type Database = {
           id?: string
           name?: string
           parent_folder_id?: string | null
+          progress_locked?: boolean
+          removed_from_project_at?: string | null
           sort_order?: number | null
           updated_at?: string | null
         }

@@ -119,5 +119,7 @@
   "adding": "Dodawanie...",
   "saving": "Zapisywanie...",
   "save_changes": "Zapisz Zmiany",
-  "edit_task": "Edytuj zadanie"
+  "edit_task": "Edytuj zadanie",
+  "delete_task_requirement": "Usuń wymaganie zadania",
+  "delete_task_requirement_confirm": "Usunąć to wymaganie zadania? Tej operacji nie można cofnąć."
 }

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit } from '../../lib/translationMap';
 import {
   colors,
@@ -266,7 +266,7 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -565,11 +565,11 @@ const FoundationCalculator: React.FC<FoundationCalculatorProps> = ({
           </>
         )}
 
-        <div style={{ display: 'flex', gap: spacing.md, paddingTop: spacing.xl }}>
-          <Button onClick={calculate} variant="primary" disabled={!length || !width || !depthCm} style={{ flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.md, paddingTop: spacing.xl, width: '100%' }}>
+          <Button onClick={calculate} variant="primary" fullWidth disabled={!length || !width || !depthCm}>
             {t('calculator:calculate_button')}
           </Button>
-          <Button onClick={clearAll} variant="secondary">
+          <Button onClick={clearAll} variant="secondary" fullWidth>
             {t('calculator:clear_button')}
           </Button>
         </div>

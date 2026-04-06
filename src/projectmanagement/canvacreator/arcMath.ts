@@ -246,6 +246,64 @@ export function worldToArcPointOnCurve(
 }
 
 /**
+ * Map arc control points from one chord to a parallel chord so the Bézier curve passes through the same world positions.
+ * Preserves arc ids (same logical handle on opposite strip edge).
+ */
+export function mirrorArcPointsToOppositeChord(
+  sourceA: Point,
+  sourceB: Point,
+  destA: Point,
+  destB: Point,
+  arcsOnSource: ArcPoint[],
+): ArcPoint[] {
+  if (arcsOnSource.length === 0) return [];
+  const sorted = [...arcsOnSource].sort((a, b) => a.t - b.t);
+  const destBuilt: ArcPoint[] = [];
+  for (const ap of sorted) {
+    const wp = arcPointToWorldOnCurve(sourceA, sourceB, arcsOnSource, ap);
+    const placeholder = { ...ap, id: "__mirror_ph__" };
+    const { t, offset } = worldToArcPointOnCurve(destA, destB, [...destBuilt, placeholder], placeholder, wp);
+    destBuilt.push({ id: ap.id, t, offset });
+  }
+  return destBuilt.sort((a, b) => a.t - b.t);
+}
+
+/**
+ * Opposite parallel edge of a **constant-width** strip (path ribbon).
+ * `arcPointToWorld` uses the left normal of each chord. For **anti-parallel** chords (typical L/R chain),
+ * those normals are opposite (n_r ≈ −n_l), so the **same** signed offset gives opposite global bulge — use
+ * `+offset`. For **same-direction** parallel chords, normals align — use `−offset` so bulges stay on opposite
+ * sides of the corridor. Flips `t` when chords run opposite. Pattern/centerline unchanged.
+ */
+export function mirrorArcPointsParallelStripChord(
+  sourceA: Point,
+  sourceB: Point,
+  destA: Point,
+  destB: Point,
+  arcsOnSource: ArcPoint[],
+): ArcPoint[] {
+  if (arcsOnSource.length === 0) return [];
+  const vxL = sourceB.x - sourceA.x;
+  const vyL = sourceB.y - sourceA.y;
+  const vxR = destB.x - destA.x;
+  const vyR = destB.y - destA.y;
+  const lenL = Math.hypot(vxL, vyL);
+  const lenR = Math.hypot(vxR, vyR);
+  if (lenL < 1e-9 || lenR < 1e-9) {
+    return mirrorArcPointsToOppositeChord(sourceA, sourceB, destA, destB, arcsOnSource);
+  }
+  const dot = vxL * vxR + vyL * vyR;
+  const sameDir = dot > 1e-12;
+  const sorted = [...arcsOnSource].sort((a, b) => a.t - b.t);
+  const out: ArcPoint[] = sorted.map((ap) => ({
+    id: ap.id,
+    t: sameDir ? ap.t : 1 - ap.t,
+    offset: sameDir ? -ap.offset : ap.offset,
+  }));
+  return out.sort((a, b) => a.t - b.t);
+}
+
+/**
  * Validate forward/inverse consistency: arcPointToWorldOnCurve → worldToArcPointOnCurve → arcPointToWorldOnCurve
  * should return the same point within 0.01px. Call in dev to verify evalCurveAtT matches arcPointToWorldOnCurve.
  */
@@ -358,6 +416,65 @@ export function sampleArcEdge(
 }
 
 /**
+ * Sample the same quadratic Bézier as {@link sampleArcEdge}, then offset each point toward the strip
+ * interior to approximate the centerline of a constant-width ribbon whose left face follows the arc.
+ * interiorRef should lie inside the strip (e.g. polygon centroid).
+ *
+ * Important: the inward side (which of the two normals to use) must be chosen **once** per edge — not
+ * per sample. Per-sample `min(dist to centroid)` flips when the centroid is nearly equidistant from the
+ * two offset points along the curve, causing discrete jumps, corner spikes, and “stair” artifacts while
+ * dragging the arc through that region.
+ */
+export function sampleArcEdgeLeftToCenterline(
+  A: Point,
+  B: Point,
+  arcPoints: ArcPoint[],
+  halfWidthPx: number,
+  interiorRef: Point,
+  numSamples = 48
+): Point[] {
+  const sorted = [...arcPoints].sort((a, b) => a.t - b.t);
+  let cx = 0;
+  let cy = 0;
+  for (const ap of sorted) {
+    const p = arcPointToWorld(A, B, ap);
+    cx += p.x;
+    cy += p.y;
+  }
+  cx /= sorted.length;
+  cy /= sorted.length;
+  const C = { x: cx, y: cy };
+
+  const pointAndOffsets = (t: number): { c1: Point; c2: Point } => {
+    const u = 1 - t;
+    const px = u * u * A.x + 2 * u * t * C.x + t * t * B.x;
+    const py = u * u * A.y + 2 * u * t * C.y + t * t * B.y;
+    const tx = 2 * u * (C.x - A.x) + 2 * t * (B.x - C.x);
+    const ty = 2 * u * (C.y - A.y) + 2 * t * (B.y - C.y);
+    const tlen = Math.hypot(tx, ty) || 1;
+    const ux = tx / tlen;
+    const uy = ty / tlen;
+    const nlx = -uy;
+    const nly = ux;
+    return {
+      c1: { x: px - nlx * halfWidthPx, y: py - nly * halfWidthPx },
+      c2: { x: px + nlx * halfWidthPx, y: py + nly * halfWidthPx },
+    };
+  };
+
+  const mid = pointAndOffsets(0.5);
+  const useC1 = distance(mid.c1, interiorRef) <= distance(mid.c2, interiorRef);
+
+  const result: Point[] = [];
+  for (let k = 0; k <= numSamples; k++) {
+    const t = k / numSamples;
+    const { c1, c2 } = pointAndOffsets(t);
+    result.push(useC1 ? c1 : c2);
+  }
+  return result;
+}
+
+/**
  * Tangent directions (degrees, [0,360)) along the shape outline: straight edges use chord bearing;
  * curved edges add a few tangent samples so snap matches the visible boundary, not the chord.
  * Computed once per pattern-rotate gesture — O(edges × samples) with small constants.
@@ -409,13 +526,15 @@ export function collectShapeBoundaryDirectionAnglesDeg(shape: Shape): number[] {
 /**
  * Sample arc for frame placement: positions along arc spaced by stepPx, with tangent at each.
  * Returns array of { pos, tangent } for placing blocks along the curve (joints widen naturally).
+ * @param remainderOut — when provided, set to arc length (px) after the last full block (for cut pieces).
  */
 export function sampleArcEdgeForFrame(
   A: Point,
   B: Point,
   arcPoints: ArcPoint[],
   stepPx: number,
-  pieceLengthPx: number
+  pieceLengthPx: number,
+  remainderOut?: { lengthPx: number }
 ): { pos: Point; tangent: Point }[] {
   const sorted = [...arcPoints].sort((a, b) => a.t - b.t);
   let cx = 0, cy = 0;
@@ -447,10 +566,14 @@ export function sampleArcEdgeForFrame(
     }
   }
   const totalLen = lengths[lengths.length - 1];
-  if (totalLen < 1e-9) return [];
+  if (totalLen < 1e-9) {
+    if (remainderOut) remainderOut.lengthPx = 0;
+    return [];
+  }
 
   const result: { pos: Point; tangent: Point }[] = [];
   let dist = pieceLengthPx / 2;
+  let lastCenterDist = dist;
   while (dist < totalLen - pieceLengthPx / 2 - 1e-6) {
     let i = 0;
     while (i < lengths.length - 1 && lengths[i + 1] < dist) i++;
@@ -467,7 +590,15 @@ export function sampleArcEdgeForFrame(
     };
     const tl = Math.sqrt(tangent.x * tangent.x + tangent.y * tangent.y) || 1;
     result.push({ pos, tangent: { x: tangent.x / tl, y: tangent.y / tl } });
+    lastCenterDist = dist;
     dist += stepPx;
+  }
+  if (remainderOut) {
+    if (result.length === 0) {
+      remainderOut.lengthPx = Math.max(0, totalLen);
+    } else {
+      remainderOut.lengthPx = Math.max(0, totalLen - (lastCenterDist + pieceLengthPx / 2));
+    }
   }
   return result;
 }
@@ -626,6 +757,16 @@ export function calcEdgeLengthWithArcs(
   B: Point,
   arcs: ArcPoint[] | null | undefined
 ): number {
+  if (
+    !A ||
+    !B ||
+    !Number.isFinite(A.x) ||
+    !Number.isFinite(A.y) ||
+    !Number.isFinite(B.x) ||
+    !Number.isFinite(B.y)
+  ) {
+    return 0;
+  }
   if (!arcs || arcs.length === 0) return distance(A, B);
   return arcEdgeLength(A, B, arcs);
 }

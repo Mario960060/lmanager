@@ -254,11 +254,11 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
 
   return (
     <div
-      className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-0 md:p-4"
       onClick={handleClose}
     >
       <div
-        className="p-4 md:p-8 rounded-lg w-full relative flex flex-col overflow-y-auto"
+        className="px-2 py-2 sm:px-4 sm:py-4 md:p-8 rounded-lg w-full relative flex flex-col overflow-y-auto"
         style={{ 
           backgroundColor: colors.bgCard,
           maxHeight: '95vh',
@@ -783,7 +783,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
       </div>
       {editMode && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 md:p-4"
           onClick={() => setEditMode(false)}
         >
           <div
@@ -827,7 +827,7 @@ const WorkPricingModal: React.FC<InvoiceMakerModalProps> = ({ isOpen, onClose })
             </div>
 
             {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto px-5 md:px-8 py-5 space-y-8">
+            <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-5 md:px-8 sm:py-5 space-y-8">
 
               {/* ===== MAIN TASKS ===== */}
               <div>

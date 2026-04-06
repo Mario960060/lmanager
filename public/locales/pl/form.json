@@ -323,7 +323,7 @@
   "error_label": "Błąd",
   "try_again_button": "Spróbuj Ponownie",
   "machinery_task_creator_description": "Na podstawie Twoich kopako i przewoźników, automatycznie stworzymy zadania do kopania, przygotowania i załadunku piasku",
-  "soil_excavation_task": "Zadanie kopania gruntu",
+  "soil_excavation_task": "Zadanie kopania ziemi",
   "preparation_task": "Zadanie przygotowania",
   "load_sand_task": "Zadanie załadunku i zagęszczania piasku",
   "important_label": "Ważne",
@@ -359,7 +359,7 @@
   "contact_instagram_label": "instagram.com/aitomatic_future",
   "contact_email_label": "asdasd@gmail.com",
   
-  "setup_digging_warning": "Nazwa i opis urządzenia będą wyświetlane w Sprzęcie. Twórz tutaj TYLKO kopaki i wózidła (taczki, wózidła benzynowe i wywrotki) i upewnij się, że klikasz przycisk utwórz zadania u góry po dodaniu jakiegokolwiek sprzętu",
+  "setup_digging_warning": "Nazwa i opis urządzenia będą wyświetlane w Sprzęcie. Twórz tutaj TYLKO koparki i wozidła i taczki",
   "add_equipment_button_text": "Dodaj Sprzęt",
   "excavator_type": "Koparka",
   "barrows_dumpers_type": "Taczki/Wywrotki",

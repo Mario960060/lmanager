@@ -156,7 +156,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
 
   if (wizardMode) {
     return (
-      <div className="p-6 overflow-y-auto h-full">
+      <div className="px-3 py-3 md:p-6 overflow-y-auto h-full">
         <div className="p-3 rounded-lg mb-3 text-sm" style={{ backgroundColor: colors.bgSubtle }}>
           <span className="text-sm font-medium" style={{ color: colors.red }}>
             {t('form:task_creation_warning')}
@@ -351,14 +351,14 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
       <div className="rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden" style={{ backgroundColor: colors.bgCard }}>
         {/* Header and Content together - scrollable as one */}
         <div className="overflow-y-auto flex flex-col flex-1">
           {/* Header */}
           <div className="border-b">
             {/* First row - Tasks title and close button */}
-            <div className="p-4 flex justify-between items-center">
+            <div className="px-3 py-3 md:p-4 flex justify-between items-center">
               <div className="flex items-center">
                 <Clock className="w-5 h-5 mr-2" style={{ color: colors.textSecondary }} />
                 <h2 className="text-lg font-semibold">{t('form:setup_tasks_label')}</h2>
@@ -371,7 +371,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
               </button>
             </div>
             {/* Second row - Warning message */}
-            <div className="px-4 pb-4">
+            <div className="px-3 md:px-4 pb-4">
               <span className="text-sm font-medium" style={{ color: colors.red }}>
                 {t('form:task_creation_warning')}
               </span>
@@ -379,7 +379,7 @@ const SetupTasks: React.FC<SetupTasksProps> = ({ onClose, wizardMode = false }) 
           </div>
 
           {/* Main content */}
-          <div className="p-6">
+          <div className="px-3 py-3 md:p-6">
           {/* Updated Add Task Form */}
           <form onSubmit={handleAddTask} className="mb-4">
             {/* Task Name - full width */}

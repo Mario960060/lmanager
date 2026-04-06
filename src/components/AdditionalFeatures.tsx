@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { colors } from '../themes/designTokens';
 import { translateTaskName, translateMaterialName, translateUnit } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
-import { Plus, X, CheckSquare, Clock, Package } from 'lucide-react';
+import { Plus, X, CheckSquare, Clock, Package, ChevronDown } from 'lucide-react';
 import Modal from './Modal';
 import DatePicker from './DatePicker';
 import { useAuthStore } from '../lib/store';
@@ -91,6 +91,10 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
   });
   const [showUnspecifiedMaterialModal, setShowUnspecifiedMaterialModal] = useState(false);
   const [selectedMaterialIndex, setSelectedMaterialIndex] = useState<number | null>(null);
+  const [taskTemplateSearch, setTaskTemplateSearch] = useState('');
+  const [taskComboOpen, setTaskComboOpen] = useState(false);
+  const taskComboRef = useRef<HTMLDivElement>(null);
+  const taskComboInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch additional tasks
   const { data: additionalTasks = [] } = useQuery({
@@ -181,6 +185,27 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
     enabled: !!companyId
   });
 
+  const filteredTaskTemplates = useMemo(() => {
+    const q = taskTemplateSearch.trim().toLowerCase();
+    if (!q) return taskTemplates;
+    return taskTemplates.filter((template: TaskTemplate) => {
+      const label = translateTaskName(template.name, t).toLowerCase();
+      const raw = (template.name || '').toLowerCase();
+      return label.includes(q) || raw.includes(q);
+    });
+  }, [taskTemplates, taskTemplateSearch, t]);
+
+  useEffect(() => {
+    if (!showTaskModal) return;
+    const onDoc = (e: MouseEvent) => {
+      if (taskComboRef.current && !taskComboRef.current.contains(e.target as Node)) {
+        setTaskComboOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [showTaskModal]);
+
   // Fetch material templates
   const { data: materialTemplates = [] } = useQuery<MaterialTemplate[]>({
     queryKey: ['materials', companyId],
@@ -263,6 +288,8 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
       queryClient.invalidateQueries({ queryKey: ['additional_tasks', eventId, companyId] });
       queryClient.invalidateQueries({ queryKey: ['additional_materials', eventId, companyId] });
       setShowTaskModal(false);
+      setTaskTemplateSearch('');
+      setTaskComboOpen(false);
       setTaskDetails({
         description: '',
         start_date: new Date().toISOString().split('T')[0],
@@ -336,6 +363,17 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
         }));
       }
     }
+  };
+
+  const selectTaskTemplateFromCombo = (templateId: string) => {
+    handleTaskTemplateChange(templateId);
+    if (templateId === 'other') {
+      setTaskTemplateSearch(t('event:other_custom_task'));
+    } else {
+      const template = taskTemplates.find((x) => x.id === templateId);
+      setTaskTemplateSearch(template ? translateTaskName(template.name, t) : '');
+    }
+    setTaskComboOpen(false);
   };
 
   // Add function to calculate hours based on quantity
@@ -640,24 +678,139 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
 
       {/* Task Modal */}
       {showTaskModal && (
-        <Modal title={t('event:add_additional_task_modal_title')} onClose={() => setShowTaskModal(false)}>
+        <Modal title={t('event:add_additional_task_modal_title')} onClose={() => { setShowTaskModal(false); setTaskTemplateSearch(''); setTaskComboOpen(false); }}>
           <div className="space-y-4">
-            <div>
+            <div ref={taskComboRef}>
               <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('event:task_type_label')}</label>
-              <select
-                value={selectedTaskTemplate}
-                onChange={(e) => handleTaskTemplateChange(e.target.value)}
-                className="mt-1 block w-full rounded-md shadow-sm"
-                style={{ borderColor: colors.borderDefault }}
+              <div
+                role="combobox"
+                aria-expanded={taskComboOpen}
+                onClick={() => {
+                  taskComboInputRef.current?.focus();
+                  setTaskComboOpen(true);
+                }}
+                style={{
+                  marginTop: 4,
+                  border: `1px solid ${colors.borderDefault}`,
+                  borderRadius: 6,
+                  background: colors.bgCard,
+                  overflow: 'hidden',
+                  cursor: 'text',
+                }}
               >
-                <option value="">{t('event:select_task_type')}</option>
-                {taskTemplates.map(template => (
-                  <option key={template.id} value={template.id}>
-                    {translateTaskName(template.name, t)}
-                  </option>
-                ))}
-                <option value="other">{t('event:other_custom_task')}</option>
-              </select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    ref={taskComboInputRef}
+                    type="text"
+                    aria-autocomplete="list"
+                    value={taskTemplateSearch}
+                    onChange={(e) => {
+                      setTaskTemplateSearch(e.target.value);
+                      setSelectedTaskTemplate('');
+                      setTaskComboOpen(true);
+                    }}
+                    onFocus={() => setTaskComboOpen(true)}
+                    placeholder={t('event:select_task_type')}
+                    autoComplete="off"
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      padding: '8px 12px',
+                      border: 'none',
+                      outline: 'none',
+                      fontSize: 14,
+                      background: 'transparent',
+                      color: colors.textPrimary,
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                  <ChevronDown
+                    size={18}
+                    style={{
+                      flexShrink: 0,
+                      marginRight: 10,
+                      color: colors.textDim,
+                      transform: taskComboOpen ? 'rotate(180deg)' : 'none',
+                      transition: 'transform 0.15s ease',
+                    }}
+                  />
+                </div>
+                {taskComboOpen && (
+                  <ul
+                    role="listbox"
+                    style={{
+                      maxHeight: 280,
+                      overflowY: 'auto',
+                      borderTop: `1px solid ${colors.borderDefault}`,
+                      margin: 0,
+                      padding: '4px 0',
+                      listStyle: 'none',
+                    }}
+                  >
+                    {filteredTaskTemplates.map((template) => (
+                      <li key={template.id}>
+                        <button
+                          type="button"
+                          role="option"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            selectTaskTemplateFromCombo(template.id);
+                          }}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            padding: '8px 12px',
+                            fontSize: 13,
+                            border: 'none',
+                            background: 'transparent',
+                            cursor: 'pointer',
+                            color: colors.textPrimary,
+                            fontFamily: 'inherit',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = colors.bgHover;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          {translateTaskName(template.name, t)}
+                        </button>
+                      </li>
+                    ))}
+                    <li>
+                      <button
+                        type="button"
+                        role="option"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectTaskTemplateFromCombo('other');
+                        }}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          padding: '8px 12px',
+                          fontSize: 13,
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          color: colors.textSecondary,
+                          fontFamily: 'inherit',
+                          fontStyle: 'italic',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = colors.bgHover;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        {t('event:other_custom_task')}
+                      </button>
+                    </li>
+                  </ul>
+                )}
+              </div>
             </div>
 
             <div>

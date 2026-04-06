@@ -22,6 +22,7 @@ import {
   DataTable,
 } from '../../themes/uiComponents';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
+import { carrierSpeeds, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 
 // Define types for our equipment
 interface DiggingEquipment {
@@ -44,19 +45,6 @@ const diggerLoadingRates = [
   { equipment: '21-30t digger', sizeInTons: 21, tonesPerHour: 33.33 },
   { equipment: '31-40t digger', sizeInTons: 31, tonesPerHour: 50 },
   { equipment: '40t+ digger', sizeInTons: 40, tonesPerHour: 100 }
-];
-
-// Define carrier speeds in meters per hour
-const carrierSpeeds = [
-  { size: 0.1, speed: 1500 },
-  { size: 0.125, speed: 1500 },
-  { size: 0.15, speed: 1500 },
-  { size: 0.3, speed: 2500 },
-  { size: 0.5, speed: 3000 },
-  { size: 1, speed: 4000 },
-  { size: 3, speed: 6000 },
-  { size: 5, speed: 7000 },
-  { size: 10, speed: 8000 }
 ];
 
 interface Type1AggregateCalculatorProps {
@@ -251,7 +239,7 @@ const Type1AggregateCalculator: React.FC<Type1AggregateCalculatorProps> = ({ onR
     if (result && onResultsChange) {
       // Calculate normalized transport time (for 30m baseline)
       const carrierSize = selectedCarrier ? selectedCarrier["size (in tones)"] || 0 : 0;
-      const carrierSpeed = selectedCarrier ? findCarrierSpeed(carrierSize) : 6000;
+      const carrierSpeed = selectedCarrier ? findCarrierSpeed(carrierSize) : DEFAULT_CARRIER_SPEED_M_PER_H;
       const trips = Math.ceil(result.totalTons / carrierSize);
       const normalizedDistance = 30; // baseline distance in meters
       const distanceRoundTrip = normalizedDistance * 2;

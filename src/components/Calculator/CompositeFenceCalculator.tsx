@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, FOOT_CARRY_SPEED_M_PER_H, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii, gradients } from '../../themes/designTokens';
 import { Card, DataTable, TextInput, SelectDropdown, Checkbox, CalculatorInputGrid, Button } from '../../themes/uiComponents';
@@ -146,14 +146,14 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
     enabled: !!companyId
   });
 
-  // Fetch task templates for digging holes and setting posts for composite
+  // Fetch task templates for digging holes and setting composite posts
   const { data: taskTemplates = [] } = useQuery({
     queryKey: ['fence_post_tasks'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('event_tasks_with_dynamic_estimates')
         .select('id, name, unit, estimated_hours')
-        .or('name.ilike.%digging holes%,name.ilike.%setting posts for composite%');
+        .or('name.ilike.%digging holes%,name.ilike.%setting composite posts%');
 
       if (error) throw error;
       return data || [];
@@ -226,7 +226,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -305,8 +305,8 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
       });
     }
 
-    // Add setting posts for composite task
-    const settingPostsTask = taskTemplates?.find(t => t.name?.toLowerCase().includes('setting posts for composite'));
+    // Add setting composite posts task (same role as "setting up posts" on other fence calcs; distinct task name for composite)
+    const settingPostsTask = taskTemplates?.find(t => t.name?.toLowerCase().includes('setting composite posts'));
     if (settingPostsTask && settingPostsTask.estimated_hours && settingPostsTask.name) {
       breakdown.push({
         task: settingPostsTask.name,
@@ -332,8 +332,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
       if (posts > 0) {
         const postsPerTrip = 1; // 1 post per person per trip
         const trips = Math.ceil(posts / postsPerTrip);
-        const postCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / postCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / FOOT_CARRY_SPEED_M_PER_H;
         postTransportTime = trips * timePerTrip;
         
         if (postTransportTime > 0) {
@@ -350,8 +349,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
       if (slatsNeeded > 0) {
         const slatsPerTrip = 2;
         const trips = Math.ceil(slatsNeeded / slatsPerTrip);
-        const slatCarrySpeed = 1500; // m/h for foot carrying
-        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / slatCarrySpeed;
+        const timePerTrip = (parseFloat(effectiveTransportDistance) || 30) * 2 / FOOT_CARRY_SPEED_M_PER_H;
         slatTransportTime = trips * timePerTrip;
         
         if (slatTransportTime > 0) {
@@ -552,7 +550,7 @@ const CompositeFenceCalculator: React.FC<CompositeFenceCalculatorProps> = ({
           </>
         )}
 
-        <Button variant="accent" color={colors.accentBlue} onClick={calculate} disabled={isLoading}>
+        <Button variant="primary" fullWidth onClick={calculate} disabled={isLoading}>
           {isLoading ? t('calculator:loading_in_progress') : t('calculator:calculate_button')}
         </Button>
 

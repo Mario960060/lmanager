@@ -6,6 +6,7 @@ import { colors, fonts, fontSizes, fontWeights, spacing, radii, shadows } from '
 import { useAuthStore } from '../lib/store';
 import { getCalculatorInputDefaults } from '../lib/materialUsageDefaults';
 import { useCalculatorMenu } from '../contexts/CalculatorMenuContext';
+import { LM_SIDEBAR_NAV_EVENT } from '../lib/sidebarNav';
 import WallCalculator from '../components/Calculator/WallCalculator';
 import MortarCalculator from '../components/Calculator/MortarCalculator';
 import TimeEstimator from '../components/Calculator/TimeEstimator';
@@ -29,16 +30,17 @@ import SlabCalculator from '../components/Calculator/SlabCalculator';
 import ConcreteSlabsCalculator from '../components/Calculator/ConcreteSlabsCalculator';
 import NaturalTurfCalculator from '../components/Calculator/NaturalTurfCalculator';
 import GroundworkLinearCalculator from '../components/Calculator/GroundworkLinearCalculator';
+import DecorativeStonesCalculator from '../components/Calculator/DecorativeStonesCalculator';
 
-type CalculatorType = 'aggregate' | 'wall' | 'mortar' | 'time' | 'fence' | 'steps' | 'deck' | 'grass' | 'slab' | 'paving' | 'tile' | 'kerbs' | 'foundation' | 'groundwork' | 'turf';
+type CalculatorType = 'aggregate' | 'wall' | 'mortar' | 'time' | 'fence' | 'steps' | 'deck' | 'grass' | 'slab' | 'paving' | 'tile' | 'kerbs' | 'foundation' | 'groundwork' | 'turf' | 'decorativeStones';
 type SubCalculatorType = {
   aggregate: 'type1' | 'aggregate' | 'soil_excavation' | 'mortar';
-  wall: 'brick' | 'block4' | 'block7' | 'sleeper';
+  wall: 'brick' | 'double_wall' | 'block4' | 'block7' | 'sleeper';
   mortar: 'slab' | 'general';
   time: 'task';
   fence: 'vertical' | 'horizontal' | 'venetian' | 'composite';
   steps: 'standard' | 'l_shape' | 'u_shape';
-  deck: 'standard';
+  deck: 'standard' | 'composite_deck' | 'default';
   grass: 'coming_soon';
   turf: 'default';
   slab: 'default' | 'concreteSlabs';
@@ -46,6 +48,7 @@ type SubCalculatorType = {
   tile: 'default' | 'coping';
   kerbs: 'kl' | 'rumbled' | 'flat' | 'sets';
   foundation: 'default';
+  decorativeStones: 'default';
 };
 
 const CalculatorPage: React.FC = () => {
@@ -70,7 +73,9 @@ const CalculatorPage: React.FC = () => {
     if (activeCalculator === 'foundation') return t('calculator:foundation_calculator_description');
     if (activeCalculator === 'fence') return t('calculator:fence_info_description');
     if (activeCalculator === 'grass') return t('calculator:grass_info_description');
+    if (activeCalculator === 'deck' && activeSubType === 'composite_deck') return t('calculator:deck_composite_info_description');
     if (activeCalculator === 'deck') return t('calculator:deck_info_description');
+    if (activeCalculator === 'decorativeStones') return t('calculator:decorative_stones_description');
     return t('calculator:info_description');
   }, [activeCalculator, activeSubType, t]);
 
@@ -79,6 +84,7 @@ const CalculatorPage: React.FC = () => {
   const concreteSlabsDefaults = useMemo(() => getCalculatorInputDefaults('concreteSlabs', companyId), [companyId]);
   const grassDefaults = useMemo(() => getCalculatorInputDefaults('grass', companyId), [companyId]);
   const turfDefaults = useMemo(() => getCalculatorInputDefaults('turf', companyId), [companyId]);
+  const decorativeStonesDefaults = useMemo(() => getCalculatorInputDefaults('decorativeStones', companyId), [companyId]);
 
   // Calculator buttons are now handled by the sidebar in Layout.tsx
   
@@ -91,6 +97,21 @@ const CalculatorPage: React.FC = () => {
     setSelectedSubType(null);
     setExpandedCategory(null);
   }, [setShowCalculatorMenu, setKeepSidebarOpenFor, setSelectedCalculatorType, setSelectedSubType, setExpandedCategory]);
+
+  useEffect(() => {
+    const handleSidebarNav = (e: Event) => {
+      const ce = e as CustomEvent<{ href: string }>;
+      if (ce.detail?.href !== '/calculator') return;
+      setActiveCalculator(null);
+      setActiveSubType(null);
+      setActiveCalculatorLabel(null);
+      setSelectedCalculatorType(null);
+      setSelectedSubType(null);
+      setExpandedCategory(null);
+    };
+    window.addEventListener(LM_SIDEBAR_NAV_EVENT, handleSidebarNav);
+    return () => window.removeEventListener(LM_SIDEBAR_NAV_EVENT, handleSidebarNav);
+  }, [setSelectedCalculatorType, setSelectedSubType, setExpandedCategory]);
 
   // Handle calculator selection from sidebar
   useEffect(() => {
@@ -143,7 +164,13 @@ const CalculatorPage: React.FC = () => {
         }
         return <TileInstallationCalculator key={calculatorKey} />;
       case 'wall':
-        return <WallCalculator key={calculatorKey} type={activeSubType as SubCalculatorType['wall']} />;
+        if (activeSubType === 'double_wall') {
+          return <WallCalculator key={calculatorKey} type="brick" wallBrickVariant="double_wall" />;
+        }
+        if (activeSubType === 'brick') {
+          return <WallCalculator key={calculatorKey} type="brick" wallBrickVariant="brick" />;
+        }
+        return <WallCalculator key={calculatorKey} type={activeSubType as 'block4' | 'block7' | 'sleeper'} />;
       case 'time':
         return <TimeEstimator key={calculatorKey} />;
       case 'fence':
@@ -166,11 +193,18 @@ const CalculatorPage: React.FC = () => {
         }
         return <StairCalculator key={calculatorKey} />;
       case 'deck':
-        return <DeckCalculator key={calculatorKey} />;
+        return (
+          <DeckCalculator
+            key={calculatorKey}
+            deckVariant={activeSubType === 'composite_deck' ? 'composite' : 'timber'}
+          />
+        );
       case 'grass':
         return <ArtificialGrassCalculator key={calculatorKey} savedInputs={grassDefaults} />;
       case 'turf':
         return <NaturalTurfCalculator key={calculatorKey} savedInputs={turfDefaults} />;
+      case 'decorativeStones':
+        return <DecorativeStonesCalculator key={calculatorKey} savedInputs={decorativeStonesDefaults} />;
       case 'kerbs':
         return <KerbsEdgesAndSetsCalculator key={calculatorKey} type={activeSubType as SubCalculatorType['kerbs']} />;
       case 'foundation':

@@ -5,6 +5,7 @@
 // ============================================================
 
 import React, { useState, useRef, useEffect } from "react";
+import { useBackdropPointerDismiss } from "../hooks/useBackdropPointerDismiss";
 import {
   colors, fonts, fontSizes, fontWeights,
   spacing, radii, shadows, transitions, gradients,
@@ -199,17 +200,25 @@ interface CardProps {
   style?: React.CSSProperties;
 }
 
-export function Card({ children, padding, style }: CardProps) {
+export const Card = React.forwardRef<HTMLDivElement, CardProps>(function Card(
+  { children, padding, style },
+  ref
+) {
   return (
-    <div style={{
-      background: colors.bgCard,
-      border: `1px solid ${colors.borderDefault}`,
-      borderRadius: radii["3xl"],
-      padding: padding || `${spacing["6xl"]}px`,
-      ...style,
-    }}>{children}</div>
+    <div
+      ref={ref}
+      style={{
+        background: colors.bgCard,
+        border: `1px solid ${colors.borderDefault}`,
+        borderRadius: radii["3xl"],
+        padding: padding || `${spacing["6xl"]}px`,
+        ...style,
+      }}
+    >
+      {children}
+    </div>
   );
-}
+});
 
 // ─── CollapsibleCard ────────────────────────────────────────────
 interface CollapsibleCardProps {
@@ -303,22 +312,30 @@ interface ModalProps {
   width?: number;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Applied to scrollable body (e.g. mobile padding overrides via CSS) */
+  bodyClassName?: string;
 }
 
-export function Modal({ open, onClose, title, width = 560, children, footer }: ModalProps) {
+export function Modal({ open, onClose, title, width = 560, children, footer, bodyClassName }: ModalProps) {
+  const backdropDismiss = useBackdropPointerDismiss(onClose, open);
   if (!open) return null;
 
   return (
     <div
+      ref={backdropDismiss.backdropRef}
+      className="ds-modal-backdrop"
       style={{
         position: "fixed", inset: 0, zIndex: 1000,
         display: "flex", alignItems: "center", justifyContent: "center",
         background: colors.bgModalBackdrop,
         animation: "backdropIn 0.2s ease both",
       }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onPointerDown={backdropDismiss.onBackdropPointerDown}
     >
-      <div style={{
+      <div
+        onPointerDownCapture={backdropDismiss.onPanelPointerDownCapture}
+        className="ds-modal-panel"
+        style={{
         width, maxWidth: "90vw", maxHeight: "85vh",
         background: colors.bgElevated,
         border: `1px solid ${colors.borderDefault}`,
@@ -329,7 +346,7 @@ export function Modal({ open, onClose, title, width = 560, children, footer }: M
         overflow: "hidden",
       }}>
         {/* Header */}
-        <div style={{
+        <div className="ds-modal-header" style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: `${spacing["5xl"]}px ${spacing["6xl"]}px`,
           borderBottom: `1px solid ${colors.borderDefault}`,
@@ -352,13 +369,13 @@ export function Modal({ open, onClose, title, width = 560, children, footer }: M
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflow: "auto", padding: `${spacing["6xl"]}px` }}>
+        <div className={bodyClassName ? `ds-modal-body ${bodyClassName}` : "ds-modal-body"} style={{ flex: 1, overflow: "auto", padding: `${spacing["6xl"]}px` }}>
           {children}
         </div>
 
         {/* Footer */}
         {footer && (
-          <div style={{
+          <div className="ds-modal-footer" style={{
             display: "flex", justifyContent: "flex-end", gap: spacing.xl,
             padding: `${spacing["3xl"]}px ${spacing["6xl"]}px`,
             borderTop: `1px solid ${colors.borderDefault}`,
@@ -803,10 +820,13 @@ interface DataTableProps {
 
 export function DataTable({ columns, rows, footer }: DataTableProps) {
   return (
-    <div style={{
-      background: colors.bgCard, border: `1px solid ${colors.borderDefault}`,
-      borderRadius: radii["3xl"], overflow: "hidden",
-    }}>
+    <div
+      className="calculator-data-table"
+      style={{
+        background: colors.bgCard, border: `1px solid ${colors.borderDefault}`,
+        borderRadius: radii["3xl"], overflow: "hidden",
+      }}
+    >
       {/* Header */}
       <div style={{
         display: "grid",
@@ -932,15 +952,15 @@ export function Button({ children, onClick, type = "button", variant = "primary"
     })(),
     danger: {
       padding: `${spacing["2xl"]}px ${spacing["6xl"]}px`, borderRadius: radii["2xl"],
-      background: `linear-gradient(135deg, ${colors.red}, ${colors.redLight})`,
+      background: gradients.danger,
       color: colors.textOnAccent, fontSize: fontSizes.lg,
-      boxShadow: hovered ? `0 6px 20px ${hexToRgba("#ef4444", 0.4)}` : `0 4px 12px ${hexToRgba("#ef4444", 0.3)}`,
+      boxShadow: hovered ? shadows.dangerBtnHover : shadows.dangerBtnIdle,
     },
     success: {
       padding: `${spacing["2xl"]}px ${spacing["6xl"]}px`, borderRadius: radii["2xl"],
-      background: `linear-gradient(135deg, ${colors.green}, ${colors.greenLight})`,
+      background: gradients.success,
       color: colors.textOnAccent, fontSize: fontSizes.lg,
-      boxShadow: hovered ? `0 6px 20px ${hexToRgba("#22c55e", 0.4)}` : `0 4px 12px ${hexToRgba("#22c55e", 0.3)}`,
+      boxShadow: hovered ? shadows.successBtnHover : shadows.successBtnIdle,
     },
   };
 

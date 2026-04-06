@@ -1,13 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useSidebarSectionReset } from '../../hooks/useSidebarSectionReset';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { show403Modal } from '../../components/Error403Modal';
 import { 
-  Package, 
-  Wrench, 
-  Clock, 
   Search, 
   Plus, 
   Trash2, 
@@ -20,7 +18,6 @@ import {
   ChevronDown,
   ChevronUp,
   Settings,
-  Truck
 } from 'lucide-react';
 import BackButton from '../../components/BackButton';
 import PageInfoModal from '../../components/PageInfoModal';
@@ -107,6 +104,18 @@ const SetupPage = () => {
   const [showEquipmentModal, setShowEquipmentModal] = useState(false);
   const [showDiggingModal, setShowDiggingModal] = useState(false);
   const [showMaterialUsageModal, setShowMaterialUsageModal] = useState(false);
+
+  useSidebarSectionReset('/setup', () => {
+    setShowTasksModal(false);
+    setShowMaterialsModal(false);
+    setShowEquipmentModal(false);
+    setShowDiggingModal(false);
+    setShowMaterialUsageModal(false);
+    setShowMaterialInfo(false);
+    setShowEquipmentInfo(false);
+    setShowTaskInfo(false);
+    setShowContactInfo(false);
+  });
   
   // Fetch materials
   const { data: materials = [] } = useQuery({
@@ -399,9 +408,8 @@ const SetupPage = () => {
   };
   
   const cardStyle = { padding: `${spacing['6xl']}px` };
-  const cardTitleStyle = { display: 'flex', alignItems: 'center', marginBottom: spacing['4xl'], gap: spacing.lg };
-  const cardDescStyle = { color: colors.textMuted, marginBottom: spacing['4xl'], fontSize: fontSizes.base, lineHeight: 1.5 };
-  const h2Style = { fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textSecondary, margin: 0 };
+  const cardDescStyle: React.CSSProperties = { color: colors.textDim, fontSize: fontSizes.base, lineHeight: 1.5 };
+  const h2Style: React.CSSProperties = { fontSize: fontSizes.xl, fontWeight: fontWeights.semibold, color: colors.textPrimary, margin: 0, marginBottom: spacing['3xl'] };
 
   return (
     <div style={{ maxWidth: 1280, margin: '0 auto', padding: spacing['6xl'], paddingBottom: 80, minHeight: '100vh' }}>
@@ -421,67 +429,52 @@ const SetupPage = () => {
       </div>
       
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: spacing['6xl'], alignItems: 'stretch' }}>
-        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 200 }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={cardTitleStyle}>
-              <Clock style={{ width: 24, height: 24, color: colors.accentBlue }} />
-              <h2 style={h2Style}>{t('form:setup_tasks_label')}</h2>
-            </div>
+            <h2 style={h2Style}>{t('form:setup_tasks_label')}</h2>
             <p style={{ ...cardDescStyle, flex: 1, marginBottom: 0 }}>{t('form:setup_tasks_description')}</p>
           </div>
-          <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowTasksModal(true))}>
+          <Button fullWidth onClick={() => handleSetupAction(() => setShowTasksModal(true))}>
             {t('form:manage_tasks_button')}
           </Button>
         </Card>
-        
-        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+
+        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 200 }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={cardTitleStyle}>
-              <Package style={{ width: 24, height: 24, color: colors.green }} />
-              <h2 style={h2Style}>{t('form:setup_materials_label')}</h2>
-            </div>
+            <h2 style={h2Style}>{t('form:setup_materials_label')}</h2>
             <p style={{ ...cardDescStyle, flex: 1, marginBottom: 0 }}>{t('form:setup_materials_description')}</p>
           </div>
-          <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowMaterialsModal(true))} style={{ background: `linear-gradient(135deg, ${colors.green}, #16a34a)` }}>
+          <Button fullWidth onClick={() => handleSetupAction(() => setShowMaterialsModal(true))}>
             {t('form:manage_materials_button')}
           </Button>
         </Card>
-        
-        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+
+        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 200 }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={cardTitleStyle}>
-              <Wrench style={{ width: 24, height: 24, color: colors.purple }} />
-              <h2 style={h2Style}>{t('form:setup_equipment_label')}</h2>
-            </div>
+            <h2 style={h2Style}>{t('form:setup_equipment_label')}</h2>
             <p style={{ ...cardDescStyle, flex: 1, marginBottom: 0 }}>{t('form:setup_equipment_description')}</p>
           </div>
-          <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowEquipmentModal(true))} style={{ background: `linear-gradient(135deg, ${colors.purple}, ${colors.purpleLight})` }}>
+          <Button fullWidth onClick={() => handleSetupAction(() => setShowEquipmentModal(true))}>
             {t('form:manage_equipment_button')}
           </Button>
         </Card>
-        
-        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+
+        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 200 }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={cardTitleStyle}>
-              <Truck style={{ width: 24, height: 24, color: colors.orange }} />
-              <h2 style={h2Style}>{t('form:setup_excavators_dumpers_label')}</h2>
-            </div>
+            <h2 style={h2Style}>{t('form:setup_excavators_dumpers_label')}</h2>
             <p style={{ ...cardDescStyle, flex: 1, marginBottom: 0 }}>{t('form:setup_excavators_description')}</p>
           </div>
-          <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowDiggingModal(true))} style={{ background: `linear-gradient(135deg, ${colors.orange}, ${colors.orangeLight})` }}>
+          <Button fullWidth onClick={() => handleSetupAction(() => setShowDiggingModal(true))}>
             {t('form:manage_excavators_dumpers_button')}
           </Button>
         </Card>
-        
-        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 220 }}>
+
+        <Card padding={cardStyle.padding} style={{ display: 'flex', flexDirection: 'column', minHeight: 200 }}>
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={cardTitleStyle}>
-              <Package style={{ width: 24, height: 24, color: colors.accentBlue }} />
-              <h2 style={h2Style}>{t('form:setup_material_usage_label')}</h2>
-            </div>
+            <h2 style={h2Style}>{t('form:setup_material_usage_label')}</h2>
             <p style={{ ...cardDescStyle, flex: 1, marginBottom: 0 }}>{t('form:setup_material_usage_description')}</p>
           </div>
-          <Button variant="primary" fullWidth onClick={() => handleSetupAction(() => setShowMaterialUsageModal(true))}>
+          <Button fullWidth onClick={() => handleSetupAction(() => setShowMaterialUsageModal(true))}>
             {t('form:manage_material_usage_button')}
           </Button>
         </Card>

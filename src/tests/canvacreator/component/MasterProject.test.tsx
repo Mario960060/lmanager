@@ -1,10 +1,12 @@
 /**
  * @vitest-environment jsdom
  */
+import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import MasterProject from "../../../projectmanagement/canvacreator/MasterProject";
+import { ThemeProvider } from "../../../themes/ThemeContext";
 
 vi.mock("../../../lib/supabase", () => ({
   supabase: {
@@ -25,9 +27,22 @@ vi.mock("../../../lib/supabase", () => ({
 vi.mock("../../../lib/store", () => ({
   useAuthStore: Object.assign(
     () => ({ user: { id: "test-user-id" } }),
-    { getState: () => ({ getCompanyId: () => "test-company-id" }) }
+    {
+      getState: () => ({
+        getCompanyId: () => "test-company-id",
+        setTheme: vi.fn(),
+      }),
+    }
   ),
 }));
+
+function renderWithProviders(ui: React.ReactElement) {
+  return render(
+    <MemoryRouter>
+      <ThemeProvider>{ui}</ThemeProvider>
+    </MemoryRouter>
+  );
+}
 
 describe("MasterProject", () => {
   beforeEach(() => {
@@ -67,30 +82,18 @@ describe("MasterProject", () => {
   });
 
   it("renders without crashing", () => {
-    const { container } = render(
-      <MemoryRouter>
-        <MasterProject />
-      </MemoryRouter>
-    );
+    const { container } = renderWithProviders(<MasterProject />);
     expect(container).toBeInTheDocument();
   });
 
   it("renders canvas element", () => {
-    render(
-      <MemoryRouter>
-        <MasterProject />
-      </MemoryRouter>
-    );
+    renderWithProviders(<MasterProject />);
     const canvas = document.querySelector("canvas");
     expect(canvas).toBeInTheDocument();
   });
 
   it("renders mode buttons", () => {
-    render(
-      <MemoryRouter>
-        <MasterProject />
-      </MemoryRouter>
-    );
+    renderWithProviders(<MasterProject />);
     expect(screen.getByText("Select")).toBeInTheDocument();
   });
 });

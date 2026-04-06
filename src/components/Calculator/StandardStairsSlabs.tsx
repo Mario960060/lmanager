@@ -39,6 +39,7 @@ interface StairResult {
   stepDimensions: StepDimension[];
   totalWidth?: number; // Add this to capture the total width from input
   sideOverhang?: number; // Add this to capture the sideOverhang from input
+  firstStepFrontMasonryExtensionCm?: number;
 }
 
 interface CutCalculation {
@@ -68,6 +69,8 @@ interface StandardStairsSlabsProps {
   onAdhesiveMaterialsCalculated?: (materials: any[]) => void;
   onSlabsTransportCalculated?: (transportHours: number) => void;
   onInstallationTasksCalculated?: (tasks: any[]) => void;
+  /** When last step meets patio/decking already counted elsewhere — skip top tread slabs, keep front. */
+  lastStepMode?: 'standard' | 'frontOnly';
 }
 
 const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({ 
@@ -86,7 +89,8 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
   onCutsCalculated,
   onAdhesiveMaterialsCalculated,
   onSlabsTransportCalculated,
-  onInstallationTasksCalculated
+  onInstallationTasksCalculated,
+  lastStepMode = 'standard',
 }) => {
   const { t } = useTranslation(['calculator', 'utilities', 'common']);
   // Slab dimensions options
@@ -128,7 +132,7 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
     if (stairResult) {
       calculateSlabs();
     }
-  }, [stairResult, selectedSlabDimension, selectedPlacement, gapBetweenSlabs, selectedCutting, adhesiveThickness, stepConfig, stepTreadInput]);
+  }, [stairResult, selectedSlabDimension, selectedPlacement, gapBetweenSlabs, selectedCutting, adhesiveThickness, stepConfig, stepTreadInput, lastStepMode]);
 
   const calculateSlabs = () => {
     if (!stairResult || !selectedSlabDimension) return;
@@ -238,6 +242,24 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
         slabWidth = Math.min(selectedSlab.width, selectedSlab.length);
         slabLength = Math.max(selectedSlab.width, selectedSlab.length);
       }
+
+      const skipTopSlab = isLastStep && lastStepMode === 'frontOnly';
+
+      if (!skipTopSlab) {
+      /** Depth trim (stock slabLength → topSlabDepth): strip waste per new slab, for front reuse. */
+      const pushDepthTrimOffcutFromNewSlabs = (newSlabCount: number) => {
+        if (newSlabCount <= 0 || !needsCut(slabLength, topSlabDepth)) return;
+        const offcutLen = slabLength - topSlabDepth;
+        if (offcutLen <= 1) return;
+        for (let k = 0; k < newSlabCount; k++) {
+          wasteList.push({
+            width: slabWidth,
+            length: offcutLen,
+            source: `Step ${i + 1}`,
+            canBeRotated: true
+          });
+        }
+      };
       
       // Find all usable waste pieces for this step
       const usableWastePieces = wasteList.filter(waste => {
@@ -367,8 +389,8 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
               stepSlabDimensions = `${slabsNeededWithoutGaps}x(${slabWidth}x${topSlabDepth.toFixed(1)}cm)`;
               if (needsCut(slabLength, topSlabDepth)) {
                 totalCuts += slabsNeededWithoutGaps;
-                trackCut(topSlabDepth, 'length', slabsNeededWithoutGaps);
-                trackCut(slabWidth, 'width', slabsNeededWithoutGaps);
+                trackCut(slabWidth, 'length', slabsNeededWithoutGaps);
+                pushDepthTrimOffcutFromNewSlabs(slabsNeededWithoutGaps);
                 trackSurfaceArea(slabWidth, topSlabDepth, 'top', slabsNeededWithoutGaps);
                 trackSlabDimension(slabWidth, topSlabDepth, slabsNeededWithoutGaps);
               }
@@ -378,28 +400,11 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
             stepCutLength = remainingWidth;
             totalCuts += 1;
             
-            // Track the width cut for the remaining piece
-            trackCut(stepCutLength, 'width', 1);
+            // Linear length of the width-direction cut (parallel to tread depth)
+            trackCut(topSlabDepth, 'width', 1);
             
-            // Add waste material to the list (only if cut piece actually exists and is smaller than slab)
-            if (stepCutLength > 0.1 && stepCutLength < slabWidth) {
-              // First slab waste
-              wasteList.push({
-                width: slabWidth,
-                length: slabLength - topSlabDepth,
-                source: `Step ${i+1}`,
-                canBeRotated: true
-              });
-              // Second slab waste if we used two slabs
-              if (fullSlabsCount > 0) {
-                wasteList.push({
-                  width: slabWidth,
-                  length: slabLength - topSlabDepth,
-                  source: `Step ${i+1}`,
-                  canBeRotated: true
-                });
-              }
-            }
+            // Depth-trim offcut from every new slab used on this step (not only when remainder is narrow)
+            pushDepthTrimOffcutFromNewSlabs(fullSlabsCount + 1);
             
             // Calculate dimensions - only show cut piece if width > 0.1
             if (fullSlabsCount > 0) {
@@ -418,9 +423,9 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
               totalCuts += fullSlabsCount; // Width cuts for full pieces
               totalCuts += 1; // Length cut for the cut piece
               
-              // Track for callback - track actual tread dimension, not slabLength
-              trackCut(topSlabDepth, 'length', fullSlabsCount + 1);
-              trackCut(slabWidth, 'width', fullSlabsCount);
+              // Depth trim: cut line runs along slab width for full pieces, along last piece width for remainder
+              trackCut(slabWidth, 'length', fullSlabsCount);
+              trackCut(stepCutLength, 'length', 1);
               
               // Track surface area for adhesive calculation - for top step
               trackSurfaceArea(slabWidth, topSlabDepth, 'top', fullSlabsCount);
@@ -428,21 +433,6 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
               // Track slab dimensions for installation task matching
               trackSlabDimension(slabWidth, topSlabDepth, fullSlabsCount);
               trackSlabDimension(stepCutLength, topSlabDepth, 1);
-            }
-            
-            if (needsCut(slabWidth, stepCutLength)) {
-              totalCuts += 1; // Width cut for the cut piece
-              
-              // Track for callback
-              trackCut(stepCutLength, 'width', 1);
-            }
-            
-            // For full slabs, check if width cut is needed
-            if (fullSlabsCount > 0 && needsCut(slabWidth, slabWidth)) {
-              totalCuts += fullSlabsCount; // Width cuts for full slabs if needed
-              
-              // Track for callback
-              trackCut(slabWidth, 'width', fullSlabsCount);
             }
             }
           } else {
@@ -461,8 +451,8 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
                 stepSlabDimensions = `${stepSlabsNeeded}x(${slabWidth}x${topSlabDepth.toFixed(1)}cm)`;
                 if (needsCut(slabLength, topSlabDepth)) {
                   totalCuts += stepSlabsNeeded;
-                  trackCut(topSlabDepth, 'length', stepSlabsNeeded);
-                  trackCut(slabWidth, 'width', stepSlabsNeeded);
+                  trackCut(slabWidth, 'length', stepSlabsNeeded);
+                  pushDepthTrimOffcutFromNewSlabs(stepSlabsNeeded);
                   trackSurfaceArea(slabWidth, topSlabDepth, 'top', stepSlabsNeeded);
                   trackSlabDimension(slabWidth, topSlabDepth, stepSlabsNeeded);
                 }
@@ -471,18 +461,10 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
               newSlabsNeeded = stepSlabsNeeded; // All new slabs needed
               totalCuts += 2;
               
-              // Track width cuts for both pieces
-              trackCut(equalPieceWidth, 'width', 2);
+              // Width-direction cuts: line length = tread depth
+              trackCut(topSlabDepth, 'width', 2);
               
-              // Add waste material to the list (only if cut pieces exist and are smaller than slab)
-              if (equalPieceWidth > 0.1 && equalPieceWidth < slabWidth) {
-                wasteList.push({
-                  width: slabWidth,  // Keep original width
-                  length: slabLength - topSlabDepth, // Subtract only the used length
-                  source: `Step ${i+1}`,
-                  canBeRotated: true
-                });
-              }
+              pushDepthTrimOffcutFromNewSlabs(fullSlabsCount + 2);
               
               if (fullSlabsCount > 0) {
                 stepSlabDimensions = equalPieceWidth > 0.1
@@ -500,16 +482,14 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
                 totalCuts += fullSlabsCount; // Width cuts for full pieces
                 totalCuts += 2; // Length cuts for the two cut pieces
                 
-                // Track for callback
-                trackCut(topSlabDepth, 'length', fullSlabsCount + 2);
-                trackCut(slabWidth, 'width', fullSlabsCount);
+                trackCut(slabWidth, 'length', fullSlabsCount);
+                trackCut(equalPieceWidth, 'length', 2);
               }
               
               if (needsCut(slabWidth, equalPieceWidth)) {
                 totalCuts += 2; // Width cuts for the two cut pieces
                 
-                // Track for callback
-                trackCut(equalPieceWidth, 'width', 2);
+                trackCut(topSlabDepth, 'width', 2);
                 
                 // Track surface area for adhesive calculation - for top step
                 trackSurfaceArea(slabWidth, topSlabDepth, 'top', fullSlabsCount);
@@ -518,14 +498,6 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
                 trackSlabDimension(slabWidth, topSlabDepth, fullSlabsCount);
                 trackSlabDimension(equalPieceWidth, topSlabDepth, 2);
               }
-              
-              // For full slabs, check if width cut is needed
-              if (fullSlabsCount > 0 && needsCut(slabWidth, slabWidth)) {
-                totalCuts += fullSlabsCount; // Width cuts for full slabs if needed
-                
-                // Track for callback
-                trackCut(slabWidth, 'width', fullSlabsCount);
-              }
               }
             } else {
               // Only one slab needed, just cut it
@@ -533,10 +505,14 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
               newSlabsNeeded = 1; // One new slab needed
               totalCuts += 1;
               
-              // Track the width cut
-              trackCut(totalWidth, 'width', 1);
+              trackCut(topSlabDepth, 'width', 1);
+              if (needsCut(slabLength, topSlabDepth)) {
+                totalCuts += 1;
+                trackCut(totalWidth, 'length', 1);
+                pushDepthTrimOffcutFromNewSlabs(1);
+              }
               
-              // Add waste material to the list
+              // Width-direction strip offcut (narrow tread vs slab width)
               wasteList.push({
                 width: slabWidth,  // Keep original width
                 length: slabLength - totalWidth, // Subtract only the used length
@@ -548,12 +524,25 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
             }
           }
         } else {
-          // No cutting needed, all full slabs
+          // No cutting needed along width; may still need depth trim on each slab
           stepSlabsNeeded = slabsNeededWithoutGaps;
           newSlabsNeeded = stepSlabsNeeded; // All new slabs needed
           stepSlabDimensions = `${slabsNeededWithoutGaps}x(${slabWidth}x${topSlabDepth.toFixed(1)}cm)`;
+          if (needsCut(slabLength, topSlabDepth)) {
+            totalCuts += stepSlabsNeeded;
+            trackCut(slabWidth, 'length', stepSlabsNeeded);
+            pushDepthTrimOffcutFromNewSlabs(stepSlabsNeeded);
+            trackSurfaceArea(slabWidth, topSlabDepth, 'top', stepSlabsNeeded);
+            trackSlabDimension(slabWidth, topSlabDepth, stepSlabsNeeded);
+          }
         }
         
+        stepSlabsLength = slabLength;
+      }
+      } else {
+        stepSlabsNeeded = 0;
+        newSlabsNeeded = 0;
+        stepSlabDimensions = t('calculator:last_step_top_excluded_short');
         stepSlabsLength = slabLength;
       }
       
@@ -571,9 +560,12 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
       const previousStepHeight = i > 0 ? stairResult.stepDimensions[i - 1].height : 0;
       const currentStepHeight = stepDimension.height;
       const individualStepHeight = currentStepHeight - previousStepHeight;
-      const effectiveFrontHeight = (stepConfig === 'frontsOnTop' && i > 0)
+      let effectiveFrontHeight = (stepConfig === 'frontsOnTop' && i > 0)
         ? Math.max(0, individualStepHeight - slabThicknessTop)
         : individualStepHeight;
+      if (i === 0) {
+        effectiveFrontHeight += stairResult.firstStepFrontMasonryExtensionCm ?? 0;
+      }
       
       // Find all usable waste pieces for the front
       const usableFrontWastePieces = wasteList.filter(waste => {
@@ -679,12 +671,12 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
         
         if (needsCut(selectedWaste.length, effectiveFrontHeight)) {
           totalCuts += 1;
-          trackCut(selectedWaste.length, 'length', 1);
+          trackCut(selectedWaste.width, 'length', 1);
         }
         
         if (needsCut(selectedWaste.width, totalWidth)) {
           totalCuts += 1;
-          trackCut(totalWidth, 'width', 1);
+          trackCut(selectedWaste.length, 'width', 1);
         }
       } else {
         // Calculate gaps - only between slabs, not on edges
@@ -774,9 +766,9 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
               } else {
                 frontSlabDimensions = `1x(${singleSlabWidth.toFixed(1)}x${effectiveFrontHeight.toFixed(1)}cm)`;
                 if (needsCut(slabLength, effectiveFrontHeight)) {
-                  trackCut(effectiveFrontHeight, 'length', 1);
+                  trackCut(singleSlabWidth, 'length', 1);
                 }
-                trackCut(singleSlabWidth, 'width', 1);
+                trackCut(effectiveFrontHeight, 'width', 1);
                 trackSurfaceArea(singleSlabWidth, effectiveFrontHeight, 'front', 1);
                 trackSlabDimension(singleSlabWidth, effectiveFrontHeight, 1);
               }
@@ -787,8 +779,8 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
                 totalCuts += fullSlabsCount;
                 totalCuts += fullSlabsCount;
                 totalCuts += 1;
-                trackCut(effectiveFrontHeight, 'length', fullSlabsCount + 1);
-                trackCut(slabWidth, 'width', fullSlabsCount);
+                trackCut(slabWidth, 'length', fullSlabsCount);
+                trackCut(remainingWidth, 'length', 1);
                 
                 const firstPieceW = Math.max(0, slabWidth - sideOverhang);
                 const lastPieceW = Math.max(0, remainingWidth - sideOverhang);
@@ -808,13 +800,8 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
               
               if (needsCut(slabWidth, remainingWidth)) {
                 totalCuts += 1;
-                trackCut(remainingWidth, 'width', 1);
+                trackCut(effectiveFrontHeight, 'width', 1);
               }
-            }
-            
-            if (fullSlabsCount > 0 && needsCut(slabWidth, slabWidth)) {
-              totalCuts += 1;
-              trackCut(slabWidth, 'width', fullSlabsCount);
             }
             }
           } else {
@@ -861,22 +848,17 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
                 totalCuts += fullSlabsCount;
                 totalCuts += fullSlabsCount;
                 totalCuts += 1;
-                trackCut(effectiveFrontHeight, 'length', fullSlabsCount + 1);
-                trackCut(slabWidth, 'width', fullSlabsCount);
+                trackCut(slabWidth, 'length', fullSlabsCount);
+                trackCut(equalPieceWidth, 'length', 2);
               }
               
               if (needsCut(slabWidth, equalPieceWidth)) {
                 totalCuts += 2;
-                trackCut(equalPieceWidth, 'width', 2);
+                trackCut(effectiveFrontHeight, 'width', 2);
                 trackSurfaceArea(slabWidth, effectiveFrontHeight, 'front', fullSlabsCount);
                 trackSurfaceArea(equalPieceWidth, effectiveFrontHeight, 'front', 2);
                 trackSlabDimension(slabWidth, effectiveFrontHeight, fullSlabsCount);
                 trackSlabDimension(equalPieceWidth, effectiveFrontHeight, 2);
-              }
-              
-              if (fullSlabsCount > 0 && needsCut(slabWidth, slabWidth)) {
-                totalCuts += fullSlabsCount;
-                trackCut(slabWidth, 'width', fullSlabsCount);
               }
             } else {
               const singleSlabWidth = Math.max(0, totalWidth - 2 * sideOverhang);
@@ -884,7 +866,7 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
               frontNewSlabsNeeded = frontSlabsNeeded;
               if (singleSlabWidth > 0) {
                 totalCuts += 1;
-                trackCut(singleSlabWidth, 'width', 1);
+                trackCut(effectiveFrontHeight, 'width', 1);
                 wasteList.push({
                   width: slabWidth,
                   length: slabLength - effectiveFrontHeight,
@@ -934,7 +916,8 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
         stepSlabsLength,
         stepNeedsCutting,
         stepCutLength,
-        stepTread: topSlabDepth,
+        stepTread: skipTopSlab ? 0 : topSlabDepth,
+        lastStepTopExcluded: skipTopSlab,
         stepWasteUsed,
         stepWasteSource,
         frontSlabsNeeded: frontNewSlabsNeeded, // Only show NEW slabs needed
@@ -1025,7 +1008,7 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
   
   // Calculate slab transport time when calculation result changes
   useEffect(() => {
-    if (calculateTransport && selectedTransportCarrier && slabCalculationResult) {
+    if (calculateTransport && slabCalculationResult) {
       const totalSlabs = slabCalculationResult.totalSlabs || 0;
       if (totalSlabs > 0) {
         // Assume wheelbarrow or carrier can carry 2-3 slabs per trip
@@ -1040,7 +1023,7 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
         }
       }
     }
-  }, [calculateTransport, selectedTransportCarrier, slabCalculationResult]);
+  }, [calculateTransport, slabCalculationResult]);
   
   // Calculate installation tasks based on slab surfaces and task templates
   useEffect(() => {
@@ -1239,7 +1222,7 @@ const StandardStairsSlabs: React.FC<StandardStairsSlabsProps> = ({
                         ))}
                       </td>
                       <td style={{ padding: `${spacing.xs}px ${spacing.lg}px`, color: colors.textSubtle }}>
-                        {result.totalWidth?.toFixed(1) ?? '-'} × {result.stepTread?.toFixed(1) ?? '-'}
+                        {result.lastStepTopExcluded ? t('calculator:last_step_top_excluded_short') : `${result.totalWidth?.toFixed(1) ?? '-'} × ${result.stepTread?.toFixed(1) ?? '-'}`}
                       </td>
                     </tr>
                     <tr style={{ borderBottom: `1px solid ${colors.borderMedium}` }}>

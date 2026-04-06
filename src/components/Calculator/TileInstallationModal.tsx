@@ -3,9 +3,10 @@ import { useQuery, UseQueryResult } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { colors, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
+import { Button } from '../../themes/uiComponents';
 
 interface TaskTemplate {
   id: string;
@@ -72,11 +73,7 @@ const SLAB_DIMENSIONS: SlabDimension[] = [
   { width: 30, height: 30, label: '30cm x 30cm' },
 ];
 
-const GAP_OPTIONS = [2, 3, 4, 5];
-const ADHESIVE_THICKNESS = [
-  { value: 0.5, consumption: 6 },
-  { value: 1, consumption: 12 }
-];
+const GAP_OPTIONS = [2, 3, 4, 5, 10, 20];
 
 const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({  
   onResultsChange,
@@ -161,7 +158,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -687,10 +684,10 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
         </>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <button onClick={calculateResults} style={{ padding: `${spacing['2xl']}px ${spacing['6xl']}px`, background: colors.accentBlue, color: colors.textPrimary, borderRadius: radii.md, border: 'none', cursor: 'pointer', fontWeight: fontWeights.medium }}>
+      <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+        <Button variant="primary" fullWidth onClick={calculateResults}>
           {t('calculator:calculate_button')}
-        </button>
+        </Button>
       </div>
 
       {results && (
@@ -711,33 +708,39 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
             </div>
           </div>
 
-          <div style={{ background: colors.bgCard, padding: spacing['4xl'], borderRadius: radii.lg }}>
+          <div style={{ background: colors.bgCard, borderRadius: radii.lg }} className="p-3 sm:p-6">
             <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing['4xl'] }}>{t('calculator:slab_cutting_breakdown')}</h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ minWidth: '100%', borderCollapse: 'collapse', borderBottom: `1px solid ${colors.borderDefault}` }}>
+            <div className="overflow-x-auto -mx-1 sm:mx-0">
+              <table
+                className="w-full border-collapse text-left text-[11px] leading-tight sm:text-sm sm:leading-normal [&_th]:px-1.5 [&_th]:py-2 sm:[&_th]:px-5 sm:[&_th]:py-3 [&_td]:px-1.5 [&_td]:py-2 sm:[&_td]:px-5 sm:[&_td]:py-4 [&_td]:align-middle [&_th]:align-middle"
+                style={{ borderBottom: `1px solid ${colors.borderDefault}` }}
+              >
                 <thead style={{ background: colors.bgCard }}>
                   <tr>
-                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_type_header')}</th>
-                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_length_cm')}</th>
-                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_height_cm')}</th>
-                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_quantity_header')}</th>
+                    <th scope="col" style={{ textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_type_header')}</th>
+                    <th scope="col" style={{ textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_length_cm')}</th>
+                    <th scope="col" style={{ textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_height_cm')}</th>
+                    <th scope="col" style={{ textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_cut_pieces_header')}</th>
+                    <th scope="col" style={{ textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_source_slabs_header')}</th>
                   </tr>
                 </thead>
                 <tbody style={{ background: colors.bgInput }}>
                   {results.cuttingBreakdown.fullSlabs > 0 && (
                     <tr style={{ borderTop: `1px solid ${colors.borderDefault}` }}>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{t('calculator:full_slabs_row')}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{slabOrientation === 'long' ? selectedSlab.width : selectedSlab.height}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{slabOrientation === 'long' ? selectedSlab.height : selectedSlab.width}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{results.cuttingBreakdown.fullSlabs}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{t('calculator:full_slabs_row')}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{slabOrientation === 'long' ? selectedSlab.width : selectedSlab.height}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{slabOrientation === 'long' ? selectedSlab.height : selectedSlab.width}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{results.cuttingBreakdown.fullSlabs}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{results.cuttingBreakdown.fullSlabs}</td>
                     </tr>
                   )}
                   {results.cuttingBreakdown.cutSlabs.filter(cut => cut.quantity > 0).map((cut, index) => (
                     <tr key={index} style={{ borderTop: `1px solid ${colors.borderDefault}`, background: ((results.cuttingBreakdown.fullSlabs > 0 ? 1 : 0) + index) % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.width === selectedSlab.width ? t('calculator:height_cut_type') : cut.height === selectedSlab.height ? t('calculator:length_cut_type') : t('calculator:corner_cut_type')}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.width.toFixed(1)}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.height.toFixed(1)}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.quantity}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.width === selectedSlab.width ? t('calculator:height_cut_type') : cut.height === selectedSlab.height ? t('calculator:length_cut_type') : t('calculator:corner_cut_type')}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.width.toFixed(1)}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.height.toFixed(1)}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.quantity}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>—</td>
                     </tr>
                   ))}
                 </tbody>

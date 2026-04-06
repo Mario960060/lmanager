@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
@@ -408,10 +408,10 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
       }
     };
     
-    if (calculateDigging || calculateTransport) {
+    if (calculateDigging || calculateTransport || (isInProjectCreating && propSelectedExcavator)) {
       fetchEquipment();
     }
-  }, [calculateDigging, calculateTransport]);
+  }, [calculateDigging, calculateTransport, isInProjectCreating, propSelectedExcavator]);
 
   // Add time estimate functions
   // Define loading sand time estimates (same as preparation digger estimates)
@@ -451,7 +451,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -639,7 +639,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
       // Determine which excavator to use
       const activeExcavator = isInProjectCreating && propSelectedExcavator ? propSelectedExcavator : selectedExcavator;
 
-      if (calculateDigging && activeExcavator) {
+      if ((calculateDigging || isInProjectCreating) && activeExcavator) {
         const excavatorSize = activeExcavator["size (in tones)"] || 0;
         const excavatorName = activeExcavator.name || '';
 
@@ -860,7 +860,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
               <span style={{ fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:grass_elements_label')}</span>
               <div style={{ display: 'flex', gap: spacing.sm }}>
-                <Button variant="secondary" onClick={() => setGrassElements(prev => [...prev, { widthM: '4', lengthM: '10' }])}>
+                <Button variant="accent" color={colors.accentBlue} onClick={() => setGrassElements(prev => [...prev, { widthM: '4', lengthM: '10' }])}>
                   {t('calculator:grass_add_element')}
                 </Button>
               </div>
@@ -1071,7 +1071,7 @@ const ArtificialGrassCalculator: React.FC<ArtificialGrassCalculatorProps> = ({
           </>
         )}
         
-        <Button variant="accent" color={colors.accentBlue} onClick={calculate} disabled={isLoading}>
+        <Button variant="primary" fullWidth onClick={calculate} disabled={isLoading}>
           {isLoading ? t('calculator:loading_in_progress') : t('calculator:calculate_button')}
         </Button>
         

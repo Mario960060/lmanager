@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
@@ -215,7 +215,7 @@ const NaturalTurfCalculator: React.FC<NaturalTurfCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -378,8 +378,8 @@ const NaturalTurfCalculator: React.FC<NaturalTurfCalculatorProps> = ({
 
       const transportDistanceMeters = parseFloat(effectiveTransportDistance || materialTransportDistance) || 30;
 
-      if (effectiveCalculateTransport && effectiveSelectedTransportCarrier) {
-        const carrierSizeT = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
+      if (effectiveCalculateTransport) {
+        const carrierSizeT = effectiveSelectedTransportCarrier?.['size (in tones)'] ?? 0.125;
 
         if (turfRolls > 0) {
           const turfTransportTime = calculateMaterialTransportTime(turfRolls, carrierSizeT, 'turfRolls', transportDistanceMeters);
@@ -399,7 +399,7 @@ const NaturalTurfCalculator: React.FC<NaturalTurfCalculatorProps> = ({
 
       const materialsList: Material[] = [
         { name: 'Natural turf rolls', amount: turfRolls, unit: 'rolls', price_per_unit: null, total_price: null },
-        { name: 'Soil', amount: Number(soilTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null },
+        { name: 'Lawn soil', amount: Number(soilTonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null },
         { name: 'tape1', amount: Number(tape1Tonnes.toFixed(2)), unit: 'tonnes', price_per_unit: null, total_price: null }
       ];
 
@@ -629,7 +629,7 @@ const NaturalTurfCalculator: React.FC<NaturalTurfCalculatorProps> = ({
           </>
         )}
 
-        <Button variant="accent" color={colors.accentBlue} onClick={calculate} disabled={isLoading}>
+        <Button variant="primary" fullWidth onClick={calculate} disabled={isLoading}>
           {isLoading ? t('calculator:loading_in_progress') : t('calculator:calculate_button')}
         </Button>
 

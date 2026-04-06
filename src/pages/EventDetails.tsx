@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { translateTaskName, translateMaterialName, translateMaterialDescription, translateUnit } from '../lib/translationMap';
+import { translateTaskName, translateMaterialName, translateUnit } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { Database } from '../lib/database.types';
 import { format, parseISO } from 'date-fns';
-import { CheckCircle2, Clock, Package, AlertCircle, Wrench, Pencil, ChevronDown, ChevronUp, Folder, FolderPlus, MoreHorizontal, Edit2, Trash2, Move, ArrowUp, Edit, Plus, X, Loader2, ClipboardList } from 'lucide-react';
+import { CheckCircle2, Clock, Package, AlertCircle, Wrench, Pencil, ChevronDown, ChevronUp, Folder, FolderPlus, MoreHorizontal, Edit2, Trash2, Move, ArrowUp, Edit, Plus, X, Loader2, ClipboardList, Users } from 'lucide-react';
 import BackButton from '../components/BackButton';
 import TaskProgressModal from '../components/TaskProgressModal';
 import MaterialProgressModal from '../components/MaterialProgressModal';
@@ -16,6 +16,10 @@ import AdditionalFeatures from '../components/AdditionalFeatures';
 import DatePicker from '../components/DatePicker';
 import { Button } from '../themes/uiComponents';
 import { colors, spacing, fonts, fontSizes, fontWeights, radii, transitions } from '../themes/designTokens';
+import { getPlanIdForEvent, markCanvasElementRemovedOnPlan, removeCanvasElementsFromPlanHard } from '../lib/plansService';
+import { folderOrElementHasActivity } from '../projectmanagement/canvacreator/projectSync';
+import { EventMembersModal } from '../components/EventMembers/EventMembersModal';
+import { canManageEventAssignmentsRole } from '../lib/eventMembers';
 
 type Event = Database['public']['Tables']['events']['Row'];
 type TaskDone = Database['public']['Tables']['tasks_done']['Row'];
@@ -36,6 +40,7 @@ type EquipmentUsage = {
   equipment: {
     id: string;
     name: string;
+    description?: string | null;
     type: string;
     status: string;
     quantity: number;
@@ -43,16 +48,25 @@ type EquipmentUsage = {
   };
 };
 
-type TaskFolder = {
-  id: string;
-  name: string;
-  event_id: string;
-  parent_folder_id: string | null;
-  color: string;
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
-};
+type TaskFolder = Database['public']['Tables']['task_folders']['Row'];
+
+/** Wyświetla liczby z maksymalnie dwoma miejscami po przecinku (np. ilości materiałów). */
+const formatQtyMax2 = (n: number) =>
+  Number.isFinite(n)
+    ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 0 }).format(n)
+    : String(n);
+
+/** YYYY-MM-DD z ISO lub krótkiej daty (DatePicker). */
+function dateToYmd(isoOrYmd: string | null | undefined): string {
+  if (!isoOrYmd) return '';
+  const s = String(isoOrYmd).trim();
+  return s.includes('T') ? s.split('T')[0]! : s.slice(0, 10);
+}
+
+function ymdToIsoUtc(ymd: string): string {
+  if (!ymd) return ymd;
+  return `${ymd}T00:00:00.000Z`;
+}
 
 const EventDetailsProgressBar = ({ value, color, height = 4 }: { value: number; color: string; height?: number }) => (
   <div style={{ width: "100%", height, borderRadius: height, background: "rgba(255,255,255,0.06)", overflow: "hidden" }}>
@@ -114,7 +128,7 @@ const EventDetails = () => {
   const { t } = useTranslation(['common', 'dashboard', 'utilities', 'project', 'event', 'calculator', 'material', 'units']);
   const { id } = useParams();
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [showTaskProgressModal, setShowTaskProgressModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskDone | null>(null);
@@ -150,19 +164,22 @@ const EventDetails = () => {
   const [equipmentQuantity, setEquipmentQuantity] = useState(1);
   const [equipmentAddError, setEquipmentAddError] = useState<string | null>(null);
   const [editingEquipmentId, setEditingEquipmentId] = useState<string | null>(null);
+  const [editingUsageQuantity, setEditingUsageQuantity] = useState<number | null>(null);
   const [equipmentStartDate, setEquipmentStartDate] = useState<string>('');
   const [equipmentEndDate, setEquipmentEndDate] = useState<string>('');
   const [releaseEquipmentConfirm, setReleaseEquipmentConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [showEventMembersModal, setShowEventMembersModal] = useState(false);
 
   // Fetch event details
-  const { data: event, isLoading: isEventLoading } = useQuery({
+  const { data: event, isLoading: isEventLoading, isError: isEventError } = useQuery({
     queryKey: ['event', id, companyId],
     queryFn: async () => {
       const { data, error } = await supabase.from('events').select('*').eq('id', id).eq('company_id', companyId).single();
       if (error) throw error;
       return data as Event;
     },
-    enabled: !!companyId
+    enabled: !!companyId && !!id,
+    retry: false,
   });
 
   // Add mutation for updating event status
@@ -370,6 +387,7 @@ const EventDetails = () => {
           equipment!inner (
             id,
             name,
+            description,
             type,
             status,
             quantity,
@@ -516,13 +534,17 @@ const EventDetails = () => {
   const addEquipmentToEventMutation = useMutation({
     mutationFn: async ({
       equipmentId,
-      quantity
+      quantity,
+      startDateYmd,
+      endDateYmd,
     }: {
       equipmentId: string;
       quantity: number;
+      startDateYmd: string;
+      endDateYmd: string;
     }) => {
       if (!event) throw new Error('Event not found');
-      
+
       // Check if there's enough available quantity
       const { data: currentEquipment } = await supabase
         .from('equipment')
@@ -538,37 +560,32 @@ const EventDetails = () => {
         throw new Error(`Not enough available units. Available: ${availableQuantity}`);
       }
 
-      // Create equipment usage record with event dates
       const { error: usageError } = await supabase
         .from('equipment_usage')
         .insert({
           equipment_id: equipmentId,
           event_id: event.id,
-          start_date: event.start_date,
-          end_date: event.end_date,
+          start_date: ymdToIsoUtc(startDateYmd),
+          end_date: ymdToIsoUtc(endDateYmd),
           quantity: quantity,
           is_returned: false,
           company_id: companyId
         });
 
       if (usageError) throw usageError;
-      
-      // Calculate new in_use_quantity
+
       const newInUseQuantity = currentEquipment.in_use_quantity + quantity;
-      
-      // If all quantities will be in use, set status to 'in_use', otherwise keep it as 'free_to_use'
       const newStatus = newInUseQuantity >= currentEquipment.quantity ? 'in_use' : 'free_to_use';
-      
-      // Update in_use_quantity and status
+
       const { error: updateError } = await supabase
         .from('equipment')
-        .update({ 
+        .update({
           in_use_quantity: newInUseQuantity,
           status: newStatus
         })
         .eq('id', equipmentId)
         .eq('company_id', companyId);
-        
+
       if (updateError) throw updateError;
     },
     onSuccess: () => {
@@ -579,9 +596,85 @@ const EventDetails = () => {
       setSelectedEquipmentToAdd(null);
       setEquipmentQuantity(1);
       setEquipmentAddError(null);
+      setEditingEquipmentId(null);
+      setEditingUsageQuantity(null);
     },
     onError: (error: Error) => {
       console.error('Failed to add equipment:', error);
+      setEquipmentAddError(error.message);
+    }
+  });
+
+  const updateEquipmentUsageMutation = useMutation({
+    mutationFn: async ({
+      usageId,
+      equipmentId,
+      quantity,
+      startDateYmd,
+      endDateYmd,
+      previousQuantity,
+    }: {
+      usageId: string;
+      equipmentId: string;
+      quantity: number;
+      startDateYmd: string;
+      endDateYmd: string;
+      previousQuantity: number;
+    }) => {
+      const { data: currentEquipment, error: eqErr } = await supabase
+        .from('equipment')
+        .select('quantity, in_use_quantity')
+        .eq('id', equipmentId)
+        .eq('company_id', companyId)
+        .single();
+
+      if (eqErr || !currentEquipment) throw new Error('Equipment not found');
+
+      const delta = quantity - previousQuantity;
+      if (delta !== 0) {
+        const newInUse = currentEquipment.in_use_quantity + delta;
+        if (newInUse < 0 || newInUse > currentEquipment.quantity) {
+          throw new Error(
+            `Invalid quantity: available capacity is ${currentEquipment.quantity - currentEquipment.in_use_quantity + previousQuantity} for this assignment.`
+          );
+        }
+      }
+
+      const { error: usageError } = await supabase
+        .from('equipment_usage')
+        .update({
+          start_date: ymdToIsoUtc(startDateYmd),
+          end_date: ymdToIsoUtc(endDateYmd),
+          quantity,
+        })
+        .eq('id', usageId);
+
+      if (usageError) throw usageError;
+
+      if (delta !== 0) {
+        const newInUse = currentEquipment.in_use_quantity + delta;
+        const newStatus = newInUse >= currentEquipment.quantity ? 'in_use' : 'free_to_use';
+        const { error: upEq } = await supabase
+          .from('equipment')
+          .update({ in_use_quantity: newInUse, status: newStatus })
+          .eq('id', equipmentId)
+          .eq('company_id', companyId);
+        if (upEq) throw upEq;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event_equipment', id] });
+      queryClient.invalidateQueries({ queryKey: ['all_equipment', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['equipment'] });
+      setShowAddEquipmentModal(false);
+      setSelectedEquipmentToAdd(null);
+      setEquipmentQuantity(1);
+      setEquipmentAddError(null);
+      setEditingEquipmentId(null);
+      setEditingUsageQuantity(null);
+    },
+    onError: (error: Error) => {
+      console.error('Failed to update equipment usage:', error);
       setEquipmentAddError(error.message);
     }
   });
@@ -779,25 +872,100 @@ const EventDetails = () => {
 
   const deleteFolderMutation = useMutation({
     mutationFn: async (folderId: string) => {
-      // First move all tasks in this folder to no folder
-      await supabase
-        .from('tasks_done')
-        .update({ folder_id: null })
-        .eq('folder_id', folderId)
-        .eq('company_id', companyId);
-
-      // Then delete the folder
-      const { error } = await supabase
+      const { data: folderRow, error: folderFetchErr } = await supabase
         .from('task_folders')
-        .delete()
+        .select('*')
         .eq('id', folderId)
-        .eq('company_id', companyId);
+        .eq('company_id', companyId)
+        .single();
+      if (folderFetchErr) throw folderFetchErr;
+      if (!folderRow) return;
 
-      if (error) throw error;
+      const hasAct = await folderOrElementHasActivity(
+        supabase,
+        id!,
+        companyId,
+        folderId,
+        folderRow.canvas_element_id
+      );
+
+      const planId = await getPlanIdForEvent(supabase, id!, companyId);
+
+      if (hasAct) {
+        const { data: maxOrderData } = await supabase
+          .from('task_folders')
+          .select('sort_order')
+          .eq('event_id', id)
+          .eq('company_id', companyId)
+          .order('sort_order', { ascending: false })
+          .limit(1);
+        const nextOrder =
+          maxOrderData && maxOrderData.length > 0 ? (maxOrderData[0].sort_order ?? 0) + 1000 : 1000;
+
+        const { error: softErr } = await supabase
+          .from('task_folders')
+          .update({
+            removed_from_project_at: new Date().toISOString(),
+            progress_locked: true,
+            sort_order: nextOrder,
+          })
+          .eq('id', folderId)
+          .eq('company_id', companyId);
+        if (softErr) throw softErr;
+
+        if (planId && folderRow.canvas_element_id) {
+          await markCanvasElementRemovedOnPlan(supabase, {
+            planId,
+            companyId,
+            userId: user?.id,
+            canvasElementId: folderRow.canvas_element_id,
+          });
+        }
+      } else {
+        const { data: tasksInFolder } = await supabase
+          .from('tasks_done')
+          .select('id')
+          .eq('folder_id', folderId)
+          .eq('company_id', companyId);
+        for (const t of tasksInFolder ?? []) {
+          const { error: delP } = await supabase.from('task_progress_entries').delete().eq('task_id', t.id);
+          if (delP) throw delP;
+        }
+        const { error: delTasks } = await supabase.from('tasks_done').delete().eq('folder_id', folderId);
+        if (delTasks) throw delTasks;
+
+        if (folderRow.canvas_element_id) {
+          const { data: mats } = await supabase
+            .from('materials_delivered')
+            .select('id')
+            .eq('event_id', id)
+            .eq('company_id', companyId)
+            .eq('canvas_element_id', folderRow.canvas_element_id);
+          for (const m of mats ?? []) {
+            const { error: delMd } = await supabase.from('material_deliveries').delete().eq('material_id', m.id);
+            if (delMd) throw delMd;
+            const { error: delM } = await supabase.from('materials_delivered').delete().eq('id', m.id);
+            if (delM) throw delM;
+          }
+        }
+
+        const { error: delF } = await supabase.from('task_folders').delete().eq('id', folderId);
+        if (delF) throw delF;
+
+        if (planId && folderRow.canvas_element_id) {
+          await removeCanvasElementsFromPlanHard(supabase, {
+            planId,
+            companyId,
+            userId: user?.id,
+            canvasElementIds: [folderRow.canvas_element_id],
+          });
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task_folders', id, companyId] });
       queryClient.invalidateQueries({ queryKey: ['tasks', id, companyId] });
+      queryClient.invalidateQueries({ queryKey: ['materials', id, companyId] });
       setContextMenu(null);
     }
   });
@@ -915,11 +1083,27 @@ const EventDetails = () => {
     }
   };
 
-  if (isEventLoading || !event) return <div>{t('event:loading')}</div>;
+  if (isEventLoading) return <div>{t('event:loading')}</div>;
+  if (isEventError) {
+    return (
+      <div style={{ minHeight: '100vh', background: colors.bgApp, fontFamily: fonts.body, padding: 24 }}>
+        <BackButton />
+        <p style={{ color: colors.textPrimary, marginTop: 16 }}>{t('common:event_access_denied')}</p>
+      </div>
+    );
+  }
+  if (!event) return null;
 
   // Helper function to recursively render folders
   const renderFolders = (parentFolderId: string | null = null, depth: number = 0): JSX.Element[] => {
-    const foldersByParent = folders.filter(f => f.parent_folder_id === parentFolderId);
+    const foldersByParent = folders
+      .filter(f => f.parent_folder_id === parentFolderId)
+      .sort((a, b) => {
+        const ar = a.removed_from_project_at ? 1 : 0;
+        const br = b.removed_from_project_at ? 1 : 0;
+        if (ar !== br) return ar - br;
+        return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      });
 
     return foldersByParent.map(folder => {
       const folderTasks = tasks.filter(task => task.folder_id === folder.id);
@@ -959,7 +1143,12 @@ const EventDetails = () => {
             >
               <div className="flex items-center space-x-3">
                 <Folder className="w-5 h-5" style={{ color: folder.color }} />
-                <h3 className="font-medium">{folder.name}</h3>
+                <h3 className="font-medium">
+                  {folder.name}
+                  {folder.removed_from_project_at && (
+                    <span className="text-xs font-normal ml-2 opacity-80">({t('event:folder_removed_from_project')})</span>
+                  )}
+                </h3>
                 {childFolders.length > 0 && (
                   <span className="text-xs" style={{ color: colors.textSubtle }}>({childFolders.length} folders)</span>
                 )}
@@ -1350,7 +1539,20 @@ const EventDetails = () => {
             background: colors.bgCard, borderRadius: 14, border: `1px solid ${colors.borderDefault}`,
             padding: "20px 22px",
           }}>
-            <div style={{ fontSize: 20, fontWeight: 800, color: colors.textPrimary, marginBottom: 4 }}>{event.title}</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+              <div style={{ fontSize: 20, fontWeight: 800, color: colors.textPrimary, flex: 1, minWidth: 0 }}>{event.title}</div>
+              {canManageEventAssignmentsRole(profile?.role) && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowEventMembersModal(true)}
+                  style={{ flexShrink: 0, padding: '8px 12px', gap: 8, display: 'inline-flex', alignItems: 'center' }}
+                >
+                  <Users size={18} />
+                  {t('common:event_members_open')}
+                </Button>
+              )}
+            </div>
             <div style={{ fontSize: 12.5, color: colors.textDim, marginBottom: 14 }}>
               {event.start_date && format(new Date(event.start_date), 'MMM dd, yyyy')} - {event.end_date && format(new Date(event.end_date), 'MMM dd, yyyy')}
             </div>
@@ -1596,7 +1798,7 @@ const EventDetails = () => {
 
         {/* Create Folder Modal */}
         {showCreateFolderModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 md:p-4">
             <div className="p-6 rounded-lg w-96" style={{ background: colors.bgCard }}>
               <h3 className="text-lg font-semibold mb-4" style={{ color: colors.textPrimary }}>{t('event:create_new_folder')}</h3>
               <form
@@ -1659,7 +1861,7 @@ const EventDetails = () => {
 
         {/* Edit Folder Modal */}
         {editingFolder && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 md:p-4">
             <div className="p-6 rounded-lg w-96" style={{ background: colors.bgCard }}>
               <h3 className="text-lg font-semibold mb-4" style={{ color: colors.textPrimary }}>{t('event:edit_folder')}</h3>
               <form
@@ -1725,7 +1927,7 @@ const EventDetails = () => {
 
         {/* Move Task Modal */}
         {showMoveFolderModal && selectedTaskToMove && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 md:p-4">
             <div className="p-6 rounded-lg w-96" style={{ background: colors.bgCard }}>
               <h3 className="text-lg font-semibold mb-4" style={{ color: colors.textPrimary }}>{t('event:move_task_to_folder')}</h3>
               <p className="text-sm mb-4" style={{ color: colors.textMuted }}>
@@ -1794,7 +1996,7 @@ const EventDetails = () => {
         onOpenChange={(open) => setExpandedSections(prev => ({ ...prev, materials: open }))}
       >
         <div style={{ padding: "6px 8px" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.2fr 80px", padding: "8px 12px", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 0.9fr) minmax(0, 1fr) 72px", padding: "8px 12px", gap: 8 }}>
               {[t('event:material_column'), t('event:quantity_column'), t('event:delivery_label_short'), ""].map((h, i) => (
                 <span key={i} style={{ fontSize: 10, fontWeight: 700, color: colors.textMuted, textTransform: "uppercase", letterSpacing: 1 }}>{h}</span>
               ))}
@@ -1806,21 +2008,34 @@ const EventDetails = () => {
               const percentDelivered = (totalDelivered / material.total_amount) * 100;
               const isCompleted = percentDelivered >= 100;
               const deliveryColor = isCompleted ? colors.green : percentDelivered > 0 ? colors.orange : colors.red;
-              const desc = translateMaterialDescription(material.name, material.description, t) || "";
               return (
                 <div
                   key={material.id}
                   style={{
-                    display: "grid", gridTemplateColumns: "2fr 1fr 1.2fr 80px",
+                    display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 0.9fr) minmax(0, 1fr) 72px",
                     padding: "10px 12px", gap: 8, alignItems: "center",
                     borderRadius: 8, background: i % 2 === 0 ? "rgba(255,255,255,0.015)" : "transparent",
                   }}
                 >
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: colors.textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{translateMaterialName(material.name, t)}</div>
-                    {desc && <div style={{ fontSize: 10.5, color: colors.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{desc}</div>}
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: colors.textPrimary,
+                        lineHeight: 1.35,
+                        wordBreak: "break-word",
+                        overflowWrap: "anywhere",
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical" as const,
+                        overflow: "hidden",
+                      }}
+                    >
+                      {translateMaterialName(material.name, t)}
+                    </div>
                   </div>
-                  <span style={{ fontSize: 13, color: colors.textMuted, fontWeight: 500 }}>{material.total_amount} {translateUnit(material.unit, t)}</span>
+                  <span style={{ fontSize: 13, color: colors.textMuted, fontWeight: 500 }}>{formatQtyMax2(material.total_amount)} {translateUnit(material.unit, t)}</span>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ flex: 1 }}><EventDetailsProgressBar value={percentDelivered} color={deliveryColor} height={3} /></div>
                     <span style={{ fontSize: 11, fontWeight: 600, color: deliveryColor, minWidth: 28, textAlign: "right" }}>{parseFloat(percentDelivered.toFixed(0))}%</span>
@@ -1865,7 +2080,20 @@ const EventDetails = () => {
             )}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary }}>{t('event:equipment_needed')}</span>
-              <Button onClick={() => setShowAddEquipmentModal(true)} variant="primary" style={{ padding: "6px 12px", fontSize: 12 }}>
+              <Button
+                onClick={() => {
+                  setEditingEquipmentId(null);
+                  setEditingUsageQuantity(null);
+                  setEquipmentStartDate(event?.start_date ? dateToYmd(event.start_date) : '');
+                  setEquipmentEndDate(event?.end_date ? dateToYmd(event.end_date) : '');
+                  setSelectedEquipmentToAdd(null);
+                  setEquipmentQuantity(1);
+                  setEquipmentAddError(null);
+                  setShowAddEquipmentModal(true);
+                }}
+                variant="primary"
+                style={{ padding: "6px 12px", fontSize: 12 }}
+              >
                 <Plus style={{ width: 14, height: 14, marginRight: 6 }} />
                 {t('event:add_equipment')}
               </Button>
@@ -1877,30 +2105,45 @@ const EventDetails = () => {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {equipmentUsage.map(usage => {
-                  const reserved = usage.equipment.status === 'in_use';
+                  const sub =
+                    [usage.equipment.description?.trim(), usage.equipment.type]
+                      .filter(Boolean)
+                      .join(" · ") || null;
                   return (
                   <div key={usage.id} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: "12px 16px", borderRadius: 10,
+                    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                    gap: 10,
+                    padding: "8px 10px", borderRadius: 8,
                     background: "rgba(255,255,255,0.015)",
                     border: `1px solid ${colors.borderDefault}`,
                   }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary }}>{usage.equipment.name}</div>
-                      <div style={{ fontSize: 12, color: colors.textDim, marginTop: 2 }}>
-                        {usage.equipment.description || usage.equipment.type || ""} — {usage.quantity} {t('event:equipment_unit')}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: colors.textPrimary, lineHeight: 1.3, wordBreak: "break-word" }}>{usage.equipment.name}</div>
+                      {(sub || usage.quantity) ? (
+                        <div style={{ fontSize: 11, color: colors.textDim, marginTop: 3, lineHeight: 1.35 }}>
+                          {sub}
+                          {sub && usage.quantity ? " · " : ""}
+                          {usage.quantity ? `${usage.quantity} ${t('event:equipment_unit')}` : ""}
+                        </div>
+                      ) : null}
+                      <div style={{ fontSize: 11, color: colors.textSubtle, marginTop: 4 }}>
+                        {t('event:equipment_rental_period_short', {
+                          from: dateToYmd(usage.start_date) || '—',
+                          to: dateToYmd(usage.end_date) || '—',
+                        })}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{
-                        fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 16,
-                        color: reserved ? colors.orange : colors.green,
-                        background: reserved ? "rgba(249,115,22,0.1)" : "rgba(34,197,94,0.1)",
-                        border: `1px solid ${reserved ? "rgba(249,115,22,0.2)" : "rgba(34,197,94,0.2)"}`,
-                      }}>
-                        {reserved ? t('event:equipment_status_reserved') : t('event:equipment_status_available')}
-                      </span>
-                      <Button variant="ghost" onClick={() => { setEditingEquipmentId(usage.id); setSelectedEquipmentToAdd(usage.equipment); setEquipmentQuantity(usage.quantity); setEquipmentStartDate(usage.start_date); setEquipmentEndDate(usage.end_date); setShowAddEquipmentModal(true); }} style={{ padding: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                      <Button variant="ghost" onClick={() => {
+                        setEditingEquipmentId(usage.id);
+                        setEditingUsageQuantity(usage.quantity);
+                        setSelectedEquipmentToAdd(usage.equipment);
+                        setEquipmentQuantity(usage.quantity);
+                        setEquipmentStartDate(dateToYmd(usage.start_date));
+                        setEquipmentEndDate(dateToYmd(usage.end_date));
+                        setEquipmentAddError(null);
+                        setShowAddEquipmentModal(true);
+                      }} style={{ padding: 6 }}>
                         <Pencil style={{ width: 14, height: 14 }} />
                       </Button>
                       <Button variant="ghost" color={colors.red} onClick={() => setReleaseEquipmentConfirm({ id: usage.id, name: usage.equipment.name })} style={{ padding: 6 }}>
@@ -1922,15 +2165,19 @@ const EventDetails = () => {
 
       {/* Add Equipment to Event Modal */}
       {showAddEquipmentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
           <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ background: colors.bgCard }}>
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('event:add_equipment_to_event')}</h3>
+              <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>
+                {editingEquipmentId ? t('event:edit_equipment_assignment') : t('event:add_equipment_to_event')}
+              </h3>
               <button
                 onClick={() => {
                   setShowAddEquipmentModal(false);
                   setSelectedEquipmentToAdd(null);
                   setEquipmentAddError(null);
+                  setEditingEquipmentId(null);
+                  setEditingUsageQuantity(null);
                 }}
                 className="p-2 rounded-full transition-colors"
                 onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = colors.bgHover; }}
@@ -1951,19 +2198,22 @@ const EventDetails = () => {
               <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:equipment_title')}</label>
               <select
                 value={selectedEquipmentToAdd?.id || ''}
+                disabled={!!editingEquipmentId}
                 onChange={(e) => {
                   const equip = allEquipment.find(eq => eq.id === e.target.value);
                   setSelectedEquipmentToAdd(equip || null);
                   setEquipmentQuantity(1);
                 }}
                 className="w-full px-3 py-2 rounded-md"
-                style={{ border: `1px solid ${colors.borderInput}` }}
+                style={{ border: `1px solid ${colors.borderInput}`, opacity: editingEquipmentId ? 0.85 : 1 }}
               >
                 <option value="">{t('event:select_equipment')}</option>
                 {allEquipment.map((equip: any) => {
                   const availableQuantity = equip.quantity - equip.in_use_quantity;
+                  const isEditingThis = !!editingEquipmentId && equip.id === selectedEquipmentToAdd?.id;
+                  const canPick = availableQuantity > 0 || isEditingThis;
                   return (
-                    <option key={equip.id} value={equip.id} disabled={availableQuantity === 0}>
+                    <option key={equip.id} value={equip.id} disabled={!canPick}>
                       {equip.name}
                       {availableQuantity > 0 ? ` (${availableQuantity} ${t('event:available')})` : ` ${t('event:not_available')}`}
                     </option>
@@ -1972,49 +2222,55 @@ const EventDetails = () => {
               </select>
             </div>
 
-            {selectedEquipmentToAdd && (
+            {selectedEquipmentToAdd && (() => {
+              const spareUnits =
+                editingEquipmentId != null && editingUsageQuantity != null
+                  ? selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity + editingUsageQuantity
+                  : selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity;
+              return (
               <>
                 <div>
                   <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:quantity')}</label>
                   <input
                     type="number"
-                    min="1"
-                    max={selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity}
+                    min={1}
+                    max={Math.max(1, spareUnits)}
                     value={equipmentQuantity}
-                    onChange={(e) => setEquipmentQuantity(Math.min(Math.max(1, parseInt(e.target.value) || 1), selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity))}
+                    onChange={(e) => setEquipmentQuantity(Math.min(Math.max(1, parseInt(e.target.value, 10) || 1), Math.max(1, spareUnits)))}
                     className="w-full px-3 py-2 rounded-md"
                     style={{ border: `1px solid ${colors.borderInput}` }}
                   />
                   <p className="mt-1 text-sm" style={{ color: colors.textMuted }}>
-                    {t('event:available')}: {selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity} {t('event:of')} {selectedEquipmentToAdd.quantity}
+                    {t('event:available')}: {spareUnits} {t('event:of')} {selectedEquipmentToAdd.quantity}
                   </p>
                 </div>
 
+                <p className="text-xs leading-snug" style={{ color: colors.textSubtle }}>
+                  {t('event:equipment_period_default_hint')}
+                </p>
+
                 <div>
-                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:start_date')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:equipment_needed_from')}</label>
                   <DatePicker
-                    value={event?.start_date ? event.start_date.split('T')[0] : ''}
-                    onChange={() => {}}
-                    disabled
+                    value={equipmentStartDate}
+                    onChange={(v) => setEquipmentStartDate(v)}
+                    maxDate={equipmentEndDate || undefined}
                     className="rounded-md"
-                    style={{ background: colors.bgInput, color: colors.textMuted }}
                   />
-                  <p className="mt-1 text-xs" style={{ color: colors.textSubtle }}>{t('event:event_start_date')}</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:end_date')}</label>
+                  <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>{t('event:equipment_needed_until')}</label>
                   <DatePicker
-                    value={event?.end_date ? event.end_date.split('T')[0] : ''}
-                    onChange={() => {}}
-                    disabled
+                    value={equipmentEndDate}
+                    onChange={(v) => setEquipmentEndDate(v)}
+                    minDate={equipmentStartDate || undefined}
                     className="rounded-md"
-                    style={{ background: colors.bgInput, color: colors.textMuted }}
                   />
-                  <p className="mt-1 text-xs" style={{ color: colors.textSubtle }}>{t('event:event_end_date')}</p>
                 </div>
               </>
-            )}
+            );
+            })()}
 
             <div className="flex justify-end space-x-3 pt-4">
               <button
@@ -2022,6 +2278,8 @@ const EventDetails = () => {
                   setShowAddEquipmentModal(false);
                   setSelectedEquipmentToAdd(null);
                   setEquipmentAddError(null);
+                  setEditingEquipmentId(null);
+                  setEditingUsageQuantity(null);
                 }}
                 className="px-4 py-2"
                 style={{ color: colors.textMuted }}
@@ -2032,24 +2290,56 @@ const EventDetails = () => {
               </button>
               <button
                 onClick={() => {
-                  if (selectedEquipmentToAdd) {
+                  if (!selectedEquipmentToAdd) return;
+                  setEquipmentAddError(null);
+                  if (!equipmentStartDate || !equipmentEndDate) {
+                    setEquipmentAddError(t('event:equipment_dates_required'));
+                    return;
+                  }
+                  if (equipmentStartDate > equipmentEndDate) {
+                    setEquipmentAddError(t('event:equipment_end_before_start'));
+                    return;
+                  }
+                  const spareUnits =
+                    editingEquipmentId != null && editingUsageQuantity != null
+                      ? selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity + editingUsageQuantity
+                      : selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity;
+                  if (!editingEquipmentId && spareUnits <= 0) {
+                    setEquipmentAddError(t('event:equipment_none_available'));
+                    return;
+                  }
+                  if (editingEquipmentId && editingUsageQuantity != null) {
+                    updateEquipmentUsageMutation.mutate({
+                      usageId: editingEquipmentId,
+                      equipmentId: selectedEquipmentToAdd.id,
+                      quantity: equipmentQuantity,
+                      startDateYmd: equipmentStartDate,
+                      endDateYmd: equipmentEndDate,
+                      previousQuantity: editingUsageQuantity,
+                    });
+                  } else {
                     addEquipmentToEventMutation.mutate({
                       equipmentId: selectedEquipmentToAdd.id,
-                      quantity: equipmentQuantity
+                      quantity: equipmentQuantity,
+                      startDateYmd: equipmentStartDate,
+                      endDateYmd: equipmentEndDate,
                     });
                   }
                 }}
                 disabled={
                   !selectedEquipmentToAdd ||
                   addEquipmentToEventMutation.isPending ||
-                  selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity === 0
+                  updateEquipmentUsageMutation.isPending ||
+                  (!editingEquipmentId && selectedEquipmentToAdd.quantity - selectedEquipmentToAdd.in_use_quantity === 0)
                 }
                 className="px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
                 style={{ background: colors.accentBlue, color: colors.textOnAccent }}
                 onMouseEnter={(e) => { if (!e.currentTarget.disabled) (e.currentTarget as HTMLElement).style.background = colors.accentBlueDark; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = colors.accentBlue; }}
               >
-                {addEquipmentToEventMutation.isPending ? t('event:adding') : t('event:add_equipment')}
+                {addEquipmentToEventMutation.isPending || updateEquipmentUsageMutation.isPending
+                  ? (editingEquipmentId ? t('event:updating') : t('event:adding'))
+                  : (editingEquipmentId ? t('event:update') : t('event:add_equipment'))}
               </button>
             </div>
           </div>
@@ -2060,6 +2350,10 @@ const EventDetails = () => {
       {showTaskProgressModal && selectedTask && (
         <TaskProgressModal
           task={selectedTask}
+          progressLocked={
+            !!selectedTask.folder_id &&
+            !!folders.find(f => f.id === selectedTask.folder_id)?.progress_locked
+          }
           onClose={() => setShowTaskProgressModal(false)}
         />
       )}
@@ -2078,9 +2372,18 @@ const EventDetails = () => {
         />
       )}
 
+      {showEventMembersModal && event && (
+        <EventMembersModal
+          open={showEventMembersModal}
+          onClose={() => setShowEventMembersModal(false)}
+          eventId={event.id}
+          title={event.title}
+        />
+      )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && itemToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
           <div className="rounded-lg max-w-md w-full p-6" style={{ background: colors.bgCard }}>
             <h3 className="text-lg font-semibold mb-4" style={{ color: colors.textPrimary }}>{t('event:confirm_delete')}</h3>
             <p className="mb-6" style={{ color: colors.textMuted }}>
@@ -2126,7 +2429,7 @@ const EventDetails = () => {
 
       {/* Release Equipment Confirmation Modal */}
       {releaseEquipmentConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
           <div className="rounded-lg max-w-sm w-full p-6" style={{ background: colors.bgCard }}>
             <h3 className="text-lg font-semibold mb-2" style={{ color: colors.textPrimary }}>{t('event:release_equipment')}</h3>
             <p className="mb-6" style={{ color: colors.textMuted }}>

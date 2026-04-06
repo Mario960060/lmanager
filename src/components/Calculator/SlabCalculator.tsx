@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
@@ -37,10 +37,11 @@ import {
   parseSlabDimensions,
   type SlabCutsResult,
 } from '../../projectmanagement/canvacreator/visualization/slabPattern';
-import { distance, PIXELS_PER_METER } from '../../projectmanagement/canvacreator/geometry';
+import { distance, PIXELS_PER_METER, type Point } from '../../projectmanagement/canvacreator/geometry';
 import { isPathElement, getPathPolygon } from '../../projectmanagement/canvacreator/linearElements';
 import { getEffectivePolygon, getEffectivePolygonWithEdgeIndices } from '../../projectmanagement/canvacreator/arcMath';
 import { FrameSidesSelector } from '../../projectmanagement/canvacreator/objectCard/FrameSidesSelector';
+import { computeMonoblockFrameBlocks } from '../../projectmanagement/canvacreator/visualization/cobblestonePattern';
 
 interface SlabType {
   id: string | number;
@@ -90,6 +91,18 @@ interface Shape {
 }
 
 const SLAB_GROUT_OPTIONS_MM = [1, 2, 3, 4, 5, 10, 20] as const;
+
+function parseFrameBorderRowCountFromSaved(c: Record<string, any> | undefined): string {
+  const explicit = c?.frameBorderRowCount;
+  if (explicit != null && explicit !== "") {
+    const n = Math.floor(Number(explicit));
+    if (Number.isFinite(n) && n >= 1) return String(Math.min(50, n));
+  }
+  if (Array.isArray(c?.frameBorderRows) && c.frameBorderRows.length > 0) {
+    return String(Math.min(50, Math.max(1, c.frameBorderRows.length)));
+  }
+  return "1";
+}
 
 function snapGroutMmToOption(mm: number): number {
   let best: number = SLAB_GROUT_OPTIONS_MM[0];
@@ -193,6 +206,14 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
 }: SlabCalculatorProps) => {
   const companyId = useAuthStore(state => state.getCompanyId());
   const { t } = useTranslation(['calculator', 'utilities', 'common', 'units']);
+  const [calcLayoutNarrow, setCalcLayoutNarrow] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const on = () => setCalcLayoutNarrow(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
   const isConcrete = false; // SlabCalculator handles sandstones/porcelain only; concrete slabs use ConcreteSlabsCalculator
   const initArea = savedInputs?.area != null ? String(savedInputs.area) : (initialArea != null ? initialArea.toFixed(3) : '');
   const [area, setArea] = useState<string>(initArea);
@@ -253,16 +274,31 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
   });
   const taskTemplates = useMemo(() => taskTemplatesData ?? [], [taskTemplatesData]);
 
+  const slabTypeOptions = useMemo(
+    () =>
+      taskTemplates.filter((tpl: SlabType) => {
+        const name = (tpl.name || '').toLowerCase();
+        return name.includes('laying slabs') && !name.includes('(concrete)') && !name.includes('betonowe');
+      }),
+    [taskTemplates]
+  );
+
   const [cutSlabs, setCutSlabs] = useState<string>(savedInputs?.cutSlabs ?? '');
   const [canvasCutSlabs, setCanvasCutSlabs] = useState<number | null>(null);
   const [canvasCutGroups, setCanvasCutGroups] = useState<{ lengthCm: number; count: number }[]>([]);
 
   const [addFrameBoard, setAddFrameBoard] = useState<boolean>(!!savedInputs?.addFrameBoard);
   const [isFrameModalOpen, setIsFrameModalOpen] = useState<boolean>(false);
-  const [framePieceLengthCm, setFramePieceLengthCm] = useState<string>(savedInputs?.framePieceLengthCm ?? '60');
-  const [framePieceWidthCm, setFramePieceWidthCm] = useState<string>(savedInputs?.framePieceWidthCm ?? '10');
-  const [frameJointType, setFrameJointType] = useState<'butt' | 'miter45'>(savedInputs?.frameJointType ?? 'butt');
+  const [framePieceLengthCm, setFramePieceLengthCm] = useState<string>(String(savedInputs?.framePieceLengthCm ?? "90"));
+  const [framePieceWidthCm, setFramePieceWidthCm] = useState<string>(String(savedInputs?.framePieceWidthCm ?? "15"));
+  const [frameJointType, setFrameJointType] = useState<"butt" | "miter45">(
+    savedInputs?.frameJointType === "butt" ? "butt" : "miter45"
+  );
+  const [frameBorderRowCount, setFrameBorderRowCount] = useState<string>(() => parseFrameBorderRowCountFromSaved(savedInputs));
   const [frameSidesEnabled, setFrameSidesEnabled] = useState<boolean[]>(Array.isArray(savedInputs?.frameSidesEnabled) ? savedInputs.frameSidesEnabled : []);
+  const [frameBorderMaterial, setFrameBorderMaterial] = useState<"slab" | "cobble">(() =>
+    savedInputs?.frameBorderMaterial === "cobble" ? "cobble" : "slab"
+  );
   const [frameResults, setFrameResults] = useState<{
     totalFrameSlabs: number;
     totalHours: number;
@@ -273,21 +309,43 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     frameSlabsName?: string;
     framePieceLengthCm?: string;
     framePieceWidthCm?: string;
+    frameRowsLabel?: string;
     cuttingHours: number;
     cuttingTaskName: string;
     cutting_task_id?: string;
-    transportTime?: number;
+    frameCobbleMode?: boolean;
   } | null>(null);
+
+  /** Path modal passes selectedSlabId via savedInputs; compact mode has no slab dropdown — keep state in sync. */
+  useEffect(() => {
+    const sid = savedInputs?.selectedSlabId;
+    if (sid == null || sid === '') return;
+    const s = String(sid);
+    if (slabTypeOptions.length === 0) return;
+    const ok = slabTypeOptions.some((t: SlabType) => t.id.toString() === s);
+    if (!ok) return;
+    if (s !== selectedSlabId) setSelectedSlabId(s);
+  }, [savedInputs?.selectedSlabId, slabTypeOptions, selectedSlabId]);
+
+  /** Drop stale IDs (deleted tasks / old defaults) so lookup matches the slab-type dropdown. */
+  useEffect(() => {
+    if (slabTypeOptions.length === 0) return;
+    if (!selectedSlabId) return;
+    const ok = slabTypeOptions.some((t: SlabType) => t.id.toString() === selectedSlabId);
+    if (!ok) setSelectedSlabId(String(slabTypeOptions[0].id));
+  }, [slabTypeOptions, selectedSlabId]);
 
   // Ref to avoid infinite loop: only call onInputsChange when payload actually changed
   const lastInputsPayloadRef = useRef<string>('');
   const onInputsChangeRef = useRef(onInputsChange);
   onInputsChangeRef.current = onInputsChange;
+  const onResultsChangeRef = useRef(onResultsChange);
+  onResultsChangeRef.current = onResultsChange;
 
   useEffect(() => {
     const fn = onInputsChangeRef.current;
     if (fn && isInProjectCreating) {
-      const selectedSlab = taskTemplates?.find((t: SlabType) => t.id?.toString() === selectedSlabId);
+      const selectedSlab = slabTypeOptions.find((t: SlabType) => t.id?.toString() === selectedSlabId);
       const selectedSlabName = selectedSlab?.name ?? "";
       const payload = {
         area: area,
@@ -300,10 +358,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         soilExcessCm,
         selectedGroutingId,
         addFrameBoard,
+        frameBorderRowCount: addFrameBoard ? Math.max(1, Math.min(50, Math.floor(Number(frameBorderRowCount) || 1))) : undefined,
         framePieceLengthCm: addFrameBoard ? framePieceLengthCm : undefined,
         framePieceWidthCm: addFrameBoard ? framePieceWidthCm : undefined,
         frameJointType: addFrameBoard ? frameJointType : undefined,
         frameSidesEnabled: addFrameBoard ? frameSidesEnabled : undefined,
+        frameBorderMaterial: addFrameBoard ? frameBorderMaterial : undefined,
         pathCornerType: savedInputs?.pathCornerType,
         vizGroutWidthMm,
       };
@@ -313,7 +373,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         fn(payload);
       }
     }
-  }, [area, tape1ThicknessCm, mortarThicknessCm, slabThicknessCm, selectedSlabId, canvasCutSlabs, soilExcessCm, selectedGroutingId, addFrameBoard, framePieceLengthCm, framePieceWidthCm, frameJointType, frameSidesEnabled, savedInputs?.pathCornerType, isInProjectCreating, taskTemplates?.length, vizGroutWidthMm]);
+  }, [area, tape1ThicknessCm, mortarThicknessCm, slabThicknessCm, selectedSlabId, canvasCutSlabs, soilExcessCm, selectedGroutingId, addFrameBoard, frameBorderRowCount, framePieceLengthCm, framePieceWidthCm, frameJointType, frameSidesEnabled, frameBorderMaterial, savedInputs?.pathCornerType, isInProjectCreating, slabTypeOptions.length, vizGroutWidthMm]);
 
   useEffect(() => {
     if (!isInProjectCreating || !shape?.closed || shape.points.length < 3) {
@@ -321,7 +381,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       setCanvasCutGroups((prev) => (prev.length > 0 ? [] : prev));
       return;
     }
-    const selectedSlab = taskTemplates?.find((t: SlabType) => t.id?.toString() === selectedSlabId);
+    const selectedSlab = slabTypeOptions.find((t: SlabType) => t.id?.toString() === selectedSlabId);
     const inputs = mergedSlabVizInputs(shape, savedInputs, vizGroutWidthMm, selectedSlab?.name);
     if (!inputs.vizSlabWidth) {
       setCanvasCutSlabs((prev) => (prev !== null ? null : prev));
@@ -347,10 +407,21 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         vizReusedAreaCm2: reusedAreaCm2,
         cutSlabs: String(cutSlabCount),
       };
-      const same = prev.vizFullSlabCount === next.vizFullSlabCount
-        && prev.vizWasteAreaCm2 === next.vizWasteAreaCm2
-        && prev.vizReusedAreaCm2 === next.vizReusedAreaCm2
-        && prev.cutSlabs === next.cutSlabs
+      const numClose = (a: unknown, b: unknown, eps = 1e-4) => {
+        const na = Number(a);
+        const nb = Number(b);
+        if (!Number.isFinite(na) && !Number.isFinite(nb)) return true;
+        if (!Number.isFinite(na) || !Number.isFinite(nb)) return false;
+        return Math.abs(na - nb) < eps;
+      };
+      const sameFull =
+        Number(prev.vizFullSlabCount ?? 0) === Number(next.vizFullSlabCount ?? 0);
+      const sameCutSlabs = String(prev.cutSlabs ?? '') === String(next.cutSlabs);
+      const same =
+        sameFull
+        && numClose(prev.vizWasteAreaCm2, next.vizWasteAreaCm2)
+        && numClose(prev.vizReusedAreaCm2, next.vizReusedAreaCm2)
+        && sameCutSlabs
         && JSON.stringify(prev.vizWasteSatisfied ?? []) === JSON.stringify(next.vizWasteSatisfied);
       if (!same) {
         fn(next);
@@ -367,6 +438,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     shape?.calculatorInputs?.vizOriginOffsetX,
     shape?.calculatorInputs?.vizOriginOffsetY,
     shape?.calculatorInputs?.framePieceWidthCm,
+    shape?.calculatorInputs?.frameBorderRowCount,
     shape?.calculatorInputs?.pathCenterline,
     shape?.calculatorInputs?.pathIsOutline,
     shape?.calculatorInputs?.slabOrientation,
@@ -380,7 +452,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     shape?.closed,
     vizGroutWidthMm,
     selectedSlabId,
-    taskTemplates?.length,
+    slabTypeOptions.length,
   ]);
 
   // Fetch time estimates for cutting tasks (needed by frame auto-compute below)
@@ -420,12 +492,44 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
   const frameTaskTemplates = useMemo(() => frameTaskTemplatesData ?? [], [frameTaskTemplatesData]);
 
   const selectedSlabTypeForFrame = useMemo(
-    () => (selectedSlabId ? taskTemplates.find((t: SlabType) => t.id?.toString() === selectedSlabId) ?? null : null),
-    [selectedSlabId, taskTemplates]
+    () => (selectedSlabId ? slabTypeOptions.find((t: SlabType) => t.id?.toString() === selectedSlabId) ?? null : null),
+    [selectedSlabId, slabTypeOptions]
   );
 
   // Ref to avoid setState loop when shape reference changes but frame result is unchanged
   const lastFrameResultsRef = useRef<{ totalFrameSlabs: number; totalHours: number; totalFrameAreaM2: number } | null>(null);
+  /** Manual “Calculate frame slabs” on canvas — bumps deps so the auto-compute effect re-runs */
+  const [frameRecalcTick, setFrameRecalcTick] = useState(0);
+
+  const clearFrameConfigInline = useCallback(() => {
+    setFramePieceLengthCm("90");
+    setFramePieceWidthCm("15");
+    setFrameBorderRowCount("1");
+    setFrameJointType("butt");
+    lastFrameResultsRef.current = null;
+    setFrameResults(null);
+    if (shape) {
+      if (isPathElement(shape)) {
+        const pathPts = getPathPolygon(shape);
+        if (pathPts && pathPts.length >= 3) {
+          setFrameSidesEnabled(Array.from({ length: pathPts.length }, () => true));
+        } else {
+          setFrameSidesEnabled([]);
+        }
+      } else {
+        const eff = getEffectivePolygonWithEdgeIndices(shape);
+        const numLogicalEdges = Math.max(...eff.edgeIndices, -1) + 1;
+        if (numLogicalEdges > 0) {
+          setFrameSidesEnabled(Array.from({ length: numLogicalEdges }, () => true));
+        } else {
+          setFrameSidesEnabled([]);
+        }
+      }
+    } else {
+      setFrameSidesEnabled([]);
+    }
+    setFrameRecalcTick((x) => x + 1);
+  }, [shape]);
 
   // Auto-compute frame sides from polygon edges when in canvas mode
   useEffect(() => {
@@ -450,6 +554,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       setFrameResults(null);
       return;
     }
+    const numLogicalEdges = Math.max(...edgeIndices, -1) + 1;
+    const rowCount = Math.max(1, Math.min(50, Math.floor(Number(frameBorderRowCount) || 1)));
     const pieceLen = parseFloat(framePieceLengthCm);
     const pieceWid = parseFloat(framePieceWidthCm);
     if (isNaN(pieceLen) || isNaN(pieceWid) || pieceLen <= 0 || pieceWid <= 0) {
@@ -457,11 +563,61 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       setFrameResults(null);
       return;
     }
+
+    if (frameBorderMaterial === "cobble") {
+      const jointGapMm = Number(shape?.calculatorInputs?.jointGapMm ?? 1);
+      const enabledSides =
+        frameSidesEnabled.length >= numLogicalEdges ? frameSidesEnabled : Array.from({ length: numLogicalEdges }, () => true);
+      const inputs: Record<string, any> = {
+        addFrameToMonoblock: true,
+        framePieceLengthCm: pieceLen,
+        framePieceWidthCm: pieceWid,
+        frameBorderRowCount: rowCount,
+        frameJointType,
+        frameSidesEnabled: enabledSides,
+        jointGapMm,
+      };
+      const result = computeMonoblockFrameBlocks(shape as any, inputs);
+      const layingHours = result.totalFrameBlocks / 60;
+      const cutBlocksTask = (taskTemplates as any[])?.find(
+        (t: any) => (t.name || "").toLowerCase().includes("cutting") && (t.name || "").toLowerCase().includes("block")
+      );
+      const hoursPerCut = cutBlocksTask?.estimated_hours ?? 2 / 60;
+      const cuttingHours = result.frameAngleCuts * hoursPerCut;
+      const nextResults = {
+        totalFrameSlabs: result.totalFrameBlocks,
+        totalHours: layingHours + cuttingHours,
+        totalFrameAreaM2: result.totalFrameAreaM2,
+        sides: result.sides.map((s) => ({ length: s.length, slabs: s.blocks })),
+        taskName: "laying frame cobbles (60/h)",
+        task_id: undefined,
+        framePieceLengthCm,
+        framePieceWidthCm,
+        frameRowsLabel: rowCount > 1 ? `${rowCount}× (${pieceLen}×${pieceWid})` : `${pieceLen}×${pieceWid}`,
+        cuttingHours,
+        cuttingTaskName: result.frameAngleCuts > 0 ? "(cutting blocks) (frame)" : "",
+        cutting_task_id: cutBlocksTask?.id,
+        frameCobbleMode: true,
+      };
+      const prevRef = lastFrameResultsRef.current;
+      const changed =
+        !prevRef ||
+        prevRef.totalFrameSlabs !== nextResults.totalFrameSlabs ||
+        prevRef.totalHours !== nextResults.totalHours ||
+        prevRef.totalFrameAreaM2 !== nextResults.totalFrameAreaM2;
+      if (changed) {
+        lastFrameResultsRef.current = {
+          totalFrameSlabs: nextResults.totalFrameSlabs,
+          totalHours: nextResults.totalHours,
+          totalFrameAreaM2: nextResults.totalFrameAreaM2,
+        };
+        setFrameResults(nextResults);
+      }
+      return;
+    }
+
     const groutMm = Number(shape?.calculatorInputs?.vizGroutWidthMm ?? (shape?.calculatorInputs?.vizGroutWidth != null ? Number(shape.calculatorInputs.vizGroutWidth) * 10 : 5));
     const groutM = groutMm / 1000;
-    const pieceLenM = pieceLen / 100;
-    const stepM = pieceLenM + groutM;
-    const numLogicalEdges = Math.max(...edgeIndices, -1) + 1;
     const enabled = frameSidesEnabled.length >= numLogicalEdges ? frameSidesEnabled : Array.from({ length: numLogicalEdges }, () => true);
     const edgeLengths: number[] = Array(numLogicalEdges).fill(0);
     const n = pts.length;
@@ -471,31 +627,51 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       const segLenM = distance(pts[i], pts[j]) / PIXELS_PER_METER;
       edgeLengths[edgeIdx] += segLenM;
     }
-    const sides: Array<{ length: number; slabs: number }> = [];
-    for (let e = 0; e < numLogicalEdges; e++) {
-      if (enabled[e] === false) continue;
-      const sideLengthM = edgeLengths[e];
-      const slabsPerSide = Math.ceil((sideLengthM + groutM) / stepM);
-      sides.push({ length: sideLengthM, slabs: slabsPerSide });
-    }
-    const totalFrameSlabs = sides.reduce((sum, s) => sum + s.slabs, 0);
+
+    let totalFrameSlabs = 0;
+    let totalHours = 0;
+    let totalFrameAreaM2 = 0;
+    let totalCuts = 0;
+    const sidesAll: Array<{ length: number; slabs: number }> = [];
+    let primaryTaskName = "laying slab frame above 0.3m2";
+    let primaryTaskId: string | undefined;
+
+    const pieceLenM = pieceLen / 100;
+    const stepM = pieceLenM + groutM;
     const widthM = pieceWid / 100;
     const pieceAreaM2 = (pieceLen / 100) * widthM;
-    const taskName = pieceAreaM2 < 0.3 ? 'laying slab frame belove 0.3m2' : 'laying slab frame above 0.3m2';
-    const frameTask = frameTaskTemplates.find((t: any) => t.name?.toLowerCase().includes(taskName.toLowerCase()));
-    let totalHours = 0;
-    if (frameTask?.estimated_hours != null) {
-      totalHours = totalFrameSlabs * frameTask.estimated_hours;
+    const taskName = pieceAreaM2 < 0.3 ? "laying slab frame belove 0.3m2" : "laying slab frame above 0.3m2";
+    primaryTaskName = taskName;
+    const frameTaskForRow = frameTaskTemplates.find((t: any) => t.name?.toLowerCase().includes(taskName.toLowerCase()));
+    if (frameTaskForRow?.id) primaryTaskId = frameTaskForRow.id;
+
+    for (let rowIdx = 0; rowIdx < rowCount; rowIdx++) {
+      const sides: Array<{ length: number; slabs: number }> = [];
+      for (let e = 0; e < numLogicalEdges; e++) {
+        if (enabled[e] === false) continue;
+        const sideLengthM = edgeLengths[e];
+        const slabsPerSide = Math.ceil((sideLengthM + groutM) / stepM);
+        sides.push({ length: sideLengthM, slabs: slabsPerSide });
+      }
+      const rowSlabs = sides.reduce((sum, s) => sum + s.slabs, 0);
+      totalFrameSlabs += rowSlabs;
+      for (const s of sides) sidesAll.push(s);
+      if (frameTaskForRow?.estimated_hours != null) {
+        totalHours += rowSlabs * frameTaskForRow.estimated_hours;
+      }
+      totalFrameAreaM2 += sides.reduce((sum, s) => sum + s.length * widthM, 0);
+      totalCuts += sides.length * 3;
     }
-    const totalCuts = sides.length * 3;
-    const selectedSlabType = taskTemplates?.find((t: SlabType) => t.id?.toString() === selectedSlabId);
+
+    const frameTask = frameTaskTemplates.find((t: any) => t.name?.toLowerCase().includes(primaryTaskName.toLowerCase()));
+    const selectedSlabType = slabTypeOptions.find((t: SlabType) => t.id?.toString() === selectedSlabId);
     let cuttingHours = 0;
-    let cuttingTaskName = '';
+    let cuttingTaskName = "";
     let cuttingTaskId: string | undefined;
     if (selectedSlabType && totalCuts > 0) {
-      const isPorcelain = (selectedSlabType.name || '').toLowerCase().includes('slab') && !(selectedSlabType.name || '').toLowerCase().includes('sandstone');
-      const cuttingTaskSearchName = isPorcelain ? 'cutting porcelain' : 'cutting sandstones';
-      const cuttingTask = (cuttingTasks as any[])?.find((t: any) => (t.name || '').toLowerCase().includes(cuttingTaskSearchName));
+      const isPorcelain = (selectedSlabType.name || "").toLowerCase().includes("slab") && !(selectedSlabType.name || "").toLowerCase().includes("sandstone");
+      const cuttingTaskSearchName = isPorcelain ? "cutting porcelain" : "cutting sandstones";
+      const cuttingTask = (cuttingTasks as any[])?.find((t: any) => (t.name || "").toLowerCase().includes(cuttingTaskSearchName));
       if (cuttingTask?.estimated_hours != null) {
         cuttingHours = totalCuts * cuttingTask.estimated_hours;
         cuttingTaskName = `${cuttingTask.name} (frame)`;
@@ -503,19 +679,19 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       } else {
         const minutesPerCut = isPorcelain ? 6 : 4;
         cuttingHours = (totalCuts * minutesPerCut) / 60;
-        cuttingTaskName = isPorcelain ? 'Cutting porcelain (frame)' : 'Cutting sandstones (frame)';
+        cuttingTaskName = isPorcelain ? "Cutting porcelain (frame)" : "Cutting sandstones (frame)";
       }
     }
-    const totalFrameAreaM2 = sides.reduce((sum, s) => sum + s.length * widthM, 0);
     const nextResults = {
       totalFrameSlabs,
       totalHours: totalHours + cuttingHours,
       totalFrameAreaM2,
-      sides,
-      taskName: frameTask?.name || taskName,
-      task_id: frameTask?.id,
+      sides: sidesAll,
+      taskName: frameTask?.name || primaryTaskName,
+      task_id: frameTask?.id ?? primaryTaskId,
       framePieceLengthCm,
       framePieceWidthCm,
+      frameRowsLabel: rowCount > 1 ? `${rowCount}× (${pieceLen}×${pieceWid})` : `${pieceLen}×${pieceWid}`,
       cuttingHours,
       cuttingTaskName,
       cutting_task_id: cuttingTaskId,
@@ -526,7 +702,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       lastFrameResultsRef.current = { totalFrameSlabs: nextResults.totalFrameSlabs, totalHours: nextResults.totalHours, totalFrameAreaM2: nextResults.totalFrameAreaM2 };
       setFrameResults(nextResults);
     }
-  }, [isInProjectCreating, addFrameBoard, shape, frameSidesEnabled, shape?.calculatorInputs?.vizGroutWidthMm, shape?.calculatorInputs?.vizGroutWidth, framePieceLengthCm, framePieceWidthCm, frameTaskTemplates, cuttingTasks, taskTemplates, selectedSlabId]);
+  }, [isInProjectCreating, addFrameBoard, shape, frameSidesEnabled, frameBorderMaterial, frameJointType, shape?.calculatorInputs?.vizGroutWidthMm, shape?.calculatorInputs?.vizGroutWidth, shape?.calculatorInputs?.jointGapMm, frameBorderRowCount, framePieceLengthCm, framePieceWidthCm, frameTaskTemplates, cuttingTasks, taskTemplates, slabTypeOptions, selectedSlabId, frameRecalcTick]);
 
   const [calculateDigging, setCalculateDigging] = useState<boolean>(false);
   const [selectedExcavator, setSelectedExcavator] = useState<DiggingEquipment | null>(null);
@@ -552,12 +728,20 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     if (savedInputs?.addFrameBoard !== undefined) setAddFrameBoard((prev) => (!!savedInputs.addFrameBoard !== prev ? !!savedInputs.addFrameBoard : prev));
     if (savedInputs?.framePieceLengthCm != null) setFramePieceLengthCm((prev) => (String(savedInputs.framePieceLengthCm) !== prev ? String(savedInputs.framePieceLengthCm) : prev));
     if (savedInputs?.framePieceWidthCm != null) setFramePieceWidthCm((prev) => (String(savedInputs.framePieceWidthCm) !== prev ? String(savedInputs.framePieceWidthCm) : prev));
-    if (savedInputs?.frameJointType === 'butt' || savedInputs?.frameJointType === 'miter45') setFrameJointType((prev) => (savedInputs.frameJointType !== prev ? savedInputs.frameJointType : prev));
+    if (savedInputs?.frameJointType === "butt" || savedInputs?.frameJointType === "miter45") setFrameJointType((prev) => (savedInputs.frameJointType !== prev ? savedInputs.frameJointType : prev));
+    if (savedInputs?.frameBorderMaterial === "slab" || savedInputs?.frameBorderMaterial === "cobble") {
+      const m = savedInputs.frameBorderMaterial as "slab" | "cobble";
+      setFrameBorderMaterial((prev) => (m !== prev ? m : prev));
+    }
+    if (savedInputs?.frameBorderRowCount != null || savedInputs?.framePieceLengthCm != null || Array.isArray(savedInputs?.frameBorderRows)) {
+      const next = parseFrameBorderRowCountFromSaved(savedInputs);
+      setFrameBorderRowCount((prev) => (next !== prev ? next : prev));
+    }
     if (Array.isArray(savedInputs?.frameSidesEnabled)) {
       const next = savedInputs.frameSidesEnabled;
       setFrameSidesEnabled((prev) => (JSON.stringify(prev) !== JSON.stringify(next) ? next : prev));
     }
-  }, [savedInputs?.addFrameBoard, savedInputs?.framePieceLengthCm, savedInputs?.framePieceWidthCm, savedInputs?.frameJointType, savedInputs?.frameSidesEnabled]);
+  }, [savedInputs?.addFrameBoard, savedInputs?.frameBorderRowCount, savedInputs?.framePieceLengthCm, savedInputs?.framePieceWidthCm, savedInputs?.frameJointType, savedInputs?.frameSidesEnabled, savedInputs?.frameBorderMaterial, savedInputs?.frameBorderRows]);
 
   useEffect(() => {
     if (savedInputs?.tape1ThicknessCm != null && savedInputs.tape1ThicknessCm !== '') setTape1ThicknessCm((prev) => (String(savedInputs.tape1ThicknessCm) !== prev ? String(savedInputs.tape1ThicknessCm) : prev));
@@ -759,8 +943,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         console.error('Error fetching equipment:', error);
       }
     };
-    if (calculateDigging || calculateTransport) fetchEquipment();
-  }, [calculateDigging, calculateTransport]);
+    if (calculateDigging || calculateTransport || (isInProjectCreating && propSelectedExcavator)) fetchEquipment();
+  }, [calculateDigging, calculateTransport, isInProjectCreating, propSelectedExcavator]);
 
   // Add time estimate functions
   // Helper function to calculate material transport time
@@ -771,7 +955,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -844,12 +1028,17 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       setCalculationError(t('calculator:select_slab_type'));
       return;
     }
-    
-    // Find the selected slab type using the ID
-    const selectedSlabType = taskTemplates.find(type => type.id.toString() === selectedSlabId);
-    
+
+    if (isLoading) {
+      setCalculationError(t('calculator:loading_slab_types'));
+      return;
+    }
+
+    // Same filter as the slab-type dropdown (laying slabs, not concrete)
+    const selectedSlabType = slabTypeOptions.find((type: SlabType) => type.id.toString() === selectedSlabId);
+
     if (!selectedSlabType) {
-      setCalculationError(`Selected slab type not found (ID: ${selectedSlabId})`);
+      setCalculationError(t('calculator:slab_type_not_found', { id: selectedSlabId }));
       return;
     }
     
@@ -964,9 +1153,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       let normalizedSlabTransportTime = 0;
       let normalizedSandTransportTime = 0;
       let normalizedCementTransportTime = 0;
-      
-      // Calculate slab pieces based on area
-      const slabPieces = areaNum * 2; // Approximate pieces
+      let frameSlabTransportTime = 0;
+      let normalizedFrameSlabTransportTime = 0;
+
+      const mainFieldSlabPieces = areaNum * 2; // pole główne
+      const frameSlabPieces =
+        addFrameBoard && frameResults && frameResults.totalFrameSlabs > 0 ? frameResults.totalFrameSlabs : 0;
 
       if (effectiveCalculateTransport) {
         // Use selected transport carrier or default to wheelbarrow 0.125t
@@ -975,10 +1167,15 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         if (effectiveSelectedTransportCarrier) {
           carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
         }
-        if (slabPieces > 0) {
-          const slabResult = calculateMaterialTransportTime(slabPieces, carrierSizeForTransport, 'slabs', transportDistanceMeters);
+        if (mainFieldSlabPieces > 0) {
+          const slabResult = calculateMaterialTransportTime(mainFieldSlabPieces, carrierSizeForTransport, 'slabs', transportDistanceMeters);
           slabTransportTime = slabResult.totalTransportTime;
           normalizedSlabTransportTime = slabResult.normalizedTransportTime;
+        }
+        if (frameSlabPieces > 0) {
+          const frameTx = calculateMaterialTransportTime(frameSlabPieces, carrierSizeForTransport, 'slabs', transportDistanceMeters);
+          frameSlabTransportTime = frameTx.totalTransportTime;
+          normalizedFrameSlabTransportTime = frameTx.normalizedTransportTime;
         }
 
         // Calculate sand transport
@@ -1031,7 +1228,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         breakdown.push({
           task: 'transport slabs',
           hours: slabTransportTime,
-          amount: `${slabPieces.toFixed(0)} pieces`,
+          amount: `${mainFieldSlabPieces.toFixed(0)} pieces`,
           unit: 'pieces',
           normalizedHours: normalizedSlabTransportTime
         });
@@ -1121,8 +1318,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         });
       }
 
-      // Add frame primer coating if applicable
-      if (addFrameBoard && frameResults && frameResults.totalFrameSlabs > 0) {
+      // Add frame primer coating if applicable (slab frame only; cobble frame uses different material)
+      if (addFrameBoard && frameResults && frameResults.totalFrameSlabs > 0 && !frameResults.frameCobbleMode) {
         breakdown.push({
           task: 'Primer coating (frame backs)',
           hours: frameResults.totalFrameSlabs * (0.5 / 60), // 0.5 minute per frame slab = 0.00833 hours
@@ -1135,7 +1332,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       const activeExcavator = isInProjectCreating && propSelectedExcavator ? propSelectedExcavator : selectedExcavator;
       
       // Add digging time if selected
-      if (calculateDigging && activeExcavator && tape1ThicknessM > 0) {
+      // In project/canvas mode, include digging when an excavator is set (same idea as NaturalTurfCalculator).
+      if ((calculateDigging || isInProjectCreating) && activeExcavator && tape1ThicknessM > 0) {
         // Calculate total excavation volume (soil volume)
         const totalExcavationVolumeM3 = soilVolumeM3; // Use the already calculated soil volume
         const totalTons = totalExcavationVolumeM3 * 1.5; // Use consistent 1.5 tonnes per cubic meter for soil
@@ -1261,13 +1459,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         }
       }
       
-      // Calculate total hours
-      let hours = breakdown.reduce((sum, item) => sum + item.hours, 0);
-      
-      // Add frame results if applicable
+      // Add frame results if applicable (dystans/nośnik z głównego Slab Calculator)
       if (addFrameBoard && frameResults) {
-        hours += frameResults.totalHours;
-        // Add frame laying task
         breakdown.push({
           task: frameResults.taskName,
           event_task_id: frameResults.task_id,
@@ -1276,7 +1469,6 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
           unit: 'pieces'
         });
         
-        // Add frame cutting task if there are cutting hours
         if (frameResults.cuttingHours > 0) {
           const totalCuts = frameResults.sides.length * 3; // 3 cuts per side
           breakdown.push({
@@ -1288,19 +1480,13 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
           });
         }
 
-        // Add frame transport tasks from frameResults if available
-        if (frameResults && frameResults.transportTime && frameResults.transportTime > 0) {
-          // Frame slabs are 0.15 m² each (90x60cm)
-          // Transport time is calculated per 0.54 m²
-          // Scale transport time based on total frame area
-          const FRAME_SLAB_AREA_M2 = 0.54;
-          const scaledFrameTransportTime = (frameResults.totalFrameAreaM2 / FRAME_SLAB_AREA_M2) * frameResults.transportTime;
-          
+        if (effectiveCalculateTransport && frameSlabTransportTime > 0 && frameResults.totalFrameAreaM2 > 0) {
           breakdown.push({
             task: 'transport frame slabs',
-            hours: scaledFrameTransportTime,
+            hours: frameSlabTransportTime,
             amount: frameResults.totalFrameAreaM2,
-            unit: 'square meters'
+            unit: 'square meters',
+            normalizedHours: normalizedFrameSlabTransportTime
           });
         }
       }
@@ -1377,8 +1563,12 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       if (addFrameBoard && frameResults && frameResults.totalFrameSlabs > 0) {
         const frameLen = frameResults.framePieceLengthCm ?? framePieceLengthCm;
         const frameWid = frameResults.framePieceWidthCm ?? framePieceWidthCm;
+        const frameLabel =
+          frameResults.frameRowsLabel && frameResults.frameRowsLabel.includes("× (")
+            ? `${t("calculator:frame_border_row_count_label")}: ${frameResults.frameRowsLabel}`
+            : t("calculator:frame_slabs_format", { length: frameLen, width: frameWid });
         materialsList.push({
-          name: t('calculator:frame_slabs_format', { length: frameLen, width: frameWid }),
+          name: frameLabel,
           amount: frameResults.totalFrameSlabs,
           unit: 'pieces',
           price_per_unit: null,
@@ -1388,10 +1578,18 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       
       // Fetch prices for materials
       const materialsWithPrices = await fetchMaterialPrices(materialsList);
-      
+
+      const filteredBreakdown = breakdown.filter((item) => {
+        const n = (item.task || '').toLowerCase();
+        if (!n.includes('transport')) return true;
+        if (n.includes('slurry') || n.includes('zawiesin')) return false;
+        return true;
+      });
+      const hoursTotal = filteredBreakdown.reduce((sum, item) => sum + item.hours, 0);
+
       setMaterials(materialsWithPrices);
-      setTotalHours(hours);
-      setTaskBreakdown(breakdown);
+      setTotalHours(hoursTotal);
+      setTaskBreakdown(filteredBreakdown);
     } catch (err) {
       console.error('Error in calculation:', err);
       setCalculationError(`${t('calculator:calculation_error')}: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -1402,7 +1600,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
   useEffect(() => {
     if (totalHours !== null && materials.length > 0) {
       const formattedResults = {
-        name: selectedSlabId ? taskTemplates.find(type => type.id.toString() === selectedSlabId)?.name || 'Slab Installation' : 'Slab Installation',
+        name: selectedSlabId ? slabTypeOptions.find((type: SlabType) => type.id.toString() === selectedSlabId)?.name || 'Slab Installation' : 'Slab Installation',
         amount: parseFloat(area) || 0,
         unit: 'square meters',
         hours_worked: totalHours,
@@ -1425,19 +1623,15 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         calculatorElement.setAttribute('data-results', JSON.stringify(formattedResults));
       }
 
-      // Notify parent component
-      if (onResultsChange) {
-        onResultsChange(formattedResults);
-      }
+      onResultsChangeRef.current?.(formattedResults);
     }
-  }, [totalHours, materials, taskBreakdown, area, selectedSlabId, taskTemplates, onResultsChange]);
+  }, [totalHours, materials, taskBreakdown, area, selectedSlabId, slabTypeOptions]);
 
-  // Recalculate when project settings (transport, equipment) change
+  // Recalculate when project settings (transport, equipment) change — wait for task templates (avoids false "not found")
   useEffect(() => {
-    if (recalculateTrigger > 0 && isInProjectCreating) {
-      void calculate();
-    }
-  }, [recalculateTrigger]);
+    if (recalculateTrigger <= 0 || !isInProjectCreating || isLoading) return;
+    void calculate();
+  }, [recalculateTrigger, isInProjectCreating, isLoading]);
 
   // Scroll to results when they appear
   useEffect(() => {
@@ -1456,16 +1650,11 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     }
   }, [materials]);
 
-  // Only show slab-related templates in the dropdown (exclude concrete slabs - they have their own calculator)
-  const slabTypeOptions = taskTemplates.filter((tpl: SlabType) => {
-    const name = (tpl.name || '').toLowerCase();
-    return name.includes('laying slabs') && !name.includes('(concrete)') && !name.includes('betonowe');
-  });
   const selectedSlabName = slabTypeOptions.find((tpl: SlabType) => tpl.id?.toString() === selectedSlabId)?.name ?? '';
   const selectedGroutingName = groutingMethods.find((m: { id?: string | number; name?: string }) => (m.id?.toString() || String(m.id)) === selectedGroutingId)?.name ?? '';
 
   return (
-    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
+    <div style={{ fontFamily: fonts.body, display: 'flex', flexDirection: 'column', gap: calcLayoutNarrow ? spacing.xl : spacing["6xl"] }}>
       {!compactForPath && (
         <>
           <h2 style={{ fontSize: fontSizes["2xl"], fontWeight: fontWeights.extrabold, color: colors.textPrimary, fontFamily: fonts.display, letterSpacing: '0.3px', margin: `${spacing.md}px 0 ${spacing.sm}px` }}>
@@ -1477,7 +1666,14 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         </>
       )}
 
-      <Card padding={`${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`} style={{ marginBottom: spacing["5xl"] }}>
+      <Card
+        padding={
+          calcLayoutNarrow
+            ? `${spacing.md}px ${spacing.sm}px ${spacing.md}px`
+            : `${spacing["6xl"]}px ${spacing["6xl"]}px ${spacing.md}px`
+        }
+        style={{ marginBottom: spacing["5xl"] }}
+      >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: `0 ${spacing["5xl"]}px` }}>
           {!compactForPath && (
             <TextInput
@@ -1616,37 +1812,90 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
           />
           {addFrameBoard && isInProjectCreating && (
             <div className="mt-2 space-y-2">
-              <div className="flex flex-wrap gap-3 items-center">
+              <div style={{ marginBottom: spacing.md }}>
+                <Label>{t("calculator:frame_border_material_label")}</Label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, marginTop: spacing.sm }}>
+                  <button
+                    type="button"
+                    onClick={() => setFrameBorderMaterial("slab")}
+                    style={{
+                      padding: `${spacing.sm}px ${spacing.lg}px`,
+                      borderRadius: radii.md,
+                      border: `1px solid ${frameBorderMaterial === "slab" ? colors.accentBlueBorder : colors.borderDefault}`,
+                      background: frameBorderMaterial === "slab" ? colors.bgHover : "transparent",
+                      color: colors.textSecondary,
+                      cursor: "pointer",
+                      fontSize: fontSizes.sm,
+                    }}
+                  >
+                    {t("calculator:frame_border_material_slab")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFrameBorderMaterial("cobble")}
+                    style={{
+                      padding: `${spacing.sm}px ${spacing.lg}px`,
+                      borderRadius: radii.md,
+                      border: `1px solid ${frameBorderMaterial === "cobble" ? colors.accentBlueBorder : colors.borderDefault}`,
+                      background: frameBorderMaterial === "cobble" ? colors.bgHover : "transparent",
+                      color: colors.textSecondary,
+                      cursor: "pointer",
+                      fontSize: fontSizes.sm,
+                    }}
+                  >
+                    {t("calculator:frame_border_material_cobble")}
+                  </button>
+                </div>
+                <div style={{ marginTop: spacing.xs }}>
+                  <HelperText>{t("calculator:frame_border_material_hint")}</HelperText>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-3 items-center frame-board-inline-inputs">
                 <label className="flex items-center gap-2">
-                  <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{t('calculator:piece_length_cm_label') || 'Piece length (cm)'}</span>
+                  <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>
+                    {frameBorderMaterial === "cobble" ? t("calculator:frame_piece_length_cobble_cm") : t("calculator:piece_length_cm_label")}
+                  </span>
                   <input
                     type="number"
                     min={1}
                     value={framePieceLengthCm}
                     onChange={(e) => setFramePieceLengthCm(e.target.value)}
-                    style={{ width: 80, padding: '4px 8px', fontSize: fontSizes.sm, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }}
+                    style={{ width: 80, padding: "4px 8px", fontSize: fontSizes.sm, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }}
                   />
                 </label>
                 <label className="flex items-center gap-2">
-                  <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{t('calculator:piece_width_cm_label') || 'Piece width (cm)'}</span>
+                  <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>
+                    {frameBorderMaterial === "cobble" ? t("calculator:frame_piece_width_cobble_cm") : t("calculator:piece_width_cm_label")}
+                  </span>
                   <input
                     type="number"
                     min={1}
                     value={framePieceWidthCm}
                     onChange={(e) => setFramePieceWidthCm(e.target.value)}
-                    style={{ width: 80, padding: '4px 8px', fontSize: fontSizes.sm, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }}
+                    style={{ width: 80, padding: "4px 8px", fontSize: fontSizes.sm, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }}
+                  />
+                </label>
+                <label className="flex items-center gap-2">
+                  <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{t("calculator:frame_border_row_count_label")}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={frameBorderRowCount}
+                    onChange={(e) => setFrameBorderRowCount(e.target.value)}
+                    style={{ width: 64, padding: "4px 8px", fontSize: fontSizes.sm, border: `1px solid ${colors.borderDefault}`, borderRadius: radii.md, background: colors.bgInput, color: colors.textPrimary }}
                   />
                 </label>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: fontSizes.sm, color: colors.textDim }}>{t('calculator:frame_joint_type_label')}</label>
+                <label style={{ display: "block", fontSize: fontSizes.sm, color: colors.textDim }}>{t("calculator:frame_joint_type_label")}</label>
                 <select
                   value={frameJointType}
-                  onChange={(e) => setFrameJointType(e.target.value as 'butt' | 'miter45')}
-                  style={{ marginTop: spacing.sm, display: 'block', maxWidth: 320, borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: '8px 12px', fontSize: fontSizes.sm, outline: 'none' }}
+                  onChange={(e) => setFrameJointType(e.target.value as "butt" | "miter45")}
+                  style={{ marginTop: spacing.sm, display: "block", maxWidth: 320, borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: "8px 12px", fontSize: fontSizes.sm, outline: "none" }}
                 >
-                  <option value="butt">{t('calculator:frame_joint_butt')}</option>
-                  <option value="miter45">{t('calculator:frame_joint_miter45')}</option>
+                  <option value="butt">{t("calculator:frame_joint_butt")}</option>
+                  <option value="miter45">{t("calculator:frame_joint_miter45")}</option>
                 </select>
               </div>
               {shape && (() => {
@@ -1680,17 +1929,72 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
                   </div>
                 );
               })()}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: spacing.sm,
+                  marginTop: spacing.md,
+                  alignItems: "stretch",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setFrameRecalcTick((x) => x + 1)}
+                  style={{
+                    flex: "1 1 160px",
+                    minWidth: 120,
+                    padding: `${spacing.sm}px ${spacing.xl}px`,
+                    borderRadius: radii.md,
+                    border: "none",
+                    background: colors.green,
+                    color: colors.textOnAccent,
+                    fontWeight: fontWeights.medium,
+                    fontSize: fontSizes.sm,
+                    cursor: "pointer",
+                  }}
+                >
+                  {t("calculator:calculate_frame_slabs_button")}
+                </button>
+                <button
+                  type="button"
+                  onClick={clearFrameConfigInline}
+                  style={{
+                    flex: "1 1 160px",
+                    minWidth: 120,
+                    padding: `${spacing.sm}px ${spacing.xl}px`,
+                    borderRadius: radii.md,
+                    border: `1px solid ${colors.borderDefault}`,
+                    background: colors.bgElevated,
+                    color: colors.textPrimary,
+                    fontWeight: fontWeights.medium,
+                    fontSize: fontSizes.sm,
+                    cursor: "pointer",
+                  }}
+                >
+                  {t("calculator:clear_all_button")}
+                </button>
+              </div>
             </div>
           )}
           {addFrameBoard && !isInProjectCreating && (
-            <Button onClick={() => setIsFrameModalOpen(true)} variant="primary" style={{ marginTop: spacing.lg, fontSize: fontSizes.md }}>
+            <Button onClick={() => setIsFrameModalOpen(true)} variant="primary" fullWidth style={{ marginTop: spacing.lg, fontSize: fontSizes.md }}>
               {t('calculator:configure_frame_slabs_button')}
             </Button>
           )}
           {frameResults && (
-            <div style={{ marginTop: spacing.md, padding: spacing.base, background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>
+            <div style={{ marginTop: spacing.md, padding: spacing.md, background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>
               <p style={{ fontSize: fontSizes.base, color: colors.textSecondary, fontFamily: fonts.body }}>
-                <strong>{t('calculator:frame_slabs_format', { length: frameResults.framePieceLengthCm ?? framePieceLengthCm, width: frameResults.framePieceWidthCm ?? framePieceWidthCm })}:</strong> {frameResults.totalFrameSlabs} {t('units:pieces')}, {frameResults.totalHours.toFixed(2)} {t('calculator:hours_label')}
+                <strong>
+                  {frameResults.frameRowsLabel && frameResults.frameRowsLabel.includes("× (")
+                    ? `${t("calculator:frame_border_row_count_label")}: ${frameResults.frameRowsLabel}`
+                    : t("calculator:frame_slabs_format", {
+                        length: frameResults.framePieceLengthCm ?? framePieceLengthCm,
+                        width: frameResults.framePieceWidthCm ?? framePieceWidthCm,
+                      })}
+                  :
+                </strong>{" "}
+                {frameResults.totalFrameSlabs} {t("units:pieces")}, {frameResults.totalHours.toFixed(2)} {t("calculator:hours_label")}
                 <br />
                 <strong>{t('calculator:frame_area_label')}:</strong> {frameResults.totalFrameAreaM2.toFixed(2)} m²
               </p>
@@ -1845,7 +2149,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         </Button>
         
         {calculationError && (
-          <div style={{ padding: spacing.base, background: 'rgba(239,68,68,0.15)', border: `1px solid ${colors.red}`, borderRadius: radii.lg, color: colors.textPrimary }}>
+          <div style={{ padding: spacing.md, background: 'rgba(239,68,68,0.15)', border: `1px solid ${colors.red}`, borderRadius: radii.lg, color: colors.textPrimary }}>
             {calculationError}
           </div>
         )}

@@ -20,6 +20,7 @@ import {
   C,
   snapPatternDirectionToBoundaryAngles,
   PATTERN_BOUNDARY_SNAP_THRESHOLD_DEG,
+  isRectangleCenterlineQuad,
 } from "../../../projectmanagement/canvacreator/geometry";
 
 // ── Helper: create a simple rectangle in pixel coords ────────
@@ -31,6 +32,24 @@ function rectPoints(x: number, y: number, w: number, h: number): Point[] {
     { x, y: y + h },
   ];
 }
+
+// ══════════════════════════════════════════════════════════════
+// isRectangleCenterlineQuad
+// ══════════════════════════════════════════════════════════════
+describe("isRectangleCenterlineQuad", () => {
+  it("accepts axis-aligned rectangle corners in order", () => {
+    expect(isRectangleCenterlineQuad(rectPoints(0, 0, 10, 5))).toBe(true);
+  });
+  it("rejects skewed parallelogram", () => {
+    const skew: Point[] = [
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 15, y: 5 },
+      { x: 5, y: 5 },
+    ];
+    expect(isRectangleCenterlineQuad(skew)).toBe(false);
+  });
+});
 
 // ══════════════════════════════════════════════════════════════
 // distance

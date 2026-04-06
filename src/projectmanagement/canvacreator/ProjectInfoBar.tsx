@@ -5,7 +5,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { ProjectSettings } from "./types";
-import { C } from "./geometry";
+import { colors } from "../../themes/designTokens";
 import DatePicker from "../../components/DatePicker";
 
 interface ProjectInfoBarProps {
@@ -21,8 +21,8 @@ export default function ProjectInfoBar({ projectSettings, onChange }: ProjectInf
       alignItems: "center",
       gap: 16,
       padding: "8px 16px",
-      background: C.panel,
-      borderBottom: `1px solid ${C.panelBorder}`,
+      background: colors.bgElevated,
+      borderBottom: `1px solid ${colors.borderDefault}`,
       flexShrink: 0,
       flexWrap: "wrap",
     }}>
@@ -35,10 +35,10 @@ export default function ProjectInfoBar({ projectSettings, onChange }: ProjectInf
           flex: "1 1 200px",
           minWidth: 120,
           padding: "6px 12px",
-          background: C.bg,
-          border: `1px solid ${C.panelBorder}`,
+          background: colors.bgInput,
+          border: `1px solid ${colors.borderDefault}`,
           borderRadius: 6,
-          color: C.text,
+          color: colors.textPrimary,
           fontSize: 14,
           fontFamily: "inherit",
         }}
@@ -62,10 +62,10 @@ export default function ProjectInfoBar({ projectSettings, onChange }: ProjectInf
         onChange={e => onChange({ status: e.target.value as ProjectSettings["status"] })}
         style={{
           padding: "6px 12px",
-          background: C.bg,
-          border: `1px solid ${C.panelBorder}`,
+          background: colors.bgInput,
+          border: `1px solid ${colors.borderDefault}`,
           borderRadius: 6,
-          color: C.text,
+          color: colors.textPrimary,
           fontSize: 13,
           fontFamily: "inherit",
           cursor: "pointer",

@@ -197,9 +197,9 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
       <div className="rounded-lg max-w-2xl w-full max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
-        <div className="flex justify-between items-center p-6 border-b flex-none" style={{ borderColor: colors.borderDefault }}>
+        <div className="flex justify-between items-center px-3 py-3 md:p-6 border-b flex-none" style={{ borderColor: colors.borderDefault }}>
           <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{t('event:user_authorization_title')}</h2>
           <button
             onClick={onClose}
@@ -212,7 +212,7 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto">
+        <div className="px-3 py-3 md:p-6 overflow-y-auto">
           {/* Add User Button */}
           <div className="mb-4">
             <button
@@ -310,9 +310,9 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
 
       {/* Add User Modal */}
       {showAddUserModal && (
-        <div className="fixed inset-0 z-[51] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="fixed inset-0 z-[51] flex items-center justify-center p-0 md:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="rounded-lg max-w-md w-full" style={{ backgroundColor: colors.bgCard }}>
-            <div className="flex justify-between items-center p-6 border-b" style={{ borderColor: colors.borderDefault }}>
+            <div className="flex justify-between items-center px-3 py-3 md:p-6 border-b" style={{ borderColor: colors.borderDefault }}>
               <h3 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('event:add_user_to_company')}</h3>
               <button
                 onClick={() => setShowAddUserModal(false)}
@@ -325,7 +325,7 @@ const UserAuthorizationModal: React.FC<UserAuthorizationModalProps> = ({ onClose
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="px-3 py-3 md:p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2" style={{ color: colors.textMuted }}>
                   {t('event:user_email_label')}

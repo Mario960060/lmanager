@@ -475,10 +475,10 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
       <div className="rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
         {/* Header */}
-        <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: colors.borderDefault }}>
+        <div className="px-3 py-3 md:p-4 border-b flex justify-between items-center" style={{ borderColor: colors.borderDefault }}>
           <h2 className="text-lg font-semibold" style={{ color: colors.textPrimary }}>{t('form:machinery_task_creator_title')}</h2>
           <button 
             onClick={onClose}
@@ -489,7 +489,7 @@ const MachineryTaskCreator: React.FC<MachineryTaskCreatorProps> = ({ onClose }: 
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto flex-grow" style={{ backgroundColor: colors.bgCard }}>
+        <div className="px-3 py-3 md:p-6 overflow-y-auto flex-grow" style={{ backgroundColor: colors.bgCard }}>
           {isLoading ? (
             <div className="flex flex-col items-center justify-center h-64">
               <Spinner size={32} style={{ marginBottom: 16 }} />

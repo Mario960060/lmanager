@@ -11,7 +11,6 @@ import { getEffectivePolygon, getEffectivePolygonWithEdgeIndices, sampleArcEdgeF
 import { isPathElement, getPathPolygon } from "../linearElements";
 import {
   shrinkPolygon,
-  shrinkPolygonByEdges,
   rectPolygonIntersectionArea,
   rectPolygonIntersection,
   computeWastePolygon,
@@ -20,8 +19,20 @@ import {
   collectCutOperationsFromDemand,
   vizDirectionToPatternAngleRad,
   patternOriginOnOutline,
+  applyFrameInsetShrinkPolygon,
+  getFrameBorderRowsFromInputs,
+  appendWorldPolygonToPath,
+  pathCobbleGridStride,
+  herringbone45CornersAtCell,
+  herringbonePolygonIjIndexBounds,
   type CutInfo,
 } from "./slabPattern";
+import {
+  getMonoblockMixById,
+  defaultMonoblockMixEnabled,
+  type MonoblockMixDefinition,
+  type MonoblockMixPieceKey,
+} from "./monoblockMix";
 
 /** Kostka-only: rect∩polygon with polygon-clipping fallback when Sutherland-Hodgman returns [] (concave/curved shapes). */
 function rectPolygonIntersectionKostka(corners: Point[], polygon: Point[]): Point[] {
@@ -135,6 +146,203 @@ function fitsWithRotation(waste: { w: number; l: number }, demand: { w: number; 
   return (waste.w >= demand.w && waste.l >= demand.l) || (waste.w >= demand.l && waste.l >= demand.w);
 }
 
+const MIN_MIX_STEP_CM = 5;
+
+function getMixEnabledLengthsCm(
+  mix: MonoblockMixDefinition,
+  enabledMap: Partial<Record<MonoblockMixPieceKey, boolean>> | undefined
+): number[] {
+  const def = defaultMonoblockMixEnabled();
+  const merged = { ...def, ...enabledMap };
+  const lengths = mix.pieces.filter((p) => merged[p.key] !== false).map((p) => p.lengthCm);
+  return [...new Set(lengths)].sort((a, b) => b - a);
+}
+
+function buildMixBlockCorners(
+  cx: number,
+  cy: number,
+  lengthPx: number,
+  rowWidthPx: number,
+  dir: Point,
+  perp: Point
+): Point[] {
+  return [
+    { x: cx, y: cy },
+    { x: cx + lengthPx * dir.x, y: cy + lengthPx * dir.y },
+    { x: cx + lengthPx * dir.x + rowWidthPx * perp.x, y: cy + lengthPx * dir.y + rowWidthPx * perp.y },
+    { x: cx + rowWidthPx * perp.x, y: cy + rowWidthPx * perp.y },
+  ];
+}
+
+/**
+ * Mixed monoblock sizes (same row width), staggered every other row so joints do not align.
+ */
+function drawMonoblockMixPattern(
+  ctx: CanvasRenderingContext2D,
+  shape: Shape,
+  pts: Point[],
+  origin: Point,
+  dir: Point,
+  perp: Point,
+  jointPx: number,
+  mix: MonoblockMixDefinition,
+  enabledLengthsCm: number[],
+  worldToScreen: WorldToScreen,
+  zoom: number,
+  showCuts: boolean,
+  inputs: Record<string, any>,
+  polygonForIntersection: Point[],
+  hasArcs: boolean,
+  useNormalColorsForCuts?: boolean
+): void {
+  if (enabledLengthsCm.length === 0) return;
+
+  const rowWidthPx = toPixels(mix.rowWidthCm / 100);
+  const staggerPx = toPixels(mix.staggerAlongCm / 100);
+  const minStepPx = toPixels(MIN_MIX_STEP_CM / 100);
+  const stepWidth = rowWidthPx + jointPx;
+  const origPts = shape.points;
+
+  let maxAlongDir = 0;
+  let maxAlongPerp = 0;
+  for (const p of pts) {
+    const dDir = Math.abs((p.x - origin.x) * dir.x + (p.y - origin.y) * dir.y);
+    const dPerp = Math.abs((p.x - origin.x) * perp.x + (p.y - origin.y) * perp.y);
+    if (dDir > maxAlongDir) maxAlongDir = dDir;
+    if (dPerp > maxAlongPerp) maxAlongPerp = dPerp;
+  }
+  const extendR = Math.ceil(maxAlongPerp / stepWidth) + 2;
+  const extendAlong = Math.ceil(maxAlongDir / minStepPx) + 20;
+  const EXTEND_CAP = 100;
+  const extendRClamped = Math.min(Math.max(extendR, 10), EXTEND_CAP);
+
+  const vizWaste = shape.calculatorInputs?.vizWasteSatisfied;
+  const wasteSatisfiedSet = new Set<string>(
+    Array.isArray(vizWaste) ? vizWaste : (typeof vizWaste === "string" && vizWaste ? [vizWaste] : [])
+  );
+
+  const countOrigVertsInSlab = (corners: Point[]): number => {
+    let n = 0;
+    for (const v of origPts) if (pointInOrOnPolygon(v, corners)) n++;
+    return n;
+  };
+
+  const cornersInsideCount = (corners: Point[], polygon: Point[]): number => {
+    let n = 0;
+    for (const c of corners) if (pointInOrOnPolygon(c, polygon)) n++;
+    return n;
+  };
+
+  let fullCount = 0;
+  let cutCount = 0;
+  let segCounter = 0;
+
+  const drawBlock = (corners: Point[], isCut: boolean, rowKey: number, segKey: number, pieceAreaPx2: number) => {
+    if (!rectIntersectsPolygon(corners, pts)) return;
+    if (isCut && !showCuts) return;
+    if (isCut) cutCount++;
+    else fullCount++;
+
+    const key = `m${rowKey},${segKey}`;
+    const isWasteReused = isCut && wasteSatisfiedSet.has(key);
+    const vertsInSlab = hasArcs ? countOrigVertsInSlab(corners) : 4;
+    const usedAreaOrig = rectPolygonIntersectionArea(corners, polygonForIntersection);
+    const usedAreaPts = hasArcs ? rectPolygonIntersectionArea(corners, pts) : usedAreaOrig;
+    const usedArea = Math.max(usedAreaOrig, usedAreaPts);
+    const isSmallCut = isCut && !isWasteReused && usedArea < 0.15 * pieceAreaPx2 && !(hasArcs && vertsInSlab <= 2);
+
+    const s0 = worldToScreen(corners[0].x, corners[0].y);
+    ctx.beginPath();
+    ctx.moveTo(s0.x, s0.y);
+    for (let i = 1; i < corners.length; i++) {
+      const s = worldToScreen(corners[i].x, corners[i].y);
+      ctx.lineTo(s.x, s.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = isCut
+      ? (useNormalColorsForCuts ? BLOCK_COLOR : (isWasteReused ? BLOCK_WASTE_REUSED_COLOR : (isSmallCut ? BLOCK_SMALL_CUT_COLOR : BLOCK_CUT_COLOR)))
+      : BLOCK_COLOR;
+    ctx.fill();
+    ctx.strokeStyle = JOINT_COLOR;
+    ctx.lineWidth = Math.max(0.5, jointPx);
+    ctx.stroke();
+
+    if (isCut) {
+      ctx.strokeStyle = "rgba(0,0,0,0.3)";
+      ctx.setLineDash([4, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  };
+
+  for (let r = -extendRClamped; r <= extendRClamped; r++) {
+    const rowStagger = (r % 2 !== 0 ? 1 : 0) * staggerPx;
+    let posAlong = -maxAlongDir - extendAlong + rowStagger;
+    const endAlong = maxAlongDir + extendAlong;
+
+    while (posAlong < endAlong) {
+      const cx = origin.x + posAlong * dir.x + r * stepWidth * perp.x;
+      const cy = origin.y + posAlong * dir.y + r * stepWidth * perp.y;
+
+      let placed = false;
+      for (const Lcm of enabledLengthsCm) {
+        const lenPx = toPixels(Lcm / 100);
+        const corners = buildMixBlockCorners(cx, cy, lenPx, rowWidthPx, dir, perp);
+        const fullyInside = rectFullyInsidePolygon(corners, pts);
+        const intersects = rectIntersectsPolygon(corners, pts);
+        if (!fullyInside && !intersects) continue;
+        const cornersInside = cornersInsideCount(corners, pts);
+        const hasIntersectionArea = rectPolygonIntersectionArea(corners, pts) > 1e-20;
+        if (!fullyInside && cornersInside === 0 && !hasIntersectionArea && !intersects) continue;
+
+        const pieceAreaPx2 = lenPx * rowWidthPx;
+        drawBlock(corners, !fullyInside, r, segCounter, pieceAreaPx2);
+        posAlong += lenPx + jointPx;
+        placed = true;
+        segCounter++;
+        break;
+      }
+      if (!placed) posAlong += minStepPx;
+    }
+  }
+
+  const total = fullCount + cutCount;
+  const wasteAreaCm2 = Number(inputs?.vizWasteAreaCm2 ?? 0);
+  const reusedAreaCm2 = Number(inputs?.vizReusedAreaCm2 ?? 0);
+  const actualWasteCm2 = Math.max(0, wasteAreaCm2 - reusedAreaCm2);
+  const avgPieceCm2 = mix.pieces.reduce((s, p) => s + p.lengthCm * p.widthCm, 0) / Math.max(1, mix.pieces.length);
+  const wastePct = total > 0 && avgPieceCm2 > 0
+    ? Math.round((actualWasteCm2 / (total * avgPieceCm2)) * 100)
+    : (total > 0 ? Math.round((cutCount / total) * 100) : 0);
+  const blocksForCuts = Math.max(0, cutCount - wasteSatisfiedSet.size);
+  if (total > 0) {
+    const anchor = labelAnchorInsidePolygon(pts);
+    const sc = worldToScreen(anchor.x, anchor.y);
+    const baseFontSize = 14;
+    const scaledFont = scaledFontSize(baseFontSize, zoom);
+    const lineHeight = scaledFont * 1.2;
+    ctx.font = `bold ${scaledFont}px 'JetBrains Mono',monospace`;
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    if (shape.layer === 2) {
+      ctx.fillText(
+        blocksForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${blocksForCuts} blocks)` : `${fullCount} full, ${cutCount} cut`,
+        sc.x,
+        sc.y + lineHeight * 0.5,
+      );
+    } else {
+      let line = 0.5;
+      const area = areaM2(getEffectivePolygon(shape));
+      ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + lineHeight * line);
+      line += 1;
+      ctx.fillText(blocksForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${blocksForCuts} blocks)` : `${fullCount} full, ${cutCount} cut`, sc.x, sc.y + lineHeight * line);
+      line += 1;
+      ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + lineHeight * line);
+    }
+  }
+}
+
 /**
  * Draw cobblestone (monoblock) pattern on a polygon shape.
  * Blocks 20×10 cm, joint 1mm (thin line in render).
@@ -159,18 +367,16 @@ export function drawCobblestonePattern(
   let pts = ptsRaw;
   if (pts.length < 3 || !shape.closed) return;
 
+  const origPts = shape.points;
+
   const addFrameToMonoblock = !!(inputs?.addFrameToMonoblock);
   const framePieceWidthCm = Number(inputs?.framePieceWidthCm ?? 0);
-  const frameWidthCm = framePieceWidthCm;
   const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
-  if (addFrameToMonoblock && frameWidthCm > 0) {
-    const frameWidthPx = toPixels(frameWidthCm / 100);
-    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled.length > 0) {
-      pts = shrinkPolygonByEdges(pts, frameWidthPx, edgeIndices, frameSidesEnabled);
-    } else {
-      pts = shrinkPolygon(pts, frameWidthPx);
-    }
-    if (pts.length < 3) return;
+  const frameRowWidthsCm = getFrameBorderRowsFromInputs(inputs).map((r) => r.widthCm).filter((w) => w > 0);
+  if (addFrameToMonoblock && frameRowWidthsCm.length > 0) {
+    const shrunk = applyFrameInsetShrinkPolygon(pts, edgeIndices, frameSidesEnabled, frameRowWidthsCm);
+    if (shrunk.length >= 3) pts = shrunk;
+    else return;
   }
 
   const blockWidthPx = toPixels(blockWidthCm / 100);
@@ -178,10 +384,9 @@ export function drawCobblestonePattern(
   const jointPx = toPixels(jointGapMm / 1000);
 
   const directionDeg = directionDegOverride ?? Number(inputs?.vizDirection ?? 0);
-  const origPts = shape.points;
   const startCorner = Math.max(0, Math.min(origPts.length - 1, Math.floor(Number(inputs?.vizStartCorner ?? 0))));
   const off = originOffset ?? { x: Number(inputs?.vizOriginOffsetX ?? 0), y: Number(inputs?.vizOriginOffsetY ?? 0) };
-  const useInnerOutline = addFrameToMonoblock && frameWidthCm > 0;
+  const useInnerOutline = addFrameToMonoblock && framePieceWidthCm > 0 && frameRowWidthsCm.length > 0;
   const cornerPt = patternOriginOnOutline(origPts, useInnerOutline ? pts : origPts, startCorner);
   if (!cornerPt) return;
   let origin = { x: cornerPt.x + off.x, y: cornerPt.y + off.y };
@@ -209,6 +414,44 @@ export function drawCobblestonePattern(
   const sin = Math.sin(angle);
   const dir = { x: cos, y: sin };
   const perp = { x: -sin, y: cos };
+
+  const hasArcsEarly = !!(shape.edgeArcs?.some((a) => a && a.length > 0));
+  const polygonForIntersectionEarly = hasArcsEarly ? pts : pts;
+
+  if (inputs?.monoblockLayoutMode === "mix") {
+    const mix = getMonoblockMixById(String(inputs?.monoblockMixId ?? ""));
+    const enabledMap = inputs?.monoblockMixEnabledSizes as Partial<Record<MonoblockMixPieceKey, boolean>> | undefined;
+    const enabledLengths = getMixEnabledLengthsCm(mix, enabledMap);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(worldToScreen(pts[0].x, pts[0].y).x, worldToScreen(pts[0].x, pts[0].y).y);
+    for (let i = 1; i < pts.length; i++) {
+      const s = worldToScreen(pts[i].x, pts[i].y);
+      ctx.lineTo(s.x, s.y);
+    }
+    ctx.closePath();
+    ctx.clip();
+    drawMonoblockMixPattern(
+      ctx,
+      shape,
+      pts,
+      origin,
+      dir,
+      perp,
+      jointPx,
+      mix,
+      enabledLengths,
+      worldToScreen,
+      zoom,
+      showCuts,
+      inputs,
+      polygonForIntersectionEarly,
+      hasArcsEarly,
+      useNormalColorsForCuts
+    );
+    ctx.restore();
+    return;
+  }
 
   const vizWaste = shape.calculatorInputs?.vizWasteSatisfied;
   const wasteSatisfiedSet = new Set<string>(
@@ -241,85 +484,132 @@ export function drawCobblestonePattern(
   const extendC = Math.ceil(maxAlongDir / stepLength) + 2;
   const extendR = Math.ceil(maxAlongPerp / stepWidth) + 2;
   const EXTEND_CAP = 100; // Prevent O(extend²) freeze on very large polygons
-  const extend = Math.min(Math.max(extendC, extendR, 10), EXTEND_CAP);
+  const capC = Math.min(Math.max(extendC, 10), EXTEND_CAP);
+  const capR = Math.min(Math.max(extendR, 10), EXTEND_CAP);
 
   const pattern = inputs?.vizPattern ?? "grid";
   const blockAreaPx2 = blockLengthPx * blockWidthPx;
   const hasArcs = !!(shape.edgeArcs?.some(a => a && a.length > 0));
   const polygonForIntersection = hasArcs ? pts : pts;
 
-  const cornersInsideCount = (corners: Point[], polygon: Point[]): number => {
-    let n = 0;
-    for (const c of corners) if (pointInOrOnPolygon(c, polygon)) n++;
-    return n;
-  };
   const countOrigVertsInSlab = (corners: Point[]): number => {
     let n = 0;
     for (const v of origPts) if (pointInOrOnPolygon(v, corners)) n++;
     return n;
   };
 
+  const { strideC, strideR } = pathCobbleGridStride(
+    worldToScreen,
+    origin,
+    dir,
+    perp,
+    stepLength,
+    stepWidth,
+    -capC,
+    capC,
+    -capR,
+    capR,
+  );
+
+  const pathFull = new Path2D();
+  const pathCutNorm = new Path2D();
+  const pathCutReuse = new Path2D();
+  const pathCutSmall = new Path2D();
+  const pathJoint = new Path2D();
+  const pathCutDash = new Path2D();
+
+  const dirStepX = stepLength * dir.x;
+  const dirStepY = stepLength * dir.y;
+  const perpStepX = stepWidth * perp.x;
+  const perpStepY = stepWidth * perp.y;
+  const blkLenX = blockLengthPx * dir.x;
+  const blkLenY = blockLengthPx * dir.y;
+  const blkWidX = blockWidthPx * perp.x;
+  const blkWidY = blockWidthPx * perp.y;
+
   let fullCount = 0;
   let cutCount = 0;
-  const drawBlock = (corners: Point[], isCut: boolean, r: number, c: number) => {
-    if (!rectIntersectsPolygon(corners, pts)) return;
-    if (isCut && !showCuts) return;
-    isCut ? cutCount++ : fullCount++;
 
-    const isWasteReused = isCut && wasteSatisfiedSet.has(`${r},${c}`);
+  const processCobbleCorners = (corners: Point[], wasteKey: string) => {
+    const fullyInside = rectFullyInsidePolygon(corners, pts);
+    if (!fullyInside && !rectIntersectsPolygon(corners, pts)) return;
+
+    if (fullyInside) {
+      fullCount++;
+      appendWorldPolygonToPath(pathFull, corners, worldToScreen);
+      appendWorldPolygonToPath(pathJoint, corners, worldToScreen);
+      return;
+    }
+
+    if (!showCuts) return;
+    cutCount++;
+    const isWasteReused = wasteSatisfiedSet.has(wasteKey);
     const vertsInSlab = hasArcs ? countOrigVertsInSlab(corners) : 4;
     const usedAreaOrig = rectPolygonIntersectionArea(corners, polygonForIntersection);
     const usedAreaPts = hasArcs ? rectPolygonIntersectionArea(corners, pts) : usedAreaOrig;
     const usedArea = Math.max(usedAreaOrig, usedAreaPts);
-    const isSmallCut = isCut && !isWasteReused && usedArea < 0.15 * blockAreaPx2 && !(hasArcs && vertsInSlab <= 2);
+    const isSmallCut = !isWasteReused && usedArea < 0.15 * blockAreaPx2 && !(hasArcs && vertsInSlab <= 2);
 
-    const s0 = worldToScreen(corners[0].x, corners[0].y);
-    ctx.beginPath();
-    ctx.moveTo(s0.x, s0.y);
-    for (let i = 1; i < corners.length; i++) {
-      const s = worldToScreen(corners[i].x, corners[i].y);
-      ctx.lineTo(s.x, s.y);
+    appendWorldPolygonToPath(pathJoint, corners, worldToScreen);
+    if (useNormalColorsForCuts) {
+      appendWorldPolygonToPath(pathFull, corners, worldToScreen);
+    } else if (isWasteReused) {
+      appendWorldPolygonToPath(pathCutReuse, corners, worldToScreen);
+    } else if (isSmallCut) {
+      appendWorldPolygonToPath(pathCutSmall, corners, worldToScreen);
+    } else {
+      appendWorldPolygonToPath(pathCutNorm, corners, worldToScreen);
     }
-    ctx.closePath();
-    ctx.fillStyle = isCut
-      ? (useNormalColorsForCuts ? BLOCK_COLOR : (isWasteReused ? BLOCK_WASTE_REUSED_COLOR : (isSmallCut ? BLOCK_SMALL_CUT_COLOR : BLOCK_CUT_COLOR)))
-      : BLOCK_COLOR;
-    ctx.fill();
-    ctx.strokeStyle = JOINT_COLOR;
-    ctx.lineWidth = Math.max(0.5, jointPx);
-    ctx.stroke();
-
-    if (isCut) {
-      ctx.strokeStyle = "rgba(0,0,0,0.3)";
-      ctx.setLineDash([4, 4]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
+    appendWorldPolygonToPath(pathCutDash, corners, worldToScreen);
   };
 
-  for (let r = -extend; r <= extend; r++) {
-    for (let c = -extend; c <= extend; c++) {
-      let offsetR = r;
-      if (pattern === "brick" && c % 2 !== 0) offsetR = r + 0.5;
-      else if (pattern === "onethird") offsetR = r + [0, 2 / 3, 1 / 3][((c % 3) + 3) % 3];
-      const cx = origin.x + c * stepLength * dir.x + offsetR * stepWidth * perp.x;
-      const cy = origin.y + c * stepLength * dir.y + offsetR * stepWidth * perp.y;
+  if (pattern === "herringbone") {
+    const L = blockLengthPx;
+    const W = blockWidthPx;
+    const j = jointPx;
+    const hb = herringbonePolygonIjIndexBounds(maxAlongDir, maxAlongPerp, L, W, j);
+    for (let jj = hb.jMin; jj <= hb.jMax; jj++) {
+      for (let ii = hb.iMin; ii <= hb.iMax; ii++) {
+        processCobbleCorners(herringbone45CornersAtCell(origin, dir, perp, L, W, j, ii, jj), `hb${ii},${jj}`);
+      }
+    }
+  } else {
+    for (let r = -capR; r <= capR; r += strideR) {
+      for (let c = -capC; c <= capC; c += strideC) {
+        let offsetR = r;
+        if (pattern === "brick" && c % 2 !== 0) offsetR = r + 0.5;
+        else if (pattern === "onethird") offsetR = r + [0, 2 / 3, 1 / 3][((c % 3) + 3) % 3];
+        const cx = origin.x + c * dirStepX + offsetR * perpStepX;
+        const cy = origin.y + c * dirStepY + offsetR * perpStepY;
 
-      const corners: Point[] = [
-        { x: cx, y: cy },
-        { x: cx + blockLengthPx * dir.x, y: cy + blockLengthPx * dir.y },
-        { x: cx + blockLengthPx * dir.x + blockWidthPx * perp.x, y: cy + blockLengthPx * dir.y + blockWidthPx * perp.y },
-        { x: cx + blockWidthPx * perp.x, y: cy + blockWidthPx * perp.y },
-      ];
-      const fullyInside = rectFullyInsidePolygon(corners, pts);
-      const intersects = rectIntersectsPolygon(corners, pts);
-      if (!fullyInside && !intersects) continue;
-      const cornersInside = cornersInsideCount(corners, pts);
-      const hasIntersectionArea = rectPolygonIntersectionArea(corners, pts) > 1e-20;
-      if (!fullyInside && cornersInside === 0 && !hasIntersectionArea && !intersects) continue;
-      drawBlock(corners, !fullyInside, r, c);
+        const corners: Point[] = [
+          { x: cx, y: cy },
+          { x: cx + blkLenX, y: cy + blkLenY },
+          { x: cx + blkLenX + blkWidX, y: cy + blkLenY + blkWidY },
+          { x: cx + blkWidX, y: cy + blkWidY },
+        ];
+        processCobbleCorners(corners, `${r},${c}`);
+      }
     }
   }
+
+  ctx.fillStyle = BLOCK_COLOR;
+  ctx.fill(pathFull);
+  if (!useNormalColorsForCuts) {
+    ctx.fillStyle = BLOCK_CUT_COLOR;
+    ctx.fill(pathCutNorm);
+    ctx.fillStyle = BLOCK_WASTE_REUSED_COLOR;
+    ctx.fill(pathCutReuse);
+    ctx.fillStyle = BLOCK_SMALL_CUT_COLOR;
+    ctx.fill(pathCutSmall);
+  }
+  ctx.strokeStyle = JOINT_COLOR;
+  ctx.lineWidth = Math.max(0.5, jointPx);
+  ctx.stroke(pathJoint);
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.setLineDash([4, 4]);
+  ctx.stroke(pathCutDash);
+  ctx.setLineDash([]);
 
   ctx.restore();
 
@@ -334,7 +624,6 @@ export function drawCobblestonePattern(
   if (total > 0) {
     const anchor = labelAnchorInsidePolygon(pts);
     const sc = worldToScreen(anchor.x, anchor.y);
-    const area = areaM2(getEffectivePolygon(shape));
     const baseFontSize = 14;
     const scaledFont = scaledFontSize(baseFontSize, zoom);
     const lineHeight = scaledFont * 1.2;
@@ -342,10 +631,197 @@ export function drawCobblestonePattern(
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + lineHeight * 0.5);
-    ctx.fillText(blocksForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${blocksForCuts} blocks)` : `${fullCount} full, ${cutCount} cut`, sc.x, sc.y + lineHeight * 1.5);
-    ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + lineHeight * 2.5);
+    if (shape.layer === 2) {
+      ctx.fillText(
+        blocksForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${blocksForCuts} blocks)` : `${fullCount} full, ${cutCount} cut`,
+        sc.x,
+        sc.y + lineHeight * 0.5,
+      );
+    } else {
+      let line = 0.5;
+      const area = areaM2(getEffectivePolygon(shape));
+      ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + lineHeight * line);
+      line += 1;
+      if (strideC === 1 && strideR === 1) {
+        ctx.fillText(blocksForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${blocksForCuts} blocks)` : `${fullCount} full, ${cutCount} cut`, sc.x, sc.y + lineHeight * line);
+        line += 1;
+        ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + lineHeight * line);
+      }
+    }
   }
+}
+
+function computeMonoblockMixCuts(
+  shape: Shape,
+  inputs: Record<string, any>,
+  pts: Point[],
+  origin: Point,
+  dir: Point,
+  perp: Point,
+  jointPx: number
+): { fullBlockCount: number; cutBlockCount: number; cuts: CutInfo[]; wasteSatisfiedPositions: string[]; wasteAreaCm2: number; reusedAreaCm2: number } {
+  const mix = getMonoblockMixById(String(inputs?.monoblockMixId ?? ""));
+  const enabledMap = inputs?.monoblockMixEnabledSizes as Partial<Record<MonoblockMixPieceKey, boolean>> | undefined;
+  const enabledLengths = getMixEnabledLengthsCm(mix, enabledMap);
+  if (enabledLengths.length === 0) {
+    return { fullBlockCount: 0, cutBlockCount: 0, cuts: [], wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
+  }
+
+  const rowWidthPx = toPixels(mix.rowWidthCm / 100);
+  const staggerPx = toPixels(mix.staggerAlongCm / 100);
+  const minStepPx = toPixels(MIN_MIX_STEP_CM / 100);
+  const stepWidth = rowWidthPx + jointPx;
+
+  let maxAlongDir = 0;
+  let maxAlongPerp = 0;
+  for (const p of pts) {
+    const dDir = Math.abs((p.x - origin.x) * dir.x + (p.y - origin.y) * dir.y);
+    const dPerp = Math.abs((p.x - origin.x) * perp.x + (p.y - origin.y) * perp.y);
+    if (dDir > maxAlongDir) maxAlongDir = dDir;
+    if (dPerp > maxAlongPerp) maxAlongPerp = dPerp;
+  }
+  const extendR = Math.ceil(maxAlongPerp / stepWidth) + 2;
+  const extendAlong = Math.ceil(maxAlongDir / minStepPx) + 20;
+  const EXTEND_CAP = 100;
+  const extendRClamped = Math.min(Math.max(extendR, 10), EXTEND_CAP);
+
+  let fullBlockCount = 0;
+  let cutBlockCount = 0;
+  const cuts: CutInfo[] = [];
+  const cutBlockData: {
+    r: number;
+    c: number;
+    demandW: number;
+    demandL: number;
+    wasteW: number;
+    wasteL: number;
+    demandPolygon?: Point[];
+    wastePolygon?: Point[];
+  }[] = [];
+
+  let segCounter = 0;
+
+  for (let r = -extendRClamped; r <= extendRClamped; r++) {
+    const rowStagger = (r % 2 !== 0 ? 1 : 0) * staggerPx;
+    let posAlong = -maxAlongDir - extendAlong + rowStagger;
+    const endAlong = maxAlongDir + extendAlong;
+
+    while (posAlong < endAlong) {
+      const cx = origin.x + posAlong * dir.x + r * stepWidth * perp.x;
+      const cy = origin.y + posAlong * dir.y + r * stepWidth * perp.y;
+
+      let placed = false;
+      for (const Lcm of enabledLengths) {
+        const lenPx = toPixels(Lcm / 100);
+        const corners = buildMixBlockCorners(cx, cy, lenPx, rowWidthPx, dir, perp);
+        if (rectFullyInsidePolygon(corners, pts)) {
+          fullBlockCount++;
+          posAlong += lenPx + jointPx;
+          placed = true;
+          segCounter++;
+          break;
+        }
+        const intersects = rectIntersectsPolygon(corners, pts);
+        if (!intersects) continue;
+        let cornersInside = 0;
+        for (const corner of corners) if (pointInOrOnPolygon(corner, pts)) cornersInside++;
+        const hasIntersectionArea = rectPolygonIntersectionArea(corners, pts) > 1e-20;
+        if (cornersInside === 0 && !hasIntersectionArea && !intersects) continue;
+
+        cutBlockCount++;
+        const slabOrigin = { x: cx, y: cy };
+        const demandPolygon = rectPolygonIntersectionKostka(corners, pts);
+        if (demandPolygon.length < 3) {
+          posAlong += lenPx + jointPx;
+          placed = true;
+          segCounter++;
+          break;
+        }
+
+        const slabCuts = collectCutOperationsFromDemand(demandPolygon, corners, pts);
+        for (const sc of slabCuts) cuts.push(sc);
+
+        const demandBbox = polygonBboxCm(demandPolygon, slabOrigin, dir, perp);
+        const demandWCm = demandBbox.w;
+        const demandLCm = demandBbox.l;
+        if (demandLCm < 0.5 || demandWCm < 0.5) {
+          posAlong += lenPx + jointPx;
+          placed = true;
+          segCounter++;
+          break;
+        }
+
+        const wastePolygon = computeWastePolygon(corners, demandPolygon);
+        let wasteW: number, wasteL: number;
+        if (wastePolygon.length >= 3) {
+          const wasteBbox = polygonBboxCm(wastePolygon, slabOrigin, dir, perp);
+          wasteW = Math.min(wasteBbox.w, wasteBbox.l);
+          wasteL = Math.max(wasteBbox.w, wasteBbox.l);
+        } else {
+          const wasteInLengthCm = Lcm - demandLCm;
+          const wasteInWidthCm = mix.rowWidthCm - demandWCm;
+          if (wasteInLengthCm * mix.rowWidthCm >= wasteInWidthCm * Lcm) {
+            wasteW = Math.min(wasteInLengthCm, mix.rowWidthCm);
+            wasteL = Math.max(wasteInLengthCm, mix.rowWidthCm);
+          } else {
+            wasteW = Math.min(Lcm, wasteInWidthCm);
+            wasteL = Math.max(Lcm, wasteInWidthCm);
+          }
+        }
+
+        const useExactPolygon = demandPolygon.length <= 5 && wastePolygon.length >= 3 && wastePolygon.length <= 8;
+
+        cutBlockData.push({
+          r: segCounter,
+          c: r,
+          demandW: demandWCm,
+          demandL: demandLCm,
+          wasteW,
+          wasteL,
+          demandPolygon: useExactPolygon ? demandPolygon : undefined,
+          wastePolygon: useExactPolygon ? wastePolygon : undefined,
+        });
+
+        posAlong += lenPx + jointPx;
+        placed = true;
+        segCounter++;
+        break;
+      }
+      if (!placed) posAlong += minStepPx;
+    }
+  }
+
+  const wasteSatisfiedPositions: string[] = [];
+  let reusedAreaCm2 = 0;
+  let wasteAreaCm2 = 0;
+  const wastePool: { w: number; l: number; r: number; c: number; polygon?: Point[] }[] = [];
+
+  for (const item of cutBlockData) {
+    const { r, c, demandW, demandL, wasteW, wasteL, demandPolygon, wastePolygon } = item;
+    const key = `m${c},${r}`;
+
+    const matches = (w: { w: number; l: number; polygon?: Point[] }): boolean => {
+      if (!fitsWithRotation(w, { w: demandW, l: demandL })) return false;
+      if (demandPolygon && wastePolygon && w.polygon) {
+        return polygonFitsInPolygonWithRotation(demandPolygon, w.polygon);
+      }
+      return true;
+    };
+
+    const idx = wastePool.findIndex((w) => matches(w));
+    if (idx >= 0) {
+      wasteSatisfiedPositions.push(key);
+      reusedAreaCm2 += demandW * demandL;
+      wastePool.splice(idx, 1);
+    } else {
+      if (wasteW > 0.5 && wasteL > 0.5) {
+        wastePool.push({ w: wasteW, l: wasteL, r, c, polygon: wastePolygon });
+        wasteAreaCm2 += wasteW * wasteL;
+      }
+    }
+  }
+
+  return { fullBlockCount, cutBlockCount, cuts, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 };
 }
 
 /**
@@ -365,14 +841,11 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
   const addFrameToMonoblock = !!(inputs?.addFrameToMonoblock);
   const framePieceWidthCm = Number(inputs?.framePieceWidthCm ?? 0);
   const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
-  if (addFrameToMonoblock && framePieceWidthCm > 0) {
-    const frameWidthPx = toPixels(framePieceWidthCm / 100);
-    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled.length > 0) {
-      pts = shrinkPolygonByEdges(pts, frameWidthPx, edgeIndices, frameSidesEnabled);
-    } else {
-      pts = shrinkPolygon(pts, frameWidthPx);
-    }
-    if (pts.length < 3) return { fullBlockCount: 0, cutBlockCount: 0, cuts: [], wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
+  const frameRowWidthsCm = getFrameBorderRowsFromInputs(inputs).map((r) => r.widthCm).filter((w) => w > 0);
+  if (addFrameToMonoblock && frameRowWidthsCm.length > 0) {
+    const shrunk = applyFrameInsetShrinkPolygon(pts, edgeIndices, frameSidesEnabled, frameRowWidthsCm);
+    if (shrunk.length >= 3) pts = shrunk;
+    else return { fullBlockCount: 0, cutBlockCount: 0, cuts: [], wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
   }
 
   const blockWidthPx = toPixels(blockWidthCm / 100);
@@ -384,7 +857,7 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
   const startCorner = Math.max(0, Math.min(origPts.length - 1, Math.floor(Number(inputs?.vizStartCorner ?? 0))));
   const offX = Number(inputs?.vizOriginOffsetX ?? 0);
   const offY = Number(inputs?.vizOriginOffsetY ?? 0);
-  const useInnerOutline = addFrameToMonoblock && framePieceWidthCm > 0;
+  const useInnerOutline = addFrameToMonoblock && framePieceWidthCm > 0 && frameRowWidthsCm.length > 0;
   const cornerPt = patternOriginOnOutline(origPts, useInnerOutline ? pts : origPts, startCorner);
   if (!cornerPt) return { fullBlockCount: 0, cutBlockCount: 0, cuts: [], wasteSatisfiedPositions: [], wasteAreaCm2: 0, reusedAreaCm2: 0 };
   let origin = { x: cornerPt.x + offX, y: cornerPt.y + offY };
@@ -407,6 +880,11 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
   const sin = Math.sin(angle);
   const dir = { x: cos, y: sin };
   const perp = { x: -sin, y: cos };
+
+  if (inputs?.monoblockLayoutMode === "mix") {
+    return computeMonoblockMixCuts(shape, inputs, pts, origin, dir, perp, jointPx);
+  }
+
   const stepLength = blockLengthPx + jointPx;
   const stepWidth = blockWidthPx + jointPx;
 
@@ -435,75 +913,92 @@ export function computeCobblestoneCuts(shape: Shape, inputs: Record<string, any>
     demandPolygon?: Point[]; wastePolygon?: Point[];
   }[] = [];
 
-  for (let r = -extend; r <= extend; r++) {
-    for (let c = -extend; c <= extend; c++) {
-      let offsetR = r;
-      if (pattern === "brick" && c % 2 !== 0) offsetR = r + 0.5;
-      else if (pattern === "onethird") offsetR = r + [0, 2 / 3, 1 / 3][((c % 3) + 3) % 3];
-      const cx = origin.x + c * stepLength * dir.x + offsetR * stepWidth * perp.x;
-      const cy = origin.y + c * stepLength * dir.y + offsetR * stepWidth * perp.y;
+  const pushCobbleCutFromCorners = (corners: Point[], cx: number, cy: number, keyR: number, keyC: number) => {
+    if (rectFullyInsidePolygon(corners, pts)) {
+      fullBlockCount++;
+      return;
+    }
+    const intersects = rectIntersectsPolygon(corners, pts);
+    if (!intersects) return;
+    let cornersInside = 0;
+    for (const corner of corners) if (pointInOrOnPolygon(corner, pts)) cornersInside++;
+    const hasIntersectionArea = rectPolygonIntersectionArea(corners, pts) > 1e-20;
+    if (cornersInside === 0 && !hasIntersectionArea && !intersects) return;
 
-      const corners: Point[] = [
-        { x: cx, y: cy },
-        { x: cx + blockLengthPx * dir.x, y: cy + blockLengthPx * dir.y },
-        { x: cx + blockLengthPx * dir.x + blockWidthPx * perp.x, y: cy + blockLengthPx * dir.y + blockWidthPx * perp.y },
-        { x: cx + blockWidthPx * perp.x, y: cy + blockWidthPx * perp.y },
-      ];
-      if (rectFullyInsidePolygon(corners, pts)) {
-        fullBlockCount++;
-        continue;
-      }
-      const intersects = rectIntersectsPolygon(corners, pts);
-      if (!intersects) continue;
-      let cornersInside = 0;
-      for (const corner of corners) if (pointInOrOnPolygon(corner, pts)) cornersInside++;
-      const hasIntersectionArea = rectPolygonIntersectionArea(corners, pts) > 1e-20;
-      if (cornersInside === 0 && !hasIntersectionArea && !intersects) continue;
+    cutBlockCount++;
 
-      cutBlockCount++;
+    const slabOrigin = { x: cx, y: cy };
+    const demandPolygon = rectPolygonIntersectionKostka(corners, pts);
+    if (demandPolygon.length < 3) return;
 
-      const slabOrigin = { x: cx, y: cy };
-      const demandPolygon = rectPolygonIntersectionKostka(corners, pts);
-      if (demandPolygon.length < 3) continue;
+    const slabCuts = collectCutOperationsFromDemand(demandPolygon, corners, pts);
+    for (const sc of slabCuts) cuts.push(sc);
 
-      // Collect cut operations before demandBbox filter (same as slabs) — diagonal=1, corner=2
-      const slabCuts = collectCutOperationsFromDemand(demandPolygon, corners, pts);
-      for (const sc of slabCuts) cuts.push(sc);
+    const demandBbox = polygonBboxCm(demandPolygon, slabOrigin, dir, perp);
+    const demandWCm = demandBbox.w;
+    const demandLCm = demandBbox.l;
+    if (demandLCm < 0.5 || demandWCm < 0.5) return;
 
-      const demandBbox = polygonBboxCm(demandPolygon, slabOrigin, dir, perp);
-      const demandWCm = demandBbox.w;
-      const demandLCm = demandBbox.l;
-      if (demandLCm < 0.5 || demandWCm < 0.5) continue;
-
-      const wastePolygon = computeWastePolygon(corners, demandPolygon);
-      let wasteW: number, wasteL: number;
-      if (wastePolygon.length >= 3) {
-        const wasteBbox = polygonBboxCm(wastePolygon, slabOrigin, dir, perp);
-        wasteW = Math.min(wasteBbox.w, wasteBbox.l);
-        wasteL = Math.max(wasteBbox.w, wasteBbox.l);
+    const wastePolygon = computeWastePolygon(corners, demandPolygon);
+    let wasteW: number, wasteL: number;
+    if (wastePolygon.length >= 3) {
+      const wasteBbox = polygonBboxCm(wastePolygon, slabOrigin, dir, perp);
+      wasteW = Math.min(wasteBbox.w, wasteBbox.l);
+      wasteL = Math.max(wasteBbox.w, wasteBbox.l);
+    } else {
+      const wasteInLengthCm = blockLengthCm - demandLCm;
+      const wasteInWidthCm = blockWidthCm - demandWCm;
+      if (wasteInLengthCm * blockWidthCm >= wasteInWidthCm * blockLengthCm) {
+        wasteW = Math.min(wasteInLengthCm, blockWidthCm);
+        wasteL = Math.max(wasteInLengthCm, blockWidthCm);
       } else {
-        const wasteInLengthCm = blockLengthCm - demandLCm;
-        const wasteInWidthCm = blockWidthCm - demandWCm;
-        if (wasteInLengthCm * blockWidthCm >= wasteInWidthCm * blockLengthCm) {
-          wasteW = Math.min(wasteInLengthCm, blockWidthCm);
-          wasteL = Math.max(wasteInLengthCm, blockWidthCm);
-        } else {
-          wasteW = Math.min(blockLengthCm, wasteInWidthCm);
-          wasteL = Math.max(blockLengthCm, wasteInWidthCm);
-        }
+        wasteW = Math.min(blockLengthCm, wasteInWidthCm);
+        wasteL = Math.max(blockLengthCm, wasteInWidthCm);
       }
+    }
 
-      const useExactPolygon = demandPolygon.length <= 5 && wastePolygon.length >= 3 && wastePolygon.length <= 8;
+    const useExactPolygon = demandPolygon.length <= 5 && wastePolygon.length >= 3 && wastePolygon.length <= 8;
 
-      cutBlockData.push({
-        r, c,
-        demandW: demandWCm,
-        demandL: demandLCm,
-        wasteW,
-        wasteL,
-        demandPolygon: useExactPolygon ? demandPolygon : undefined,
-        wastePolygon: useExactPolygon ? wastePolygon : undefined,
-      });
+    cutBlockData.push({
+      r: keyR,
+      c: keyC,
+      demandW: demandWCm,
+      demandL: demandLCm,
+      wasteW,
+      wasteL,
+      demandPolygon: useExactPolygon ? demandPolygon : undefined,
+      wastePolygon: useExactPolygon ? wastePolygon : undefined,
+    });
+  };
+
+  if (pattern === "herringbone") {
+    const L = blockLengthPx;
+    const W = blockWidthPx;
+    const j = jointPx;
+    const hb = herringbonePolygonIjIndexBounds(maxAlongDir, maxAlongPerp, L, W, j);
+    for (let jj = hb.jMin; jj <= hb.jMax; jj++) {
+      for (let ii = hb.iMin; ii <= hb.iMax; ii++) {
+        const corners = herringbone45CornersAtCell(origin, dir, perp, L, W, j, ii, jj);
+        pushCobbleCutFromCorners(corners, corners[0].x, corners[0].y, ii, jj);
+      }
+    }
+  } else {
+    for (let r = -extend; r <= extend; r++) {
+      for (let c = -extend; c <= extend; c++) {
+        let offsetR = r;
+        if (pattern === "brick" && c % 2 !== 0) offsetR = r + 0.5;
+        else if (pattern === "onethird") offsetR = r + [0, 2 / 3, 1 / 3][((c % 3) + 3) % 3];
+        const cx = origin.x + c * stepLength * dir.x + offsetR * stepWidth * perp.x;
+        const cy = origin.y + c * stepLength * dir.y + offsetR * stepWidth * perp.y;
+
+        const corners: Point[] = [
+          { x: cx, y: cy },
+          { x: cx + blockLengthPx * dir.x, y: cy + blockLengthPx * dir.y },
+          { x: cx + blockLengthPx * dir.x + blockWidthPx * perp.x, y: cy + blockLengthPx * dir.y + blockWidthPx * perp.y },
+          { x: cx + blockWidthPx * perp.x, y: cy + blockWidthPx * perp.y },
+        ];
+        pushCobbleCutFromCorners(corners, cx, cy, r, c);
+      }
     }
   }
 
@@ -550,59 +1045,77 @@ export function computeMonoblockFrameBlocks(
   shape: Shape,
   inputs: Record<string, any>
 ): { totalFrameBlocks: number; totalFrameAreaM2: number; frameAngleCuts: number; sides: Array<{ length: number; blocks: number }> } {
-  let pts: Point[];
+  let outlinePts: Point[];
   let edgeIndices: number[];
   if (isPathElement(shape)) {
-    pts = getPathPolygon(shape);
-    edgeIndices = pts.map((_, i) => i);
+    const pathPts = getPathPolygon(shape);
+    if (!pathPts || pathPts.length < 3) return { totalFrameBlocks: 0, totalFrameAreaM2: 0, frameAngleCuts: 0, sides: [] };
+    outlinePts = pathPts;
+    edgeIndices = outlinePts.map((_, i) => i);
   } else {
     const eff = getEffectivePolygonWithEdgeIndices(shape);
-    pts = eff.points;
+    outlinePts = eff.points;
     edgeIndices = eff.edgeIndices;
   }
-  if (pts.length < 3 || !shape.closed) return { totalFrameBlocks: 0, totalFrameAreaM2: 0, frameAngleCuts: 0, sides: [] };
+  if (outlinePts.length < 3 || !shape.closed) return { totalFrameBlocks: 0, totalFrameAreaM2: 0, frameAngleCuts: 0, sides: [] };
 
   const addFrameToMonoblock = !!(inputs?.addFrameToMonoblock);
-  const framePieceLengthCm = Number(inputs?.framePieceLengthCm ?? 60);
   const framePieceWidthCm = Number(inputs?.framePieceWidthCm ?? 10);
-  const frameJointType = (inputs?.frameJointType as 'butt' | 'miter45') || 'butt';
+  const frameJointType = (inputs?.frameJointType as "butt" | "miter45") || "butt";
   if (!addFrameToMonoblock || framePieceWidthCm <= 0) return { totalFrameBlocks: 0, totalFrameAreaM2: 0, frameAngleCuts: 0, sides: [] };
 
-  const pieceLengthPx = toPixels(framePieceLengthCm / 100);
-  const pieceWidthM = framePieceWidthCm / 100;
+  const rows = getFrameBorderRowsFromInputs(inputs);
+  if (rows.length === 0) return { totalFrameBlocks: 0, totalFrameAreaM2: 0, frameAngleCuts: 0, sides: [] };
+
   const jointGapMm = Number(inputs?.jointGapMm ?? 1);
   const jointPx = toPixels(jointGapMm / 1000);
-  const stepLengthPx = pieceLengthPx + jointPx;
-
   const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
   const numLogicalEdges = Math.max(...edgeIndices, -1) + 1;
-  const n = pts.length;
-  const edgeLengthsPx: number[] = Array(numLogicalEdges).fill(0);
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    const edgeIdx = edgeIndices[j];
-    const segLen = Math.sqrt((pts[j].x - pts[i].x) ** 2 + (pts[j].y - pts[i].y) ** 2) || 1;
-    edgeLengthsPx[edgeIdx] += segLen;
-  }
   let enabledEdgeCount = 0;
   for (let e = 0; e < numLogicalEdges; e++) {
     if (Array.isArray(frameSidesEnabled) && frameSidesEnabled[e] === false) continue;
     enabledEdgeCount++;
   }
-  const frameAngleCuts = frameJointType === 'miter45' ? enabledEdgeCount : 0;
+  const frameAngleCuts = frameJointType === "miter45" ? enabledEdgeCount * rows.length : 0;
 
   let totalFrameBlocks = 0;
+  let totalFrameAreaM2 = 0;
+  let cumulativePts = outlinePts;
   const sides: Array<{ length: number; blocks: number }> = [];
-  for (let e = 0; e < numLogicalEdges; e++) {
-    if (Array.isArray(frameSidesEnabled) && frameSidesEnabled[e] === false) continue;
-    const edgeLenPx = edgeLengthsPx[e];
-    const blocksPerEdge = Math.ceil((edgeLenPx + jointPx) / stepLengthPx);
-    const sideLengthM = toMeters(edgeLenPx);
-    sides.push({ length: sideLengthM, blocks: blocksPerEdge });
-    totalFrameBlocks += blocksPerEdge;
-  }
 
-  const totalFrameAreaM2 = sides.reduce((sum, s) => sum + s.length * pieceWidthM, 0);
+  for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+    const row = rows[rowIdx];
+    const framePieceLengthCm = row.lengthCm;
+    const framePieceWidthCmRow = row.widthCm;
+    const pieceLengthPx = toPixels(framePieceLengthCm / 100);
+    const pieceWidthM = framePieceWidthCmRow / 100;
+    const stepLengthPx = pieceLengthPx + jointPx;
+
+    const pts = cumulativePts;
+    const n = pts.length;
+    const edgeLengthsPx: number[] = Array(numLogicalEdges).fill(0);
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const edgeIdx = edgeIndices[j];
+      const segLen = Math.sqrt((pts[j].x - pts[i].x) ** 2 + (pts[j].y - pts[i].y) ** 2) || 1;
+      edgeLengthsPx[edgeIdx] += segLen;
+    }
+
+    for (let e = 0; e < numLogicalEdges; e++) {
+      if (Array.isArray(frameSidesEnabled) && frameSidesEnabled[e] === false) continue;
+      const edgeLenPx = edgeLengthsPx[e];
+      const blocksPerEdge = Math.ceil((edgeLenPx + jointPx) / stepLengthPx);
+      const sideLengthM = toMeters(edgeLenPx);
+      totalFrameBlocks += blocksPerEdge;
+      totalFrameAreaM2 += sideLengthM * pieceWidthM;
+      if (rowIdx === 0) {
+        sides.push({ length: sideLengthM, blocks: blocksPerEdge });
+      }
+    }
+
+    cumulativePts = applyFrameInsetShrinkPolygon(cumulativePts, edgeIndices, frameSidesEnabled, [row.widthCm]);
+    if (cumulativePts.length < 3) break;
+  }
 
   return { totalFrameBlocks, totalFrameAreaM2, frameAngleCuts, sides };
 }
@@ -620,47 +1133,64 @@ export function drawMonoblockFrame(
   _zoom: number
 ): void {
   const inputs = shape.calculatorInputs;
-  const framePieceWidthCm = Number(inputs?.framePieceWidthCm ?? 0);
-  const framePieceLengthCm = Number(inputs?.framePieceLengthCm ?? 60);
-  if (framePieceWidthCm <= 0) return;
+  const rows = getFrameBorderRowsFromInputs(inputs);
+  if (rows.length === 0) return;
 
-  const { points: pts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
-  if (pts.length < 3 || !shape.closed) return;
+  let outlinePts: Point[];
+  let edgeIndices: number[];
+  if (isPathElement(shape)) {
+    const pathPts = getPathPolygon(shape);
+    if (!pathPts || pathPts.length < 3) return;
+    outlinePts = pathPts;
+    edgeIndices = outlinePts.map((_, i) => i);
+  } else {
+    const eff = getEffectivePolygonWithEdgeIndices(shape);
+    outlinePts = eff.points;
+    edgeIndices = eff.edgeIndices;
+  }
+  if (outlinePts.length < 3 || !shape.closed) return;
 
-  const pieceLengthPx = toPixels(framePieceLengthCm / 100);
-  const pieceWidthPx = toPixels(framePieceWidthCm / 100);
   const jointGapMm = Number(inputs?.jointGapMm ?? 1);
   const jointPx = toPixels(jointGapMm / 1000);
-  const stepLengthPx = pieceLengthPx + jointPx;
-  const frameJointType = (inputs?.frameJointType as 'butt' | 'miter45') || 'butt';
-  const miter = frameJointType === 'miter45';
+  const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
+  const origPts = shape.points;
+  const nOrig = origPts.length;
+  const edgeArcs = shape.edgeArcs;
+  const isPath = isPathElement(shape);
 
   ctx.save();
 
   ctx.beginPath();
-  ctx.moveTo(worldToScreen(pts[0].x, pts[0].y).x, worldToScreen(pts[0].x, pts[0].y).y);
-  for (let i = 1; i < pts.length; i++) {
-    const s = worldToScreen(pts[i].x, pts[i].y);
+  ctx.moveTo(worldToScreen(outlinePts[0].x, outlinePts[0].y).x, worldToScreen(outlinePts[0].x, outlinePts[0].y).y);
+  for (let i = 1; i < outlinePts.length; i++) {
+    const s = worldToScreen(outlinePts[i].x, outlinePts[i].y);
     ctx.lineTo(s.x, s.y);
   }
   ctx.closePath();
   ctx.clip();
 
-  const innerPts = miter ? shrinkPolygon(pts, pieceWidthPx) : null;
+  let cumulativePts = outlinePts;
 
-  const signedArea = pts.reduce((acc, p, idx) => {
-    const q = pts[(idx + 1) % pts.length];
-    return acc + p.x * q.y - q.x * p.y;
-  }, 0) / 2;
-  const perpSign = signedArea > 0 ? 1 : -1;
+  for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+    const row = rows[rowIdx];
+    const pieceLengthPx = toPixels(row.lengthCm / 100);
+    const pieceWidthPx = toPixels(row.widthCm / 100);
+    if (pieceWidthPx <= 0) continue;
+    const stepLengthPx = pieceLengthPx + jointPx;
+    const miter = row.jointType === "miter45";
+    const skipArcs = rowIdx > 0;
 
-  const frameSidesEnabled = inputs?.frameSidesEnabled as boolean[] | undefined;
-  const n = pts.length;
-  const origPts = shape.points;
-  const nOrig = origPts.length;
-  const edgeArcs = shape.edgeArcs;
-  const arcEdgeDrawn = new Set<number>();
-  const isPath = isPathElement(shape);
+    const pts = cumulativePts;
+    const innerPts = miter ? shrinkPolygon(pts, pieceWidthPx) : null;
+
+    const signedArea = pts.reduce((acc, p, idx) => {
+      const q = pts[(idx + 1) % pts.length];
+      return acc + p.x * q.y - q.x * p.y;
+    }, 0) / 2;
+    const perpSign = signedArea > 0 ? 1 : -1;
+
+    const n = pts.length;
+    const arcEdgeDrawn = new Set<number>();
 
   for (let i = 0; i < n; i++) {
     const edgeIdx = edgeIndices[(i + 1) % n];
@@ -669,7 +1199,7 @@ export function drawMonoblockFrame(
     const arcs = !isPath && edgeArcs?.[edgeIdx];
     const hasArc = arcs && arcs.length > 0;
 
-    if (hasArc && !arcEdgeDrawn.has(edgeIdx) && edgeIdx < nOrig) {
+    if (hasArc && !skipArcs && !arcEdgeDrawn.has(edgeIdx) && edgeIdx < nOrig) {
       arcEdgeDrawn.add(edgeIdx);
       const A = origPts[edgeIdx];
       const B = origPts[(edgeIdx + 1) % nOrig];
@@ -780,6 +1310,10 @@ export function drawMonoblockFrame(
         ctx.stroke();
       }
     }
+  }
+
+    cumulativePts = applyFrameInsetShrinkPolygon(cumulativePts, edgeIndices, frameSidesEnabled, [row.widthCm]);
+    if (cumulativePts.length < 3) break;
   }
 
   ctx.restore();

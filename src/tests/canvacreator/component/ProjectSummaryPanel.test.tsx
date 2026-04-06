@@ -27,7 +27,7 @@ describe("ProjectSummaryPanel", () => {
     render(<ProjectSummaryPanel shapes={[]} onCreateProject={onCreateProject} />);
 
     expect(screen.getByText(/No elements on Layer 2/)).toBeInTheDocument();
-    expect(screen.getByText(/Add shapes and assign calculators/)).toBeInTheDocument();
+    expect(screen.getByText(/assign a calculation type/)).toBeInTheDocument();
   });
 
   it("renders list of Layer 2 shapes with correct badges", () => {
@@ -50,7 +50,9 @@ describe("ProjectSummaryPanel", () => {
     ];
     render(<ProjectSummaryPanel shapes={shapes} onCreateProject={vi.fn()} />);
 
-    expect(screen.getByText(/1 element\(s\) without calculator/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/1 element\(s\) without an assigned calculation type/)
+    ).toBeInTheDocument();
   });
 
   it("collapse/expand toggle works", () => {

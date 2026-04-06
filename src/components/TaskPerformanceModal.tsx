@@ -30,7 +30,7 @@ const DeleteConfirmation: React.FC<DeleteConfirmationProps> = ({
   t = (key) => key
 }) => {
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-[60] p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+    <div className="fixed inset-0 flex items-center justify-center z-[60] p-0 md:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
       <div className="rounded-lg shadow-xl p-6 max-w-md w-full" style={{ backgroundColor: colors.bgCard }}>
         <h3 className="text-lg font-semibold mb-4">{t('common:confirm_deletion')}</h3>
         <p className="mb-6">{t('common:want_delete_record')}</p>
@@ -246,7 +246,7 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
 
   return (
     <>
-      <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+      <div className="fixed inset-0 flex items-center justify-center z-50 p-0 md:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
         <div className="rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
           {/* Header */}
           <div className="p-4 border-b flex justify-between items-center sticky top-0 z-10" style={{ borderColor: colors.borderDefault, backgroundColor: colors.bgCard }}>
@@ -396,7 +396,7 @@ const TaskPerformanceModal: React.FC<TaskPerformanceModalProps> = ({ onClose }) 
       )}
 
       {showRequestSent && (
-        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-0 md:p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
           <div className="rounded-lg shadow-xl p-6 max-w-sm w-full" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium flex items-center">

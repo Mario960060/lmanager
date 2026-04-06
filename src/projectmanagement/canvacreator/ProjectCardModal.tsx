@@ -4,7 +4,6 @@ import { X, Calendar, Tag, Truck, Wrench, FileText } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { useAuthStore } from "../../lib/store";
 import { ProjectSettings } from "./types";
-import { C } from "./geometry";
 import { COMPACTORS, type CompactorOption } from "../../components/Calculator/CompactorSelector";
 import { getFoundationDiggingMethodFromExcavator } from "./GroundworkLinearCalculator";
 import DatePicker from "../../components/DatePicker";
@@ -30,10 +29,10 @@ type Tab = "details" | "equipment";
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "10px 14px",
-  background: C.bg,
-  border: `1px solid ${C.panelBorder}`,
+  background: colors.bgInput,
+  border: `1px solid ${colors.borderDefault}`,
   borderRadius: 8,
-  color: C.text,
+  color: colors.textPrimary,
   fontSize: 14,
   fontFamily: "inherit",
   outline: "none",
@@ -43,7 +42,7 @@ const inputStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = {
   display: "block",
   fontSize: 12,
-  color: C.textDim,
+  color: colors.textDim,
   marginBottom: 6,
   fontWeight: 500,
   letterSpacing: "0.02em",
@@ -110,7 +109,7 @@ export default function ProjectCardModal({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.6)",
+        background: colors.bgModalBackdrop,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -122,8 +121,8 @@ export default function ProjectCardModal({
         data-testid="project-card-modal"
         className="canvas-modal-content"
         style={{
-          background: C.panel,
-          border: `1px solid ${C.panelBorder}`,
+          background: colors.bgElevated,
+          border: `1px solid ${colors.borderDefault}`,
           borderRadius: 16,
           width: "90%",
           maxWidth: 560,
@@ -139,15 +138,15 @@ export default function ProjectCardModal({
         <div
           style={{
             padding: "20px 24px 0",
-            borderBottom: `1px solid ${C.panelBorder}`,
+            borderBottom: `1px solid ${colors.borderDefault}`,
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
             <div>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: C.text }}>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: colors.textPrimary }}>
                 {projectSettings.title || t("project:untitled_project")}
               </h2>
-              <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>
+              <div style={{ fontSize: 12, color: colors.textDim, marginTop: 4 }}>
                 {completionItems.filter(i => !i.done).length === 0
                   ? t("project:ready_to_create")
                   : `${t("project:missing")}: ${completionItems.filter(i => !i.done).map(i => i.label).join(", ")}`}
@@ -159,7 +158,7 @@ export default function ProjectCardModal({
                 background: "none",
                 border: "none",
                 cursor: canClose ? "pointer" : "not-allowed",
-                color: canClose ? C.textDim : C.textDim + "80",
+                color: canClose ? colors.textDim : colors.textDim + "80",
                 padding: 4,
                 borderRadius: 6,
               }}
@@ -169,12 +168,12 @@ export default function ProjectCardModal({
           </div>
 
           {/* Progress bar */}
-          <div style={{ height: 3, background: C.panelBorder, borderRadius: 2, marginBottom: 16 }}>
+          <div style={{ height: 3, background: colors.borderDefault, borderRadius: 2, marginBottom: 16 }}>
             <div
               style={{
                 height: "100%",
                 width: `${completionPct * 100}%`,
-                background: completionPct === 1 ? C.accent : C.open,
+                background: completionPct === 1 ? colors.accentBlue : colors.orange,
                 borderRadius: 2,
                 transition: "width 0.3s, background 0.3s",
               }}
@@ -272,9 +271,9 @@ export default function ProjectCardModal({
                       in_progress: t("project:status_in_progress"),
                     };
                     const statusColors: Record<string, string> = {
-                      planned: C.textDim,
+                      planned: colors.textDim,
                       scheduled: colors.accentBlue,
-                      in_progress: C.accent,
+                      in_progress: colors.accentBlue,
                     };
                     return (
                       <button
@@ -286,9 +285,9 @@ export default function ProjectCardModal({
                           minWidth: 0,
                           padding: "8px 12px",
                           borderRadius: radii.lg,
-                          border: `1px solid ${active ? statusColors[status] : C.panelBorder}`,
-                          background: active ? statusColors[status] + "22" : C.button,
-                          color: active ? statusColors[status] : C.textDim,
+                          border: `1px solid ${active ? statusColors[status] : colors.borderDefault}`,
+                          background: active ? statusColors[status] + "22" : colors.bgOverlay,
+                          color: active ? statusColors[status] : colors.textDim,
                           cursor: "pointer",
                           fontSize: 13,
                           fontWeight: active ? 600 : 400,
@@ -308,7 +307,7 @@ export default function ProjectCardModal({
           {activeTab === "equipment" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               {loadingEquipment ? (
-                <div style={{ color: C.textDim, fontSize: 14, textAlign: "center", padding: 32 }}>
+                <div style={{ color: colors.textDim, fontSize: 14, textAlign: "center", padding: 32 }}>
                   {t("project:loading_equipment")}
                 </div>
               ) : (
@@ -330,7 +329,7 @@ export default function ProjectCardModal({
                         </option>
                       ))}
                     </select>
-                    <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: colors.textDim, marginTop: 4 }}>
                       {t("project:foundation_digging_label")}: {(() => {
                         const method = getFoundationDiggingMethodFromExcavator(projectSettings.selectedExcavator);
                         const labels: Record<string, string> = {
@@ -361,7 +360,7 @@ export default function ProjectCardModal({
                         </option>
                       ))}
                     </select>
-                    <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{t("project:for_excavator_materials")}</div>
+                    <div style={{ fontSize: 11, color: colors.textDim, marginTop: 4 }}>{t("project:for_excavator_materials")}</div>
                   </div>
 
                   <div>
@@ -381,7 +380,7 @@ export default function ProjectCardModal({
                         </option>
                       ))}
                     </select>
-                    <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{t("project:for_calculator_materials")}</div>
+                    <div style={{ fontSize: 11, color: colors.textDim, marginTop: 4 }}>{t("project:for_calculator_materials")}</div>
                   </div>
 
                   <div>
@@ -415,7 +414,7 @@ export default function ProjectCardModal({
                         ))
                       )}
                     </select>
-                    <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: colors.textDim, marginTop: 4 }}>
                       {compactors.length > 0 ? t("project:from_company_setup") : t("project:default_list_compactor")}
                     </div>
                   </div>
@@ -432,7 +431,7 @@ export default function ProjectCardModal({
                       <option value="sand">{t("project:sand")}</option>
                       <option value="rock">{t("project:rock")}</option>
                     </select>
-                    <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{t("project:for_excavation_tonnage")}</div>
+                    <div style={{ fontSize: 11, color: colors.textDim, marginTop: 4 }}>{t("project:for_excavation_tonnage")}</div>
                   </div>
 
                   <div>
@@ -446,26 +445,26 @@ export default function ProjectCardModal({
                       <option value="tape1">{t("project:tape1_option")}</option>
                       <option value="soil">{t("project:soil_option")}</option>
                     </select>
-                    <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{t("project:when_terrain_low")}</div>
+                    <div style={{ fontSize: 11, color: colors.textDim, marginTop: 4 }}>{t("project:when_terrain_low")}</div>
                   </div>
 
                   {/* Transport section */}
                   <div
                     style={{
                       padding: 16,
-                      background: C.bg,
+                      background: colors.bgInput,
                       borderRadius: 10,
-                      border: `1px solid ${C.panelBorder}`,
+                      border: `1px solid ${colors.borderDefault}`,
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: projectSettings.calculateTransport ? 16 : 0 }}>
-                      <Truck size={16} color={C.textDim} />
-                      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14, color: C.text, flex: 1 }}>
+                      <Truck size={16} color={colors.textDim} />
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 14, color: colors.textPrimary, flex: 1 }}>
                         <input
                           type="checkbox"
                           checked={projectSettings.calculateTransport}
                           onChange={e => onSave({ calculateTransport: e.target.checked })}
-                          style={{ accentColor: C.accent }}
+                          style={{ accentColor: colors.accentBlue }}
                         />
                         {t("project:calculate_transport")}
                       </label>
@@ -494,7 +493,7 @@ export default function ProjectCardModal({
         <div
           style={{
             padding: "16px 24px",
-            borderTop: `1px solid ${C.panelBorder}`,
+            borderTop: `1px solid ${colors.borderDefault}`,
             display: "flex",
             justifyContent: "flex-end",
           }}
@@ -504,7 +503,7 @@ export default function ProjectCardModal({
             disabled={!canClose}
             style={{
               padding: "10px 28px",
-              background: canClose ? C.accent : C.accent + "66",
+              background: canClose ? colors.accentBlue : colors.accentBlue + "66",
               border: "none",
               borderRadius: 8,
               color: "#fff",
@@ -544,8 +543,8 @@ function TabButton({
         padding: "10px 20px",
         background: "none",
         border: "none",
-        borderBottom: `2px solid ${active ? C.accent : "transparent"}`,
-        color: active ? C.accent : C.textDim,
+        borderBottom: `2px solid ${active ? colors.accentBlue : "transparent"}`,
+        color: active ? colors.accentBlue : colors.textDim,
         fontSize: 13,
         fontWeight: active ? 600 : 400,
         cursor: "pointer",

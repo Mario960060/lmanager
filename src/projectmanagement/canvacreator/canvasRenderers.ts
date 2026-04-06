@@ -3,7 +3,19 @@
 // Badge and indicator rendering for shapes
 // ══════════════════════════════════════════════════════════════
 
-import { Shape, labelAnchorInsidePolygon, C, toPixels, Point, polylineMidpointAndAngle, polylineLengthMeters, areaM2 } from "./geometry";
+import {
+  Shape,
+  labelAnchorInsidePolygon,
+  C,
+  toPixels,
+  Point,
+  polylineMidpointAndAngle,
+  centroid,
+  distance,
+  midpoint,
+  readableTextAngle,
+  formatLength,
+} from "./geometry";
 import { getEffectivePolygon } from "./arcMath";
 import { computeThickPolyline, getPathPolygon, getPolygonLinearOutline, isLinearElement, isPathElement } from "./linearElements";
 
@@ -45,35 +57,67 @@ export function getTypeBadgeText(calculatorType: string | undefined): string {
   return map[calculatorType] ?? calculatorType.slice(0, 2).toUpperCase();
 }
 
-/** Build rich label for path elements: slab dims, length, width, area, full/cut counts. */
+/** Path object name only — lengths, width, and slab counts are drawn via {@link drawPathRibbonMetrics}. */
 export function getPathLabel(shape: Shape): string {
+  return (shape.label ?? "").trim();
+}
+
+const PATH_RIBBON_METRIC_ORANGE = "#e67e22";
+
+/**
+ * Small orange labels along the path centerline: at each segment midpoint, length (top) and path width (bottom), same layout on every segment.
+ * Intended to be legible mainly when zoomed in.
+ */
+export function drawPathRibbonMetrics(
+  ctx: CanvasRenderingContext2D,
+  shape: Shape,
+  worldToScreen: WorldToScreen,
+  zoom: number
+): void {
+  if (!isPathElement(shape) || shape.layer !== 2 || !shape.closed) return;
   const inp = shape.calculatorInputs ?? {};
   const pathCenterline = inp.pathCenterline as Point[] | undefined;
-  const outline = inp.pathIsOutline ? shape.points : getEffectivePolygon(shape);
-  const parts: string[] = [];
-  const w = Number(inp.vizSlabWidth);
-  const l = Number(inp.vizSlabLength);
-  if (w && l) parts.push(`${w}×${l} cm`);
-  if (pathCenterline && pathCenterline.length >= 2) {
-    const lenM = polylineLengthMeters(pathCenterline);
-    parts.push(`${lenM.toFixed(2)} m`);
+  if (!pathCenterline || pathCenterline.length < 2) return;
+
+  const outline = getPathPolygon(shape);
+  const ctr = outline.length >= 3 ? centroid(outline) : pathCenterline[0]!;
+  const pathWidthM = Number(inp.pathWidthM ?? 0.6) || 0.6;
+  const widthStr = `${pathWidthM.toFixed(2)} m`;
+
+  const fontPx = Math.max(5, Math.min(11, 7 * zoom));
+  const inwardM = 0.1;
+
+  const nSeg = pathCenterline.length - 1;
+  for (let i = 0; i < nSeg; i++) {
+    const A = pathCenterline[i]!;
+    const B = pathCenterline[i + 1]!;
+    const lenPx = distance(A, B);
+    const lenStr = formatLength(lenPx);
+    const mid = midpoint(A, B);
+    const dx = B.x - A.x;
+    const dy = B.y - A.y;
+    const segLen = Math.hypot(dx, dy) || 1;
+    const cross = dx * (ctr.y - mid.y) - dy * (ctr.x - mid.x);
+    const sign = cross >= 0 ? 1 : -1;
+    const nx = (-dy / segLen) * sign;
+    const ny = (dx / segLen) * sign;
+    const offPx = toPixels(inwardM);
+    const labelWorld = { x: mid.x + nx * offPx, y: mid.y + ny * offPx };
+    const sc = worldToScreen(labelWorld.x, labelWorld.y);
+    const textAngle = readableTextAngle(Math.atan2(dy, dx));
+
+    ctx.save();
+    ctx.translate(sc.x, sc.y);
+    ctx.rotate(textAngle);
+    ctx.font = `${fontPx}px 'JetBrains Mono',monospace`;
+    ctx.fillStyle = PATH_RIBBON_METRIC_ORANGE;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    ctx.fillText(lenStr, 0, -fontPx * 0.55);
+    ctx.fillText(widthStr, 0, fontPx * 0.55);
+    ctx.restore();
   }
-  if (outline.length >= 3) {
-    const area = areaM2(outline);
-    parts.push(`${area.toFixed(2)} m²`);
-    const pathCenterline2 = inp.pathCenterline as Point[] | undefined;
-    if (pathCenterline2 && pathCenterline2.length >= 2 && area > 0.0001) {
-      const lenM = polylineLengthMeters(pathCenterline2);
-      const widthM = lenM > 0 ? area / lenM : 0;
-      if (widthM > 0) parts.push(`szer. ${(widthM * 100).toFixed(0)} cm`);
-    }
-  }
-  const full = inp.vizFullSlabCount;
-  const cut = inp.cutSlabs != null ? Number(inp.cutSlabs) : undefined;
-  if (typeof full === "number" || typeof cut === "number") {
-    parts.push(`${full ?? 0} full, ${cut ?? 0} cut`);
-  }
-  return parts.length > 0 ? parts.join(" · ") : (shape.label || "Path");
 }
 
 export function getTypeBadgeColor(calculatorType: string | undefined): string {
@@ -272,6 +316,25 @@ export function getExcavationBreakdown(shape: Shape): ExcavationLayer[] {
       const depth = parse(inp.depth ?? inp.depthCm);
       if (depth <= 0) return [];
       layers.push({ label: "Fundament", cm: depth, pct: 100, colorKey: "foundation" });
+      break;
+    }
+    case "decorativeStones": {
+      const decorative = parse(inp.decorativeDepthCm);
+      const sub = inp.addSubBase === true || inp.addSubBase === "true";
+      const tape1 = sub ? parse(inp.tape1ThicknessCm) : 0;
+      const total = tape1 + decorative;
+      if (total <= 0) return [];
+      if (decorative > 0) {
+        layers.push({
+          label: "Kamień dekor.",
+          cm: decorative,
+          pct: (decorative / total) * 100,
+          colorKey: "monoBlocks",
+        });
+      }
+      if (tape1 > 0) {
+        layers.push({ label: "Tape1", cm: tape1, pct: (tape1 / total) * 100, colorKey: "tape1" });
+      }
       break;
     }
     default:

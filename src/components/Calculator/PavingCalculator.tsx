@@ -3,12 +3,21 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { CompactorSelector, type CompactorOption } from './CompactorSelector';
 import { calculateCompactingTime } from '../../lib/compactingCalculations';
 import { computeCobblestoneCuts, computeMonoblockFrameBlocks } from '../../projectmanagement/canvacreator/visualization/cobblestonePattern';
-import { groupCutsByLength } from '../../projectmanagement/canvacreator/visualization/slabPattern';
+import {
+  MONOBLOCK_MIXES,
+  getMonoblockMixById,
+  singleSizeToBlockCm,
+  defaultMonoblockMixEnabled,
+  type MonoblockLayoutMode,
+  type MonoblockSingleSizeKey,
+  type MonoblockMixPieceKey,
+} from '../../projectmanagement/canvacreator/visualization/monoblockMix';
+import { groupCutsByLength, getFrameBorderRowCount } from '../../projectmanagement/canvacreator/visualization/slabPattern';
 import { isPathElement, getPathPolygon } from '../../projectmanagement/canvacreator/linearElements';
 import { getEffectivePolygon, getEffectivePolygonWithEdgeIndices } from '../../projectmanagement/canvacreator/arcMath';
 import { FrameSidesSelector } from '../../projectmanagement/canvacreator/objectCard/FrameSidesSelector';
@@ -121,17 +130,63 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
   const [cutBlocks, setCutBlocks] = useState<string>(savedInputs?.cutBlocks ?? '');
   const [soilExcessCm, setSoilExcessCm] = useState<string>(savedInputs?.soilExcessCm ?? '');
   const [addFrameToMonoblock, setAddFrameToMonoblock] = useState<boolean>(!!savedInputs?.addFrameToMonoblock);
-  const [framePieceLengthCm, setFramePieceLengthCm] = useState<string>(savedInputs?.framePieceLengthCm ?? '60');
+  const [framePieceLengthCm, setFramePieceLengthCm] = useState<string>(savedInputs?.framePieceLengthCm ?? '20');
   const [framePieceWidthCm, setFramePieceWidthCm] = useState<string>(savedInputs?.framePieceWidthCm ?? '10');
+  const [frameBorderRowCount, setFrameBorderRowCount] = useState<string>(
+    String(
+      savedInputs?.frameBorderRowCount != null && Number.isFinite(Number(savedInputs.frameBorderRowCount))
+        ? Math.max(1, Math.min(50, Math.floor(Number(savedInputs.frameBorderRowCount))))
+        : getFrameBorderRowCount(savedInputs as Record<string, unknown> | undefined)
+    )
+  );
   const [frameJointType, setFrameJointType] = useState<'butt' | 'miter45'>(savedInputs?.frameJointType ?? 'butt');
   const [frameSidesEnabled, setFrameSidesEnabled] = useState<boolean[]>(Array.isArray(savedInputs?.frameSidesEnabled) ? savedInputs.frameSidesEnabled : []);
+  const [frameBorderMaterial, setFrameBorderMaterial] = useState<'slab' | 'cobble'>(() =>
+    savedInputs?.frameBorderMaterial === 'slab' || savedInputs?.frameBorderMaterial === 'cobble'
+      ? savedInputs.frameBorderMaterial
+      : 'cobble'
+  );
+
+  const [monoblockLayoutMode, setMonoblockLayoutMode] = useState<MonoblockLayoutMode>(() =>
+    savedInputs?.monoblockLayoutMode === 'mix' || savedInputs?.monoblockLayoutMode === 'single'
+      ? savedInputs.monoblockLayoutMode
+      : 'single'
+  );
+  const [monoblockSingleSize, setMonoblockSingleSize] = useState<MonoblockSingleSizeKey>(() =>
+    savedInputs?.monoblockSingleSize === '10x10' ? '10x10' : '20x10'
+  );
+  const [monoblockMixId, setMonoblockMixId] = useState<string>(() =>
+    String(savedInputs?.monoblockMixId ?? MONOBLOCK_MIXES[0].id)
+  );
+  const [monoblockMixEnabledSizes, setMonoblockMixEnabledSizes] = useState<Record<MonoblockMixPieceKey, boolean>>(() => {
+    const d = defaultMonoblockMixEnabled();
+    const s = savedInputs?.monoblockMixEnabledSizes as Partial<Record<MonoblockMixPieceKey, boolean>> | undefined;
+    return s ? { ...d, ...s } : d;
+  });
+
   useEffect(() => {
     if (savedInputs?.addFrameToMonoblock !== undefined) setAddFrameToMonoblock(!!savedInputs.addFrameToMonoblock);
     if (savedInputs?.framePieceLengthCm != null) setFramePieceLengthCm(String(savedInputs.framePieceLengthCm));
     if (savedInputs?.framePieceWidthCm != null) setFramePieceWidthCm(String(savedInputs.framePieceWidthCm));
+    if (savedInputs?.frameBorderRowCount != null && Number.isFinite(Number(savedInputs.frameBorderRowCount))) {
+      setFrameBorderRowCount(String(Math.max(1, Math.min(50, Math.floor(Number(savedInputs.frameBorderRowCount))))));
+    }
     if (savedInputs?.frameJointType === 'butt' || savedInputs?.frameJointType === 'miter45') setFrameJointType(savedInputs.frameJointType);
     if (Array.isArray(savedInputs?.frameSidesEnabled)) setFrameSidesEnabled(savedInputs.frameSidesEnabled);
-  }, [savedInputs?.addFrameToMonoblock, savedInputs?.framePieceLengthCm, savedInputs?.framePieceWidthCm, savedInputs?.frameJointType, savedInputs?.frameSidesEnabled]);
+    if (savedInputs?.monoblockLayoutMode === 'mix' || savedInputs?.monoblockLayoutMode === 'single') {
+      setMonoblockLayoutMode(savedInputs.monoblockLayoutMode);
+    }
+    if (savedInputs?.monoblockSingleSize === '10x10' || savedInputs?.monoblockSingleSize === '20x10') {
+      setMonoblockSingleSize(savedInputs.monoblockSingleSize);
+    }
+    if (savedInputs?.monoblockMixId != null) setMonoblockMixId(String(savedInputs.monoblockMixId));
+    if (savedInputs?.monoblockMixEnabledSizes && typeof savedInputs.monoblockMixEnabledSizes === 'object') {
+      setMonoblockMixEnabledSizes({ ...defaultMonoblockMixEnabled(), ...savedInputs.monoblockMixEnabledSizes });
+    }
+    if (savedInputs?.frameBorderMaterial === 'slab' || savedInputs?.frameBorderMaterial === 'cobble') {
+      setFrameBorderMaterial(savedInputs.frameBorderMaterial);
+    }
+  }, [savedInputs?.addFrameToMonoblock, savedInputs?.framePieceLengthCm, savedInputs?.framePieceWidthCm, savedInputs?.frameBorderRowCount, savedInputs?.frameJointType, savedInputs?.frameSidesEnabled, savedInputs?.frameBorderMaterial, savedInputs?.monoblockLayoutMode, savedInputs?.monoblockSingleSize, savedInputs?.monoblockMixId, savedInputs?.monoblockMixEnabledSizes]);
 
   useEffect(() => {
     if (savedInputs?.tape1ThicknessCm != null && savedInputs.tape1ThicknessCm !== '') setTape1ThicknessCm(String(savedInputs.tape1ThicknessCm));
@@ -145,17 +200,34 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
     sides: Array<{ length: number; blocks: number }>;
   } | null>(null);
   const [canvasCutGroups, setCanvasCutGroups] = useState<{ lengthCm: number; count: number }[]>([]);
+  const onResultsChangeRef = useRef(onResultsChange);
+  onResultsChangeRef.current = onResultsChange;
+  const onInputsChangeRef = useRef(onInputsChange);
+  onInputsChangeRef.current = onInputsChange;
+
+  /** Fallback when DB view returns null dynamic estimate (avoids 0 h + console noise). */
+  const DEFAULT_LAYING_MONOBLOCKS_H_PER_M2 = 0.05;
+  const COBBLE_FRAME_LAYING_BLOCKS_PER_HOUR = 60;
 
   useEffect(() => {
     if (!isInProjectCreating || !shape?.calculatorInputs || !shape.closed || shape.points.length < 3) {
       setCanvasCutGroups([]);
       return;
     }
-    const inputs = { ...shape.calculatorInputs, blockWidthCm: shape.calculatorInputs?.blockWidthCm ?? 20, blockLengthCm: shape.calculatorInputs?.blockLengthCm ?? 10, jointGapMm: shape.calculatorInputs?.jointGapMm ?? 1 };
+    const inputs = {
+      ...shape.calculatorInputs,
+      blockWidthCm: shape.calculatorInputs?.blockWidthCm ?? 20,
+      blockLengthCm: shape.calculatorInputs?.blockLengthCm ?? 10,
+      jointGapMm: shape.calculatorInputs?.jointGapMm ?? 1,
+      monoblockLayoutMode: shape.calculatorInputs?.monoblockLayoutMode,
+      monoblockMixId: shape.calculatorInputs?.monoblockMixId,
+      monoblockMixEnabledSizes: shape.calculatorInputs?.monoblockMixEnabledSizes,
+    };
     const { fullBlockCount, cutBlockCount, cuts, wasteSatisfiedPositions, wasteAreaCm2, reusedAreaCm2 } = computeCobblestoneCuts(shape as any, inputs);
     setCutBlocks(String(cutBlockCount));
     setCanvasCutGroups(cuts.length > 0 ? groupCutsByLength(cuts) : []);
-    if (onInputsChange) {
+    const fn = onInputsChangeRef.current;
+    if (fn) {
       const prev = shape.calculatorInputs ?? {};
       const next = {
         vizWasteSatisfied: wasteSatisfiedPositions ?? [],
@@ -169,27 +241,38 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
         && prev.vizFullBlockCount === next.vizFullBlockCount
         && prev.cutBlocks === next.cutBlocks
         && JSON.stringify(prev.vizWasteSatisfied ?? []) === JSON.stringify(next.vizWasteSatisfied);
-      if (!same) onInputsChange(next);
+      if (!same) fn(next);
     }
-  }, [isInProjectCreating, shape?.calculatorInputs?.blockWidthCm, shape?.calculatorInputs?.blockLengthCm, shape?.calculatorInputs?.jointGapMm, shape?.calculatorInputs?.vizPattern, shape?.calculatorInputs?.vizDirection, shape?.calculatorInputs?.vizStartCorner, shape?.calculatorInputs?.vizOriginOffsetX, shape?.calculatorInputs?.vizOriginOffsetY, shape?.calculatorInputs?.addFrameToMonoblock, shape?.calculatorInputs?.framePieceWidthCm, JSON.stringify(shape?.points), shape?.closed, onInputsChange]);
+  }, [isInProjectCreating, shape?.calculatorInputs?.blockWidthCm, shape?.calculatorInputs?.blockLengthCm, shape?.calculatorInputs?.jointGapMm, shape?.calculatorInputs?.vizPattern, shape?.calculatorInputs?.vizDirection, shape?.calculatorInputs?.vizStartCorner, shape?.calculatorInputs?.vizOriginOffsetX, shape?.calculatorInputs?.vizOriginOffsetY, shape?.calculatorInputs?.addFrameToMonoblock, shape?.calculatorInputs?.framePieceWidthCm, shape?.calculatorInputs?.frameBorderRowCount, shape?.calculatorInputs?.monoblockLayoutMode, shape?.calculatorInputs?.monoblockMixId, JSON.stringify(shape?.calculatorInputs?.monoblockMixEnabledSizes), JSON.stringify(shape?.points), shape?.closed]);
 
   const lastInputsSentRef = useRef<string>("");
   useEffect(() => {
-    if (!onInputsChange || !isInProjectCreating) return;
+    if (!isInProjectCreating) return;
+    const fn = onInputsChangeRef.current;
+    if (!fn) return;
+    const singleDims = singleSizeToBlockCm(monoblockSingleSize);
     const next = {
       area, sandThicknessCm, tape1ThicknessCm, monoBlocksHeightCm, cutBlocks, soilExcessCm,
-      blockWidthCm: 20, blockLengthCm: 10, jointGapMm: 1,
+      monoblockLayoutMode,
+      monoblockSingleSize: monoblockLayoutMode === 'single' ? monoblockSingleSize : undefined,
+      monoblockMixId: monoblockLayoutMode === 'mix' ? monoblockMixId : undefined,
+      monoblockMixEnabledSizes: monoblockLayoutMode === 'mix' ? monoblockMixEnabledSizes : undefined,
+      blockWidthCm: monoblockLayoutMode === 'single' ? singleDims.blockWidthCm : 10,
+      blockLengthCm: monoblockLayoutMode === 'single' ? singleDims.blockLengthCm : 20,
+      jointGapMm: 1,
       addFrameToMonoblock: addFrameToMonoblock ? true : undefined,
       framePieceLengthCm: addFrameToMonoblock ? framePieceLengthCm : undefined,
       framePieceWidthCm: addFrameToMonoblock ? framePieceWidthCm : undefined,
+      frameBorderRowCount: addFrameToMonoblock ? Math.max(1, Math.min(50, Math.floor(Number(frameBorderRowCount) || 1))) : undefined,
       frameJointType: addFrameToMonoblock ? frameJointType : undefined,
       frameSidesEnabled: addFrameToMonoblock ? frameSidesEnabled : undefined,
+      frameBorderMaterial: addFrameToMonoblock ? frameBorderMaterial : undefined,
     };
     const key = JSON.stringify(next);
     if (lastInputsSentRef.current === key) return;
     lastInputsSentRef.current = key;
-    onInputsChange(next);
-  }, [area, sandThicknessCm, tape1ThicknessCm, monoBlocksHeightCm, cutBlocks, soilExcessCm, addFrameToMonoblock, framePieceLengthCm, framePieceWidthCm, frameJointType, frameSidesEnabled, onInputsChange, isInProjectCreating]);
+    fn(next);
+  }, [area, sandThicknessCm, tape1ThicknessCm, monoBlocksHeightCm, cutBlocks, soilExcessCm, addFrameToMonoblock, framePieceLengthCm, framePieceWidthCm, frameBorderRowCount, frameJointType, frameSidesEnabled, monoblockLayoutMode, monoblockSingleSize, monoblockMixId, monoblockMixEnabledSizes, frameBorderMaterial, isInProjectCreating]);
 
   useEffect(() => {
     if (!isInProjectCreating || !addFrameToMonoblock || !shape?.closed || !shape.points || shape.points.length < 3) {
@@ -199,14 +282,15 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
     const inputs = {
       ...shape.calculatorInputs,
       addFrameToMonoblock: true,
-      framePieceLengthCm: parseFloat(framePieceLengthCm) || 60,
+      framePieceLengthCm: parseFloat(framePieceLengthCm) || 20,
       framePieceWidthCm: parseFloat(framePieceWidthCm) || 10,
+      frameBorderRowCount: Math.max(1, Math.min(50, Math.floor(Number(frameBorderRowCount) || 1))),
       frameJointType: frameJointType,
       frameSidesEnabled: frameSidesEnabled,
     };
     const result = computeMonoblockFrameBlocks(shape as any, inputs);
     setFrameResults(result);
-  }, [isInProjectCreating, addFrameToMonoblock, framePieceLengthCm, framePieceWidthCm, frameJointType, frameSidesEnabled, shape?.closed, shape?.calculatorInputs, JSON.stringify(shape?.points)]);
+  }, [isInProjectCreating, addFrameToMonoblock, framePieceLengthCm, framePieceWidthCm, frameBorderRowCount, frameJointType, frameSidesEnabled, shape?.closed, shape?.calculatorInputs, JSON.stringify(shape?.points)]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [totalHours, setTotalHours] = useState<number | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
@@ -432,10 +516,10 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       }
     };
     
-    if (calculateDigging) {
+    if (calculateDigging || (isInProjectCreating && propSelectedExcavator)) {
       fetchEquipment();
     }
-  }, [calculateDigging]);
+  }, [calculateDigging, isInProjectCreating, propSelectedExcavator]);
 
   // Define loading sand time estimates (same as preparation digger estimates)
   const loadingSandDiggerTimeEstimates = [
@@ -475,7 +559,7 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
   ) => {
     // Get carrier speed
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000; // Default 4000 m/h
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
 
     // Get material capacity
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
@@ -518,17 +602,32 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       const frameAreaM2 = addFrameToMonoblock && frameResults ? frameResults.totalFrameAreaM2 : 0;
       const effectiveAreaM2 = areaNum - frameAreaM2;
 
-      // Calculate base hours needed for installation
+      // Calculate base hours needed for installation (fallback if DB dynamic estimate is null)
+      const layingHoursPerM2 =
+        layingTask != null &&
+        typeof layingTask.estimated_hours === 'number' &&
+        Number.isFinite(layingTask.estimated_hours)
+          ? layingTask.estimated_hours
+          : DEFAULT_LAYING_MONOBLOCKS_H_PER_M2;
+      if (
+        layingTask != null &&
+        (layingTask.estimated_hours == null || !Number.isFinite(Number(layingTask.estimated_hours))) &&
+        !isLoading
+      ) {
+        console.warn('Laying monoblocks task has no estimated_hours; using fallback rate (m²/h):', DEFAULT_LAYING_MONOBLOCKS_H_PER_M2);
+      }
+
       let mainTaskHours = 0;
       let frameTaskHours = 0;
-      
-      if (layingTask?.unit && layingTask?.estimated_hours !== undefined) {
-        mainTaskHours = effectiveAreaM2 * layingTask.estimated_hours;
-        if (addFrameToMonoblock && frameResults && frameResults.totalFrameAreaM2 > 0) {
-          frameTaskHours = frameResults.totalFrameAreaM2 * layingTask.estimated_hours;
+      const frameUsesSlabRate = frameBorderMaterial === 'slab';
+
+      mainTaskHours = effectiveAreaM2 * layingHoursPerM2;
+      if (addFrameToMonoblock && frameResults && frameResults.totalFrameAreaM2 > 0) {
+        if (frameUsesSlabRate) {
+          frameTaskHours = frameResults.totalFrameAreaM2 * layingHoursPerM2;
+        } else {
+          frameTaskHours = frameResults.totalFrameBlocks / COBBLE_FRAME_LAYING_BLOCKS_PER_HOUR;
         }
-      } else {
-        console.warn('Laying task has no unit or estimated_hours:', layingTask);
       }
 
       // Add time for cuts. Use cutting blocks task if available, else 2 min per cut. Include frame corner cuts when miter45.
@@ -624,15 +723,17 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       ];
       if (addFrameToMonoblock && frameResults && frameResults.totalFrameBlocks > 0) {
         breakdown.push({
-          task: 'laying monoblocks (frame)',
+          task: frameUsesSlabRate ? 'laying monoblocks (frame)' : 'laying frame cobbles (60/h)',
           hours: frameTaskHours,
-          amount: `${frameResults.totalFrameBlocks} blocks`,
-          unit: 'blocks'
+          amount: frameUsesSlabRate
+            ? `${frameResults.totalFrameAreaM2.toFixed(2)} square meters`
+            : `${frameResults.totalFrameBlocks} blocks`,
+          unit: frameUsesSlabRate ? 'square meters' : 'blocks'
         });
       }
 
-      // Add monoblock transport if applicable (use material carrier from project card when in project mode)
-      if (effectiveSelectedTransportCarrier && monoBlockTransportTime > 0) {
+      // Add monoblock transport if applicable (default wheelbarrow 0.125 t when no carrier selected)
+      if (effectiveCalculateTransport && monoBlockTransportTime > 0) {
         breakdown.push({
           task: 'transport monoblocks',
           hours: monoBlockTransportTime,
@@ -642,8 +743,8 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
         });
       }
 
-      // Add sand transport if applicable (use material carrier from project card when in project mode)
-      if (effectiveSelectedTransportCarrier && sandTransportTime > 0) {
+      // Add sand transport if applicable
+      if (effectiveCalculateTransport && sandTransportTime > 0) {
         breakdown.push({
           task: 'transport sand',
           hours: sandTransportTime,
@@ -716,7 +817,7 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       // Determine which excavator to use
       const activeExcavator = isInProjectCreating && propSelectedExcavator ? propSelectedExcavator : selectedExcavator;
 
-      if (calculateDigging && activeExcavator) {
+      if ((calculateDigging || isInProjectCreating) && activeExcavator) {
         const excavatorSize = activeExcavator["size (in tones)"] || 0;
         const excavatorName = activeExcavator.name || '';
 
@@ -835,16 +936,32 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
       const blockWidthCm = Number(savedInputs?.blockWidthCm ?? 20);
       const blockLengthCm = Number(savedInputs?.blockLengthCm ?? 10);
       const blockAreaM2 = (blockWidthCm / 100) * (blockLengthCm / 100);
+      const layoutModeMat: MonoblockLayoutMode =
+        savedInputs?.monoblockLayoutMode === 'mix' ? 'mix' : 'single';
+      const mixForMat = getMonoblockMixById(String(savedInputs?.monoblockMixId ?? ''));
+      const mixEnabledMap = savedInputs?.monoblockMixEnabledSizes as Partial<Record<MonoblockMixPieceKey, boolean>> | undefined;
+      const mergedMixEnabled = { ...defaultMonoblockMixEnabled(), ...mixEnabledMap };
+      const enabledMixPieces = mixForMat.pieces.filter((p) => mergedMixEnabled[p.key] !== false);
+      const mixLabel =
+        layoutModeMat === 'mix' && enabledMixPieces.length > 0
+          ? enabledMixPieces.map((p) => `${p.lengthCm}×${p.widthCm}`).join(' + ')
+          : '';
       const fromCanvas = isInProjectCreating && (savedInputs?.vizFullBlockCount != null || savedInputs?.cutBlocks != null);
       const fullCount = fromCanvas ? (savedInputs?.vizFullBlockCount ?? 0) : 0;
       const cutCount = fromCanvas ? (parseInt(String(savedInputs?.cutBlocks ?? 0), 10) || 0) : cutBlocksNum;
       const wasteSatisfiedCount = Array.isArray(savedInputs?.vizWasteSatisfied) ? savedInputs.vizWasteSatisfied.length : 0;
       const blocksForCuts = Math.max(0, cutCount - wasteSatisfiedCount);
       const blocksToBuy = fromCanvas && (fullCount > 0 || cutCount > 0) ? fullCount + blocksForCuts : 0;
-      const monoblocksMaterialM2 = fromCanvas && blocksToBuy > 0
-        ? blocksToBuy * blockAreaM2
-        : effectiveAreaM2;
-      const monoblocksMaterialName = `Monoblocks ${blockWidthCm}×${blockLengthCm}`;
+      const monoblocksMaterialM2 =
+        fromCanvas && blocksToBuy > 0
+          ? layoutModeMat === 'mix'
+            ? effectiveAreaM2
+            : blocksToBuy * blockAreaM2
+          : effectiveAreaM2;
+      const monoblocksMaterialName =
+        layoutModeMat === 'mix' && mixLabel
+          ? `${t('calculator:monoblocks_mix_material_prefix')} (${mixLabel})`
+          : `Monoblocks ${blockWidthCm}×${blockLengthCm}`;
 
       // Prepare materials list (Monoblocks first, then others)
       const materialsList: Material[] = [
@@ -907,12 +1024,9 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
         calculatorElement.setAttribute('data-results', JSON.stringify(formattedResults));
       }
 
-      // Notify parent component
-      if (onResultsChange) {
-        onResultsChange(formattedResults);
-      }
+      onResultsChangeRef.current?.(formattedResults);
     }
-  }, [totalHours, materials, taskBreakdown, area, onResultsChange]);
+  }, [totalHours, materials, taskBreakdown, area]);
 
   // Scroll to results when they appear
   useEffect(() => {
@@ -964,6 +1078,98 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
           />
         </CalculatorInputGrid>
 
+        {isInProjectCreating && !compactForPath && (
+          <div
+            style={{
+              marginTop: spacing.md,
+              padding: spacing.lg,
+              border: `1px solid ${colors.borderLight}`,
+              borderRadius: radii.lg,
+              background: colors.bgSubtle,
+            }}
+          >
+            <Label>{t('calculator:monoblock_size_mode')}</Label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, marginTop: spacing.sm }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: spacing.md, cursor: 'pointer', fontSize: fontSizes.base, color: colors.textSecondary }}>
+                <input
+                  type="radio"
+                  name="monoblock-layout-mode"
+                  checked={monoblockLayoutMode === 'single' && monoblockSingleSize === '20x10'}
+                  onChange={() => {
+                    setMonoblockLayoutMode('single');
+                    setMonoblockSingleSize('20x10');
+                  }}
+                />
+                {t('calculator:monoblock_single_20x10')}
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: spacing.md, cursor: 'pointer', fontSize: fontSizes.base, color: colors.textSecondary }}>
+                <input
+                  type="radio"
+                  name="monoblock-layout-mode"
+                  checked={monoblockLayoutMode === 'single' && monoblockSingleSize === '10x10'}
+                  onChange={() => {
+                    setMonoblockLayoutMode('single');
+                    setMonoblockSingleSize('10x10');
+                  }}
+                />
+                {t('calculator:monoblock_single_10x10')}
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: spacing.md, cursor: 'pointer', fontSize: fontSizes.base, color: colors.textSecondary }}>
+                <input
+                  type="radio"
+                  name="monoblock-layout-mode"
+                  checked={monoblockLayoutMode === 'mix'}
+                  onChange={() => {
+                    setMonoblockLayoutMode('mix');
+                    setMonoblockMixEnabledSizes((prev) => ({ ...defaultMonoblockMixEnabled(), ...prev }));
+                  }}
+                />
+                {t('calculator:monoblock_mode_mix')}
+              </label>
+            </div>
+
+            {monoblockLayoutMode === 'mix' && (
+              <div style={{ marginTop: spacing.lg }}>
+                <Label>{t('calculator:monoblock_mix_choose')}</Label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, marginTop: spacing.sm }}>
+                  {MONOBLOCK_MIXES.map((m) => (
+                    <label
+                      key={m.id}
+                      style={{ display: 'flex', alignItems: 'center', gap: spacing.md, cursor: 'pointer', fontSize: fontSizes.base, color: colors.textSecondary }}
+                    >
+                      <input
+                        type="radio"
+                        name="monoblock-mix-id"
+                        checked={monoblockMixId === m.id}
+                        onChange={() => {
+                          setMonoblockMixId(m.id);
+                          setMonoblockMixEnabledSizes(defaultMonoblockMixEnabled());
+                        }}
+                      />
+                      {t(m.labelKey)}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ marginTop: spacing.md }}>
+                  <Label>{t('calculator:monoblock_mix_pieces')}</Label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.xs, marginTop: spacing.sm }}>
+                    {getMonoblockMixById(monoblockMixId).pieces.map((p) => (
+                      <Checkbox
+                        key={p.key}
+                        label={`${p.lengthCm}×${p.widthCm} cm`}
+                        checked={monoblockMixEnabledSizes[p.key] !== false}
+                        onChange={(checked) =>
+                          setMonoblockMixEnabledSizes((prev) => ({ ...prev, [p.key]: checked }))
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {!compactForPath && !isInProjectCreating && (
           <TextInput
             label={t('calculator:soil_excess_label')}
@@ -985,69 +1191,126 @@ const PavingCalculator: React.FC<PavingCalculatorProps> = ({
 
         {isInProjectCreating && (
           <div style={{ borderTop: `1px solid ${colors.borderLight}`, paddingTop: spacing.xl, marginTop: spacing.xs, marginBottom: spacing["3xl"] }}>
-            <Checkbox
-              label={t('calculator:add_frame_to_monoblock') || 'Add frame to monoblock'}
-              checked={addFrameToMonoblock}
-              onChange={setAddFrameToMonoblock}
-            />
-            {addFrameToMonoblock && (
-              <div style={{ marginTop: spacing.md, display: 'flex', flexDirection: 'column', gap: spacing.md }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.lg, alignItems: 'center' }}>
-                  <TextInput
-                    label={t('calculator:piece_length_cm_label') || 'Each piece length (cm)'}
-                    value={framePieceLengthCm}
-                    onChange={setFramePieceLengthCm}
-                    unit="cm"
-                    style={{ marginBottom: 0, maxWidth: 120 }}
-                  />
-                  <TextInput
-                    label={t('calculator:piece_width_cm_label') || 'Each piece width (cm)'}
-                    value={framePieceWidthCm}
-                    onChange={setFramePieceWidthCm}
-                    unit="cm"
-                    style={{ marginBottom: 0, maxWidth: 120 }}
-                  />
-                </div>
-                <SelectDropdown
-                  label={t('calculator:frame_joint_type_label')}
-                  value={frameJointType === 'miter45' ? t('calculator:frame_joint_miter45') : t('calculator:frame_joint_butt')}
-                  options={[t('calculator:frame_joint_butt'), t('calculator:frame_joint_miter45')]}
-                  onChange={(val) => setFrameJointType(val === t('calculator:frame_joint_miter45') ? 'miter45' : 'butt')}
-                  width="100%"
-                  placeholder={t('calculator:frame_joint_butt')}
+            {!compactForPath && (
+              <>
+                <Checkbox
+                  label={t('calculator:add_frame_to_monoblock') || 'Add frame to monoblock'}
+                  checked={addFrameToMonoblock}
+                  onChange={setAddFrameToMonoblock}
                 />
-                {shape && (() => {
-                  if (isPathElement(shape)) {
-                    const pts = getPathPolygon(shape);
-                    if (!pts || pts.length < 3) return null;
-                    return (
-                      <div style={{ marginTop: 12 }}>
-                        <FrameSidesSelector
-                          points={pts}
-                          frameSidesEnabled={frameSidesEnabled}
-                          onChange={setFrameSidesEnabled}
-                          width={280}
-                          height={180}
-                        />
+                {addFrameToMonoblock && (
+                  <div style={{ marginTop: spacing.md, display: 'flex', flexDirection: 'column', gap: spacing.md }}>
+                    <div>
+                      <Label>{t('calculator:frame_border_material_label')}</Label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm }}>
+                        <button
+                          type="button"
+                          onClick={() => setFrameBorderMaterial('cobble')}
+                          style={{
+                            padding: `${spacing.sm}px ${spacing.lg}px`,
+                            borderRadius: radii.md,
+                            border: `1px solid ${frameBorderMaterial === 'cobble' ? colors.accentBlueBorder : colors.borderDefault}`,
+                            background: frameBorderMaterial === 'cobble' ? colors.bgHover : 'transparent',
+                            color: colors.textSecondary,
+                            cursor: 'pointer',
+                            fontSize: fontSizes.sm,
+                          }}
+                        >
+                          {t('calculator:frame_border_material_cobble')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFrameBorderMaterial('slab')}
+                          style={{
+                            padding: `${spacing.sm}px ${spacing.lg}px`,
+                            borderRadius: radii.md,
+                            border: `1px solid ${frameBorderMaterial === 'slab' ? colors.accentBlueBorder : colors.borderDefault}`,
+                            background: frameBorderMaterial === 'slab' ? colors.bgHover : 'transparent',
+                            color: colors.textSecondary,
+                            cursor: 'pointer',
+                            fontSize: fontSizes.sm,
+                          }}
+                        >
+                          {t('calculator:frame_border_material_slab')}
+                        </button>
                       </div>
-                    );
-                  }
-                  const { points: pts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
-                  if (!pts || pts.length < 3) return null;
-                  return (
-                    <div style={{ marginTop: 12 }}>
-                      <FrameSidesSelector
-                        points={pts}
-                        edgeIndices={edgeIndices}
-                        frameSidesEnabled={frameSidesEnabled}
-                        onChange={setFrameSidesEnabled}
-                        width={280}
-                        height={180}
+                      <div style={{ marginTop: spacing.xs }}>
+                        <HelperText>{t('calculator:frame_border_material_hint')}</HelperText>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: spacing.lg, alignItems: 'center' }}>
+                      <TextInput
+                        label={
+                          frameBorderMaterial === 'cobble'
+                            ? t('calculator:frame_piece_length_cobble_cm')
+                            : t('calculator:piece_length_cm_label')
+                        }
+                        value={framePieceLengthCm}
+                        onChange={setFramePieceLengthCm}
+                        unit="cm"
+                        style={{ marginBottom: 0, maxWidth: 120 }}
+                      />
+                      <TextInput
+                        label={
+                          frameBorderMaterial === 'cobble'
+                            ? t('calculator:frame_piece_width_cobble_cm')
+                            : t('calculator:piece_width_cm_label')
+                        }
+                        value={framePieceWidthCm}
+                        onChange={setFramePieceWidthCm}
+                        unit="cm"
+                        style={{ marginBottom: 0, maxWidth: 120 }}
+                      />
+                      <TextInput
+                        label={t('calculator:frame_border_row_count_label') || 'Number of border rows'}
+                        value={frameBorderRowCount}
+                        onChange={setFrameBorderRowCount}
+                        unit=""
+                        style={{ marginBottom: 0, maxWidth: 100 }}
                       />
                     </div>
-                  );
-                })()}
-              </div>
+                    <SelectDropdown
+                      label={t('calculator:frame_joint_type_label')}
+                      value={frameJointType === 'miter45' ? t('calculator:frame_joint_miter45') : t('calculator:frame_joint_butt')}
+                      options={[t('calculator:frame_joint_butt'), t('calculator:frame_joint_miter45')]}
+                      onChange={(val) => setFrameJointType(val === t('calculator:frame_joint_miter45') ? 'miter45' : 'butt')}
+                      width="100%"
+                      placeholder={t('calculator:frame_joint_butt')}
+                    />
+                    {shape && (() => {
+                      if (isPathElement(shape)) {
+                        const pts = getPathPolygon(shape);
+                        if (!pts || pts.length < 3) return null;
+                        return (
+                          <div style={{ marginTop: 12 }}>
+                            <FrameSidesSelector
+                              points={pts}
+                              frameSidesEnabled={frameSidesEnabled}
+                              onChange={setFrameSidesEnabled}
+                              width={280}
+                              height={180}
+                            />
+                          </div>
+                        );
+                      }
+                      const { points: pts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
+                      if (!pts || pts.length < 3) return null;
+                      return (
+                        <div style={{ marginTop: 12 }}>
+                          <FrameSidesSelector
+                            points={pts}
+                            edgeIndices={edgeIndices}
+                            frameSidesEnabled={frameSidesEnabled}
+                            onChange={setFrameSidesEnabled}
+                            width={280}
+                            height={180}
+                          />
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </>
             )}
             {frameResults && addFrameToMonoblock && (
               <div style={{ marginTop: spacing.md, padding: spacing.base, background: colors.bgSubtle, borderRadius: radii.lg, border: `1px solid ${colors.borderDefault}` }}>

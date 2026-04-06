@@ -156,10 +156,10 @@ const CompanySetupWizard: React.FC = () => {
     <>
       <div className="fixed inset-0 bg-black/50 z-40" onClick={() => {}} />
       
-      <div className="fixed inset-0 z-50 flex items-center justify-center md:p-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4">
         <div className="rounded-lg shadow-2xl w-full md:max-w-5xl max-h-[100vh] md:max-h-[90vh] md:rounded-lg flex flex-col overflow-hidden" style={{ backgroundColor: colors.bgCard }}>
           {/* Header */}
-          <div className="border-b p-4 flex justify-between items-center flex-shrink-0">
+          <div className="border-b px-3 py-3 md:p-4 flex justify-between items-center flex-shrink-0">
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <div className="flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm" style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}>
@@ -185,7 +185,7 @@ const CompanySetupWizard: React.FC = () => {
           </div>
 
           {/* Progress Bar */}
-          <div className="px-4 pt-3 pb-2 flex-shrink-0 border-b">
+          <div className="px-3 md:px-4 pt-3 pb-2 flex-shrink-0 border-b">
             <div className="flex gap-2">
               {steps.map((s) => (
                 <div key={s.number} className="flex-1 h-1 rounded-full overflow-hidden" style={{ backgroundColor: colors.borderLight }}>
@@ -242,9 +242,9 @@ const CompanySetupWizard: React.FC = () => {
 
       {/* Completion Modal */}
       {showCompletionModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 md:p-4">
           <div className="rounded-lg shadow-2xl w-full max-w-md" style={{ backgroundColor: colors.bgCard }}>
-            <div className="p-8 text-center">
+            <div className="p-4 md:p-8 text-center">
               <div className="flex justify-center mb-6">
                 <CheckCircle2 className="w-16 h-16 text-green-600" />
               </div>
@@ -268,9 +268,9 @@ const CompanySetupWizard: React.FC = () => {
 
       {/* Exit Setup Modal */}
       {showExitModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-0 md:p-4">
           <div className="rounded-lg shadow-2xl w-full max-w-md" style={{ backgroundColor: colors.bgCard }}>
-            <div className="p-8">
+            <div className="p-4 md:p-8">
               <h2 className="text-xl font-bold mb-3" style={{ color: colors.textPrimary }}>
                 {t('form:exit_setup_title')}
               </h2>

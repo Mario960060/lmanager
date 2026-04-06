@@ -3,12 +3,24 @@ import { AlertCircle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import StandardStairsSlabs from './StandardStairsSlabs';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
+import {
+  splitTotalMortarKgToCementSand,
+  totalMortarWeightKgForMixingFromMaterials,
+  getStairTransportMaterialCapacityType,
+} from '../../lib/mortarSplit';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
 import { Card, Button, InfoBanner, Checkbox, RadioGroup } from '../../themes/uiComponents';
+import {
+  computeBuriedDepthBand,
+  computeGlobalBuriedDepthAndBestBlockStepHeight,
+  computeSingleStepMaterialConfiguration,
+  computeStandardLinearTotalLength,
+  type StairMaterialOption,
+} from './stairSharedCalculations';
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -36,7 +48,16 @@ interface Material {
   unit: string;
   price_per_unit: number | null;
   total_price: number | null;
-  courseDetails?: {step: number; blocks: number; rows: number; material: string; mortarHeight: number; needsCutting?: boolean; calculationLog?: string[]}[];
+  courseDetails?: {
+    step: number;
+    blocks: number;
+    rows: number;
+    material: string;
+    mortarHeight: number;
+    podsadzka: number;
+    needsCutting?: boolean;
+    calculationLog?: string[];
+  }[];
 }
 
 interface MaterialOption {
@@ -63,6 +84,14 @@ interface StairResult {
   stepDimensions: StepDimension[];
   totalWidth?: number;
   sideOverhang: number;
+  /** Shown above step table when burial is much deeper than masonry-start target */
+  deepBurialWarning?: string;
+  /** Extra cm on first-step vertical front only: max(0, |start muru| − 0.5) vs finished level */
+  firstStepFrontMasonryExtensionCm?: number;
+  /** User’s masonry-start depth (cm below finished), from input */
+  userTargetBuriedCm?: number;
+  /** Depth used after optional optimization (cm below finished) */
+  globalBuriedDepthCmUsed?: number;
 }
 
 interface StairCalculatorProps {
@@ -106,6 +135,8 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
   const [totalWidth, setTotalWidth] = useState<string>('');
   const [stepTread, setStepTread] = useState<string>('');
   const [stepHeight, setStepHeight] = useState<string>('');
+  /** cm vs finished level: 0 or negative (e.g. -5 = first course ~5 cm below LL). Required — no default. */
+  const [masonryStartVsFinishedCm, setMasonryStartVsFinishedCm] = useState<string>('');
   const [slabThicknessTop, setSlabThicknessTop] = useState<string>('');
   const [slabThicknessSide, setSlabThicknessSide] = useState<string>('');
   const [slabThicknessFront, setSlabThicknessFront] = useState<string>('');
@@ -163,6 +194,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
   
   // Step configuration
   const [stepConfig, setStepConfig] = useState<'frontsOnTop' | 'stepsToFronts'>('frontsOnTop');
+  const [lastStepMode, setLastStepMode] = useState<'standard' | 'frontOnly'>('standard');
   const [gapBetweenSlabs, setGapBetweenSlabs] = useState<number>(2);
   
   // Material selection - updated to allow multiple materials
@@ -230,6 +262,58 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
     },
     enabled: !!companyId
   });
+
+  const { data: brickBlockMortarMixRatioConfig } = useQuery<{ id: string; mortar_mix_ratio: string } | null>({
+    queryKey: ['mortarMixRatio', 'brick', companyId],
+    queryFn: async () => {
+      if (!companyId) return null;
+      const { data, error } = await supabase
+        .from('mortar_mix_ratios')
+        .select('id, mortar_mix_ratio')
+        .eq('company_id', companyId)
+        .eq('type', 'brick')
+        .single();
+      if (error && error.code !== 'PGRST116') throw error;
+      return data;
+    },
+    enabled: !!companyId
+  });
+
+  const { data: wallMaterialUsageConfig } = useQuery<{ material_id: string }[]>({
+    queryKey: ['materialUsageConfig', 'wall', 'stairs', companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('material_usage_configs')
+        .select('material_id')
+        .eq('calculator_id', 'wall')
+        .eq('company_id', companyId);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!companyId
+  });
+
+  const wallSandMaterialId = wallMaterialUsageConfig?.[0]?.material_id;
+
+  const { data: selectedSandMaterial } = useQuery<{
+    id: string;
+    name: string;
+    unit: string;
+    price: number | null;
+  } | null>({
+    queryKey: ['material', 'sand_stairs', wallSandMaterialId],
+    queryFn: async () => {
+      if (!wallSandMaterialId) return null;
+      const { data, error } = await supabase
+        .from('materials')
+        .select('id, name, unit, price')
+        .eq('id', wallSandMaterialId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!companyId && !!wallSandMaterialId
+  });
   
   // Material options
   const materialOptions: MaterialOption[] = [
@@ -243,7 +327,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
     },
     {
       id: 'blocks7',
-      name: '7-inch Blocks',
+      name: '6-inch Blocks',
       height: 21, // cm
       width: 14, // cm
       length: 44, // cm
@@ -258,38 +342,6 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
       isInches: false
     }
   ];
-  
-  // Define acceptable mortar thickness range (joints between blocks)
-  const mortarRange = {
-    min: 0.5, // Minimum acceptable joint thickness in cm
-    max: 3    // Maximum acceptable joint thickness in cm
-  };
-  // Podsadzka (bottom mortar): standard 2cm, adjustable 1-3 cm
-  const podsadzkaRange = { min: 1, max: 3 };
-  
-  // Find valid podsadzka (1-3cm) + jointSize (0.5-3cm) for total mortar space. Returns { podsadzka, jointSize } or null.
-  const findMortarConfig = (totalSpaceForMortar: number, numberOfJoints: number): { podsadzka: number; jointSize: number } | null => {
-    const minMortar = podsadzkaRange.min + numberOfJoints * mortarRange.min;
-    const maxMortar = podsadzkaRange.max + numberOfJoints * mortarRange.max;
-    if (totalSpaceForMortar < minMortar || totalSpaceForMortar > maxMortar) return null;
-    // 1 rząd bloczków: tylko podsadzka, brak fug między blokami
-    if (numberOfJoints === 0) {
-      const p = Math.round(Math.max(podsadzkaRange.min, Math.min(podsadzkaRange.max, totalSpaceForMortar)) * 10) / 10;
-      return { podsadzka: p, jointSize: 0 };
-    }
-    // Prefer podsadzka = 2 (standard), try 2 first then nearby values
-    const toTry = [2, 1.5, 2.5, 1, 3, 1.2, 1.8, 2.2, 2.8];
-    for (const p of toTry) {
-      if (p < podsadzkaRange.min || p > podsadzkaRange.max) continue;
-      const jointSize = numberOfJoints > 0 ? (totalSpaceForMortar - p) / numberOfJoints : 0;
-      if (jointSize >= mortarRange.min && jointSize <= mortarRange.max) return { podsadzka: p, jointSize };
-    }
-    for (let p = podsadzkaRange.min; p <= podsadzkaRange.max; p += 0.1) {
-      const jointSize = numberOfJoints > 0 ? (totalSpaceForMortar - p) / numberOfJoints : 0;
-      if (jointSize >= mortarRange.min && jointSize <= mortarRange.max) return { podsadzka: Math.round(p * 10) / 10, jointSize };
-    }
-    return null;
-  };
 
   // Helper function to check if a cut is needed
   const needsCut = (actualDimension: number, requiredDimension: number): boolean => {
@@ -319,20 +371,26 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
       
       // Add building tasks for blocks/bricks
       result.materials.forEach(material => {
+        if (material.unit !== 'pieces') return;
         // Find matching "building steps with X" task
         let buildingTaskName = '';
-        if (material.name.toLowerCase().includes('7-inch')) {
-          buildingTaskName = 'building steps with 7-inch blocks';
-        } else if (material.name.toLowerCase().includes('4-inch')) {
+        const mn = material.name.toLowerCase();
+        if (mn.includes('6-inch') || mn.includes('7-inch')) {
+          buildingTaskName = 'building steps with 6-inch blocks';
+        } else if (mn.includes('4-inch')) {
           buildingTaskName = 'building steps with 4-inch blocks';
-        } else if (material.name.toLowerCase().includes('brick')) {
+        } else if (mn.includes('brick')) {
           buildingTaskName = 'building steps with bricks';
         }
         
         if (buildingTaskName && taskTemplates.length > 0) {
-          const buildingTask = taskTemplates.find((t: any) => 
-            t.name.toLowerCase() === buildingTaskName.toLowerCase()
-          );
+          const buildingTask = taskTemplates.find((t: any) => {
+            const tn = t.name.toLowerCase();
+            if (buildingTaskName === 'building steps with 6-inch blocks') {
+              return tn === 'building steps with 6-inch blocks' || tn === 'building steps with 7-inch blocks';
+            }
+            return tn === buildingTaskName.toLowerCase();
+          });
           
           if (buildingTask) {
             const totalHours = material.amount * (buildingTask.estimated_hours || 0);
@@ -404,11 +462,9 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
       
       // Add mixing mortar task if available
       if (mixingMortarTask && mixingMortarTask.estimated_hours !== undefined) {
-        // Find mortar material in results
-        const mortarMaterial = result.materials.find(m => m.name.toLowerCase() === 'mortar');
-        if (mortarMaterial && mortarMaterial.amount > 0) {
-          // Calculate number of batches (125kg per batch, same as SlabCalculator)
-          const numberOfBatches = Math.ceil(mortarMaterial.amount / 125);
+        const totalMortarWeightKg = totalMortarWeightKgForMixingFromMaterials(result.materials);
+        if (totalMortarWeightKg > 0) {
+          const numberOfBatches = Math.ceil(totalMortarWeightKg / 125);
           taskBreakdown.push({
             task: 'mixing mortar',
             hours: numberOfBatches * mixingMortarTask.estimated_hours,
@@ -418,24 +474,30 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
         }
       }
       
-      // Add transport for materials if calculateTransport is enabled
-      if (effectiveCalculateTransport && effectiveSelectedTransportCarrier) {
+      // Add transport for materials if calculateTransport is enabled (default wheelbarrow = 0.125 t, same as WallCalculator)
+      if (effectiveCalculateTransport) {
         const transportDistanceMeters = parseFloat(effectiveTransportDistance) || 30;
-        const carrierSize = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
+        const carrierSize = effectiveSelectedTransportCarrier?.['size (in tones)'] ?? 0.125;
         
-        // Calculate transport for blocks/bricks
         result.materials.forEach(material => {
-          const materialType = material.name.toLowerCase().includes('brick') ? 'bricks' : 'blocks';
+          const capacityType = getStairTransportMaterialCapacityType(material);
+          if (!capacityType) return;
           const transportResult = calculateMaterialTransportTime(
             material.amount,
             carrierSize,
-            materialType,
+            capacityType,
             transportDistanceMeters
           );
           
           if (transportResult.totalTransportTime > 0) {
+            const task =
+              capacityType === 'cement'
+                ? 'transport cement'
+                : capacityType === 'sand'
+                  ? 'transport sand'
+                  : `transport ${material.name.toLowerCase()}`;
             taskBreakdown.push({
-              task: `transport ${material.name.toLowerCase()}`,
+              task,
               hours: transportResult.totalTransportTime,
               amount: material.amount,
               unit: material.unit
@@ -477,7 +539,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
         onResultsChange(formattedResults);
       }
     }
-  }, [result, onResultsChange, slabType, cuttingTasks, cutsData, effectiveCalculateTransport, effectiveSelectedTransportCarrier, effectiveTransportDistance, slabsTransportHours, adhesiveMaterials, installationTasks, buildLeftSide, buildRightSide, slabThicknessFront]);
+  }, [result, onResultsChange, slabType, cuttingTasks, cutsData, effectiveCalculateTransport, effectiveSelectedTransportCarrier, effectiveTransportDistance, slabsTransportHours, adhesiveMaterials, installationTasks, buildLeftSide, buildRightSide, slabThicknessFront, mixingMortarTask, taskTemplates]);
 
   useEffect(() => {
     if (result !== null && result.materials.length > 0 && resultsRef.current) {
@@ -511,7 +573,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -526,8 +588,9 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
     setAdjustedStepHeightInfo(null);
     
     // Validate inputs
-    if (!totalHeight || !totalWidth || !stepTread || !stepHeight || 
-        !slabThicknessTop || !slabThicknessSide || !slabThicknessFront || 
+    if (!totalHeight || !totalWidth || !stepTread || !stepHeight ||
+        !masonryStartVsFinishedCm.trim() ||
+        !slabThicknessTop || !slabThicknessSide || !slabThicknessFront ||
         !overhangFront || !overhangSide) {
       setCalculationError(t('calculator:fill_required_measurements'));
       return;
@@ -539,6 +602,14 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
     }
     
     try {
+      const masonryStartRaw = parseFloat(masonryStartVsFinishedCm.trim());
+      if (Number.isNaN(masonryStartRaw) || masonryStartRaw > 0) {
+        setCalculationError(t('calculator:stair_masonry_start_invalid'));
+        return;
+      }
+      const targetBuriedCm = -masonryStartRaw;
+      const { minBuriedDepthCm, maxBuriedDepthCm } = computeBuriedDepthBand(targetBuriedCm);
+
       // Parse input values to numbers
       const totalHeightNum = parseFloat(totalHeight);
       const totalWidthNum = parseFloat(totalWidth);
@@ -580,19 +651,11 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
       // Each step tread needs to account for slab thickness and overhang
       const adjustedStepTread = stepTreadNum - overhangFrontNum;
       
-      // Calculate total length based on step configuration
-      let totalLength = 0;
-      if (stepConfig === 'frontsOnTop') {
-        // All steps have the same tread except the last one which is shorter by the slab thickness
-        const regularStepTread = adjustedStepTread;
-        const lastStepTread = adjustedStepTread - slabThicknessFrontNum;
-        totalLength = (regularStepTread * (stepCount - 1)) + lastStepTread;
-      } else {
-        // When steps come to fronts, the last step is shorter by the slab thickness
-        const regularStepTread = adjustedStepTread;
-        const lastStepTread = adjustedStepTread - slabThicknessFrontNum;
-        totalLength = (regularStepTread * (stepCount - 1)) + lastStepTread;
-      }
+      const totalLength = computeStandardLinearTotalLength(
+        adjustedStepTread,
+        slabThicknessFrontNum,
+        stepCount
+      );
       
       // Calculate actual width of each step
       // Need to subtract side overhangs and slab thickness
@@ -617,205 +680,59 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
         blocks: number;
         rows: number;
         mortarHeight: number;
+        podsadzka: number;
         needsCutting: boolean;
         buriedDepth?: number;
+        _log?: { targetStepHeight: number; totalBlockHeight: number; totalSpaceForMortar: number; numberOfJoints: number };
       }[] = [];
       
-      // --- BEGIN: Find best buried depth for block calculation ---
-      let bestBuriedDepth = 2;
-      let bestBuriedDepthDiff = Infinity;
-      let bestBlockStepHeight = actualStepHeight;
+      const { globalBuriedDepthCm, bestBlockStepHeight } = computeGlobalBuriedDepthAndBestBlockStepHeight({
+        totalHeightNum,
+        stepCount,
+        actualStepHeight,
+        targetBuriedCm,
+        selectedMaterials,
+        materialOptions: materialOptions as StairMaterialOption[],
+        brickOrientation,
+        slabThicknessTopCm: slabThicknessTopNum,
+      });
 
-      // First check if blocks fit without burying
-      let needsBurying = false;
-      for (const materialId of selectedMaterials) {
-        const materialOption = materialOptions.find(m => m.id === materialId);
-        if (!materialOption) continue;
-        let blockHeightWhenFlat = materialOption.width;
-        if (materialOption.id === 'bricks') {
-          blockHeightWhenFlat = brickOrientation === 'flat' ? materialOption.height : materialOption.width;
-        }
-
-        const maxBlocksNeeded = Math.floor(actualStepHeight / blockHeightWhenFlat);
-        const totalBlockHeight = maxBlocksNeeded * blockHeightWhenFlat;
-        if (totalBlockHeight > actualStepHeight) {
-          needsBurying = true;
-          break;
-        }
-      }
-
-      // If blocks are too high, try different buried depths
-      if (needsBurying) {
-      for (let buriedDepth = 2; buriedDepth <= 8; buriedDepth++) {
-          const blockAdjustedTotalHeight = totalHeightNum - buriedDepth;
-        if (blockAdjustedTotalHeight <= 0) continue;
-        const blockStepHeight = blockAdjustedTotalHeight / stepCount;
-
-        // Try to build all steps with full blocks and allowed mortar (no cutting)
-        let canBuildAll = true;
-        for (let i = 0; i < stepCount; i++) {
-          let found = false;
-          for (const materialId of selectedMaterials) {
-            const materialOption = materialOptions.find(m => m.id === materialId);
-            if (!materialOption) continue;
-            let blockHeightWhenFlat = materialOption.width;
-            if (materialOption.id === 'bricks') {
-              blockHeightWhenFlat = brickOrientation === 'flat' ? materialOption.height : materialOption.width;
-            }
-
-              const maxBlocksNeeded = Math.floor(blockStepHeight / (blockHeightWhenFlat + 1));
-              for (let blocksNeeded = 1; blocksNeeded <= maxBlocksNeeded + 1; blocksNeeded++) {
-              const totalBlockHeight = blocksNeeded * blockHeightWhenFlat;
-                const numberOfJoints = blocksNeeded - 1;
-                
-                // Try with standard 2cm podsadzka + 1cm joints first
-                const heightWithStandardJoints = totalBlockHeight + 2 + (numberOfJoints * 1);
-                const totalSpaceForMortar = blockStepHeight - totalBlockHeight;
-
-                if (heightWithStandardJoints <= blockStepHeight && 
-                    heightWithStandardJoints >= blockStepHeight - 0.5) {
-                  // Perfect fit with standard mortar
-                  found = true;
-                  break;
-                }
-                // Try adjustable podsadzka (1-3cm) + joints (0.5-3cm)
-                if (findMortarConfig(totalSpaceForMortar, numberOfJoints)) {
-                  found = true;
-                  break;
-                }
-            }
-            if (found) break;
-          }
-          if (!found) {
-            canBuildAll = false;
-            break;
-          }
-        }
-
-        if (canBuildAll) {
-          const diff = Math.abs(buriedDepth - 5);
-          if (diff < bestBuriedDepthDiff) {
-            bestBuriedDepth = buriedDepth;
-            bestBuriedDepthDiff = diff;
-              bestBlockStepHeight = blockStepHeight;
-          }
-        }
-        }
-      } else {
-        bestBuriedDepth = 2; // Use minimum buried depth if no burying needed
-        bestBlockStepHeight = actualStepHeight;
-      }
-      // --- END: Find best buried depth for block calculation ---
-      
-      // First pass: Find the best material for each step
       for (let i = 0; i < stepCount; i++) {
-        // Calculate total height at this step, accounting for slab thickness
-        const targetStepHeight = actualStepHeight * (i + 1) - slabThicknessTopNum;
-        let bestBuriedDepth = 0;
-        let bestConfiguration = null;
+        const targetStepHeight =
+          bestBlockStepHeight * (i + 1) - slabThicknessTopNum + globalBuriedDepthCm;
+        const stepMat = computeSingleStepMaterialConfiguration({
+          targetStepHeight,
+          selectedMaterials,
+          materialOptions: materialOptions as StairMaterialOption[],
+          brickOrientation,
+          minBuriedDepthCm,
+          maxBuriedDepthCm,
+          globalBuriedDepthCm,
+        });
 
-        // Try each material to find the best fit for this step height
-        for (const materialId of selectedMaterials) {
-          const materialOption = materialOptions.find(m => m.id === materialId);
-          if (!materialOption) continue;
-          
-          let blockHeight = materialOption.width;
-          if (materialOption.id === 'bricks') {
-            blockHeight = brickOrientation === 'flat' ? materialOption.height : materialOption.width;
-          }
-
-          // Try different block counts
-          const maxBlocksNeeded = Math.ceil(targetStepHeight / blockHeight);
-
-          // Try configurations with different numbers of blocks
-          for (let blocksNeeded = 1; blocksNeeded <= maxBlocksNeeded + 1; blocksNeeded++) {
-            const totalBlockHeight = blocksNeeded * blockHeight;
-            const numberOfJoints = blocksNeeded - 1;
-            
-            // Try standard 2cm podsadzka + 1cm joints first
-            const heightWithStandardJoints = totalBlockHeight + 2 + (numberOfJoints * 1);
-            const totalSpaceForMortar = targetStepHeight - totalBlockHeight;
-            const mortarConfig = findMortarConfig(totalSpaceForMortar, numberOfJoints);
-
-            if (mortarConfig) {
-              // Valid config with adjustable podsadzka (1-3cm) + joints (0.5-3cm)
-              bestConfiguration = {
-                materialId,
-                blocks: blocksNeeded,
-                mortarHeight: mortarConfig.jointSize,
-                podsadzka: mortarConfig.podsadzka,
-                needsCutting: false,
-                buriedDepth: 0,
-                _log: { targetStepHeight, totalBlockHeight, totalSpaceForMortar, numberOfJoints }
-              };
-              break;
-            }
-
-            // If mortar doesn't fit: totalSpaceForMortar < min (1 + n*0.5) → need to bury
-            const minMortar = podsadzkaRange.min + numberOfJoints * mortarRange.min;
-            if (totalSpaceForMortar < minMortar) {
-              const buriedDepth = minMortar - totalSpaceForMortar;
-              if (buriedDepth <= 8) {
-                bestConfiguration = {
-                  materialId,
-                  blocks: blocksNeeded,
-                  mortarHeight: 1,
-                  podsadzka: 2,
-                  needsCutting: false,
-                  buriedDepth,
-                  _log: { targetStepHeight, totalBlockHeight, totalSpaceForMortar, numberOfJoints }
-                };
-                break;
-              }
-            }
-          }
-
-          if (bestConfiguration) break;
-        }
-
-        // If no perfect configuration found, use the best available with cutting
-        if (!bestConfiguration) {
-          const mat = materialOptions.find(m => m.id === selectedMaterials[0]);
-          const fallbackBlockHeight = mat ? (mat.id === 'bricks' ? (brickOrientation === 'flat' ? mat.height : mat.width) : mat.width) : 10;
-          const fallbackBlocks = Math.ceil(targetStepHeight / fallbackBlockHeight);
-          const fallbackTotalBlockHeight = fallbackBlocks * fallbackBlockHeight;
-          bestConfiguration = {
-            materialId: selectedMaterials[0],
-            blocks: fallbackBlocks,
-            mortarHeight: 1,
-            podsadzka: 2,
-            needsCutting: true,
-            buriedDepth: 0,
-            _log: { targetStepHeight, totalBlockHeight: fallbackTotalBlockHeight, totalSpaceForMortar: targetStepHeight - fallbackTotalBlockHeight, numberOfJoints: fallbackBlocks - 1 }
-          };
-        }
-        
-        // Store the best material for this step
         bestMaterialsForSteps.push({
           step: i + 1,
-          materialId: bestConfiguration.materialId,
-          blocks: bestConfiguration.blocks,
+          materialId: stepMat.materialId,
+          blocks: stepMat.blocks,
           rows: 0,
-          mortarHeight: bestConfiguration.mortarHeight,
-          podsadzka: bestConfiguration.podsadzka,
-          needsCutting: bestConfiguration.needsCutting,
-          buriedDepth: bestConfiguration.buriedDepth,
-          _log: bestConfiguration._log
+          mortarHeight: stepMat.mortarHeight,
+          podsadzka: stepMat.podsadzka,
+          needsCutting: stepMat.needsCutting,
+          buriedDepth: stepMat.totalDepthBelowFinishedCm,
+          _log: stepMat._log,
         });
-        
-        // Store the dimensions of this step
-        let calculatedTread = adjustedStepTread; // stepTread - overhangFront
+
+        let calculatedTread = adjustedStepTread;
         if (i === stepCount - 1) {
-          // Last step: shorter by front slab thickness (no next step to cover it)
           calculatedTread = adjustedStepTread - slabThicknessFrontNum;
         }
-        
+
         stepDimensions.push({
           height: targetStepHeight,
           tread: calculatedTread,
           isFirst: i === 0,
           remainingTread: adjustedStepTread,
-          buriedDepth: bestConfiguration.buriedDepth
+          buriedDepth: stepMat.totalDepthBelowFinishedCm,
         });
       }
       
@@ -823,7 +740,16 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
       // Group by material type
       const materialCounts: Record<string, {
         totalBlocks: number;
-        courseDetails: {step: number; blocks: number; rows: number; material: string; mortarHeight: number; needsCutting: boolean}[];
+        courseDetails: {
+          step: number;
+          blocks: number;
+          rows: number;
+          material: string;
+          mortarHeight: number;
+          podsadzka: number;
+          needsCutting: boolean;
+          calculationLog?: string[];
+        }[];
       }> = {};
       
       // Initialize material counts
@@ -900,10 +826,6 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
         const blocksPerRow = Math.ceil(frontWidth / effectiveBlockLength);
 
         // Calculate the individual step height for this specific step (height difference from previous step)
-        const previousStepHeight = index > 0 ? stepDimensions[index - 1].height : 0;
-        const currentStepHeight = stepDimensions[index].height;
-        const rowsForThisStep = Math.ceil(currentStepHeight / (blockHeight + 1)); // Total height to this step
-
         // Total front blocks is just blocks per row times blocks per course height (fronts are always 1 row)
         const frontBlocks = blocksPerRow * bestMaterial.blocks;
         
@@ -951,7 +873,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
           `Bloczki: ${bestMaterial.blocks} × ${blockHeight} cm = ${(bestMaterial.blocks * blockHeight).toFixed(2)} cm`,
           `Przestrzeń na fugi: ${bestMaterial._log.targetStepHeight.toFixed(2)} - ${bestMaterial._log.totalBlockHeight.toFixed(2)} = ${bestMaterial._log.totalSpaceForMortar.toFixed(2)} cm`,
           `Podsadzka: ${(bestMaterial as any).podsadzka?.toFixed(2) ?? '2.00'} cm, fuga między bloczkami: ${bestMaterial.mortarHeight.toFixed(2)} cm`,
-          bestMaterial.buriedDepth ? `Zakopanie: ${bestMaterial.buriedDepth.toFixed(2)} cm` : null,
+          bestMaterial.buriedDepth ? t('calculator:burial_depth_cm_vs_finished', { value: bestMaterial.buriedDepth.toFixed(2) }) : null,
           `Front: szer. ${frontWidth.toFixed(0)} cm, eff.dł.=${(blockLength + 1).toFixed(0)} cm → ceil(${frontWidth.toFixed(0)}/${(blockLength + 1).toFixed(0)}) = ${blocksPerRow} bl/rząd × ${bestMaterial.blocks} rzędów = ${frontBlocks}`,
           buildLeftSide || buildRightSide ? `Boki: wys.diff=${(stepDimensions[index].height - (index > 0 ? stepDimensions[index - 1].height : 0)).toFixed(0)} cm, dł.=${remainingLength.toFixed(0)} cm → ceil(${(stepDimensions[index].height - (index > 0 ? stepDimensions[index - 1].height : 0)) / (blockHeight + 1)})×ceil(${remainingLength}/${blockLength + 1})×${sidesCount} = ${sideBlocks} bl` : null,
           buildBackSide && index > 0 ? `Tył: ${backBlocks} bl` : null,
@@ -963,9 +885,10 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
         materialCounts[bestMaterial.materialId].courseDetails.push({
           step: bestMaterial.step,
           blocks: stepBlocks,
-          rows: rowsForThisStep,
+          rows: bestMaterial.blocks,
           material: materialOption.name,
           mortarHeight: bestMaterial.mortarHeight,
+          podsadzka: bestMaterial.podsadzka,
           needsCutting: bestMaterial.needsCutting,
           calculationLog: log
         });
@@ -1006,8 +929,8 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
         // Depth of hole = step.tread - 21cm (subtract front)
         const holeDepth = step.tread - 21; // cm
         
-        // Height of hole = step height
-        const holeHeight = step.height; // cm
+        // Height of hole = cumulative riser column only (exclude burial added for block math)
+        const holeHeight = Math.max(0, step.height - globalBuriedDepthCm);
         
         // Volume in cubic cm
         const holeVolumeCubicCm = holeWidth * holeDepth * holeHeight;
@@ -1024,17 +947,36 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
       
       // Add to total mortar
       totalMortar += additionalMortarKg;
-      
-      materials.push({
-        name: 'Mortar',
-        amount: totalMortar,
-        unit: 'kg',
-        price_per_unit: null,
-        total_price: null
-      });
+
+      const mortarMixRatio = brickBlockMortarMixRatioConfig?.mortar_mix_ratio || '1:4';
+      const { cementBags, sandTonnes } = splitTotalMortarKgToCementSand(totalMortar, mortarMixRatio);
+      materials.push(
+        {
+          name: 'Cement',
+          amount: cementBags,
+          unit: 'bags',
+          price_per_unit: null,
+          total_price: null
+        },
+        {
+          name: selectedSandMaterial?.name || 'Sand',
+          amount: Number(sandTonnes.toFixed(2)),
+          unit: 'tonnes',
+          price_per_unit: selectedSandMaterial?.price ?? null,
+          total_price: null
+        }
+      );
       
       // Note: Steps are typically transported on foot with individual carrying
       // No additional transport time calculations needed
+
+      const maxDepthUsed = Math.max(
+        globalBuriedDepthCm,
+        ...stepDimensions.map(s => s.buriedDepth ?? 0)
+      );
+      const deepBurialWarning =
+        maxDepthUsed - targetBuriedCm >= 5 ? t('calculator:stair_deep_burial_warning') : undefined;
+      const firstStepFrontMasonryExtensionCm = Math.max(0, -masonryStartRaw - 0.5);
       
       // Set the result
       setResult({
@@ -1044,6 +986,10 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
         stepDimensions: stepDimensions,
         totalWidth: totalWidthNum,
         sideOverhang: overhangSideNum,
+        deepBurialWarning,
+        firstStepFrontMasonryExtensionCm,
+        userTargetBuriedCm: targetBuriedCm,
+        globalBuriedDepthCmUsed: globalBuriedDepthCm,
       });
       
     } catch (error) {
@@ -1057,7 +1003,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
     if (recalculateTrigger > 0 && isInProjectCreating) {
       calculate();
     }
-  }, [recalculateTrigger]);
+  }, [recalculateTrigger, brickBlockMortarMixRatioConfig, selectedSandMaterial]);
   
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.xl }}>
@@ -1087,6 +1033,22 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
               <label style={labelStyle}>{t('calculator:input_step_height')}</label>
               <input type="number" value={stepHeight} onChange={(e) => setStepHeight(e.target.value)} style={inputStyle} placeholder={t('calculator:placeholder_cm')} min="0" step="0.1" />
             </div>
+          </div>
+
+          <div style={{ marginTop: spacing.sm }}>
+            <label style={labelStyle}>{t('calculator:input_stair_masonry_start_cm')}</label>
+            <input
+              type="number"
+              value={masonryStartVsFinishedCm}
+              onChange={(e) => setMasonryStartVsFinishedCm(e.target.value)}
+              style={inputStyle}
+              placeholder={t('calculator:placeholder_stair_masonry_start')}
+              max={0}
+              step="0.1"
+            />
+            <p style={{ fontSize: fontSizes.xs, color: colors.textMuted, marginTop: spacing.xs, marginBottom: 0, lineHeight: 1.45, fontFamily: fonts.body }}>
+              {t('calculator:input_stair_masonry_start_hint')}
+            </p>
           </div>
           
           <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginTop: spacing.lg, fontFamily: fonts.heading }}>{t('calculator:input_slab_adhesive_thickness_cm')}</h3>
@@ -1140,6 +1102,20 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
             onChange={(v) => setStepConfig(v as 'frontsOnTop' | 'stepsToFronts')}
             style={{ marginBottom: 0 }}
           />
+
+          <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginTop: spacing.lg, fontFamily: fonts.heading }}>{t('calculator:last_step_mode_label')}</h3>
+          <RadioGroup
+            options={[
+              { value: 'standard', label: t('calculator:last_step_standard') },
+              { value: 'frontOnly', label: t('calculator:last_step_front_only') },
+            ]}
+            value={lastStepMode}
+            onChange={(v) => setLastStepMode(v as 'standard' | 'frontOnly')}
+            style={{ marginBottom: 0 }}
+          />
+          <p style={{ fontSize: fontSizes.xs, color: colors.textMuted, marginTop: spacing.sm, marginBottom: 0, lineHeight: 1.45, fontFamily: fonts.body }}>
+            {t('calculator:last_step_front_only_hint')}
+          </p>
           
           <div style={{ marginTop: spacing.lg }}>
             <label style={{ ...labelStyle, marginBottom: spacing.md }}>{t('calculator:gap_label')}</label>
@@ -1234,7 +1210,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
           )}
 
           <div style={{ marginTop: spacing.xl }}>
-            <Button onClick={calculate} fullWidth>
+            <Button variant="primary" onClick={calculate} fullWidth>
               {t('calculator:calculate_button')}
             </Button>
           </div>
@@ -1282,20 +1258,47 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
                 border: `1px solid ${colors.red}50`,
               }}>
                 <p style={{ fontWeight: fontWeights.semibold, marginBottom: spacing.md, margin: 0, fontFamily: fonts.body }}>{t('calculator:calculation_logic')}:</p>
-                <ul style={{ listStyle: 'disc', paddingLeft: spacing.xl, margin: 0, display: 'flex', flexDirection: 'column', gap: spacing.xs }}>
+                  <ul style={{ listStyle: 'disc', paddingLeft: spacing.xl, margin: 0, display: 'flex', flexDirection: 'column', gap: spacing.xs }}>
                   <li>{t('calculator:standard_logic_step_row')}</li>
+                  <li>{t('calculator:stair_logic_masonry_from_buried', { depth: (result.userTargetBuriedCm ?? 0).toFixed(1) })}</li>
                   <li>{t('calculator:standard_logic_sidewall')}</li>
                 </ul>
+                {result.userTargetBuriedCm !== undefined &&
+                  result.globalBuriedDepthCmUsed !== undefined &&
+                  Math.abs(result.globalBuriedDepthCmUsed - result.userTargetBuriedCm) > 0.05 && (
+                  <p style={{ marginTop: spacing.sm, marginBottom: 0, fontSize: fontSizes.xs, color: colors.amber, fontFamily: fonts.body }}>
+                    {t('calculator:stair_buried_optimized_note', {
+                      user: result.userTargetBuriedCm.toFixed(1),
+                      used: result.globalBuriedDepthCmUsed.toFixed(1),
+                    })}
+                  </p>
+                )}
               </div>
+              {result.deepBurialWarning && (
+                <div style={{
+                  background: `${colors.amber}18`,
+                  color: colors.textPrimary,
+                  fontSize: fontSizes.sm,
+                  padding: spacing.md,
+                  marginBottom: spacing.sm,
+                  borderRadius: radii.lg,
+                  border: `1px solid ${colors.amber}55`,
+                  fontFamily: fonts.body,
+                  lineHeight: 1.5,
+                }}>
+                  {result.deepBurialWarning}
+                </div>
+              )}
               <div className="overflow-x-auto" style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii["2xl"] }}>
                 <table className="w-full table-fixed" style={{ backgroundColor: colors.bgCardInner }}>
                   <colgroup>
                     <col className="w-16" />
-                      <col className="w-32" />
                     <col className="w-32" />
                     <col className="w-32" />
                     <col className="w-32" />
                     <col className="w-32" />
+                    <col className="w-28" />
+                    <col className="w-40" />
                     <col />
                   </colgroup>
                   <thead>
@@ -1305,7 +1308,8 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
                       <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:standard_table_total_height_cm')}</th>
                       <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:lshape_table_tread_cm')}</th>
                       <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:table_length_cm')}</th>
-                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:lshape_table_mortar_cm')}</th>
+                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:lshape_table_total_rows')}</th>
+                      <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:standard_table_joint_bedding_header')}</th>
                       <th className="py-2 px-4 text-left" style={{ color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{t('calculator:materials')}</th>
                     </tr>
                   </thead>
@@ -1345,23 +1349,46 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
                             <td className="py-2 px-4" style={{ color: colors.textPrimary }}>
                               {(index === 0 ? step.height : step.height - result.stepDimensions[index - 1].height).toFixed(2)}
                             </td>
-                          <td className="py-2 px-4" style={{ color: colors.textPrimary }}>{step.height.toFixed(2)}</td>
+                          <td className="py-2 px-4" style={{ color: colors.textPrimary }}>
+                            {step.height.toFixed(2)}
+                            <div style={{ fontSize: fontSizes.xs, color: colors.textMuted, marginTop: 4, lineHeight: 1.35 }}>
+                              {t('calculator:stair_total_height_from_finished_note', {
+                                value: (step.height - buriedDepth).toFixed(2),
+                              })}
+                            </div>
+                          </td>
                           <td className="py-2 px-4" style={{ color: colors.textPrimary }}>{step.tread.toFixed(2)}</td>
                           <td className="py-2 px-4" style={{ color: colors.textPrimary }}>{displayLength.toFixed(2)}</td>
                           <td className="py-2 px-4" style={{ color: colors.textPrimary }}>
                             {stepCourseDetails.map((course, idx) => (
-                              <div key={idx}>
-                                {course.mortarHeight.toFixed(2)}
+                              <div key={idx}>{course.rows}</div>
+                            ))}
+                          </td>
+                          <td className="py-2 px-4" style={{ color: colors.textPrimary }}>
+                            {stepCourseDetails.map((course, idx) => (
+                              <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                <span>
+                                  {t('calculator:standard_mortar_joint_label')}: {course.mortarHeight.toFixed(2)}
+                                </span>
+                                <span>
+                                  {t('calculator:standard_mortar_bedding_label')}: {course.podsadzka.toFixed(2)}
+                                </span>
                               </div>
                             ))}
                           </td>
                           <td style={{ padding: `${spacing.md}px ${spacing.lg}px`, borderTop: `1px solid ${colors.borderDefault}` }}>
                             {stepCourseDetails.map((course, idx) => (
                               <div key={idx} style={{ color: course.needsCutting ? colors.amber : colors.textPrimary }}>
-                                {course.blocks} x {translateMaterialName(course.material, t)} {course.material === 'Standard Bricks (9x6x21)' ? 
-                                  (course.mortarHeight === 9 || step.height === 9 ? t('calculator:laid_on_side') : t('calculator:laid_flat')) : 
-                                  ''}
-                                {course.needsCutting && ` ${t('calculator:needs_cutting')}`}
+                                <div style={{ fontWeight: fontWeights.semibold, marginBottom: 2 }}>
+                                  {translateMaterialName(course.material, t)}
+                                </div>
+                                <div>
+                                  {course.blocks} {translateUnit('pieces', t)}
+                                  {course.material === 'Standard Bricks (9x6x21)' ? (
+                                    <> — {course.mortarHeight === 9 || step.height === 9 ? t('calculator:laid_on_side') : t('calculator:laid_flat')}</>
+                                  ) : null}
+                                  {course.needsCutting && ` ${t('calculator:needs_cutting')}`}
+                                </div>
                               </div>
                             ))}
                           </td>
@@ -1509,6 +1536,7 @@ const StairCalculator: React.FC<StairCalculatorProps> = ({
             onInstallationTasksCalculated={(tasks) => {
               setInstallationTasks(tasks);
             }}
+            lastStepMode={lastStepMode}
           />
         </div>
       )}

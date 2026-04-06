@@ -21,6 +21,7 @@ import WallFinishCalculator from '../components/Calculator/TileInstallationCalcu
 import CopingInstallationCalculator from '../components/Calculator/CopingInstallationCalculator';
 import FoundationCalculator from '../components/Calculator/FoundationCalculator';
 import DeckCalculator from '../components/Calculator/DeckCalculator';
+import DecorativeStonesCalculator from '../components/Calculator/DecorativeStonesCalculator';
 import GroundworkLinearCalculator from '../components/Calculator/GroundworkLinearCalculator';
 import { getFoundationDiggingMethodFromExcavator } from './canvacreator/GroundworkLinearCalculator';
 import { getCalculatorInputDefaults } from '../lib/materialUsageDefaults';
@@ -75,6 +76,7 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
   const concreteSlabsDefaults = useMemo(() => getCalculatorInputDefaults('concreteSlabs', companyId), [companyId]);
   const grassDefaults = useMemo(() => getCalculatorInputDefaults('grass', companyId), [companyId]);
   const turfDefaults = useMemo(() => getCalculatorInputDefaults('turf', companyId), [companyId]);
+  const decorativeStonesDefaults = useMemo(() => getCalculatorInputDefaults('decorativeStones', companyId), [companyId]);
 
   // Fetch carriers for both digging and materials in AddTask mode
   React.useEffect(() => {
@@ -174,9 +176,15 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
       case 'paving':
         return <PavingCalculator {...commonProps} savedInputs={pavingDefaults} />;
       case 'wall':
+        if (calculatorSubType === 'double_wall') {
+          return <WallCalculator type="brick" wallBrickVariant="double_wall" {...commonProps} />;
+        }
+        if (calculatorSubType === 'brick') {
+          return <WallCalculator type="brick" wallBrickVariant="brick" {...commonProps} />;
+        }
         return (
           <WallCalculator
-            type={calculatorSubType as 'brick' | 'block4' | 'block7' | 'sleeper'}
+            type={calculatorSubType as 'block4' | 'block7' | 'sleeper'}
             {...commonProps}
           />
         );
@@ -215,7 +223,14 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
       case 'groundwork':
         return <GroundworkLinearCalculator type={calculatorSubType as 'drainage' | 'canalPipe' | 'waterPipe' | 'cable'} {...commonProps} selectedExcavator={selectedExcavator} />;
       case 'deck':
-        return <DeckCalculator {...commonProps} />;
+        return (
+          <DeckCalculator
+            {...commonProps}
+            deckVariant={calculatorSubType === 'composite_deck' ? 'composite' : 'timber'}
+          />
+        );
+      case 'decorativeStones':
+        return <DecorativeStonesCalculator {...commonProps} savedInputs={decorativeStonesDefaults} />;
       default:
         return null;
     }
@@ -266,7 +281,7 @@ const CalculatorModal: React.FC<CalculatorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
       <div className="rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ backgroundColor: colors.bgCard }}>
         <div className="flex justify-between items-center p-6 border-b" style={{ borderColor: colors.borderDefault }}>
           <h2 className="text-xl font-semibold" style={{ color: colors.textPrimary }}>{t('project:calculator_modal_title')}</h2>

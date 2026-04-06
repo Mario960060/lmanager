@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
@@ -6,12 +6,12 @@ import { useAuthStore } from '../lib/store';
 import { format, addDays, parseISO, isWithinInterval } from 'date-fns';
 import { enUS, pl } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
+import { useSidebarSectionReset } from '../hooks/useSidebarSectionReset';
 import { AlertCircle, ChevronDown, ChevronUp, Wrench, Package, ClipboardList } from 'lucide-react';
 import PageInfoModal from '../components/PageInfoModal';
 import DatePicker from '../components/DatePicker';
 import {
   PageHeader,
-  NavBtn,
   Button,
   SummaryBar,
   SectionHeader,
@@ -29,19 +29,209 @@ import {
   transitions,
   layout,
 } from '../themes';
+import { translateTaskName, translateUnit } from '../lib/i18nTaskUtils';
+
+type DashboardTaskFolderLite = { id: string; name: string; sort_order: number | null; event_id?: string | null };
+
+type DashboardPlannedRow = {
+  rowKey: string;
+  folderId: string | null;
+  display: string;
+  quantity: number | null;
+  unitLabel: string;
+  priority: number;
+  hourStart: number | null;
+  hourEnd: number | null;
+};
+
+function dashboardExcavationPrepFolder(f: Pick<DashboardTaskFolderLite, 'name' | 'sort_order'>): boolean {
+  if ((f.sort_order ?? 0) < 0) return true;
+  const n = (f.name || '').toLowerCase();
+  if (n.includes('excavation') && n.includes('preparation')) return true;
+  if (n.includes('digging') && n.includes('preparation')) return true;
+  if (n.includes('kopan') && (n.includes('przygotow') || n.includes('preparation'))) return true;
+  return false;
+}
+
+function sortDashboardPlannedFolderKeys(
+  keys: (string | '__none__')[],
+  folderById: Map<string, DashboardTaskFolderLite>
+): (string | '__none__')[] {
+  const hasNone = keys.includes('__none__');
+  const real = keys.filter((k): k is string => k !== '__none__');
+  real.sort((a, b) => {
+    const fa = folderById.get(a);
+    const fb = folderById.get(b);
+    const ae = fa && dashboardExcavationPrepFolder(fa);
+    const be = fb && dashboardExcavationPrepFolder(fb);
+    if (ae !== be) return ae ? -1 : 1;
+    const soa = fa?.sort_order ?? 0;
+    const sob = fb?.sort_order ?? 0;
+    if (soa !== sob) return soa - sob;
+    return (fa?.name || a).localeCompare(fb?.name || b);
+  });
+  return hasNone ? [...real, '__none__'] : real;
+}
+
+function DashboardPlannedTasksGrouped({
+  rows,
+  folders,
+  t,
+}: {
+  rows: DashboardPlannedRow[];
+  folders: DashboardTaskFolderLite[];
+  t: (k: string, opts?: Record<string, unknown>) => string;
+}) {
+  const folderById = useMemo(() => new Map(folders.map((f) => [f.id, f])), [folders]);
+
+  const { grouped, sortedKeys } = useMemo(() => {
+    const g = new Map<string | '__none__', DashboardPlannedRow[]>();
+    for (const r of rows) {
+      const fid = r.folderId;
+      const key: string | '__none__' = fid && folderById.has(fid) ? fid : '__none__';
+      if (!g.has(key)) g.set(key, []);
+      g.get(key)!.push(r);
+    }
+    for (const arr of g.values()) {
+      arr.sort((a, b) => (b.priority !== a.priority ? b.priority - a.priority : a.display.localeCompare(b.display)));
+    }
+    const keys = Array.from(g.keys()).filter((k) => (g.get(k)?.length ?? 0) > 0);
+    const sorted = sortDashboardPlannedFolderKeys(keys, folderById);
+    return { grouped: g, sortedKeys: sorted };
+  }, [rows, folderById]);
+
+  const fmtHour = (h: number) => `${String(h).padStart(2, '0')}:00`;
+
+  return (
+    <>
+      {sortedKeys.map((fk, idx) => {
+        const list = grouped.get(fk)!;
+        const title =
+          fk === '__none__' ? t('dashboard:day_plan_tasks_no_folder') : folderById.get(fk)?.name ?? '';
+        return (
+          <div key={String(fk)} style={{ marginTop: idx === 0 ? 0 : 12 }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: fontWeights.bold,
+                color: colors.accentBlue,
+                fontFamily: fonts.display,
+                marginBottom: 6,
+                paddingLeft: 2,
+              }}
+            >
+              {title}
+            </div>
+            <div style={{ paddingLeft: 6 }}>
+              {list.map((row) => {
+                const hasHours = row.hourStart !== null && row.hourEnd !== null;
+                const qtyPart =
+                  row.quantity !== null && !Number.isNaN(row.quantity) && row.quantity !== 0
+                    ? ` — ${row.quantity}${row.unitLabel ? ` ${row.unitLabel}` : ''}`
+                    : '';
+                return (
+                  <div
+                    key={row.rowKey}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 0',
+                      borderBottom: '1px solid rgba(255,255,255,0.06)',
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 4 }}>
+                      <span style={{ fontSize: 12.5, color: colors.textPrimary, fontWeight: fontWeights.semibold }}>{row.display}</span>
+                      {qtyPart ? (
+                        <span style={{ fontSize: 12.5, color: colors.textDim, fontWeight: fontWeights.medium }}>{qtyPart}</span>
+                      ) : null}
+                    </div>
+                    <div style={{ display: 'flex', gap: 1, flexShrink: 0 }} aria-hidden>
+                      {[1, 2, 3].map((star) => (
+                        <span
+                          key={star}
+                          style={{
+                            fontSize: 13,
+                            color: row.priority >= star ? colors.amber : colors.textFaint,
+                            lineHeight: 1,
+                          }}
+                        >
+                          ★
+                        </span>
+                      ))}
+                    </div>
+                    <div
+                      style={{
+                        minWidth: 88,
+                        flexShrink: 0,
+                        textAlign: 'right',
+                        fontSize: 12,
+                        fontWeight: fontWeights.semibold,
+                        color: hasHours ? colors.textSecondary : colors.textFaint,
+                        fontFamily: fonts.display,
+                      }}
+                    >
+                      {hasHours ? `${fmtHour(row.hourStart!)}–${fmtHour(row.hourEnd!)}` : '—'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 const Dashboard = () => {
-  const { t, i18n } = useTranslation(['dashboard', 'common', 'utilities', 'project']);
+  const { t, i18n } = useTranslation(['dashboard', 'common', 'utilities', 'project', 'event', 'calculator']);
   const navigate = useNavigate();
   const companyId = useAuthStore(state => state.getCompanyId());
   const today = new Date();
-  const tomorrow = addDays(today, 1);
   const currentLocale = i18n.language === 'pl' ? pl : enUS;
+  const DASHBOARD_SCROLL_DAYS = 14;
+  const [compactHeader, setCompactHeader] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : false
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const onChange = () => setCompactHeader(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  const todayYmd = format(today, 'yyyy-MM-dd');
+  const dashboardPlanDates = useMemo(() => {
+    const base = new Date();
+    return Array.from({ length: DASHBOARD_SCROLL_DAYS }, (_, i) => format(addDays(base, i), 'yyyy-MM-dd'));
+  }, [todayYmd]);
+
   const [expandedSections, setExpandedSections] = useState<Record<string, Record<string, boolean>>>({});
   const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
   const [materialDate, setMaterialDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
 
-  // Fetch events for today and tomorrow
+  const daysScrollIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [daysScrollInteracting, setDaysScrollInteracting] = useState(false);
+
+  useSidebarSectionReset('/', () => {
+    setShowAddMaterialModal(false);
+  });
+
+  const handleDaysScroll = useCallback(() => {
+    setDaysScrollInteracting(true);
+    if (daysScrollIdleRef.current) clearTimeout(daysScrollIdleRef.current);
+    daysScrollIdleRef.current = setTimeout(() => {
+      setDaysScrollInteracting(false);
+      daysScrollIdleRef.current = null;
+    }, 900);
+  }, []);
+
+  useEffect(() => () => {
+    if (daysScrollIdleRef.current) clearTimeout(daysScrollIdleRef.current);
+  }, []);
+
   const { data: events = [] } = useQuery({
     queryKey: ['dashboard_events', companyId],
     queryFn: async () => {
@@ -70,7 +260,7 @@ const Dashboard = () => {
 
   // Fetch calendar materials
   const { data: calendarMaterials = [] } = useQuery({
-    queryKey: ['dashboard_calendar_materials', companyId],
+    queryKey: ['dashboard_calendar_materials', companyId, dashboardPlanDates.join(',')],
     queryFn: async () => {
       if (!companyId) return [];
       const { data, error } = await supabase
@@ -86,7 +276,7 @@ const Dashboard = () => {
           )
         `)
         .eq('company_id', companyId)
-        .in('date', [format(today, 'yyyy-MM-dd'), format(tomorrow, 'yyyy-MM-dd')])
+        .in('date', dashboardPlanDates)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -97,7 +287,7 @@ const Dashboard = () => {
 
   // Fetch calendar equipment
   const { data: calendarEquipment = [] } = useQuery({
-    queryKey: ['dashboard_calendar_equipment', companyId],
+    queryKey: ['dashboard_calendar_equipment', companyId, dashboardPlanDates.join(',')],
     queryFn: async () => {
       if (!companyId) return [];
       const { data, error } = await supabase
@@ -117,7 +307,7 @@ const Dashboard = () => {
           )
         `)
         .eq('company_id', companyId)
-        .in('date', [format(today, 'yyyy-MM-dd'), format(tomorrow, 'yyyy-MM-dd')])
+        .in('date', dashboardPlanDates)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -156,7 +346,7 @@ const Dashboard = () => {
 
   // Fetch day notes
   const { data: dayNotes = [] } = useQuery({
-    queryKey: ['dashboard_day_notes', companyId],
+    queryKey: ['dashboard_day_notes', companyId, dashboardPlanDates.join(',')],
     queryFn: async () => {
       const cid = companyId;
       if (!cid) return [];
@@ -173,7 +363,7 @@ const Dashboard = () => {
           profiles (id, full_name)
         `)
         .eq('company_id', cid)
-        .in('date', [format(today, 'yyyy-MM-dd'), format(tomorrow, 'yyyy-MM-dd')])
+        .in('date', dashboardPlanDates)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -182,7 +372,7 @@ const Dashboard = () => {
     enabled: !!companyId
   });
 
-  // Fetch tasks for the events
+  // Project tasks (for summary / completed today)
   const { data: tasks = [] } = useQuery({
     queryKey: ['dashboard_tasks', events.map(e => e.id), companyId],
     queryFn: async () => {
@@ -200,6 +390,142 @@ const Dashboard = () => {
     },
     enabled: events.length > 0 && !!companyId
   });
+
+  const dashboardEventIdKey = events
+    .map(e => e.id)
+    .filter((id): id is string => id != null)
+    .sort()
+    .join(',');
+
+  const { data: dashboardPlannedBlocks = [] } = useQuery({
+    queryKey: ['dashboard_calendar_planned_tasks', companyId, dashboardPlanDates.join(','), dashboardEventIdKey],
+    queryFn: async () => {
+      const cid = companyId;
+      const ids = events.map(e => e.id).filter((id): id is string => id != null);
+      if (!cid || ids.length === 0) return [];
+
+      const { data, error } = await supabase
+        .from('calendar_day_plan_blocks')
+        .select(
+          `
+          id,
+          event_id,
+          plan_date,
+          start_hour,
+          end_hour,
+          sort_order,
+          calendar_day_plan_block_tasks!block_id (
+            tasks_done_id,
+            planned_quantity,
+            priority,
+            sort_order
+          )
+        `
+        )
+        .eq('company_id', cid)
+        .in('plan_date', dashboardPlanDates)
+        .in('event_id', ids);
+
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: events.length > 0 && !!companyId,
+  });
+
+  const { data: dashboardTaskFolders = [] } = useQuery({
+    queryKey: ['dashboard_task_folders', companyId, dashboardEventIdKey],
+    queryFn: async () => {
+      const cid = companyId;
+      const ids = events.map((e) => e.id).filter((id): id is string => id != null);
+      if (!cid || ids.length === 0) return [];
+      const { data, error } = await supabase
+        .from('task_folders')
+        .select('id, name, sort_order, event_id')
+        .eq('company_id', cid)
+        .in('event_id', ids)
+        .order('sort_order', { ascending: true });
+      if (error) throw error;
+      return (data || []) as DashboardTaskFolderLite[];
+    },
+    enabled: events.length > 0 && !!companyId,
+  });
+
+  const plannedTaskCountByEventAndDate = useMemo(() => {
+    const m: Record<string, Set<string>> = {};
+    for (const row of dashboardPlannedBlocks as Array<{
+      event_id?: string | null;
+      plan_date?: string | null;
+      calendar_day_plan_block_tasks?: Array<{ tasks_done_id?: string | null }> | null;
+    }>) {
+      if (!row.event_id || !row.plan_date) continue;
+      const key = `${row.event_id}__${row.plan_date}`;
+      if (!m[key]) m[key] = new Set();
+      for (const t of row.calendar_day_plan_block_tasks || []) {
+        if (t.tasks_done_id) m[key].add(t.tasks_done_id);
+      }
+    }
+    const out: Record<string, number> = {};
+    for (const [k, set] of Object.entries(m)) out[k] = set.size;
+    return out;
+  }, [dashboardPlannedBlocks]);
+
+  const plannedTaskRowsByEventDate = useMemo(() => {
+    type BlockRow = {
+      id: string;
+      event_id?: string | null;
+      plan_date?: string | null;
+      start_hour: number | null;
+      end_hour: number | null;
+      sort_order: number;
+      calendar_day_plan_block_tasks?: Array<{
+        tasks_done_id?: string | null;
+        planned_quantity?: number | null;
+        priority?: number | null;
+        sort_order?: number | null;
+      }> | null;
+    };
+    const tasksById = new Map((tasks as Array<{ id: string; name?: string | null; task_name?: string | null; unit?: string | null; folder_id?: string | null }>).map((r) => [r.id, r]));
+    const result: Record<string, DashboardPlannedRow[]> = {};
+    const sortedBlocks = [...(dashboardPlannedBlocks as BlockRow[])].sort((a, z) => (a.sort_order ?? 0) - (z.sort_order ?? 0));
+    let seq = 0;
+    for (const block of sortedBlocks) {
+      const eid = block.event_id;
+      const pd = block.plan_date;
+      if (!eid || !pd) continue;
+      const key = `${eid}__${pd}`;
+      if (!result[key]) result[key] = [];
+      const hs = block.start_hour !== null && block.end_hour !== null ? block.start_hour : null;
+      const he = block.start_hour !== null && block.end_hour !== null ? block.end_hour : null;
+      const taskRows = [...(block.calendar_day_plan_block_tasks || [])].sort(
+        (a, z) => (a.sort_order ?? 0) - (z.sort_order ?? 0)
+      );
+      for (const tr of taskRows) {
+        const tid = tr.tasks_done_id;
+        if (!tid) continue;
+        const td = tasksById.get(tid);
+        const raw = td?.name || td?.task_name || '';
+        const display = translateTaskName(raw, t) || raw || t('dashboard:day_plan_untitled_task');
+        const unitRaw = td?.unit || '';
+        const unitLabel = unitRaw ? translateUnit(unitRaw, t) : '';
+        const pq = tr.planned_quantity;
+        const quantity = pq !== null && pq !== undefined && !Number.isNaN(Number(pq)) ? Number(pq) : null;
+        result[key].push({
+          rowKey: `${block.id}-${tid}-${seq++}`,
+          folderId: td?.folder_id ?? null,
+          display,
+          quantity: quantity !== null && quantity !== 0 ? quantity : null,
+          unitLabel,
+          priority: tr.priority != null ? Math.min(3, Math.max(1, tr.priority)) : 1,
+          hourStart: hs,
+          hourEnd: he,
+        });
+      }
+    }
+    for (const k of Object.keys(result)) {
+      result[k].sort((a, b) => (b.priority !== a.priority ? b.priority - a.priority : 0));
+    }
+    return result;
+  }, [dashboardPlannedBlocks, tasks, t]);
 
   // Summary counts for SummaryBar (computed from events + tasks)
   const inProgressCount = events.filter(e => e.status === 'in_progress').length;
@@ -260,7 +586,7 @@ const Dashboard = () => {
       return acc;
     }, {});
 
-    const toggleSection = (eventId: string, section: 'materials' | 'equipment') => {
+    const toggleSection = (eventId: string, section: 'planned_tasks' | 'materials' | 'equipment') => {
       setExpandedSections(prev => ({
         ...prev,
         [format(date, 'yyyy-MM-dd')]: {
@@ -270,7 +596,7 @@ const Dashboard = () => {
       }));
     };
 
-    const isExpanded = (eventId: string, section: 'materials' | 'equipment') => {
+    const isExpanded = (eventId: string, section: 'planned_tasks' | 'materials' | 'equipment') => {
       return expandedSections[format(date, 'yyyy-MM-dd')]?.[`${eventId}-${section}`] || false;
     };
 
@@ -286,9 +612,10 @@ const Dashboard = () => {
         todayLabel={t('dashboard:today')}
         onClick={() => navigate(`/calendar?date=${format(date, 'yyyy-MM-dd')}`)}
         style={{
-          flex: '1 1 0',
+          flex: '0 0 auto',
           minWidth: layout.dayColumnMinWidth,
           maxWidth: layout.dayColumnMaxWidth,
+          scrollSnapAlign: 'start',
         }}
       >
         <div style={{
@@ -300,7 +627,10 @@ const Dashboard = () => {
           <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["5xl"] }}>
             {dayEvents.filter(e => e.id).map(event => {
               const eventId = event.id!;
-              const eventTasks = tasks.filter(t => t.event_id === eventId);
+              const dateKey = format(date, 'yyyy-MM-dd');
+              const plannedTaskCount = plannedTaskCountByEventAndDate[`${eventId}__${dateKey}`] ?? 0;
+              const plannedTaskRows = plannedTaskRowsByEventDate[`${eventId}__${dateKey}`] ?? [];
+              const eventTaskFolders = dashboardTaskFolders.filter((f) => f.event_id === eventId);
               const eventMaterials = materialsByProject[eventId] || [];
               const eventEquipment = equipmentByProject[eventId] || [];
 
@@ -308,13 +638,15 @@ const Dashboard = () => {
                 <DashboardEventCard
                   key={eventId}
                   event={event}
-                  eventTasks={eventTasks}
+                  plannedTaskCount={plannedTaskCount}
+                  plannedTaskRows={plannedTaskRows}
+                  taskFolders={eventTaskFolders}
                   eventMaterials={eventMaterials}
                   eventEquipment={eventEquipment}
                   formatStatus={formatStatus}
                   getEventAccentColor={getEventAccentColor}
-                  toggleSection={(s: 'materials' | 'equipment') => toggleSection(eventId, s)}
-                  isExpanded={(s: 'materials' | 'equipment') => isExpanded(eventId, s)}
+                  toggleSection={(s) => toggleSection(eventId, s)}
+                  isExpanded={(s) => isExpanded(eventId, s)}
                   t={t}
                   navigate={navigate}
                 />
@@ -377,9 +709,11 @@ const Dashboard = () => {
 
   const DashboardEventCard = ({
     event,
-    eventTasks,
-    eventMaterials,
-    eventEquipment,
+    plannedTaskCount,
+    plannedTaskRows = [],
+    taskFolders = [],
+    eventMaterials = [],
+    eventEquipment = [],
     formatStatus,
     getEventAccentColor,
     toggleSection,
@@ -388,13 +722,15 @@ const Dashboard = () => {
     navigate,
   }: {
     event: any;
-    eventTasks: any[];
-    eventMaterials: any[];
-    eventEquipment: any[];
+    plannedTaskCount: number;
+    plannedTaskRows?: DashboardPlannedRow[];
+    taskFolders?: DashboardTaskFolderLite[];
+    eventMaterials?: any[];
+    eventEquipment?: any[];
     formatStatus: (s: string) => string;
     getEventAccentColor: (s: string) => string;
-    toggleSection: (s: 'materials' | 'equipment') => void;
-    isExpanded: (s: 'materials' | 'equipment') => boolean;
+    toggleSection: (s: 'planned_tasks' | 'materials' | 'equipment') => void;
+    isExpanded: (s: 'planned_tasks' | 'materials' | 'equipment') => boolean;
     t: any;
     navigate: (p: string) => void;
   }) => (
@@ -423,12 +759,12 @@ const Dashboard = () => {
         gap: spacing["5xl"],
         fontSize: fontSizes.base,
       }}>
-        {eventTasks.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', color: colors.textDim }}>
-            <ClipboardList style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.sm }} />
-            <span>{eventTasks.length} {t('dashboard:tasks')}</span>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', color: colors.textDim }}>
+          <ClipboardList style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.sm }} />
+          <span>
+            {plannedTaskCount} {t('dashboard:planned_tasks_label')}
+          </span>
+        </div>
         {eventMaterials.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', color: colors.textDim }}>
             <Package style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.sm }} />
@@ -442,6 +778,44 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+
+      {plannedTaskRows.length > 0 && (
+        <div style={{ marginTop: spacing["5xl"], paddingTop: spacing["5xl"], borderTop: `1px solid ${colors.borderLight}` }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontSize: fontSizes.base,
+              color: colors.accentBlue,
+              marginBottom: spacing.sm,
+              cursor: 'pointer',
+              borderRadius: radii.md,
+              padding: spacing.sm,
+              transition: transitions.fast,
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSection('planned_tasks');
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+              <ClipboardList style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.xs }} />
+              <span>{t('dashboard:day_plan_section_scheduled_tasks', { count: plannedTaskRows.length })}</span>
+            </div>
+            {isExpanded('planned_tasks') ? (
+              <ChevronUp style={{ width: spacing["3xl"], height: spacing["3xl"] }} />
+            ) : (
+              <ChevronDown style={{ width: spacing["3xl"], height: spacing["3xl"] }} />
+            )}
+          </div>
+          {isExpanded('planned_tasks') && (
+            <div style={{ padding: `0 ${spacing.sm}px ${spacing.sm}px` }}>
+              <DashboardPlannedTasksGrouped rows={plannedTaskRows} folders={taskFolders} t={t} />
+            </div>
+          )}
+        </div>
+      )}
 
       {eventMaterials.length > 0 && (
         <div style={{ marginTop: spacing["5xl"], paddingTop: spacing["5xl"], borderTop: `1px solid ${colors.borderLight}` }}>
@@ -569,23 +943,40 @@ const Dashboard = () => {
         title={t('dashboard:title')}
         infoButton={<PageInfoModal description={t('dashboard:info_description')} title={t('dashboard:info_title')} />}
       >
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 4,
-          background: colors.bgOverlay, borderRadius: radii.lg, padding: '4px 6px',
-          border: `1px solid ${colors.borderDefault}`,
-        }}>
-          <NavBtn direction="left" />
-          <span style={{ fontSize: 12, color: colors.textSubtle, fontFamily: fonts.body, fontWeight: 500, padding: '4px 10px', cursor: 'pointer' }}>
-            {t('dashboard:this_week', 'Ten tydzień')}
-          </span>
-          <NavBtn direction="right" />
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'nowrap',
+            gap: compactHeader ? 6 : spacing.lg,
+            width: compactHeader ? '100%' : 'auto',
+            minWidth: 0,
+            flexBasis: compactHeader ? '100%' : undefined,
+            justifyContent: compactHeader ? 'stretch' : 'flex-start',
+          }}
+        >
+          <Button
+            onClick={() => navigate('/user-hours')}
+            style={{
+              flex: '1 1 0',
+              minWidth: 0,
+              padding: compactHeader ? `${spacing.md}px ${spacing.sm}px` : undefined,
+              fontSize: compactHeader ? fontSizes.sm : undefined,
+            }}
+          >
+            {t('dashboard:add_hours_short')}
+          </Button>
+          <Button
+            onClick={() => setShowAddMaterialModal(true)}
+            style={{
+              flex: '1 1 0',
+              minWidth: 0,
+              padding: compactHeader ? `${spacing.md}px ${spacing.sm}px` : undefined,
+              fontSize: compactHeader ? fontSizes.sm : undefined,
+            }}
+          >
+            {t('dashboard:add_tasks_materials_gear_short')}
+          </Button>
         </div>
-        <Button variant="accent" color={colors.amber} icon="⏱" onClick={() => navigate('/user-hours')}>
-          {t('dashboard:add_hours_progress')}
-        </Button>
-        <Button variant="accent" color={colors.accentBlue} icon="📦" onClick={() => setShowAddMaterialModal(true)}>
-          {t('dashboard:order_material_equipment')}
-        </Button>
       </PageHeader>
 
       <SummaryBar
@@ -598,30 +989,40 @@ const Dashboard = () => {
         style={{ marginBottom: spacing["6xl"] }}
       />
 
-      <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 8 }}>
-        <DayView 
-          date={today} 
-          dayEvents={events.filter(event => {
-            const eventStart = parseISO(event.start_date);
-            const eventEnd = parseISO(event.end_date);
-            return isWithinInterval(today, { start: eventStart, end: eventEnd });
-          })} 
-        />
-        <DayView 
-          date={tomorrow} 
-          dayEvents={events.filter(event => {
-            const eventStart = parseISO(event.start_date);
-            const eventEnd = parseISO(event.end_date);
-            return isWithinInterval(tomorrow, { start: eventStart, end: eventEnd });
-          })} 
-        />
+      <div
+        className={`dashboard-days-scroll${daysScrollInteracting ? ' dashboard-days-scroll--interacting' : ''}`}
+        onScroll={handleDaysScroll}
+        style={{
+          display: 'flex',
+          gap: 14,
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          paddingBottom: 8,
+          WebkitOverflowScrolling: 'touch',
+          scrollSnapType: 'x proximity',
+        }}
+      >
+        {dashboardPlanDates.map((ymd) => {
+          const dayDate = new Date(`${ymd}T12:00:00`);
+          return (
+            <DayView
+              key={ymd}
+              date={dayDate}
+              dayEvents={events.filter((event) => {
+                const eventStart = parseISO(event.start_date);
+                const eventEnd = parseISO(event.end_date);
+                return isWithinInterval(dayDate, { start: eventStart, end: eventEnd });
+              })}
+            />
+          );
+        })}
       </div>
 
       {/* Order Material & Equipment Modal */}
       <Modal
         open={showAddMaterialModal}
         onClose={() => setShowAddMaterialModal(false)}
-        title={t('dashboard:order_material_equipment')}
+        title={t('dashboard:add_tasks_materials_gear_modal_title')}
         width={448}
         footer={
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: spacing.lg, paddingTop: spacing["5xl"] }}>

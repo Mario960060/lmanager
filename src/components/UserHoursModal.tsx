@@ -14,6 +14,9 @@ import {
   ConfirmDialog, colors, spacing, radii, fontSizes, fontWeights, fonts, layout, transitions, shadows,
 } from '../themes';
 
+/** Tasks from calendar day plan (Zaplanuj dzień) for the selected date — shown first, duplicated under real folders */
+const DAY_PLAN_FOLDER_ID = '__calendar_day_plan__';
+
 interface TaskTemplate {
   id: string;
   name: string;
@@ -69,6 +72,9 @@ const UserHoursPage: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; type: 'task' | 'additional'; name: string; taskId?: string } | null>(null);
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
+  const [isMobileLayout, setIsMobileLayout] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : false
+  );
 
   const isToday = selectedDate === new Date().toISOString().split('T')[0];
 
@@ -128,6 +134,32 @@ const UserHoursPage: React.FC = () => {
       return data;
     },
     enabled: !!selectedProject && !!companyId
+  });
+
+  const { data: dayPlanRows = [], isLoading: isDayPlanLoading } = useQuery({
+    queryKey: ['calendar_day_plan_user_hours', selectedProject, selectedDate, companyId],
+    queryFn: async () => {
+      if (!selectedProject) return [];
+      const { data, error } = await supabase
+        .from('calendar_day_plan_blocks')
+        .select(
+          `
+          id,
+          sort_order,
+          calendar_day_plan_block_tasks!block_id (
+            tasks_done_id,
+            priority,
+            sort_order
+          )
+        `
+        )
+        .eq('event_id', selectedProject)
+        .eq('plan_date', selectedDate)
+        .eq('company_id', companyId!);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!selectedProject && !!companyId,
   });
 
   const { data: additionalTasks = [], isLoading: isAdditionalTasksLoading } = useQuery({
@@ -214,6 +246,36 @@ const UserHoursPage: React.FC = () => {
     tasksByFolder[folderId].push(task);
   });
 
+  const plannedTaskIdsOrdered = useMemo(() => {
+    const list = [
+      ...(dayPlanRows as Array<{
+        sort_order: number;
+        calendar_day_plan_block_tasks: Array<{ tasks_done_id: string; priority: number; sort_order: number }> | null;
+      }>),
+    ].sort((a, z) => a.sort_order - z.sort_order);
+    const order: string[] = [];
+    const seen = new Set<string>();
+    for (const b of list) {
+      const rows = [...(b.calendar_day_plan_block_tasks || [])].sort(
+        (a, z) => z.priority - a.priority || a.sort_order - z.sort_order
+      );
+      for (const r of rows) {
+        const tid = r.tasks_done_id;
+        if (tid && !seen.has(tid)) {
+          seen.add(tid);
+          order.push(tid);
+        }
+      }
+    }
+    return order;
+  }, [dayPlanRows]);
+
+  const dayPlanTasksForList = useMemo(() => {
+    if (plannedTaskIdsOrdered.length === 0) return [];
+    const byId = new Map(filteredTasks.map((t: any) => [t.id, t]));
+    return plannedTaskIdsOrdered.map((id) => byId.get(id)).filter(Boolean) as any[];
+  }, [filteredTasks, plannedTaskIdsOrdered]);
+
   const allTodayEntries = useMemo(() => {
     const taskEntries = todayTaskEntries.map((e: any) => {
       const taskData = e.tasks_done as any;
@@ -250,6 +312,14 @@ const UserHoursPage: React.FC = () => {
   // ---------- EFFECTS ----------
 
   useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const onChange = () => setIsMobileLayout(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  useEffect(() => {
     if (taskSearch && filteredTasks.length > 0) {
       const byFolder: Record<string, any[]> = {};
       filteredTasks.forEach(task => {
@@ -260,14 +330,14 @@ const UserHoursPage: React.FC = () => {
       const foldersWithMatches = Object.keys(byFolder).filter(
         folderId => byFolder[folderId]?.length > 0
       );
-      if (foldersWithMatches.length > 0) {
-        setExpandedFolders(prev => {
-          const newExpanded = [...new Set([...prev, ...foldersWithMatches])];
-          return newExpanded;
-        });
+      const planSet = new Set(plannedTaskIdsOrdered);
+      const hasDayPlanMatch = filteredTasks.some((task) => planSet.has(task.id));
+      const extra = hasDayPlanMatch ? [DAY_PLAN_FOLDER_ID] : [];
+      if (foldersWithMatches.length > 0 || extra.length > 0) {
+        setExpandedFolders((prev) => [...new Set([...prev, ...foldersWithMatches, ...extra])]);
       }
     }
-  }, [taskSearch, filteredTasks]);
+  }, [taskSearch, filteredTasks, plannedTaskIdsOrdered]);
 
   useEffect(() => {
     const fetchTaskTemplates = async () => {
@@ -538,15 +608,53 @@ const UserHoursPage: React.FC = () => {
 
   // ---------- RENDER HELPERS ----------
 
+  const renderTaskSearchBar = () => (
+    <div style={{ width: '100%', minWidth: 0 }}>
+      <Label style={{ marginBottom: 6 }}>{t('event:search_tasks')}</Label>
+      <div style={{
+        display: 'flex', alignItems: 'center',
+        background: colors.bgInput, border: `1px solid ${colors.borderInput}`,
+        borderRadius: radii.xl, overflow: 'hidden', width: '100%',
+      }}>
+        <Search style={{ paddingLeft: 12, width: 18, height: 18, color: colors.textFaint, flexShrink: 0 }} />
+        <input
+          type="text"
+          value={taskSearch}
+          onChange={e => setTaskSearch(e.target.value)}
+          placeholder={t('event:search_tasks_placeholder', { defaultValue: 'np. piasek, krawężniki...' })}
+          style={{
+            flex: 1, minWidth: 0, padding: isMobileLayout ? '14px 14px' : '12px 14px', background: 'transparent', border: 'none',
+            color: colors.textSecondary, fontSize: isMobileLayout ? fontSizes.lg : fontSizes.md, fontFamily: fonts.body, outline: 'none',
+          }}
+        />
+        {taskSearch ? (
+          <button
+            type="button"
+            onClick={() => setTaskSearch('')}
+            style={{ padding: 10, background: 'transparent', color: colors.textFaint, border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, flexShrink: 0 }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textFaint; }}
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+
   const renderFolderTasks = (folderTasks: any[]) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, marginTop: spacing.sm }}>
       {folderTasks.map((task: any) => (
         <div
           key={task.id}
           style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '12px 16px', background: colors.bgCardInner, border: `1px solid ${colors.borderDefault}`,
-            borderRadius: radii.xl, gap: spacing.lg, transition: transitions.fast,
+            display: 'flex',
+            flexDirection: isMobileLayout ? 'column' : 'row',
+            alignItems: isMobileLayout ? 'stretch' : 'center',
+            justifyContent: 'space-between',
+            padding: isMobileLayout ? '12px 12px' : '12px 16px',
+            background: colors.bgCardInner, border: `1px solid ${colors.borderDefault}`,
+            borderRadius: radii.xl, gap: isMobileLayout ? spacing.md : spacing.lg, transition: transitions.fast,
           }}
         >
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -557,8 +665,19 @@ const UserHoursPage: React.FC = () => {
               {task.amount} &middot; {t('common:est_abbr')} {task.hours_worked || 0}h
             </div>
           </div>
-          <Button variant="primary" onClick={() => { setProgressTask(task); setShowProgressModal(true); }} style={{ fontSize: fontSizes.base, padding: '8px 16px' }}>
-            {t('event:add_task', { defaultValue: 'Dodaj Zadanie' })}
+          <Button
+            variant="primary"
+            onClick={() => { setProgressTask(task); setShowProgressModal(true); }}
+            style={{
+              fontSize: fontSizes.base,
+              padding: '10px 16px',
+              width: isMobileLayout ? '100%' : 'auto',
+              alignSelf: isMobileLayout ? 'stretch' : 'center',
+              whiteSpace: 'normal',
+              textAlign: 'center',
+            }}
+          >
+            {t('event:log_hours_entry', { defaultValue: 'Wpisz godziny' })}
           </Button>
         </div>
       ))}
@@ -569,10 +688,26 @@ const UserHoursPage: React.FC = () => {
 
   return (
     <div style={{ minHeight: '100vh', background: colors.bgMain }}>
-      <div style={{ maxWidth: layout.maxContentWidth, margin: '0 auto', minHeight: '100vh', position: 'relative', padding: layout.contentPadding }}>
+      <div style={{
+        maxWidth: isMobileLayout ? '100%' : layout.maxContentWidth,
+        margin: '0 auto',
+        minHeight: '100vh',
+        position: 'relative',
+        padding: isMobileLayout ? `0 0 ${spacing["7xl"]}px` : layout.contentPadding,
+        boxSizing: 'border-box',
+      }}>
         {/* Header */}
-        <header style={{ marginBottom: spacing["6xl"] }}>
-          <h1 style={{ fontSize: fontSizes["3xl"], fontWeight: fontWeights.extrabold, fontFamily: fonts.display, color: colors.textPrimary, letterSpacing: '0.5px', margin: 0 }}>
+        <header style={{ marginBottom: isMobileLayout ? spacing["4xl"] : spacing["6xl"] }}>
+          <h1 style={{
+            fontSize: isMobileLayout ? fontSizes["2xl"] : fontSizes["3xl"],
+            fontWeight: fontWeights.extrabold,
+            fontFamily: fonts.display,
+            color: colors.textPrimary,
+            letterSpacing: '0.5px',
+            margin: 0,
+            lineHeight: 1.2,
+          }}
+          >
             {t('event:add_hours_progress')}
           </h1>
           <p style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, marginTop: 4 }}>
@@ -580,14 +715,23 @@ const UserHoursPage: React.FC = () => {
           </p>
         </header>
 
-        {/* Filter Bar */}
-        <Card padding={`${spacing["4xl"]}px ${spacing["5xl"]}px`} style={{ marginBottom: spacing["6xl"] }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: 20, alignItems: 'center' }}>
-            <div>
+        {/* Filter Bar: data → projekt → szukaj zadań */}
+        <Card
+          padding={isMobileLayout ? `${spacing["2xl"]}px ${spacing.md}px` : `${spacing["4xl"]}px ${spacing["5xl"]}px`}
+          style={{ marginBottom: isMobileLayout ? spacing["4xl"] : spacing["6xl"] }}
+        >
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobileLayout ? '1fr' : 'auto 1fr 1fr',
+            gap: isMobileLayout ? 16 : 20,
+            alignItems: isMobileLayout ? 'stretch' : 'center',
+          }}
+          >
+            <div style={{ minWidth: 0 }}>
               <Label style={{ marginBottom: 6 }}>{t('common:date')}</Label>
               <DatePicker value={selectedDate} onChange={setSelectedDate} />
             </div>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <Label style={{ marginBottom: 6 }}>{t('event:project_label')}</Label>
               <SelectDropdown
                 value={selectedProject ? projects.find((p: any) => p.id === selectedProject)?.title || '' : ''}
@@ -599,49 +743,98 @@ const UserHoursPage: React.FC = () => {
                 placeholder={t('event:select_project')}
               />
             </div>
-            <div>
-              <Label style={{ marginBottom: 6 }}>{t('event:search_tasks')}</Label>
-              <div style={{
-                display: 'flex', alignItems: 'center',
-                background: colors.bgInput, border: `1px solid ${colors.borderInput}`,
-                borderRadius: radii.xl, overflow: 'hidden',
-              }}>
-                <Search style={{ paddingLeft: 12, width: 16, height: 16, color: colors.textFaint, flexShrink: 0 }} />
-                <input
-                  type="text"
-                  value={taskSearch}
-                  onChange={e => setTaskSearch(e.target.value)}
-                  placeholder={t('event:search_tasks_placeholder', { defaultValue: 'np. piasek, krawężniki...' })}
-                  style={{
-                    flex: 1, padding: '12px 14px', background: 'transparent', border: 'none',
-                    color: colors.textSecondary, fontSize: fontSizes.md, fontFamily: fonts.body, outline: 'none',
-                  }}
-                />
-                {taskSearch && (
-                  <button
-                    onClick={() => setTaskSearch('')}
-                    style={{ padding: 8, background: 'transparent', color: colors.textFaint, border: 'none', cursor: 'pointer', fontSize: 14 }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textMuted; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textFaint; }}
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            </div>
+            <div style={{ minWidth: 0 }}>{renderTaskSearchBar()}</div>
           </div>
         </Card>
 
-        {/* Two-column layout */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        {/* Tasks + entries: single column on mobile */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobileLayout ? '1fr' : '1fr 1fr',
+          gap: isMobileLayout ? spacing["6xl"] : 20,
+        }}
+        >
           {/* Left column: Tasks + Additional Tasks */}
           <div style={{ minWidth: 0 }}>
             <SectionHeader title={t('event:tasks_label')} style={{ marginBottom: spacing.lg }} />
 
-            {isTasksLoading || isFoldersLoading ? (
+            {isTasksLoading || isFoldersLoading || (selectedProject && isDayPlanLoading) ? (
               <div style={{ textAlign: 'center', color: colors.textDim, padding: spacing["6xl"], fontSize: fontSizes.sm }}>{t('event:loading_tasks')}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+                {dayPlanTasksForList.length > 0 ? (
+                  <div style={{ borderRadius: radii["2xl"], overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        background: colors.bgCard,
+                        border: `1px solid ${colors.accentBlueBorder}`,
+                        borderRadius: radii["2xl"],
+                        padding: '12px 16px',
+                        cursor: 'pointer',
+                        borderLeft: `3px solid ${colors.accentBlue}`,
+                        transition: transitions.fast,
+                      }}
+                      onClick={() => toggleFolder(DAY_PLAN_FOLDER_ID)}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: spacing.md,
+                          fontSize: fontSizes.md,
+                          fontWeight: fontWeights.extrabold,
+                          fontFamily: fonts.display,
+                          color: colors.accentBlue,
+                        }}
+                      >
+                        <ChevronRight
+                          style={{
+                            width: 18,
+                            height: 18,
+                            color: colors.accentBlue,
+                            flexShrink: 0,
+                            transform: expandedFolders.includes(DAY_PLAN_FOLDER_ID) ? 'rotate(90deg)' : 'none',
+                            transition: 'transform 0.3s',
+                          }}
+                        />
+                        <span>{t('event:today_required_tasks')}</span>
+                      </div>
+                      <span
+                        style={{
+                          background: colors.accentBlue,
+                          color: '#fff',
+                          fontSize: fontSizes.sm,
+                          fontWeight: fontWeights.bold,
+                          padding: '2px 8px',
+                          borderRadius: radii.full,
+                          minWidth: 22,
+                          textAlign: 'center',
+                        }}
+                      >
+                        {dayPlanTasksForList.length}
+                      </span>
+                    </button>
+                    {expandedFolders.includes(DAY_PLAN_FOLDER_ID) ? (
+                      <div
+                        style={{
+                          padding: spacing.sm,
+                          background: colors.bgCard,
+                          border: `1px solid ${colors.borderDefault}`,
+                          borderTop: 'none',
+                          borderRadius: `0 0 ${radii["2xl"]}px ${radii["2xl"]}px`,
+                        }}
+                      >
+                        {renderFolderTasks(dayPlanTasksForList)}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 {folders.map((folder: any) => (
                   (!taskSearch || tasksByFolder[folder.id]?.length > 0) ? (
                     <div key={folder.id} style={{ borderRadius: radii["2xl"], overflow: 'hidden' }}>
@@ -701,7 +894,10 @@ const UserHoursPage: React.FC = () => {
                 {taskSearch && Object.values(tasksByFolder).every(t => t.length === 0) && (
                   <EmptyState icon="🔍" title={t('event:no_tasks_found_matching', { defaultValue: `Nie znaleziono zadań dla "${taskSearch}"` }).replace('{query}', taskSearch)} style={{ background: colors.bgCard, border: `1px solid ${colors.borderDefault}` }} />
                 )}
-                {!taskSearch && folders.length === 0 && (tasksByFolder['unorganized'] || []).length === 0 && (
+                {!taskSearch &&
+                  folders.length === 0 &&
+                  (tasksByFolder['unorganized'] || []).length === 0 &&
+                  dayPlanTasksForList.length === 0 && (
                   <EmptyState icon="📋" title={t('event:no_tasks_for_project')} style={{ background: colors.bgCard, border: `1px solid ${colors.borderDefault}` }} />
                 )}
               </div>
@@ -709,18 +905,37 @@ const UserHoursPage: React.FC = () => {
 
             <div style={{ marginTop: spacing["6xl"] }}>
               <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                display: 'flex',
+                flexDirection: isMobileLayout ? 'column' : 'row',
+                justifyContent: 'space-between',
+                alignItems: isMobileLayout ? 'stretch' : 'center',
+                gap: isMobileLayout ? spacing.md : 0,
                 background: colors.bgCard, border: `1px solid ${colors.borderDefault}`,
-                borderRadius: radii["2xl"], padding: '12px 16px', marginBottom: spacing.sm,
+                borderRadius: radii["2xl"], padding: isMobileLayout ? '12px 12px' : '12px 16px', marginBottom: isMobileLayout ? spacing.md : spacing.sm,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm, fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary }}>
-                  <Plus style={{ width: 16, height: 16 }} />
+                  <Plus style={{ width: 16, height: 16, flexShrink: 0 }} />
                   <span>+ {t('event:additional_tasks')}</span>
                 </div>
-                <Button variant="accent" color={colors.accentBlue} icon="+" onClick={() => setShowTaskModal(true)} disabled={!selectedProject}>
+                {!isMobileLayout ? (
+                  <Button variant="accent" color={colors.accentBlue} icon="+" onClick={() => setShowTaskModal(true)} disabled={!selectedProject}>
+                    {t('event:add_task')}
+                  </Button>
+                ) : null}
+              </div>
+              {isMobileLayout ? (
+                <Button
+                  variant="accent"
+                  fullWidth
+                  color={colors.accentBlue}
+                  icon="+"
+                  onClick={() => setShowTaskModal(true)}
+                  disabled={!selectedProject}
+                  style={{ marginBottom: spacing.md }}
+                >
                   {t('event:add_task')}
                 </Button>
-              </div>
+              ) : null}
               {isAdditionalTasksLoading ? (
                 <div style={{ textAlign: 'center', color: colors.textDim, padding: spacing["6xl"], fontSize: fontSizes.sm }}>{t('event:loading_additional_tasks')}</div>
               ) : (
@@ -729,13 +944,17 @@ const UserHoursPage: React.FC = () => {
                     <div
                       key={task.id}
                       style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '12px 16px', background: colors.bgCardInner, border: `1px solid ${colors.borderDefault}`,
-                        borderRadius: radii.xl, gap: spacing.lg, transition: transitions.fast,
+                        display: 'flex',
+                        flexDirection: isMobileLayout ? 'column' : 'row',
+                        alignItems: isMobileLayout ? 'stretch' : 'center',
+                        justifyContent: 'space-between',
+                        padding: isMobileLayout ? '12px 12px' : '12px 16px',
+                        background: colors.bgCardInner, border: `1px solid ${colors.borderDefault}`,
+                        borderRadius: radii.xl, gap: isMobileLayout ? spacing.md : spacing.lg, transition: transitions.fast,
                       }}
                     >
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary }}>{translateTaskName(task.description ?? '', t)}</div>
+                        <div style={{ fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary, wordBreak: isMobileLayout ? 'break-word' : undefined, overflowWrap: isMobileLayout ? 'anywhere' : undefined }}>{translateTaskName(task.description ?? '', t)}</div>
                         <div style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, marginTop: 2 }}>
                           {task.quantity || 0} &middot; {task.hours_spent || 0}h / {task.hours_needed || 0}h
                         </div>
@@ -745,8 +964,19 @@ const UserHoursPage: React.FC = () => {
                           </div>
                         )}
                       </div>
-                      <Button variant="primary" onClick={() => { setSelectedAdditionalTask(task); setProgressDetails({ progress: '', hoursWorked: '', notes: '' }); setShowAdditionalTaskProgressModal(true); }} style={{ fontSize: fontSizes.base, padding: '8px 16px' }}>
-                        {t('event:add_task', { defaultValue: 'Dodaj Zadanie' })}
+                      <Button
+                        variant="primary"
+                        onClick={() => { setSelectedAdditionalTask(task); setProgressDetails({ progress: '', hoursWorked: '', notes: '' }); setShowAdditionalTaskProgressModal(true); }}
+                        style={{
+                          fontSize: fontSizes.base,
+                          padding: '10px 16px',
+                          width: isMobileLayout ? '100%' : 'auto',
+                          alignSelf: isMobileLayout ? 'stretch' : 'center',
+                          whiteSpace: 'normal',
+                          textAlign: 'center',
+                        }}
+                      >
+                        {t('event:log_hours_entry', { defaultValue: 'Wpisz godziny' })}
                       </Button>
                     </div>
                   ))}
@@ -770,31 +1000,70 @@ const UserHoursPage: React.FC = () => {
                   <div
                     key={`${entry.type}-${entry.id}`}
                     style={{
-                      display: 'flex', alignItems: 'center', gap: spacing.lg,
-                      padding: '12px 16px', background: colors.bgCard, border: `1px solid ${colors.borderDefault}`,
+                      display: 'flex',
+                      flexDirection: isMobileLayout ? 'column' : 'row',
+                      alignItems: isMobileLayout ? 'stretch' : 'center',
+                      gap: isMobileLayout ? spacing.md : spacing.lg,
+                      padding: isMobileLayout ? '12px 12px' : '12px 16px', background: colors.bgCard, border: `1px solid ${colors.borderDefault}`,
                       borderRadius: radii.xl,
                     }}
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{translateTaskName(entry.taskName, t)}</p>
-                      <div style={{ display: 'flex', gap: spacing.sm, alignItems: 'center', fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, marginTop: 2 }}>
-                        <span>{entry.meta}</span>
-                        <span>&middot;</span>
-                        <span>{entry.time}</span>
-                      </div>
-                    </div>
-                    <span style={{ background: 'rgba(34,197,94,0.15)', color: colors.greenLight, fontSize: fontSizes.sm, fontWeight: fontWeights.bold, padding: '2px 8px', borderRadius: radii.md, whiteSpace: 'nowrap' }}>
-                      {entry.hours}h
-                    </span>
-                    {isToday && (
-                      <button
-                        onClick={() => setDeleteTarget({ id: entry.id, type: entry.type, name: entry.taskName, taskId: entry.type === 'additional' ? (entry as any).taskId : undefined })}
-                        style={{ width: 28, height: 28, borderRadius: radii.md, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', color: colors.textFaint, border: 'none', cursor: 'pointer', flexShrink: 0 }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.red; }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textFaint; }}
-                      >
-                        <Trash2 style={{ width: 16, height: 16 }} />
-                      </button>
+                    {isMobileLayout ? (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.md }}>
+                          <p style={{
+                            fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary, margin: 0,
+                            wordBreak: 'break-word', overflowWrap: 'anywhere', lineHeight: 1.35, flex: 1, minWidth: 0,
+                          }}
+                          >
+                            {translateTaskName(entry.taskName, t)}
+                          </p>
+                          {isToday ? (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget({ id: entry.id, type: entry.type, name: entry.taskName, taskId: entry.type === 'additional' ? (entry as any).taskId : undefined })}
+                              style={{ width: 28, height: 28, borderRadius: radii.md, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', color: colors.textFaint, border: 'none', cursor: 'pointer', flexShrink: 0 }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.red; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textFaint; }}
+                            >
+                              <Trash2 style={{ width: 16, height: 16 }} />
+                            </button>
+                          ) : null}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm }}>
+                          <span style={{ fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body }}>
+                            {entry.meta} &middot; {entry.time}
+                          </span>
+                          <span style={{ background: 'rgba(34,197,94,0.15)', color: colors.greenLight, fontSize: fontSizes.sm, fontWeight: fontWeights.bold, padding: '4px 10px', borderRadius: radii.md, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                            {entry.hours}h
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: fontSizes.md, fontWeight: fontWeights.semibold, fontFamily: fonts.display, color: colors.textSecondary, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{translateTaskName(entry.taskName, t)}</p>
+                          <div style={{ display: 'flex', gap: spacing.sm, alignItems: 'center', fontSize: fontSizes.base, color: colors.textDim, fontFamily: fonts.body, marginTop: 2 }}>
+                            <span>{entry.meta}</span>
+                            <span>&middot;</span>
+                            <span>{entry.time}</span>
+                          </div>
+                        </div>
+                        <span style={{ background: 'rgba(34,197,94,0.15)', color: colors.greenLight, fontSize: fontSizes.sm, fontWeight: fontWeights.bold, padding: '2px 8px', borderRadius: radii.md, whiteSpace: 'nowrap' }}>
+                          {entry.hours}h
+                        </span>
+                        {isToday && (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget({ id: entry.id, type: entry.type, name: entry.taskName, taskId: entry.type === 'additional' ? (entry as any).taskId : undefined })}
+                            style={{ width: 28, height: 28, borderRadius: radii.md, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', color: colors.textFaint, border: 'none', cursor: 'pointer', flexShrink: 0 }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = colors.red; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = colors.textFaint; }}
+                          >
+                            <Trash2 style={{ width: 16, height: 16 }} />
+                          </button>
+                        )}
+                      </>
                     )}
                   </div>
                 ))}
@@ -939,7 +1208,13 @@ const UserHoursPage: React.FC = () => {
       </Modal>
 
       {/* Add Additional Task Modal */}
-      <Modal open={showTaskModal} onClose={() => setShowTaskModal(false)} title={t('event:add_additional_task')} width={560}>
+      <Modal
+        open={showTaskModal}
+        onClose={() => setShowTaskModal(false)}
+        title={t('event:add_additional_task')}
+        width={560}
+        bodyClassName={isMobileLayout ? "modal-body-mobile-tight" : undefined}
+      >
           <div style={{ display: 'flex', flexDirection: 'column', gap: spacing["6xl"] }}>
             <div>
               <Label>{t('event:task_type')}</Label>
@@ -963,7 +1238,7 @@ const UserHoursPage: React.FC = () => {
               <Label>{t('event:task_description')}</Label>
               <Textarea value={taskDetails.description} onChange={v => setTaskDetails({ ...taskDetails, description: v })} rows={3} placeholder={t('event:describe_task')} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing["6xl"] }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobileLayout ? '1fr' : '1fr 1fr', gap: spacing["6xl"] }}>
               <div>
                 <Label>{t('event:start_date')}</Label>
                 <DatePicker value={taskDetails.start_date} onChange={v => setTaskDetails({ ...taskDetails, start_date: v })} />
@@ -996,8 +1271,8 @@ const UserHoursPage: React.FC = () => {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.lg }}>
                 {taskDetails.materials.map((material: any, index: number) => (
-                  <div key={index} style={{ display: 'flex', gap: spacing.sm, alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1 }}>
+                  isMobileLayout ? (
+                    <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
                       <select
                         value={material.material}
                         onChange={(e) => {
@@ -1012,17 +1287,47 @@ const UserHoursPage: React.FC = () => {
                           <option key={template.id} value={template.name}>{translateMaterialName(template.name, t)} ({template.unit})</option>
                         ))}
                       </select>
+                      <div style={{ display: 'flex', gap: spacing.sm, alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <TextInput value={material.quantity} onChange={v => handleMaterialChange(index, 'quantity', v)} placeholder={t('event:qty_placeholder')} style={{ marginBottom: 0 }} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <TextInput value={material.unit} onChange={v => handleMaterialChange(index, 'unit', v)} placeholder={t('event:unit_label')} style={{ marginBottom: 0 }} />
+                        </div>
+                        <button type="button" onClick={() => handleRemoveMaterial(index)} style={{ padding: spacing.sm, color: colors.red, background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, alignSelf: 'center' }} aria-label={t('event:delete_action', { defaultValue: 'Remove' })}>
+                          <X style={{ width: 20, height: 20 }} />
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ width: 96 }}>
-                      <TextInput value={material.quantity} onChange={v => handleMaterialChange(index, 'quantity', v)} placeholder={t('event:qty_placeholder')} style={{ marginBottom: 0 }} />
+                  ) : (
+                    <div key={index} style={{ display: 'flex', gap: spacing.sm, alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1 }}>
+                        <select
+                          value={material.material}
+                          onChange={(e) => {
+                            if (e.target.value === 'other') { setSelectedMaterialIndex(index); setShowUnspecifiedMaterialModal(true); return; }
+                            handleMaterialChange(index, 'material', e.target.value);
+                          }}
+                          style={{ width: '100%', padding: `${spacing.xl}px ${spacing["2xl"]}px`, background: colors.bgInput, border: `1px solid ${colors.borderInput}`, borderRadius: radii.xl, color: colors.textSecondary, fontSize: fontSizes.md, fontFamily: fonts.body }}
+                        >
+                          <option value="">{t('event:select_material')}</option>
+                          <option value="other">{t('event:other_custom_material')}</option>
+                          {materialTemplates.map((template: any) => (
+                            <option key={template.id} value={template.name}>{translateMaterialName(template.name, t)} ({template.unit})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ width: 96 }}>
+                        <TextInput value={material.quantity} onChange={v => handleMaterialChange(index, 'quantity', v)} placeholder={t('event:qty_placeholder')} style={{ marginBottom: 0 }} />
+                      </div>
+                      <div style={{ width: 96 }}>
+                        <TextInput value={material.unit} onChange={v => handleMaterialChange(index, 'unit', v)} placeholder={t('event:unit_label')} style={{ marginBottom: 0 }} />
+                      </div>
+                      <button type="button" onClick={() => handleRemoveMaterial(index)} style={{ padding: spacing.sm, color: colors.red, background: 'none', border: 'none', cursor: 'pointer', marginTop: spacing.xl }}>
+                        <X style={{ width: 20, height: 20 }} />
+                      </button>
                     </div>
-                    <div style={{ width: 96 }}>
-                      <TextInput value={material.unit} onChange={v => handleMaterialChange(index, 'unit', v)} placeholder={t('event:unit_label')} style={{ marginBottom: 0 }} />
-                    </div>
-                    <button type="button" onClick={() => handleRemoveMaterial(index)} style={{ padding: spacing.sm, color: colors.red, background: 'none', border: 'none', cursor: 'pointer', marginTop: spacing.xl }}>
-                      <X style={{ width: 20, height: 20 }} />
-                    </button>
-                  </div>
+                  )
                 ))}
                 {taskDetails.materials.length === 0 && (
                   <div style={{ textAlign: 'center', padding: spacing["6xl"], fontSize: fontSizes.sm, color: colors.textDim, background: colors.bgCard, borderRadius: radii.lg, border: `1px dashed ${colors.borderDefault}` }}>

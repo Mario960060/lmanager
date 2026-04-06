@@ -10,7 +10,7 @@ import BackButton from '../components/BackButton';
 import MainTaskModal from './MainTaskModal';
 import CalculatorModal from './CalculatorModal';
 import UnspecifiedMaterialModal from '../components/UnspecifiedMaterialModal';
-import { getMaterialCapacity } from '../constants/materialCapacity';
+import { getMaterialCapacity, DEFAULT_CARRIER_SPEED_M_PER_H } from '../constants/materialCapacity';
 import { translateTaskName, translateMaterialName, translateMaterialDescription, translateUnit } from '../lib/translationMap';
 import { colors, fontSizes, fontWeights, spacing } from '../themes/designTokens';
 import { Card, Button } from '../themes/uiComponents';
@@ -121,7 +121,7 @@ const ProjectCreating = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const companyId = useAuthStore(state => state.getCompanyId());
-  const { t } = useTranslation(['project', 'form', 'utilities', 'common', 'nav', 'calculator', 'material']);
+  const { t } = useTranslation(['project', 'form', 'utilities', 'common', 'nav', 'calculator', 'material', 'units']);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState<FormData>({
@@ -357,6 +357,7 @@ const ProjectCreating = () => {
       label: t('project:wall_finish_calc'),
       subTypes: [
         { type: 'brick', label: t('nav:brick_wall_calculator') },
+        { type: 'double_wall', label: t('nav:double_wall_calculator') },
         { type: 'block4', label: t('nav:block4_wall_calculator') },
         { type: 'block7', label: t('nav:block7_wall_calculator') },
         { type: 'sleeper', label: t('nav:sleeper_wall_calculator') }
@@ -442,7 +443,8 @@ const ProjectCreating = () => {
       type: 'deck',
       label: t('nav:deck_calculator'),
       subTypes: [
-        { type: 'default', label: t('nav:decking_standard') }
+        { type: 'default', label: t('nav:decking_standard') },
+        { type: 'composite_deck', label: t('nav:composite_decking') },
       ]
     }
   ].sort((a, b) => a.label.localeCompare(b.label))
@@ -638,7 +640,7 @@ const ProjectCreating = () => {
     carrierSpeed: number
   ) => {
     // Use carrier speed from database (not hardcoded)
-    const speed = carrierSpeed || 4000; // Fallback to 4000 m/h if not set
+    const speed = carrierSpeed || DEFAULT_CARRIER_SPEED_M_PER_H; // Fallback if not set (1t baseline m/h)
     
     // Get material capacity
     const materialCapacityTons = getMaterialCapacity('soil', carrierSize);
@@ -1075,7 +1077,7 @@ const ProjectCreating = () => {
             const distance = parseFloat(soilTransportDistance) || 0;
             
             if (distance > 0) {
-              const carrierSpeed = selectedCarrier.speed_m_per_hour || 4000;
+              const carrierSpeed = selectedCarrier.speed_m_per_hour || DEFAULT_CARRIER_SPEED_M_PER_H;
             
             const transportHours = calculateTransportTimeWithDistance(
               selectedCarrier["size (in tones)"] || 0,
@@ -1155,7 +1157,7 @@ const ProjectCreating = () => {
             const distance = parseFloat(tape1TransportDistance) || 0;
             
             if (distance > 0) {
-              const carrierSpeed = selectedCarrier.speed_m_per_hour || 4000;
+              const carrierSpeed = selectedCarrier.speed_m_per_hour || DEFAULT_CARRIER_SPEED_M_PER_H;
             
             const transportHours = calculateTransportTimeWithDistance(
               selectedCarrier["size (in tones)"] || 0,
@@ -1779,7 +1781,7 @@ const ProjectCreating = () => {
                     <div style={{ border: `1px solid ${colors.borderDefault}`, borderRadius: radii.lg, overflow: 'hidden' }}>
                       {task.results.taskBreakdown?.map((breakdown, i) => (
                         <div key={i} className="flex justify-between" style={{ padding: `${spacing.lg}px ${spacing['4xl']}px`, background: i % 2 === 1 ? colors.bgTableRowAlt : undefined, borderBottom: i < (task.results.taskBreakdown?.length ?? 0) - 1 ? `1px solid ${colors.borderLight}` : 'none', color: colors.textSecondary }}>
-                          <span>{breakdown.name || breakdown.task}</span>
+                          <span>{translateTaskName(breakdown.name || breakdown.task, t)}</span>
                           <span>{breakdown.hours.toFixed(2)} {t('common:hrs_abbr')}</span>
                         </div>
                       ))}
@@ -1915,7 +1917,7 @@ const ProjectCreating = () => {
                             <label className="block text-sm font-medium" style={{ color: colors.textSecondary }}>{t('project:unit')}</label>
                             <input
                               type="text"
-                              value={task.unit}
+                              value={translateUnit(task.unit, t)}
                               className="mt-1 block w-full rounded-md shadow-sm"
                               style={{ borderColor: colors.borderDefault }}
                               readOnly
@@ -2145,7 +2147,7 @@ className="p-2 transition-colors"
                       </div>
                       <div>
                         <div style={{ color: colors.textPrimary }}>{carrier.name}</div>
-                        <div className="text-sm" style={{ color: colors.textSubtle }}>({carrier["size (in tones)"]} {t('project:tons')}, {carrier.speed_m_per_hour || 4000} {t('project:speed')})</div>
+                        <div className="text-sm" style={{ color: colors.textSubtle }}>({carrier["size (in tones)"]} {t('project:tons')}, {carrier.speed_m_per_hour || DEFAULT_CARRIER_SPEED_M_PER_H} {t('project:speed')})</div>
                       </div>
                     </div>
                   ))
@@ -2544,7 +2546,7 @@ className="p-2 transition-colors"
       )}
 
       {showNamePrompt && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-0 md:p-4">
           <div className="p-6 rounded-lg shadow-lg max-w-md w-full" style={{ backgroundColor: colors.bgCard }}>
             <h3 className="text-lg font-semibold mb-4">{t('project:enter_task_name')}</h3>
             <input
@@ -2592,7 +2594,7 @@ className="p-2 transition-colors"
 
       {/* Add Equipment to Project Modal */}
       {showAddEquipmentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
           <div className="rounded-lg max-w-md w-full p-6 space-y-4" style={{ backgroundColor: colors.bgCard }}>
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-semibold">

@@ -107,13 +107,16 @@ describe("FENCE_CALCULATOR_GROUPS", () => {
 // WALL_CALCULATOR_GROUPS
 // ══════════════════════════════════════════════════════════════
 describe("WALL_CALCULATOR_GROUPS", () => {
-  it("has 4 wall sub-types", () => {
+  it("has 5 wall sub-types including double_wall (cavity / double-skin)", () => {
     const wall = WALL_CALCULATOR_GROUPS[0];
     expect(wall.type).toBe("wall");
-    expect(wall.subTypes).toHaveLength(4);
+    expect(wall.subTypes).toHaveLength(5);
     expect(wall.subTypes.map(s => s.type)).toEqual([
-      "brick", "block4", "block7", "sleeper",
+      "brick", "double_wall", "block4", "block7", "sleeper",
     ]);
+    expect(wall.subTypes.find(s => s.type === "double_wall")?.label).toBe(
+      "calc_subtype_double_wall"
+    );
   });
 });
 

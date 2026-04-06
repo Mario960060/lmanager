@@ -3,10 +3,11 @@ import { useQuery, UseQueryResult } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../lib/store';
-import { carrierSpeeds, getMaterialCapacity } from '../../constants/materialCapacity';
+import { carrierSpeeds, getMaterialCapacity, DEFAULT_CARRIER_SPEED_M_PER_H } from '../../constants/materialCapacity';
 import { translateTaskName, translateUnit, translateMaterialName } from '../../lib/translationMap';
 import { colors, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
 import { Button, Checkbox, TextInput } from '../../themes/uiComponents';
+import { countSlabsTrapezoidColumnwise, countTrapezoidWholeVsCut } from '../../lib/tileWallSlabCount';
 
 interface TaskTemplate {
   id: string;
@@ -36,7 +37,7 @@ interface TileInstallationCalculatorProps {
   /** When Wall Calculate is clicked, parent increments this to trigger tile calc */
   calculateTrigger?: number;
   /** Per-segment dimensions for slab count per wycinka */
-  initialSegmentDimensions?: { length: number; height: number }[];
+  initialSegmentDimensions?: { length: number; height: number; startH?: number; endH?: number }[];
 }
 
 interface SlabDimension {
@@ -46,7 +47,12 @@ interface SlabDimension {
 }
 
 interface SlabCuttingBreakdown {
+  /** Pieces mounted whole (no cut to size on site). */
   fullSlabs: number;
+  /** Pieces that are cut from stock slabs (docinki). */
+  installedCutPieces: number;
+  /** fullSlabs + installedCutPieces (elements on the wall). */
+  totalInstalledPieces: number;
   cutSlabs: {
     width: number;
     height: number;
@@ -86,11 +92,13 @@ const SLAB_DIMENSIONS: SlabDimension[] = [
   { width: 30, height: 30, label: '30cm x 30cm' },
 ];
 
-const GAP_OPTIONS = [2, 3, 4, 5];
-const ADHESIVE_THICKNESS = [
-  { value: 0.5, consumption: 6 },
-  { value: 1, consumption: 12 }
-];
+const GAP_OPTIONS = [2, 3, 4, 5, 10, 20];
+
+/** kg/m²; 0.5 cm → 6, 1 cm → 12 (linear in thickness, same as TileInstallationModal) */
+function adhesiveConsumptionKgPerM2(thicknessCm: number): number {
+  const t = Math.max(0.1, Math.min(5, thicknessCm));
+  return 12 * t;
+}
 
 const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({ 
   onResultsChange,
@@ -119,7 +127,9 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
   const [wallHeight, setWallHeight] = useState<string>(() =>
     fromWallSegments && initialWallHeightM != null ? initialWallHeightM.toFixed(3) : ''
   );
-  const defH = parseFloat(wallHeight) || 1;
+  /** Standalone single wall: height at start vs end of length (same logic as one segment with slope). */
+  const [singleWallStartH, setSingleWallStartH] = useState('');
+  const [singleWallEndH, setSingleWallEndH] = useState('');
   const [wallConfigMode, setWallConfigMode] = useState<'single' | 'segments'>('single');
   const [segmentLengthsLocal, setSegmentLengthsLocal] = useState<number[]>([]);
   const [segmentHeightsLocal, setSegmentHeightsLocal] = useState<Array<{ startH: number; endH: number }>>([]);
@@ -128,7 +138,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
   const [selectedGap, setSelectedGap] = useState<number>(GAP_OPTIONS[0]);
   const [lengthCutType, setLengthCutType] = useState<'1cut' | '2cuts'>('1cut');
   const [heightCutType, setHeightCutType] = useState<'1cut' | '2cuts'>('1cut');
-  const [adhesiveThickness, setAdhesiveThickness] = useState<number>(ADHESIVE_THICKNESS[0].value);
+  const [adhesiveThicknessCm, setAdhesiveThicknessCm] = useState<string>('0.5');
   const [results, setResults] = useState<{
     totalSlabs: number;
     totalCuts: number;
@@ -138,6 +148,8 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     materials: { name: string; amount: number; unit: string; price_per_unit: number | null; total_price: number | null }[];
     labor: number;
     slabsPerSegment?: number[];
+    /** Per wall segment: whole vs cut (skos / prostokąt). */
+    segmentSlabSplit?: { whole: number; cut: number; total: number }[];
   } | null>(null);
   const [slabType, setSlabType] = useState<'porcelain' | 'sandstones' | 'granite'>('porcelain');
   const [selectedGroutingId, setSelectedGroutingId] = useState<string>('');
@@ -145,7 +157,19 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
   const [calculateTransport, setCalculateTransport] = useState<boolean>(false);
   const [selectedTransportCarrier, setSelectedTransportCarrier] = useState<DiggingEquipment | null>(null);
   const [carriersLocal, setCarriersLocal] = useState<DiggingEquipment[]>([]);
+  const [bulkSetAllHeightsInput, setBulkSetAllHeightsInput] = useState('');
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  const defH = (() => {
+    if (!fromWallSegments && wallConfigMode === 'single') {
+      const a = parseFloat(String(singleWallStartH).replace(',', '.'));
+      const b = parseFloat(String(singleWallEndH).replace(',', '.'));
+      if (Number.isFinite(a) && a > 0 && Number.isFinite(b) && b > 0) return (a + b) / 2;
+      if (Number.isFinite(a) && a > 0) return a;
+      if (Number.isFinite(b) && b > 0) return b;
+    }
+    return parseFloat(wallHeight) || 1;
+  })();
 
   const effectiveCalculateTransport = isInProjectCreating ? (propCalculateTransport ?? false) : calculateTransport;
   const effectiveSelectedTransportCarrier = isInProjectCreating ? (propSelectedTransportCarrier ?? null) : selectedTransportCarrier;
@@ -178,9 +202,18 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
 
   const addSegment = () => {
     const len = segmentLengthsLocal.length > 0 ? segmentLengthsLocal[segmentLengthsLocal.length - 1] : 1;
-    const h = segmentHeightsLocal.length > 0 ? (segmentHeightsLocal[segmentHeightsLocal.length - 1]?.startH ?? defH) : defH;
     setSegmentLengthsLocal((prev) => [...prev, len]);
-    setSegmentHeightsLocal((prev) => [...prev, { startH: h, endH: h }]);
+    if (segmentHeightsLocal.length > 0) {
+      const last = segmentHeightsLocal[segmentHeightsLocal.length - 1];
+      const h = last?.startH ?? defH;
+      setSegmentHeightsLocal((prev) => [...prev, { startH: h, endH: last?.endH ?? h }]);
+    } else {
+      const pa = parseFloat(String(singleWallStartH).replace(',', '.'));
+      const pb = parseFloat(String(singleWallEndH).replace(',', '.'));
+      const s0 = Number.isFinite(pa) && pa > 0 ? pa : defH;
+      const s1 = Number.isFinite(pb) && pb > 0 ? pb : defH;
+      setSegmentHeightsLocal((prev) => [...prev, { startH: s0, endH: s1 }]);
+    }
     setWallConfigMode('segments');
   };
   const removeSegment = (idx: number) => {
@@ -257,7 +290,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     transportDistanceMeters: number
   ) => {
     const carrierSpeedData = carrierSpeeds.find(c => c.size === carrierSize);
-    const carrierSpeed = carrierSpeedData?.speed || 4000;
+    const carrierSpeed = carrierSpeedData?.speed || DEFAULT_CARRIER_SPEED_M_PER_H;
     const materialCapacityUnits = getMaterialCapacity(materialType, carrierSize);
     const trips = Math.ceil(materialAmount / materialCapacityUnits);
     const timePerTrip = (transportDistanceMeters * 2) / carrierSpeed;
@@ -314,7 +347,9 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     let wallHeightCm: number;
     let wallArea: number;
 
-    let segmentDimensionsForCalc: { length: number; height: number }[] | undefined;
+    let segmentDimensionsForCalc:
+      | { length: number; height: number; startH?: number; endH?: number }[]
+      | undefined;
     if (fromWallSegments && initialAreaM2 != null && initialAreaM2 > 0) {
       wallArea = initialAreaM2;
       const len = initialWallLengthM ?? Math.sqrt(initialAreaM2);
@@ -330,17 +365,35 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       segmentDimensionsForCalc = segmentLengthsLocal.map((len, i) => {
         const sh = segmentHeightsLocal[i];
         const avgH = sh ? (sh.startH + sh.endH) / 2 : defH;
-        return { length: len, height: avgH };
+        const s0 = sh?.startH ?? avgH;
+        const e0 = sh?.endH ?? avgH;
+        return { length: len, height: avgH, startH: s0, endH: e0 };
       });
       wallArea = segmentDimensionsForCalc.reduce((sum, s) => sum + s.length * s.height, 0);
       const totalLen = segmentDimensionsForCalc.reduce((sum, s) => sum + s.length, 0);
       wallLengthCm = totalLen * 100;
       wallHeightCm = totalLen > 0 ? (wallArea / totalLen) * 100 : defH * 100;
     } else {
-      if (!wallLength || !wallHeight) return;
-      wallLengthCm = parseFloat(wallLength) * 100;
-      wallHeightCm = parseFloat(wallHeight) * 100;
-      wallArea = (wallLengthCm * wallHeightCm) / 10000;
+      if (!wallLength) return;
+      const lenM = parseFloat(wallLength);
+      if (!Number.isFinite(lenM) || lenM <= 0) return;
+      if (!fromWallSegments && wallConfigMode === 'single') {
+        const hFallback = parseFloat(String(wallHeight).replace(',', '.')) || 1;
+        const s0 = parseFloat(String(singleWallStartH).replace(',', '.'));
+        const s1 = parseFloat(String(singleWallEndH).replace(',', '.'));
+        const h0 = Number.isFinite(s0) && s0 > 0 ? s0 : hFallback;
+        const h1 = Number.isFinite(s1) && s1 > 0 ? s1 : hFallback;
+        const avgH = (h0 + h1) / 2;
+        wallLengthCm = lenM * 100;
+        wallHeightCm = avgH * 100;
+        wallArea = lenM * avgH;
+        segmentDimensionsForCalc = [{ length: lenM, height: avgH, startH: h0, endH: h1 }];
+      } else {
+        if (!wallHeight) return;
+        wallLengthCm = lenM * 100;
+        wallHeightCm = parseFloat(wallHeight) * 100;
+        wallArea = (wallLengthCm * wallHeightCm) / 10000;
+      }
     }
     const gapCm = selectedGap / 10;
 
@@ -348,144 +401,229 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     const slabWidth = slabOrientation === 'long' ? selectedSlab.width : selectedSlab.height;
     const slabHeight = slabOrientation === 'long' ? selectedSlab.height : selectedSlab.width;
 
-    // Compute slabs per segment when we have segment dimensions (for materials/total)
-    const segDims = segmentDimensionsForCalc ?? initialSegmentDimensions;
-    const slabsPerSegment: number[] | undefined = segDims && segDims.length > 0
-      ? segDims.map(({ length, height }) => {
-          const lenCm = length * 100;
-          const hCm = height * 100;
-          const sL = Math.ceil((lenCm + gapCm) / (slabWidth + gapCm));
-          const sH = Math.ceil((hCm + gapCm) / (slabHeight + gapCm));
-          return sL * sH;
-        })
-      : undefined;
+    type SegmentTileDim = { length: number; height: number; startH: number; endH: number };
+    const segDimsRaw = segmentDimensionsForCalc ?? initialSegmentDimensions;
+    const segDimsNorm: SegmentTileDim[] | undefined =
+      segDimsRaw && segDimsRaw.length > 0
+        ? segDimsRaw.map((s) => ({
+            length: s.length,
+            height: s.height,
+            startH: s.startH ?? s.height,
+            endH: s.endH ?? s.height,
+          }))
+        : undefined;
 
-    // Calculate slabs needed for length and height
-    const slabsInLength = Math.floor((wallLengthCm + gapCm) / (slabWidth + gapCm));
-    const slabsInHeight = Math.floor((wallHeightCm + gapCm) / (slabHeight + gapCm));
+    const hasSlopedSegments =
+      !!segDimsNorm && segDimsNorm.some((s) => Math.abs(s.startH - s.endH) > 1e-6);
 
-    // Calculate remaining space
-    const remainingLength = wallLengthCm - (slabsInLength * slabWidth + (slabsInLength) * gapCm);
-    const remainingHeight = wallHeightCm - (slabsInHeight * slabHeight + (slabsInHeight) * gapCm);
-
-    // Initialize arrays for different types of cuts
-    const cutSlabs = [];
-    let totalCuts = 0;
-
-    // Calculate full-length slabs (not cut at the ends)
-    let fullLengthSlabs = slabsInLength;
-    let cutLengthPieces = 0;
-    let cutLengthPieceWidth = 0;
-    if (remainingLength > 0 && lengthCutType === '2cuts') {
-      // For each row, (slabsInLength - 1) full-length slabs, 2 cut pieces at ends
-      fullLengthSlabs = Math.max(0, slabsInLength - 1);
-      cutLengthPieces = 2;
-      cutLengthPieceWidth = (slabWidth + remainingLength) / 2;
-    }
-
-    // Calculate full-height slabs (not cut at the top/bottom)
-    let fullHeightSlabs = slabsInHeight;
-    let cutHeightPieces = 0;
-    let cutHeightPieceHeight = 0;
-    if (remainingHeight > 0 && heightCutType === '2cuts') {
-      // For each column, (slabsInHeight - 1) full-height slabs, 2 cut pieces at top/bottom
-      fullHeightSlabs = Math.max(0, slabsInHeight - 1);
-      cutHeightPieces = 2;
-      cutHeightPieceHeight = (slabHeight + remainingHeight) / 2;
-    }
-
-    // Calculate full slabs (full length and full height)
-    let fullSlabs = fullLengthSlabs * fullHeightSlabs;
-
-    // Add cut slabs for length (ends of each row)
-    if (cutLengthPieces > 0) {
-      cutSlabs.push({
-        width: cutLengthPieceWidth,
-        height: slabHeight,
-        quantity: cutLengthPieces * fullHeightSlabs
-      });
-      totalCuts += cutLengthPieces * fullHeightSlabs;
-    }
-
-    // Add cut slabs for height (top/bottom of each column)
-    if (cutHeightPieces > 0) {
-      cutSlabs.push({
-        width: slabWidth,
-        height: cutHeightPieceHeight,
-        quantity: cutHeightPieces * fullLengthSlabs
-      });
-      totalCuts += cutHeightPieces * fullLengthSlabs;
-    }
-
-    // Handle remaining length (1 cut at the end)
-    if (remainingLength > 0 && lengthCutType === '1cut') {
-      cutSlabs.push({
-        width: remainingLength,
-        height: slabHeight,
-        quantity: fullHeightSlabs
-      });
-      totalCuts += fullHeightSlabs;
-    }
-
-    // Handle remaining height (1 cut at the top)
-    if (remainingHeight > 0 && heightCutType === '1cut') {
-      cutSlabs.push({
-        width: slabWidth,
-        height: remainingHeight,
-        quantity: fullLengthSlabs
-      });
-      totalCuts += fullLengthSlabs;
-    }
-
-    // Handle corner cuts (where both length and height need cuts)
-    if (remainingLength > 0 && remainingHeight > 0) {
-      if (lengthCutType === '2cuts' && heightCutType === '2cuts') {
-        // Four corner pieces
-        cutSlabs.push({
-          width: cutLengthPieceWidth,
-          height: cutHeightPieceHeight,
-          quantity: 4
-        });
-        totalCuts += 4;
-      } else if (lengthCutType === '2cuts' && heightCutType === '1cut') {
-        // Two pieces at ends, cut in height
-        cutSlabs.push({
-          width: cutLengthPieceWidth,
-          height: remainingHeight,
-          quantity: 2
-        });
-        totalCuts += 2;
-      } else if (lengthCutType === '1cut' && heightCutType === '2cuts') {
-        // Two pieces at top/bottom, cut in length
-        cutSlabs.push({
-          width: remainingLength,
-          height: cutHeightPieceHeight,
-          quantity: 2
-        });
-        totalCuts += 2;
-      } else if (lengthCutType === '1cut' && heightCutType === '1cut') {
-        // One corner piece
-        cutSlabs.push({
-          width: remainingLength,
-          height: remainingHeight,
-          quantity: 1
-        });
-        totalCuts += 1;
+    const slabsPerSegment: number[] | undefined = segDimsNorm?.map((seg) => {
+      const lenCm = seg.length * 100;
+      const h0Cm = seg.startH * 100;
+      const h1Cm = seg.endH * 100;
+      if (Math.abs(h0Cm - h1Cm) < 0.001) {
+        const hCm = seg.startH * 100;
+        const sL = Math.ceil((lenCm + gapCm) / (slabWidth + gapCm));
+        const sH = Math.ceil((hCm + gapCm) / (slabHeight + gapCm));
+        return sL * sH;
       }
-    }
-
-    // Add extra cuts for each corner cut
-    cutSlabs.forEach(cut => {
-      if (
-        cut.width !== selectedSlab.width &&
-        cut.height !== selectedSlab.height
-      ) {
-        totalCuts += cut.quantity;
-      }
+      return countSlabsTrapezoidColumnwise(lenCm, h0Cm, h1Cm, slabWidth, slabHeight, gapCm);
     });
 
-    // Calculate adhesive needed (wallArea already set above)
-    const adhesiveConsumption = ADHESIVE_THICKNESS.find(t => t.value === adhesiveThickness)?.consumption || 6;
+    const segmentSlabSplit: { whole: number; cut: number; total: number }[] | undefined = segDimsNorm?.map(
+      (seg) => {
+        const lenCm = seg.length * 100;
+        const h0Cm = seg.startH * 100;
+        const h1Cm = seg.endH * 100;
+        if (Math.abs(h0Cm - h1Cm) < 0.001) {
+          const hCm = seg.startH * 100;
+          const sL = Math.ceil((lenCm + gapCm) / (slabWidth + gapCm));
+          const sH = Math.ceil((hCm + gapCm) / (slabHeight + gapCm));
+          const total = sL * sH;
+          return { whole: total, cut: 0, total };
+        }
+        return countTrapezoidWholeVsCut(lenCm, h0Cm, h1Cm, slabWidth, slabHeight, gapCm);
+      }
+    );
+
+    let fullSlabs: number;
+    let totalCuts: number;
+    const cutSlabs: { width: number; height: number; quantity: number }[] = [];
+    let cutSlabsWithFull: Array<{ width: number; height: number; quantity: number; fullSlabsNeeded?: number }>;
+    let totalFullSlabsNeeded: number;
+    let installedCutPieces = 0;
+    let totalInstalledPieces = 0;
+
+    if (hasSlopedSegments && slabsPerSegment && slabsPerSegment.length > 0 && segmentSlabSplit) {
+      totalFullSlabsNeeded = slabsPerSegment.reduce((a, b) => a + b, 0);
+      const wholeSum = segmentSlabSplit.reduce((s, x) => s + x.whole, 0);
+      const cutSum = segmentSlabSplit.reduce((s, x) => s + x.cut, 0);
+      fullSlabs = wholeSum;
+      installedCutPieces = cutSum;
+      totalInstalledPieces = wholeSum + cutSum;
+      totalCuts = cutSum;
+      cutSlabsWithFull = [];
+    } else {
+      // Calculate slabs needed for length and height (rectangular wall)
+      const slabsInLength = Math.floor((wallLengthCm + gapCm) / (slabWidth + gapCm));
+      const slabsInHeight = Math.floor((wallHeightCm + gapCm) / (slabHeight + gapCm));
+
+      // Calculate remaining space
+      const remainingLength = wallLengthCm - (slabsInLength * slabWidth + slabsInLength * gapCm);
+      const remainingHeight = wallHeightCm - (slabsInHeight * slabHeight + slabsInHeight * gapCm);
+
+      totalCuts = 0;
+
+      // Calculate full-length slabs (not cut at the ends)
+      let fullLengthSlabs = slabsInLength;
+      let cutLengthPieces = 0;
+      let cutLengthPieceWidth = 0;
+      if (remainingLength > 0 && lengthCutType === '2cuts') {
+        fullLengthSlabs = Math.max(0, slabsInLength - 1);
+        cutLengthPieces = 2;
+        cutLengthPieceWidth = (slabWidth + remainingLength) / 2;
+      }
+
+      // Calculate full-height slabs (not cut at the top/bottom)
+      let fullHeightSlabs = slabsInHeight;
+      let cutHeightPieces = 0;
+      let cutHeightPieceHeight = 0;
+      if (remainingHeight > 0 && heightCutType === '2cuts') {
+        fullHeightSlabs = Math.max(0, slabsInHeight - 1);
+        cutHeightPieces = 2;
+        cutHeightPieceHeight = (slabHeight + remainingHeight) / 2;
+      }
+
+      fullSlabs = fullLengthSlabs * fullHeightSlabs;
+
+      // Add cut slabs for length (ends of each row)
+      if (cutLengthPieces > 0) {
+        cutSlabs.push({
+          width: cutLengthPieceWidth,
+          height: slabHeight,
+          quantity: cutLengthPieces * fullHeightSlabs,
+        });
+        totalCuts += cutLengthPieces * fullHeightSlabs;
+      }
+
+      // Add cut slabs for height (top/bottom of each column)
+      if (cutHeightPieces > 0) {
+        cutSlabs.push({
+          width: slabWidth,
+          height: cutHeightPieceHeight,
+          quantity: cutHeightPieces * fullLengthSlabs,
+        });
+        totalCuts += cutHeightPieces * fullLengthSlabs;
+      }
+
+      // Handle remaining length (1 cut at the end)
+      if (remainingLength > 0 && lengthCutType === '1cut') {
+        cutSlabs.push({
+          width: remainingLength,
+          height: slabHeight,
+          quantity: fullHeightSlabs,
+        });
+        totalCuts += fullHeightSlabs;
+      }
+
+      // Handle remaining height (1 cut at the top)
+      if (remainingHeight > 0 && heightCutType === '1cut') {
+        cutSlabs.push({
+          width: slabWidth,
+          height: remainingHeight,
+          quantity: fullLengthSlabs,
+        });
+        totalCuts += fullLengthSlabs;
+      }
+
+      // Handle corner cuts (where both length and height need cuts)
+      if (remainingLength > 0 && remainingHeight > 0) {
+        if (lengthCutType === '2cuts' && heightCutType === '2cuts') {
+          cutSlabs.push({
+            width: cutLengthPieceWidth,
+            height: cutHeightPieceHeight,
+            quantity: 4,
+          });
+          totalCuts += 4;
+        } else if (lengthCutType === '2cuts' && heightCutType === '1cut') {
+          cutSlabs.push({
+            width: cutLengthPieceWidth,
+            height: remainingHeight,
+            quantity: 2,
+          });
+          totalCuts += 2;
+        } else if (lengthCutType === '1cut' && heightCutType === '2cuts') {
+          cutSlabs.push({
+            width: remainingLength,
+            height: cutHeightPieceHeight,
+            quantity: 2,
+          });
+          totalCuts += 2;
+        } else if (lengthCutType === '1cut' && heightCutType === '1cut') {
+          cutSlabs.push({
+            width: remainingLength,
+            height: remainingHeight,
+            quantity: 1,
+          });
+          totalCuts += 1;
+        }
+      }
+
+      // Waste-aware slab counting: shared waste pool, process larger pieces first
+      type WasteRect = { w: number; h: number };
+      const waste: WasteRect[] = [];
+      cutSlabsWithFull = cutSlabs.map((c) => ({ ...c, fullSlabsNeeded: 0 }));
+
+      const addWaste = (w: number, h: number) => {
+        if (w >= 1 && h >= 1) waste.push({ w, h });
+      };
+
+      const useFromWaste = (needW: number, needH: number): boolean => {
+        const idx = waste.findIndex((r) => r.w >= needW && r.h >= needH);
+        if (idx < 0) return false;
+        const r = waste[idx];
+        waste.splice(idx, 1);
+        if (r.w > needW) addWaste(r.w - needW, needH);
+        if (r.h > needH) addWaste(needW, r.h - needH);
+        return true;
+      };
+
+      const cutSlabsByArea = cutSlabsWithFull
+        .map((c, i) => ({ ...c, idx: i, area: c.width * c.height }))
+        .sort((a, b) => b.area - a.area);
+
+      for (const cut of cutSlabsByArea) {
+        let needed = cut.quantity;
+        let slabsUsed = 0;
+        while (needed > 0) {
+          if (useFromWaste(cut.width, cut.height)) {
+            needed--;
+            continue;
+          }
+          const cols = Math.floor(slabWidth / cut.width);
+          const rows = Math.floor(slabHeight / cut.height);
+          const perSlab = cols * rows;
+          const take = Math.min(needed, Math.max(1, perSlab));
+          slabsUsed++;
+          needed -= take;
+          const usedRows = Math.ceil(take / cols);
+          const usedCols = take <= cols ? take : cols;
+          const usedW = usedCols * cut.width;
+          const usedH = usedRows * cut.height;
+          if (slabWidth > usedW) addWaste(slabWidth - usedW, slabHeight);
+          if (slabHeight > usedH) addWaste(usedW, slabHeight - usedH);
+        }
+        cutSlabsWithFull[cut.idx].fullSlabsNeeded = slabsUsed;
+      }
+
+      totalFullSlabsNeeded = fullSlabs + cutSlabsWithFull.reduce((s, c) => s + (c.fullSlabsNeeded ?? 0), 0);
+      installedCutPieces = cutSlabs.reduce((s, c) => s + c.quantity, 0);
+      totalInstalledPieces = fullSlabs + installedCutPieces;
+    }
+
+    // Calculate adhesive needed (wallArea already set above); same parse as adhesive thickness input UI
+    const adhesiveThicknessNum =
+      parseFloat(String(adhesiveThicknessCm).replace(',', '.')) || 0.5;
+    const adhesiveConsumption = adhesiveConsumptionKgPerM2(adhesiveThicknessNum);
     const adhesiveNeeded = wallArea * adhesiveConsumption;
 
     // Find adhesive in materials table
@@ -509,58 +647,6 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       });
     }
 
-    // Waste-aware slab counting: shared waste pool, process larger pieces first
-    type WasteRect = { w: number; h: number };
-    const waste: WasteRect[] = [];
-    const cutSlabsWithFull: typeof cutSlabs = cutSlabs.map(c => ({ ...c, fullSlabsNeeded: 0 }));
-
-    const addWaste = (w: number, h: number) => {
-      if (w >= 1 && h >= 1) waste.push({ w, h });
-    };
-
-    const useFromWaste = (needW: number, needH: number): boolean => {
-      const idx = waste.findIndex(r => r.w >= needW && r.h >= needH);
-      if (idx < 0) return false;
-      const r = waste[idx];
-      waste.splice(idx, 1);
-      if (r.w > needW) addWaste(r.w - needW, needH);
-      if (r.h > needH) addWaste(needW, r.h - needH);
-      return true;
-    };
-
-    const cutSlabsByArea = cutSlabsWithFull
-      .map((c, i) => ({ ...c, idx: i, area: c.width * c.height }))
-      .sort((a, b) => b.area - a.area);
-
-    for (const cut of cutSlabsByArea) {
-      let needed = cut.quantity;
-      let slabsUsed = 0;
-      while (needed > 0) {
-        if (useFromWaste(cut.width, cut.height)) {
-          needed--;
-          continue;
-        }
-        const cols = Math.floor(slabWidth / cut.width);
-        const rows = Math.floor(slabHeight / cut.height);
-        const perSlab = cols * rows;
-        const take = Math.min(needed, Math.max(1, perSlab));
-        slabsUsed++;
-        needed -= take;
-        const usedRows = Math.ceil(take / cols);
-        const usedCols = take <= cols ? take : cols;
-        const usedW = usedCols * cut.width;
-        const usedH = usedRows * cut.height;
-        if (slabWidth > usedW) addWaste(slabWidth - usedW, slabHeight);
-        if (slabHeight > usedH) addWaste(usedW, slabHeight - usedH);
-      }
-      cutSlabsWithFull[cut.idx].fullSlabsNeeded = slabsUsed;
-    }
-
-    let totalFullSlabsNeeded = fullSlabs + cutSlabsWithFull.reduce((s, c) => s + (c.fullSlabsNeeded ?? 0), 0);
-    if (slabsPerSegment && slabsPerSegment.length > 0) {
-      totalFullSlabsNeeded = slabsPerSegment.reduce((a, b) => a + b, 0);
-    }
-
     if (totalFullSlabsNeeded > 0) {
       const slabMaterialLabel = slabType === 'porcelain' ? 'porcelain' : slabType === 'granite' ? 'granite' : 'sandstone';
       materials.unshift({
@@ -574,6 +660,8 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
 
     const cuttingBreakdown: SlabCuttingBreakdown = {
       fullSlabs,
+      installedCutPieces,
+      totalInstalledPieces,
       cutSlabs: cutSlabsWithFull,
       totalCuts,
       totalFullSlabsNeeded
@@ -597,29 +685,13 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       );
     const slabMaterialForTask = slabType === 'porcelain' ? 'porcelain' : slabType === 'granite' ? 'granite' : 'sandstone';
 
-    const cutLengthCounts = new Map<number, number>();
-    for (const cut of cutSlabsWithFull) {
-      const isLengthCut = Math.abs(cut.width - slabWidth) > 0.1 && Math.abs(cut.height - slabHeight) < 0.1;
-      const isHeightCut = Math.abs(cut.width - slabWidth) < 0.1 && Math.abs(cut.height - slabHeight) > 0.1;
-      const isCornerCut = Math.abs(cut.width - slabWidth) > 0.1 && Math.abs(cut.height - slabHeight) > 0.1;
-      if (isLengthCut) {
-        const len = Math.round(slabHeight);
-        cutLengthCounts.set(len, (cutLengthCounts.get(len) ?? 0) + cut.quantity);
-      } else if (isHeightCut) {
-        const len = Math.round(slabWidth);
-        cutLengthCounts.set(len, (cutLengthCounts.get(len) ?? 0) + cut.quantity);
-      } else if (isCornerCut) {
-        const lenH = Math.round(slabWidth);
-        const lenL = Math.round(slabHeight);
-        cutLengthCounts.set(lenH, (cutLengthCounts.get(lenH) ?? 0) + cut.quantity);
-        cutLengthCounts.set(lenL, (cutLengthCounts.get(lenL) ?? 0) + cut.quantity);
-      }
-    }
-
+    /** One bucket per cut piece: longest edge → closest standard task length (same idea as stair slab cuts). */
     const taskLengthCounts = new Map<number, number>();
-    for (const [actualLen, count] of cutLengthCounts) {
-      const taskLen = findClosestCutLength(actualLen);
-      taskLengthCounts.set(taskLen, (taskLengthCounts.get(taskLen) ?? 0) + count);
+    for (const cut of cutSlabsWithFull) {
+      if (cut.quantity <= 0) continue;
+      const longestEdge = Math.max(cut.width, cut.height);
+      const taskLen = findClosestCutLength(Math.max(1, Math.round(longestEdge)));
+      taskLengthCounts.set(taskLen, (taskLengthCounts.get(taskLen) ?? 0) + cut.quantity);
     }
     const cuttingTaskBreakdown: { task: string; hours: number; amount: string; unit: string }[] = [];
     let cuttingTaskTotal = 0;
@@ -634,16 +706,23 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       cuttingTaskBreakdown.push({
         task: taskName,
         hours,
-        amount: `${count} pieces`,
+        amount: t('calculator:tile_cutting_task_amount', { count, cm: taskLen }),
         unit: 'pieces'
       });
     }
+
+    const tileInstallAmount = t('calculator:tile_task_amount_rect', {
+      whole: fullSlabs,
+      cuts: installedCutPieces,
+      onWall: totalInstalledPieces,
+      stock: totalFullSlabsNeeded,
+    });
 
     const taskBreakdown: { task: string; hours: number; amount?: string; unit?: string }[] = [
       {
         task: `Tile Installation ${selectedSlab.width} x ${selectedSlab.height}`,
         hours: tileTaskTotal,
-        amount: `${fullSlabs + cutSlabs.reduce((sum, cut) => sum + cut.quantity, 0)} pieces`,
+        amount: tileInstallAmount,
         unit: 'pieces'
       },
       ...cuttingTaskBreakdown
@@ -680,10 +759,10 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
         carrierSizeForTransport = effectiveSelectedTransportCarrier["size (in tones)"] || 0.125;
       }
 
-      // Calculate tile transport
-      const totalTiles = fullSlabs + cutSlabs.reduce((sum, cut) => sum + cut.quantity, 0);
-      if (totalTiles > 0) {
-        const tileResult = calculateMaterialTransportTime(totalTiles, carrierSizeForTransport, 'slabs', parseFloat(effectiveTransportDistance) || 30);
+      // Transport stock slabs to site (after waste optimization), not “pieces on wall”
+      const slabsToTransport = totalFullSlabsNeeded;
+      if (slabsToTransport > 0) {
+        const tileResult = calculateMaterialTransportTime(slabsToTransport, carrierSizeForTransport, 'slabs', parseFloat(effectiveTransportDistance) || 30);
         tileTransportTime = tileResult.totalTransportTime;
         normalizedTileTransportTime = tileResult.normalizedTransportTime;
       }
@@ -706,7 +785,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
         taskBreakdown.push({
           task: 'transport tiles',
           hours: tileTransportTime,
-          amount: `${totalTiles} pieces`,
+          amount: `${slabsToTransport} pieces`,
           unit: 'pieces'
         });
       }
@@ -723,9 +802,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
 
     const totalTransportTime = tileTransportTime + adhesiveTransportTime;
 
-    const totalSlabsCount = slabsPerSegment && slabsPerSegment.length > 0
-      ? slabsPerSegment.reduce((a, b) => a + b, 0)
-      : fullSlabs + cutSlabs.reduce((sum, cut) => sum + cut.quantity, 0);
+    const totalSlabsCount = totalFullSlabsNeeded;
     const newResults = {
       totalSlabs: totalSlabsCount,
       totalCuts,
@@ -734,7 +811,8 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       taskBreakdown,
       materials,
       labor: tileTaskTotal + cuttingTaskTotal + totalTransportTime,
-      ...(slabsPerSegment && { slabsPerSegment })
+      ...(slabsPerSegment && { slabsPerSegment }),
+      ...(segmentSlabSplit && segmentSlabSplit.length > 0 && { segmentSlabSplit })
     };
 
     // Prepare formatted results for parent/modal (match other calculators)
@@ -783,7 +861,13 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
   return (
     <div className={canvasMode ? "space-y-4" : "space-y-6"}>
       {!canvasMode && <h2 style={{ fontSize: fontSizes['2xl'], fontWeight: fontWeights.bold, color: colors.textPrimary, marginBottom: spacing['4xl'] }}>{t('calculator:tile_installation_calculator_title_alt')}</h2>}
-      <div className="grid grid-cols-2 gap-4">
+      <div
+        className={
+          !fromWallSegments && wallConfigMode === 'single'
+            ? 'grid grid-cols-1 sm:grid-cols-3 gap-4'
+            : 'grid grid-cols-2 gap-4'
+        }
+      >
         <div>
           <label style={labelStyle ?? { display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_tile_wall_length_m')}</label>
           <input
@@ -798,20 +882,49 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
             step="0.01"
           />
         </div>
-        <div>
-          <label style={labelStyle ?? { display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_tile_wall_height_m')}</label>
-          <input
-            type="number"
-            value={!fromWallSegments && wallConfigMode === 'segments' && segmentHeightsLocal.length > 0
-              ? (segmentHeightsLocal.reduce((sum, h) => sum + (h.startH + h.endH) / 2, 0) / segmentHeightsLocal.length).toFixed(2)
-              : wallHeight}
-            onChange={(e) => !fromWallSegments && wallConfigMode !== 'segments' && setWallHeight(e.target.value)}
-            readOnly={fromWallSegments || (wallConfigMode === 'segments' && segmentLengthsLocal.length > 0)}
-            style={inputStyle ?? inputStyleDefault}
-            placeholder={t('calculator:placeholder_enter_wall_height_tile')}
-            step="0.01"
-          />
-        </div>
+        {!fromWallSegments && wallConfigMode === 'single' ? (
+          <>
+            <div>
+              <label style={labelStyle ?? { display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:segment_start_h')}</label>
+              <input
+                type="number"
+                value={singleWallStartH}
+                onChange={(e) => setSingleWallStartH(e.target.value)}
+                style={inputStyle ?? inputStyleDefault}
+                placeholder={t('calculator:placeholder_enter_wall_height_tile')}
+                step="0.01"
+                min={0.01}
+              />
+            </div>
+            <div>
+              <label style={labelStyle ?? { display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:segment_end_h')}</label>
+              <input
+                type="number"
+                value={singleWallEndH}
+                onChange={(e) => setSingleWallEndH(e.target.value)}
+                style={inputStyle ?? inputStyleDefault}
+                placeholder={t('calculator:placeholder_enter_wall_height_tile')}
+                step="0.01"
+                min={0.01}
+              />
+            </div>
+          </>
+        ) : (
+          <div>
+            <label style={labelStyle ?? { display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_tile_wall_height_m')}</label>
+            <input
+              type="number"
+              value={!fromWallSegments && wallConfigMode === 'segments' && segmentHeightsLocal.length > 0
+                ? (segmentHeightsLocal.reduce((sum, h) => sum + (h.startH + h.endH) / 2, 0) / segmentHeightsLocal.length).toFixed(2)
+                : wallHeight}
+              onChange={(e) => !fromWallSegments && wallConfigMode !== 'segments' && setWallHeight(e.target.value)}
+              readOnly={fromWallSegments || (wallConfigMode === 'segments' && segmentLengthsLocal.length > 0)}
+              style={inputStyle ?? inputStyleDefault}
+              placeholder={t('calculator:placeholder_enter_wall_height_tile')}
+              step="0.01"
+            />
+          </div>
+        )}
       </div>
 
       {/* Wall configuration: Single / Segments — only when not from wall (standalone) */}
@@ -827,7 +940,12 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
                   setWallConfigMode('single');
                   if (segmentLengthsLocal.length === 1) {
                     setWallLength(String(segmentLengthsLocal[0]));
-                    setWallHeight(String(segmentHeightsLocal[0]?.startH ?? defH));
+                    const sh = segmentHeightsLocal[0];
+                    const st = sh?.startH ?? defH;
+                    const en = sh?.endH ?? defH;
+                    setSingleWallStartH(String(st));
+                    setSingleWallEndH(String(en));
+                    setWallHeight(String((st + en) / 2));
                   }
                 }
               }}
@@ -877,13 +995,26 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
               </button>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.68rem', color: colors.textLabel ?? '#94a3b8', fontWeight: 600 }}>{t('calculator:set_all_label')}</span>
-            {[0.6, 1.0, 1.2, 1.5, 1.8, 2.0].map((h) => (
-              <button key={h} type="button" onClick={() => setAllSegmentHeights(h)} style={{ padding: '3px 10px', borderRadius: 12, border: `1px solid ${colors.borderInputDark ?? 'rgba(255,255,255,0.1)'}`, background: 'transparent', color: colors.textLabel ?? '#94a3b8', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.7rem', fontWeight: 500, cursor: 'pointer' }}>
-                {h === 1 || h === 2 ? `${h}.0m` : `${h}m`}
-              </button>
-            ))}
+            <input
+              type="number"
+              step={0.1}
+              min={0.01}
+              placeholder={defH.toFixed(1)}
+              value={bulkSetAllHeightsInput}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setBulkSetAllHeightsInput(raw);
+                const v = parseFloat(raw.replace(',', '.'));
+                if (!Number.isFinite(v) || v < 0.01) return;
+                setAllSegmentHeights(v);
+              }}
+              title={t('calculator:set_all_height_live_hint')}
+              aria-label={t('calculator:set_all_label')}
+              style={{ width: 88, padding: '5px 8px', borderRadius: 8, border: `1px solid ${colors.borderInputDark ?? 'rgba(255,255,255,0.1)'}`, background: colors.bgInputDark ?? '#0f172a', color: colors.textPrimaryLight ?? '#e2e8f0', fontSize: '0.78rem', fontFamily: "'JetBrains Mono', monospace", outline: 'none' }}
+            />
+            <span style={{ fontSize: '0.62rem', color: colors.textLabel ?? '#94a3b8' }}>m</span>
           </div>
           <div style={{ background: colors.bgDeep ?? '#1a2332', border: `1px solid ${colors.bgDeepBorder ?? 'rgba(255,255,255,0.06)'}`, borderRadius: 12, overflow: 'hidden', marginTop: 10 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '46px 1fr 100px 100px 44px', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
@@ -953,11 +1084,11 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       </div>
 
       <div>
-        <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_tile_gaps')}</label>
+        <label style={labelStyle ?? { display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_tile_gaps')}</label>
         <select
           value={selectedGap}
           onChange={(e) => setSelectedGap(Number(e.target.value))}
-          style={{ marginTop: spacing.sm, display: 'block', width: '100%', borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: '8px 12px', outline: 'none' }}
+          style={{ marginTop: canvasMode ? 4 : spacing.sm, display: 'block', width: '100%', borderRadius: radii.md, ...(canvasMode && inputStyle ? inputStyle : { border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: '8px 12px', outline: 'none' }) }}
         >
           {GAP_OPTIONS.map((gap) => (
             <option key={gap} value={gap}>
@@ -998,18 +1129,22 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       </div>
 
       <div>
-        <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_tile_adhesive_thickness')}</label>
-        <select
-          value={adhesiveThickness}
-          onChange={(e) => setAdhesiveThickness(Number(e.target.value))}
-          style={{ marginTop: spacing.sm, display: 'block', width: '100%', borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: '8px 12px', outline: 'none' }}
-        >
-          {ADHESIVE_THICKNESS.map((thickness) => (
-            <option key={thickness.value} value={thickness.value}>
-              {thickness.value} cm
-            </option>
-          ))}
-        </select>
+        <label style={labelStyle ?? { display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_tile_adhesive_thickness')}</label>
+        <input
+          type="number"
+          value={adhesiveThicknessCm}
+          onChange={(e) => setAdhesiveThicknessCm(e.target.value)}
+          min={0.1}
+          max={5}
+          step={0.1}
+          style={{ marginTop: canvasMode ? 4 : spacing.sm, ...(inputStyle ?? inputStyleDefault ?? {}) }}
+          placeholder="0.5"
+        />
+        <p style={{ fontSize: fontSizes.xs, color: canvasMode ? colors.textDim : colors.textMuted, marginTop: spacing.sm }}>
+          {t('calculator:consumption_label')}{' '}
+          {adhesiveConsumptionKgPerM2(Math.max(0.1, Math.min(5, parseFloat(String(adhesiveThicknessCm).replace(',', '.')) || 0.5))).toFixed(1)}{' '}
+          {t('calculator:kg_m2_suffix')}
+        </p>
       </div>
 
       <div>
@@ -1095,7 +1230,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
 
       {!(fromWallSegments && (canvasMode || isInProjectCreating)) && (
         <div className="flex justify-center">
-          <Button variant="accent" color={colors.accentBlue} onClick={calculateResults}>
+          <Button variant="primary" fullWidth onClick={calculateResults}>
             {t('calculator:calculate_button')}
           </Button>
         </div>
@@ -1103,52 +1238,42 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
 
       {results && (
         <div className="mt-6 space-y-4" ref={resultsRef}>
-          {/* Slab cutting breakdown first */}
-          <div style={{ background: colors.bgCard, padding: spacing['4xl'], borderRadius: radii.lg }}>
-            <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing['4xl'] }}>{t('calculator:slab_cutting_breakdown_label')}</h3>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ minWidth: '100%', borderCollapse: 'collapse', borderBottom: `1px solid ${colors.borderDefault}` }}>
-                <thead style={{ background: colors.bgCard }}>
-                  <tr>
-                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_type_header')}</th>
-                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_length_cm')}</th>
-                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_height_cm')}</th>
-                    <th scope="col" style={{ padding: '12px 24px', textAlign: 'left', fontSize: fontSizes.xs, fontWeight: fontWeights.medium, color: colors.textDim, textTransform: 'uppercase' }}>{t('calculator:table_quantity_header')}</th>
-                  </tr>
-                </thead>
-                <tbody style={{ background: colors.bgInput }}>
-                  {/* Only show Full Slabs row if quantity > 0 */}
-                  {results.cuttingBreakdown.fullSlabs > 0 && (
-                    <tr style={{ borderTop: `1px solid ${colors.borderDefault}` }}>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{t('calculator:full_slabs_row')}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{slabOrientation === 'long' ? selectedSlab.width : selectedSlab.height}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{slabOrientation === 'long' ? selectedSlab.height : selectedSlab.width}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{results.cuttingBreakdown.fullSlabs}</td>
-                    </tr>
-                  )}
-                  {/* Only show cut slabs with quantity > 0 */}
-                  {results.cuttingBreakdown.cutSlabs.filter(cut => cut.quantity > 0).map((cut, index) => (
-                    <tr key={index} style={{ borderTop: `1px solid ${colors.borderDefault}`, background: ((results.cuttingBreakdown.fullSlabs > 0 ? 1 : 0) + index) % 2 === 1 ? colors.bgTableRowAlt : undefined }}>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.width === selectedSlab.width ? t('calculator:height_cut_type') : cut.height === selectedSlab.height ? t('calculator:length_cut_type') : t('calculator:corner_cut_type')}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.width.toFixed(1)}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.height.toFixed(1)}</td>
-                      <td style={{ padding: '16px 24px', whiteSpace: 'nowrap', fontSize: fontSizes.sm, color: colors.textPrimary }}>{cut.fullSlabsNeeded != null ? `${cut.quantity} (${cut.fullSlabsNeeded})` : cut.quantity}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Slabs per segment (wycinka) when from wall or user-defined segments */}
           {results.slabsPerSegment && results.slabsPerSegment.length > 0 && (
             <div style={{ background: colors.bgCard, padding: spacing['4xl'], borderRadius: radii.lg }}>
-              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing['4xl'] }}>{t('calculator:slabs_per_segment_label')}</h3>
+              <h3 style={{ fontSize: fontSizes.lg, fontWeight: fontWeights.medium, color: colors.textPrimary, marginBottom: spacing['4xl'] }}>{t('calculator:slabs_needed_heading')}</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm, fontSize: fontSizes.sm, color: colors.textMuted }}>
-                {results.slabsPerSegment.map((count, i) => (
-                  <div key={i}>{t('calculator:segment_n_slabs', { n: i + 1, count })}</div>
-                ))}
-                <div style={{ fontWeight: fontWeights.semibold, marginTop: spacing['2xl'] }}>{t('calculator:slabs_per_segment_total', { total: results.slabsPerSegment.reduce((a, b) => a + b, 0) })}</div>
+                {results.slabsPerSegment.map((count, i) => {
+                  const multi = results.slabsPerSegment!.length > 1;
+                  const split = results.segmentSlabSplit?.[i];
+                  if (split != null) {
+                    return (
+                      <div key={i}>
+                        {multi
+                          ? t('calculator:slabs_needed_segment_split', {
+                              n: i + 1,
+                              whole: split.whole,
+                              cuts: split.cut,
+                              count,
+                            })
+                          : t('calculator:slabs_needed_single_split', {
+                              whole: split.whole,
+                              cuts: split.cut,
+                              count,
+                            })}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={i}>
+                      {multi
+                        ? t('calculator:slabs_needed_segment_plain', { n: i + 1, count })
+                        : t('calculator:slabs_needed_single_plain', { count })}
+                    </div>
+                  );
+                })}
+                <div style={{ fontWeight: fontWeights.semibold, marginTop: spacing['2xl'] }}>
+                  {t('calculator:slabs_needed_total', { total: results.slabsPerSegment.reduce((a, b) => a + b, 0) })}
+                </div>
               </div>
             </div>
           )}

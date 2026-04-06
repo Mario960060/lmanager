@@ -18,7 +18,7 @@ describe("ProjectInfoBar", () => {
     const onChange = vi.fn();
     render(<ProjectInfoBar projectSettings={settings} onChange={onChange} />);
 
-    const titleInput = screen.getByPlaceholderText("Project title");
+    const titleInput = screen.getByPlaceholderText("Enter project title");
     expect(titleInput).toHaveValue("My Project");
 
     // DatePicker displays in dd/MM/yyyy format
@@ -34,7 +34,7 @@ describe("ProjectInfoBar", () => {
     const onChange = vi.fn();
     render(<ProjectInfoBar projectSettings={settings} onChange={onChange} />);
 
-    const titleInput = screen.getByPlaceholderText("Project title");
+    const titleInput = screen.getByPlaceholderText("Enter project title");
     fireEvent.change(titleInput, { target: { value: "New Title" } });
 
     expect(onChange).toHaveBeenCalledWith({ title: "New Title" });

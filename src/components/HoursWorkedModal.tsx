@@ -75,7 +75,7 @@ const HoursWorkedModal: React.FC<HoursWorkedModalProps> = ({ eventId, onClose })
 
   if (isLoading) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
         <div className="rounded-lg p-6" style={{ backgroundColor: colors.bgCard }}>
           <p>{t('common:loading')}</p>
         </div>
@@ -90,7 +90,7 @@ const HoursWorkedModal: React.FC<HoursWorkedModalProps> = ({ eventId, onClose })
   }, 0);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-0 md:p-4">
       <div className="rounded-lg max-w-2xl w-full" style={{ backgroundColor: colors.bgCard }}>
         <div className="flex justify-between items-center p-6 border-b" style={{ borderColor: colors.borderDefault }}>
           <div>
