@@ -3,8 +3,8 @@
 // Slab pattern rendering on polygon shapes (grid, brick)
 // ══════════════════════════════════════════════════════════════
 
-import { Point, Shape, toPixels, toMeters, labelAnchorInsidePolygon, areaM2, polygonCentroidByArea, centroid, pathLongestSegmentLabelPlacement } from "../geometry";
-import { scaledFontSize } from "../canvasRenderers";
+import { Point, Shape, toPixels, toMeters, areaM2, polygonCentroidByArea, labelAnchorInsidePolygon } from "../geometry";
+import { scaledFontSize, getPathLabel } from "../canvasRenderers";
 import { getEffectivePolygon, getEffectivePolygonWithEdgeIndices, sampleArcEdgeForFrame } from "../arcMath";
 import { isPathElement, getPathPolygon } from "../linearElements";
 
@@ -54,6 +54,138 @@ function resolvePathPatternCenterlineAndSides(
 }
 
 type WorldToScreen = (wx: number, wy: number) => { x: number; y: number };
+
+export function polygonScreenAabb(outline: Point[], worldToScreen: WorldToScreen): { minX: number; maxX: number; minY: number; maxY: number } {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const p of outline) {
+    const s = worldToScreen(p.x, p.y);
+    minX = Math.min(minX, s.x);
+    maxX = Math.max(maxX, s.x);
+    minY = Math.min(minY, s.y);
+    maxY = Math.max(maxY, s.y);
+  }
+  if (!Number.isFinite(minX)) {
+    return { minX: 0, maxX: 80, minY: 0, maxY: 80 };
+  }
+  return { minX, maxX, minY, maxY };
+}
+
+/** Word-wrap for canvas; splits on spaces, breaks long tokens character-wise when needed. */
+export function wrapCanvasTextToLines(ctx: CanvasRenderingContext2D, text: string, maxWidthPx: number): string[] {
+  if (!text) return [];
+  if (maxWidthPx <= 4) return [text];
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = "";
+
+  const flushLine = () => {
+    if (cur) {
+      lines.push(cur);
+      cur = "";
+    }
+  };
+
+  const splitLongWord = (word: string): void => {
+    let part = "";
+    for (const ch of word) {
+      const next = part + ch;
+      if (ctx.measureText(next).width > maxWidthPx && part) {
+        lines.push(part);
+        part = ch;
+      } else {
+        part = next;
+      }
+    }
+    cur = part;
+  };
+
+  for (const w of words) {
+    const trial = cur ? `${cur} ${w}` : w;
+    if (ctx.measureText(trial).width <= maxWidthPx) {
+      cur = trial;
+      continue;
+    }
+    flushLine();
+    if (ctx.measureText(w).width <= maxWidthPx) {
+      cur = w;
+    } else {
+      splitLongWord(w);
+      flushLine();
+    }
+  }
+  flushLine();
+  return lines;
+}
+
+/**
+ * Stack paragraphs (name, stats, …) centered at (cx,cy), shrinking font until lines fit in maxW × maxH.
+ */
+export function drawParagraphsCenteredInScreenBox(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  maxW: number,
+  maxH: number,
+  paragraphs: string[],
+  zoom: number,
+  labelFill: string,
+): void {
+  const nonempty = paragraphs.map(p => p.trim()).filter(Boolean);
+  if (nonempty.length === 0) return;
+
+  const minFont = 7;
+  let fontPx = scaledFontSize(14, zoom);
+
+  const tryLayout = (px: number) => {
+    ctx.font = `bold ${px}px 'JetBrains Mono',monospace`;
+    const lineHeight = px * 1.2;
+    const paraGap = px * 0.32;
+    const lines: string[] = [];
+    const gapAfter: number[] = [];
+    for (let pi = 0; pi < nonempty.length; pi++) {
+      const wrapped = wrapCanvasTextToLines(ctx, nonempty[pi]!, maxW);
+      for (let li = 0; li < wrapped.length; li++) {
+        lines.push(wrapped[li]!);
+        const isLastOfPara = li === wrapped.length - 1;
+        gapAfter.push(isLastOfPara && pi < nonempty.length - 1 ? paraGap : 0);
+      }
+    }
+    const totalH = lines.reduce((sum, _, i) => sum + lineHeight + gapAfter[i]!, 0);
+    return { lines, gapAfter, lineHeight, totalH };
+  };
+
+  const paint = (lines: string[], gapAfter: number[], lineHeight: number, totalH: number) => {
+    ctx.fillStyle = labelFill;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    let y = cy - totalH / 2 + lineHeight / 2;
+    for (let i = 0; i < lines.length; i++) {
+      ctx.fillText(lines[i]!, cx, y);
+      y += lineHeight + gapAfter[i]!;
+    }
+  };
+
+  while (fontPx >= minFont) {
+    const { lines, gapAfter, lineHeight, totalH } = tryLayout(fontPx);
+    if (totalH <= maxH) {
+      paint(lines, gapAfter, lineHeight, totalH);
+      return;
+    }
+    const nextPx = fontPx * 0.88;
+    if (nextPx < minFont) {
+      const lay = tryLayout(minFont);
+      paint(lay.lines, lay.gapAfter, lay.lineHeight, lay.totalH);
+      return;
+    }
+    fontPx = nextPx;
+  }
+
+  const lay = tryLayout(minFont);
+  paint(lay.lines, lay.gapAfter, lay.lineHeight, lay.totalH);
+}
 
 /**
  * Maps calculator `vizDirection` (degrees) to the angle used for `dir` / `perp` in the grid.
@@ -1285,48 +1417,51 @@ export function drawPathSlabPattern(
 }
 
 /**
- * Path slab label: full/cut counts only — call AFTER path stroke so the label sits on the outline.
+ * Path slab label: object name, optionally + full/cut counts, centered **inside** the path footprint.
+ * Stats belong on pattern layer (L3); on elements view (L2) pass `includeSlabStats: false` for name only.
  */
 export function drawPathSlabLabel(
   ctx: CanvasRenderingContext2D,
   shape: Shape,
   worldToScreen: WorldToScreen,
-  zoom: number
+  zoom: number,
+  canvasLabelFill: string = "#ffffff",
+  includeSlabStats: boolean = true,
 ): void {
   const inputs = shape.calculatorInputs;
   const resolved = resolvePathPatternCenterlineAndSides(shape, inputs);
   if (!resolved || !inputs?.vizSlabWidth || !inputs?.vizSlabLength) return;
-  const { pathCenterline } = resolved;
 
-  const result = computePathSlabCuts(shape, inputs);
-  const { cutSlabCount, fullSlabCount, wasteSatisfiedPositions } = result;
-  const total = fullSlabCount + cutSlabCount;
-  if (total <= 0) return;
-  const wasteSatisfiedCount = Array.isArray(wasteSatisfiedPositions) ? wasteSatisfiedPositions.length : 0;
-  const slabsForCuts = Math.max(0, cutSlabCount - wasteSatisfiedCount);
+  let statsLabel = "";
+  if (includeSlabStats) {
+    const result = computePathSlabCuts(shape, inputs);
+    const { cutSlabCount, fullSlabCount, wasteSatisfiedPositions } = result;
+    const total = fullSlabCount + cutSlabCount;
+    const wasteSatisfiedCount = Array.isArray(wasteSatisfiedPositions) ? wasteSatisfiedPositions.length : 0;
+    const slabsForCuts = Math.max(0, cutSlabCount - wasteSatisfiedCount);
+    statsLabel =
+      total > 0
+        ? slabsForCuts > 0
+          ? `${fullSlabCount} full, ${cutSlabCount} cut (from ${slabsForCuts} slabs)`
+          : `${fullSlabCount} full, ${cutSlabCount} cut`
+        : "";
+  }
 
-  const baseFontSize = 14;
-  const scaledFont = scaledFontSize(baseFontSize, zoom);
-  ctx.font = `bold ${scaledFont}px 'JetBrains Mono',monospace`;
-  ctx.fillStyle = "#ffffff";
-  ctx.textAlign = "center";
+  const name = getPathLabel(shape).trim();
+  if (!name && !statsLabel) return;
 
   const outline = getPathPolygon(shape);
-  const interiorRef = outline.length >= 3 ? centroid(outline) : pathCenterline[0]!;
-  const placement = pathLongestSegmentLabelPlacement(pathCenterline, interiorRef);
-  if (!placement) return;
-
-  const sc = worldToScreen(placement.point.x, placement.point.y);
-  ctx.save();
-  ctx.translate(sc.x, sc.y);
-  ctx.rotate(placement.textAngleRad);
-  const label =
-    slabsForCuts > 0
-      ? `${fullSlabCount} full, ${cutSlabCount} cut (from ${slabsForCuts} slabs)`
-      : `${fullSlabCount} full, ${cutSlabCount} cut`;
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, 0, 0);
-  ctx.restore();
+  if (outline.length < 3) return;
+  const anchor = labelAnchorInsidePolygon(outline);
+  const sc = worldToScreen(anchor.x, anchor.y);
+  const bb = polygonScreenAabb(outline, worldToScreen);
+  const pad = 6;
+  const maxW = Math.max(28, bb.maxX - bb.minX - pad * 2);
+  const maxH = Math.max(22, bb.maxY - bb.minY - pad * 2);
+  const paras: string[] = [];
+  if (name) paras.push(name);
+  if (statsLabel) paras.push(statsLabel);
+  drawParagraphsCenteredInScreenBox(ctx, sc.x, sc.y, maxW, maxH, paras, zoom, canvasLabelFill);
 }
 
 /**
@@ -1646,64 +1781,66 @@ export function drawPathCobblePattern(
   return true;
 }
 
-/** Path monoblock label: full/cut counts only — same placement as {@link drawPathSlabLabel}. */
+/** Path monoblock label: name, optionally + full/cut — same layout as {@link drawPathSlabLabel} for stats flag. */
 export function drawPathCobbleLabel(
   ctx: CanvasRenderingContext2D,
   shape: Shape,
   worldToScreen: WorldToScreen,
-  zoom: number
+  zoom: number,
+  canvasLabelFill: string = "#ffffff",
+  includeBlockStats: boolean = true,
 ): void {
   const inputs = shape.calculatorInputs;
   const resolved = resolvePathPatternCenterlineAndSides(shape, inputs);
   if (!resolved) return;
-  const { pathCenterline } = resolved;
   const bw = Number(inputs?.blockWidthCm);
   const bl = Number(inputs?.blockLengthCm);
   if (!bw || !bl) return;
 
-  const cachedFull = Number(inputs?.vizFullBlockCount ?? 0);
-  const cachedCutStr = inputs?.cutBlocks;
-  const cachedCut = cachedCutStr != null ? Number(cachedCutStr) : 0;
-  const cachedWasteSatisfied = inputs?.vizWasteSatisfied;
-  const cachedWasteSatisfiedCount = Array.isArray(cachedWasteSatisfied) ? cachedWasteSatisfied.length : 0;
+  let statsLabel = "";
+  if (includeBlockStats) {
+    const cachedFull = Number(inputs?.vizFullBlockCount ?? 0);
+    const cachedCutStr = inputs?.cutBlocks;
+    const cachedCut = cachedCutStr != null ? Number(cachedCutStr) : 0;
+    const cachedWasteSatisfied = inputs?.vizWasteSatisfied;
+    const cachedWasteSatisfiedCount = Array.isArray(cachedWasteSatisfied) ? cachedWasteSatisfied.length : 0;
 
-  let fullBlockCount = cachedFull;
-  let cutBlockCount = cachedCut;
-  let wasteSatisfiedCount = cachedWasteSatisfiedCount;
+    let fullBlockCount = cachedFull;
+    let cutBlockCount = cachedCut;
+    let wasteSatisfiedCount = cachedWasteSatisfiedCount;
 
-  if (fullBlockCount === 0 && cutBlockCount === 0) {
-    const result = computePathCobbleCuts(shape, inputs!);
-    fullBlockCount = result.fullSlabCount;
-    cutBlockCount = result.cutSlabCount;
-    wasteSatisfiedCount = Array.isArray(result.wasteSatisfiedPositions) ? result.wasteSatisfiedPositions.length : 0;
+    if (fullBlockCount === 0 && cutBlockCount === 0) {
+      const result = computePathCobbleCuts(shape, inputs!);
+      fullBlockCount = result.fullSlabCount;
+      cutBlockCount = result.cutSlabCount;
+      wasteSatisfiedCount = Array.isArray(result.wasteSatisfiedPositions) ? result.wasteSatisfiedPositions.length : 0;
+    }
+
+    const total = fullBlockCount + cutBlockCount;
+    const blocksForCuts = Math.max(0, cutBlockCount - wasteSatisfiedCount);
+    statsLabel =
+      total > 0
+        ? blocksForCuts > 0
+          ? `${fullBlockCount} full, ${cutBlockCount} cut (from ${blocksForCuts} blocks)`
+          : `${fullBlockCount} full, ${cutBlockCount} cut`
+        : "";
   }
 
-  const total = fullBlockCount + cutBlockCount;
-  if (total <= 0) return;
-  const blocksForCuts = Math.max(0, cutBlockCount - wasteSatisfiedCount);
-
-  const baseFontSize = 14;
-  const scaledFont = scaledFontSize(baseFontSize, zoom);
-  ctx.font = `bold ${scaledFont}px 'JetBrains Mono',monospace`;
-  ctx.fillStyle = "#ffffff";
-  ctx.textAlign = "center";
+  const name = getPathLabel(shape).trim();
+  if (!name && !statsLabel) return;
 
   const outline = getPathPolygon(shape);
-  const interiorRef = outline.length >= 3 ? centroid(outline) : pathCenterline[0]!;
-  const placement = pathLongestSegmentLabelPlacement(pathCenterline, interiorRef);
-  if (!placement) return;
-
-  const sc = worldToScreen(placement.point.x, placement.point.y);
-  ctx.save();
-  ctx.translate(sc.x, sc.y);
-  ctx.rotate(placement.textAngleRad);
-  const label =
-    blocksForCuts > 0
-      ? `${fullBlockCount} full, ${cutBlockCount} cut (from ${blocksForCuts} blocks)`
-      : `${fullBlockCount} full, ${cutBlockCount} cut`;
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, 0, 0);
-  ctx.restore();
+  if (outline.length < 3) return;
+  const anchor = labelAnchorInsidePolygon(outline);
+  const sc = worldToScreen(anchor.x, anchor.y);
+  const bb = polygonScreenAabb(outline, worldToScreen);
+  const pad = 6;
+  const maxW = Math.max(28, bb.maxX - bb.minX - pad * 2);
+  const maxH = Math.max(22, bb.maxY - bb.minY - pad * 2);
+  const paras: string[] = [];
+  if (name) paras.push(name);
+  if (statsLabel) paras.push(statsLabel);
+  drawParagraphsCenteredInScreenBox(ctx, sc.x, sc.y, maxW, maxH, paras, zoom, canvasLabelFill);
 }
 
 /**
@@ -1718,7 +1855,8 @@ export function drawSlabPattern(
   showCuts: boolean = true,
   originOffset?: { x: number; y: number },
   directionDegOverride?: number,
-  useNormalColorsForCuts?: boolean
+  useNormalColorsForCuts?: boolean,
+  labelFill: string = "#ffffff",
 ): void {
   const inputs = shape.calculatorInputs;
   if (!inputs?.vizSlabWidth || !inputs?.vizSlabLength) return;
@@ -1931,32 +2069,23 @@ export function drawSlabPattern(
   ctx.restore();
 
   if (total > 0) {
-    const areaCtr = polygonCentroidByArea(pts);
-    const anchor = pointInPolygon(areaCtr, pts) ? areaCtr : labelAnchorInsidePolygon(pts);
-    const sc = worldToScreen(anchor.x, anchor.y);
-    const baseFontSize = 14;
-    const scaledFont = scaledFontSize(baseFontSize, zoom);
-    const lineHeight = scaledFont * 1.2;
-    ctx.font = `bold ${scaledFont}px 'JetBrains Mono',monospace`;
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
+    const bb = polygonScreenAabb(pts, worldToScreen);
+    const cx = (bb.minX + bb.maxX) / 2;
+    const cy = (bb.minY + bb.maxY) / 2;
+    const pad = 6;
+    const maxW = Math.max(28, bb.maxX - bb.minX - pad * 2);
+    const maxH = Math.max(22, bb.maxY - bb.minY - pad * 2);
+    const statsStr =
+      slabsForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${slabsForCuts} slabs)` : `${fullCount} full, ${cutCount} cut`;
     if (shape.layer === 2) {
-      ctx.fillText(
-        slabsForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${slabsForCuts} slabs)` : `${fullCount} full, ${cutCount} cut`,
-        sc.x,
-        sc.y + lineHeight * 0.5,
-      );
+      drawParagraphsCenteredInScreenBox(ctx, cx, cy, maxW, maxH, [statsStr], zoom, labelFill);
     } else {
-      let line = 0.5;
-      const area = areaM2(getPolygonPointsForSlabArea(shape));
-      ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + lineHeight * line);
-      line += 1;
+      const paras: string[] = [areaM2(getPolygonPointsForSlabArea(shape)).toFixed(2) + " m²"];
       if (strideC === 1 && strideR === 1) {
-        ctx.fillText(slabsForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${slabsForCuts} slabs)` : `${fullCount} full, ${cutCount} cut`, sc.x, sc.y + lineHeight * line);
-        line += 1;
-        ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + lineHeight * line);
+        paras.push(statsStr);
+        paras.push(`~${wastePct}% waste`);
       }
+      drawParagraphsCenteredInScreenBox(ctx, cx, cy, maxW, maxH, paras, zoom, labelFill);
     }
   }
 }

@@ -308,15 +308,19 @@ export function SectionHeader({ title, subtitle, style }: SectionHeaderProps) {
 interface ModalProps {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title?: React.ReactNode;
   width?: number;
   children: React.ReactNode;
   footer?: React.ReactNode;
   /** Applied to scrollable body (e.g. mobile padding overrides via CSS) */
   bodyClassName?: string;
+  /** Merged into modal body (e.g. flex layout, padding: 0) */
+  bodyStyle?: React.CSSProperties;
+  /** Max height of the panel (default 85vh) */
+  panelMaxHeight?: string;
 }
 
-export function Modal({ open, onClose, title, width = 560, children, footer, bodyClassName }: ModalProps) {
+export function Modal({ open, onClose, title, width = 560, children, footer, bodyClassName, bodyStyle, panelMaxHeight }: ModalProps) {
   const backdropDismiss = useBackdropPointerDismiss(onClose, open);
   if (!open) return null;
 
@@ -336,7 +340,9 @@ export function Modal({ open, onClose, title, width = 560, children, footer, bod
         onPointerDownCapture={backdropDismiss.onPanelPointerDownCapture}
         className="ds-modal-panel"
         style={{
-        width, maxWidth: "90vw", maxHeight: "85vh",
+        width, maxWidth: "90vw", maxHeight: panelMaxHeight ?? "85vh",
+        ...(panelMaxHeight ? { height: panelMaxHeight } : {}),
+        minHeight: 0,
         background: colors.bgElevated,
         border: `1px solid ${colors.borderDefault}`,
         borderRadius: radii["3xl"],
@@ -348,14 +354,21 @@ export function Modal({ open, onClose, title, width = 560, children, footer, bod
         {/* Header */}
         <div className="ds-modal-header" style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: `${spacing["3xl"]}px`,
           padding: `${spacing["5xl"]}px ${spacing["6xl"]}px`,
           borderBottom: `1px solid ${colors.borderDefault}`,
           flexShrink: 0,
         }}>
-          <h2 style={{
-            fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold,
-            color: colors.textPrimary, fontFamily: fonts.display, letterSpacing: "0.3px", margin: 0,
-          }}>{title}</h2>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center" }}>
+            {typeof title === "string" || title == null ? (
+              <h2 style={{
+                fontSize: fontSizes["2xl"], fontWeight: fontWeights.bold,
+                color: colors.textPrimary, fontFamily: fonts.display, letterSpacing: "0.3px", margin: 0,
+              }}>{title}</h2>
+            ) : (
+              title
+            )}
+          </div>
           <button onClick={onClose} style={{
             width: 30, height: 30, borderRadius: radii.lg,
             background: colors.bgOverlay, border: `1px solid ${colors.borderMedium}`,
@@ -369,7 +382,16 @@ export function Modal({ open, onClose, title, width = 560, children, footer, bod
         </div>
 
         {/* Body */}
-        <div className={bodyClassName ? `ds-modal-body ${bodyClassName}` : "ds-modal-body"} style={{ flex: 1, overflow: "auto", padding: `${spacing["6xl"]}px` }}>
+        <div
+          className={bodyClassName ? `ds-modal-body ${bodyClassName}` : "ds-modal-body"}
+          style={{
+            flex: 1,
+            overflow: "auto",
+            padding: `${spacing["6xl"]}px`,
+            minHeight: 0,
+            ...bodyStyle,
+          }}
+        >
           {children}
         </div>
 

@@ -114,7 +114,7 @@
   "enter_task_description": "Enter task description",
   "add_tool": "+ Add Tool",
   "enter_tool_name": "Enter tool name",
-  "add_material": "+ Add Material",
+  "add_material": "+ Require Material",
   "enter_material_name": "Enter material name",
   "adding": "Adding...",
   "saving": "Saving...",

@@ -5,6 +5,9 @@ import {
   toMeters,
   toPixels,
   formatLength,
+  formatDimensionCm,
+  formatGeodesySignedCm,
+  roundHeightMToTenthCm,
   midpoint,
   angleDeg,
   shoelaceArea,
@@ -108,6 +111,32 @@ describe("formatLength", () => {
 
   it("formats negative values as absolute", () => {
     expect(formatLength(-80)).toBe("1.000m");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// formatDimensionCm / geodesy display
+// ══════════════════════════════════════════════════════════════
+describe("formatDimensionCm", () => {
+  it("formats whole meters as integer cm", () => {
+    expect(formatDimensionCm(1.6)).toBe("160");
+    expect(formatDimensionCm(0.34)).toBe("34");
+  });
+
+  it("shows one decimal when needed", () => {
+    expect(formatDimensionCm(1.605)).toBe("160.5");
+    expect(formatDimensionCm(0.073)).toBe("7.3");
+  });
+});
+
+describe("roundHeightMToTenthCm / formatGeodesySignedCm", () => {
+  it("rounds height to 0.1 cm in meters", () => {
+    expect(roundHeightMToTenthCm(0.34567)).toBeCloseTo(0.346, 6);
+  });
+
+  it("formats signed cm without unit suffix", () => {
+    expect(formatGeodesySignedCm(0.345)).toBe("+34.5");
+    expect(formatGeodesySignedCm(-0.023)).toBe("-2.3");
   });
 });
 

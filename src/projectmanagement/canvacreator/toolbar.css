@@ -102,6 +102,7 @@
 .toolbar-cad .layer-dot.garden { background: var(--tb-accent); }
 .toolbar-cad .layer-dot.elements { background: var(--tb-blue); }
 .toolbar-cad .layer-dot.pattern { background: #a78bfa; }
+.toolbar-cad .layer-dot.wykop { background: #3b8bd4; }
 .toolbar-cad .layer-dot.preparation { background: #f59e0b; }
 .toolbar-cad .layer-dot.adjustment { background: var(--tb-red); }
 .toolbar-cad .layer-dot.survey { background: #2dd4bf; }

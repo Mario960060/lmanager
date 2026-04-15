@@ -3,8 +3,7 @@
 // Post markers on fences, slope indicators on walls
 // ══════════════════════════════════════════════════════════════
 
-import { Point, Shape, distance, toPixels, midpoint, readableTextAngle } from "../geometry";
-import { C } from "../geometry";
+import { Point, Shape, distance, toPixels, midpoint, readableTextAngle, C, C_LIGHT } from "../geometry";
 import { calcEdgeSlopes, formatSlope, slopeColor } from "../geodesy";
 
 type WorldToScreen = (wx: number, wy: number) => { x: number; y: number };
@@ -84,7 +83,8 @@ export function drawFencePostMarkers(
 export function drawWallSlopeIndicators(
   ctx: CanvasRenderingContext2D,
   shape: Shape,
-  worldToScreen: WorldToScreen
+  worldToScreen: WorldToScreen,
+  canvasIsLight?: boolean,
 ): void {
   if (shape.elementType !== "wall") return;
   const heights = shape.heights || shape.points.map(() => 0);
@@ -122,7 +122,7 @@ export function drawWallSlopeIndicators(
     ctx.translate(stx, sty);
     ctx.rotate(textAngle);
     ctx.font = "bold 20px 'JetBrains Mono',monospace";
-    ctx.fillStyle = slopeColor(sl.severity);
+    ctx.fillStyle = canvasIsLight ? C_LIGHT.text : slopeColor(sl.severity);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(formatSlope(sl), 0, 0);

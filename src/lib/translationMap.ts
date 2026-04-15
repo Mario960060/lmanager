@@ -291,6 +291,7 @@ const dynamicMaterialPatterns: { regex: RegExp; translationKey: string; format?:
   { regex: /^Concrete slabs (.+)$/i, translationKey: 'calculator:material_concrete_slabs' },
   { regex: /^Copings \((.+)\)$/i, translationKey: 'calculator:material_copings', format: (tr, m) => `${tr} (${m[1]})` },
   { regex: /^porcelain slabs (.+)$/i, translationKey: 'calculator:material_porcelain_slabs' },
+  { regex: /^tier panels (.+)$/i, translationKey: 'calculator:material_tier_panels' },
   { regex: /^granite slabs (.+)$/i, translationKey: 'calculator:material_granite_slabs' },
   { regex: /^sandstone slabs (.+)$/i, translationKey: 'calculator:material_sandstone_slabs' },
   { regex: /^Porcelana (.+)$/i, translationKey: 'calculator:material_porcelana' },

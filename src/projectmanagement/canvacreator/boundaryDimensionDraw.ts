@@ -6,7 +6,7 @@ import { readableTextAngle } from "./geometry";
  * Exterior dimension offset at zoom = 1 (CSS px). Scales with {@link boundaryDimL1ExteriorOffsetScreenPx}
  * so the gap from the edge stays constant in **world** space when zoom changes.
  */
-export const BOUNDARY_DIM_L1_EXTERIOR_PX = 76;
+export const BOUNDARY_DIM_L1_EXTERIOR_PX = 90;
 
 /** Screen offset for L1 exterior dims: `BASE * zoom` (world-constant gap), clamped for extreme zoom. */
 export function boundaryDimL1ExteriorOffsetScreenPx(zoom: number): number {
@@ -59,7 +59,8 @@ export function drawExteriorAlignedDimension(
   dimOffsetPx: number,
   label: string,
   strokeColor: string,
-  labelColor: string = strokeColor
+  labelColor: string = strokeColor,
+  labelFontPx: number = 12,
 ) {
   const nx = Math.cos(outwardRad);
   const ny = Math.sin(outwardRad);
@@ -110,11 +111,11 @@ export function drawExteriorAlignedDimension(
   const edgeAng = Math.atan2(sb.y - sa.y, sb.x - sa.x);
   ctx.translate(midx, midy);
   ctx.rotate(readableTextAngle(edgeAng));
-  ctx.font = "12px 'JetBrains Mono','Fira Code',monospace";
+  ctx.font = `${labelFontPx}px 'JetBrains Mono','Fira Code',monospace`;
   ctx.fillStyle = labelColor;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(label, 0, -11);
+  ctx.fillText(label, 0, -14);
   ctx.restore();
 }
 

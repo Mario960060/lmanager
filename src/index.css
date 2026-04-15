@@ -792,3 +792,14 @@
 .dashboard-days-scroll.dashboard-days-scroll--interacting::-webkit-scrollbar-thumb:hover {
   background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.85);
 }
+
+/* CAD geodesy / excavation modals — hide number spinners (Chrome, Safari, Firefox) */
+input.geodesy-modal-number-input::-webkit-outer-spin-button,
+input.geodesy-modal-number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input.geodesy-modal-number-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

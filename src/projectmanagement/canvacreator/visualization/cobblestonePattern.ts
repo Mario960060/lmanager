@@ -5,8 +5,7 @@
 
 import polygonClipping from "polygon-clipping";
 import type { Polygon } from "polygon-clipping";
-import { Point, Shape, toPixels, toMeters, labelAnchorInsidePolygon, areaM2 } from "../geometry";
-import { scaledFontSize } from "../canvasRenderers";
+import { Point, Shape, toPixels, toMeters, areaM2 } from "../geometry";
 import { getEffectivePolygon, getEffectivePolygonWithEdgeIndices, sampleArcEdgeForFrame } from "../arcMath";
 import { isPathElement, getPathPolygon } from "../linearElements";
 import {
@@ -25,6 +24,8 @@ import {
   pathCobbleGridStride,
   herringbone45CornersAtCell,
   herringbonePolygonIjIndexBounds,
+  drawParagraphsCenteredInScreenBox,
+  polygonScreenAabb,
   type CutInfo,
 } from "./slabPattern";
 import {
@@ -193,7 +194,8 @@ function drawMonoblockMixPattern(
   inputs: Record<string, any>,
   polygonForIntersection: Point[],
   hasArcs: boolean,
-  useNormalColorsForCuts?: boolean
+  useNormalColorsForCuts?: boolean,
+  canvasLabelFill: string = "#ffffff",
 ): void {
   if (enabledLengthsCm.length === 0) return;
 
@@ -316,29 +318,19 @@ function drawMonoblockMixPattern(
     : (total > 0 ? Math.round((cutCount / total) * 100) : 0);
   const blocksForCuts = Math.max(0, cutCount - wasteSatisfiedSet.size);
   if (total > 0) {
-    const anchor = labelAnchorInsidePolygon(pts);
-    const sc = worldToScreen(anchor.x, anchor.y);
-    const baseFontSize = 14;
-    const scaledFont = scaledFontSize(baseFontSize, zoom);
-    const lineHeight = scaledFont * 1.2;
-    ctx.font = `bold ${scaledFont}px 'JetBrains Mono',monospace`;
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
+    const bb = polygonScreenAabb(pts, worldToScreen);
+    const cx = (bb.minX + bb.maxX) / 2;
+    const cy = (bb.minY + bb.maxY) / 2;
+    const pad = 6;
+    const maxW = Math.max(28, bb.maxX - bb.minX - pad * 2);
+    const maxH = Math.max(22, bb.maxY - bb.minY - pad * 2);
+    const statsStr =
+      blocksForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${blocksForCuts} blocks)` : `${fullCount} full, ${cutCount} cut`;
     if (shape.layer === 2) {
-      ctx.fillText(
-        blocksForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${blocksForCuts} blocks)` : `${fullCount} full, ${cutCount} cut`,
-        sc.x,
-        sc.y + lineHeight * 0.5,
-      );
+      drawParagraphsCenteredInScreenBox(ctx, cx, cy, maxW, maxH, [statsStr], zoom, canvasLabelFill);
     } else {
-      let line = 0.5;
-      const area = areaM2(getEffectivePolygon(shape));
-      ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + lineHeight * line);
-      line += 1;
-      ctx.fillText(blocksForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${blocksForCuts} blocks)` : `${fullCount} full, ${cutCount} cut`, sc.x, sc.y + lineHeight * line);
-      line += 1;
-      ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + lineHeight * line);
+      const paras = [areaM2(getEffectivePolygon(shape)).toFixed(2) + " m²", statsStr, `~${wastePct}% waste`];
+      drawParagraphsCenteredInScreenBox(ctx, cx, cy, maxW, maxH, paras, zoom, canvasLabelFill);
     }
   }
 }
@@ -356,7 +348,8 @@ export function drawCobblestonePattern(
   originOffset?: { x: number; y: number },
   directionDegOverride?: number,
   useNormalColorsForCuts?: boolean,
-  pathPatternLongOffsetMOverride?: number
+  pathPatternLongOffsetMOverride?: number,
+  canvasLabelFill: string = "#ffffff",
 ): void {
   const inputs = shape.calculatorInputs;
   const blockWidthCm = Number(inputs?.blockWidthCm ?? 20);
@@ -447,7 +440,8 @@ export function drawCobblestonePattern(
       inputs,
       polygonForIntersectionEarly,
       hasArcsEarly,
-      useNormalColorsForCuts
+      useNormalColorsForCuts,
+      canvasLabelFill,
     );
     ctx.restore();
     return;
@@ -622,31 +616,23 @@ export function drawCobblestonePattern(
   const wastePct = totalBlockAreaCm2 > 0 ? Math.round((actualWasteCm2 / totalBlockAreaCm2) * 100) : (total > 0 ? Math.round((cutCount / total) * 100) : 0);
   const blocksForCuts = Math.max(0, cutCount - wasteSatisfiedSet.size);
   if (total > 0) {
-    const anchor = labelAnchorInsidePolygon(pts);
-    const sc = worldToScreen(anchor.x, anchor.y);
-    const baseFontSize = 14;
-    const scaledFont = scaledFontSize(baseFontSize, zoom);
-    const lineHeight = scaledFont * 1.2;
-    ctx.font = `bold ${scaledFont}px 'JetBrains Mono',monospace`;
-    ctx.fillStyle = "#ffffff";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
+    const bb = polygonScreenAabb(pts, worldToScreen);
+    const cx = (bb.minX + bb.maxX) / 2;
+    const cy = (bb.minY + bb.maxY) / 2;
+    const pad = 6;
+    const maxW = Math.max(28, bb.maxX - bb.minX - pad * 2);
+    const maxH = Math.max(22, bb.maxY - bb.minY - pad * 2);
+    const statsStr =
+      blocksForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${blocksForCuts} blocks)` : `${fullCount} full, ${cutCount} cut`;
     if (shape.layer === 2) {
-      ctx.fillText(
-        blocksForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${blocksForCuts} blocks)` : `${fullCount} full, ${cutCount} cut`,
-        sc.x,
-        sc.y + lineHeight * 0.5,
-      );
+      drawParagraphsCenteredInScreenBox(ctx, cx, cy, maxW, maxH, [statsStr], zoom, canvasLabelFill);
     } else {
-      let line = 0.5;
-      const area = areaM2(getEffectivePolygon(shape));
-      ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + lineHeight * line);
-      line += 1;
+      const paras: string[] = [areaM2(getEffectivePolygon(shape)).toFixed(2) + " m²"];
       if (strideC === 1 && strideR === 1) {
-        ctx.fillText(blocksForCuts > 0 ? `${fullCount} full, ${cutCount} cut (from ${blocksForCuts} blocks)` : `${fullCount} full, ${cutCount} cut`, sc.x, sc.y + lineHeight * line);
-        line += 1;
-        ctx.fillText(`~${wastePct}% waste`, sc.x, sc.y + lineHeight * line);
+        paras.push(statsStr);
+        paras.push(`~${wastePct}% waste`);
       }
+      drawParagraphsCenteredInScreenBox(ctx, cx, cy, maxW, maxH, paras, zoom, canvasLabelFill);
     }
   }
 }

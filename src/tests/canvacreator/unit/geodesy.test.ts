@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { calcShapeGradient } from "../../../projectmanagement/canvacreator/geodesy";
-import { Shape, toPixels } from "../../../projectmanagement/canvacreator/geometry";
+import { calcShapeGradient, propagateDesignSlopesToLayer2 } from "../../../projectmanagement/canvacreator/geodesy";
+import { Shape, toPixels, type DesignSlopePoint } from "../../../projectmanagement/canvacreator/geometry";
 
 function makeShape(
   points: { x: number; y: number }[],
@@ -128,5 +128,102 @@ describe("calcShapeGradient — proportional angle", () => {
     expect(result!.magnitude).toBeLessThan(7);
     const verticalSouth = -Math.PI / 2;
     expect(Math.abs(result!.angle - verticalSouth)).toBeGreaterThan(0.1);
+  });
+});
+
+describe("propagateDesignSlopesToLayer2", () => {
+  it("sets L2 vertex heights from design slope points on Layer 1 outline", () => {
+    const px = toPixels(5);
+    const l1: Shape = {
+      points: [
+        { x: 0, y: 0 },
+        { x: px, y: 0 },
+        { x: px, y: px },
+        { x: 0, y: px },
+      ],
+      closed: true,
+      label: "Garden",
+      layer: 1,
+      lockedEdges: [],
+      lockedAngles: [],
+      heights: [0, 0, 0, 0],
+      elementType: "polygon",
+      thickness: 0,
+    };
+    const l2: Shape = {
+      points: [
+        { x: px * 0.25, y: px * 0.25 },
+        { x: px * 0.75, y: px * 0.25 },
+        { x: px * 0.75, y: px * 0.75 },
+        { x: px * 0.25, y: px * 0.75 },
+      ],
+      closed: true,
+      label: "Patio",
+      layer: 2,
+      lockedEdges: [],
+      lockedAngles: [],
+      heights: [0, 0, 0, 0],
+      elementType: "polygon",
+      thickness: 0,
+    };
+    const dsp: DesignSlopePoint[] = [
+      { id: "a", x: 0, y: 0, height: 0, sourceShapeIdx: 0, pointIdx: 0 },
+      { id: "b", x: px, y: 0, height: 0.1, sourceShapeIdx: 0, pointIdx: 1 },
+      { id: "c", x: px, y: px, height: 0.1, sourceShapeIdx: 0, pointIdx: 2 },
+      { id: "d", x: 0, y: px, height: 0, sourceShapeIdx: 0, pointIdx: 3 },
+    ];
+    const { nextShapes } = propagateDesignSlopesToLayer2([l1, l2], dsp);
+    expect(nextShapes).not.toBeNull();
+    const heights = nextShapes![1]!.heights!;
+    expect(heights.length).toBe(4);
+    for (const h of heights) {
+      expect(h).toBeGreaterThan(0.01);
+      expect(h).toBeLessThan(0.09);
+    }
+  });
+
+  it("does not overwrite vertices marked heightManualOverride on L2", () => {
+    const px = toPixels(5);
+    const l1: Shape = {
+      points: [
+        { x: 0, y: 0 },
+        { x: px, y: 0 },
+        { x: px, y: px },
+        { x: 0, y: px },
+      ],
+      closed: true,
+      label: "Garden",
+      layer: 1,
+      lockedEdges: [],
+      lockedAngles: [],
+      heights: [0, 0, 0, 0],
+      elementType: "polygon",
+      thickness: 0,
+    };
+    const l2: Shape = {
+      points: [
+        { x: px * 0.2, y: px * 0.2 },
+        { x: px * 0.8, y: px * 0.2 },
+      ],
+      closed: false,
+      label: "Edge",
+      layer: 2,
+      lockedEdges: [],
+      lockedAngles: [],
+      heights: [0.05, 0.05],
+      heightManualOverride: [true, false],
+      elementType: "fence",
+      thickness: 0,
+    };
+    const dsp: DesignSlopePoint[] = [
+      { id: "a", x: 0, y: 0, height: 0, sourceShapeIdx: 0, pointIdx: 0 },
+      { id: "b", x: px, y: 0, height: 0.2, sourceShapeIdx: 0, pointIdx: 1 },
+      { id: "c", x: px, y: px, height: 0.2, sourceShapeIdx: 0, pointIdx: 2 },
+    ];
+    const { nextShapes } = propagateDesignSlopesToLayer2([l1, l2], dsp);
+    expect(nextShapes).not.toBeNull();
+    const out = nextShapes![1]!;
+    expect(out.heights![0]).toBeCloseTo(0.05, 5);
+    expect(out.heights![1]).not.toBeCloseTo(0.05, 3);
   });
 });

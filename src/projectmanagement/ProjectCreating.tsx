@@ -12,7 +12,7 @@ import CalculatorModal from './CalculatorModal';
 import UnspecifiedMaterialModal from '../components/UnspecifiedMaterialModal';
 import { getMaterialCapacity, DEFAULT_CARRIER_SPEED_M_PER_H } from '../constants/materialCapacity';
 import { translateTaskName, translateMaterialName, translateMaterialDescription, translateUnit } from '../lib/translationMap';
-import { colors, fontSizes, fontWeights, spacing } from '../themes/designTokens';
+import { colors, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
 import { Card, Button } from '../themes/uiComponents';
 import DatePicker from '../components/DatePicker';
 

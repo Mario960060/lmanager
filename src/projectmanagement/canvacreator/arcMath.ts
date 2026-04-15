@@ -962,13 +962,26 @@ export function drawArcHandles(
   arcPoints: ArcPoint[],
   worldToScreen: WorldToScreen,
   hoveredArcId: string | null = null,
-  linkedArcIds?: Set<string>
+  linkedArcIds?: Set<string>,
+  /** PDF/print: tiny dots instead of large edit handles */
+  printSnapshot = false,
 ): void {
   for (const ap of arcPoints) {
     const world = arcPointToWorldOnCurve(A, B, arcPoints, ap);
     const base = { x: A.x + ap.t * (B.x - A.x), y: A.y + ap.t * (B.y - A.y) };
     const sBase = worldToScreen(base.x, base.y);
     const sWorld = worldToScreen(world.x, world.y);
+
+    if (printSnapshot) {
+      ctx.beginPath();
+      ctx.arc(sWorld.x, sWorld.y, 1.15, 0, Math.PI * 2);
+      ctx.fillStyle = "#60a5fa";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(15,23,42,0.55)";
+      ctx.lineWidth = 0.85;
+      ctx.stroke();
+      continue;
+    }
 
     ctx.beginPath();
     ctx.setLineDash([4, 4]);

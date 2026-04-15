@@ -496,6 +496,17 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     [selectedSlabId, slabTypeOptions]
   );
 
+  /** Canvas / path edit: closed polygon → FrameSidesSelector + lengths from geometry. Project wizard without shape → manual SlabFrameCalculator (modal). */
+  const effectivePolygonFrameBorder = useMemo(() => {
+    if (!isInProjectCreating || !shape?.closed) return false;
+    if (isPathElement(shape)) {
+      const pathPts = getPathPolygon(shape);
+      return !!pathPts && pathPts.length >= 3;
+    }
+    const eff = getEffectivePolygonWithEdgeIndices(shape);
+    return eff.points.length >= 3;
+  }, [isInProjectCreating, shape]);
+
   // Ref to avoid setState loop when shape reference changes but frame result is unchanged
   const lastFrameResultsRef = useRef<{ totalFrameSlabs: number; totalHours: number; totalFrameAreaM2: number } | null>(null);
   /** Manual “Calculate frame slabs” on canvas — bumps deps so the auto-compute effect re-runs */
@@ -531,10 +542,14 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
     setFrameRecalcTick((x) => x + 1);
   }, [shape]);
 
-  // Auto-compute frame sides from polygon edges when in canvas mode
+  // Auto-compute frame sides from polygon edges when on canvas / path (not in project wizard without shape)
   useEffect(() => {
     if (!isInProjectCreating || !addFrameBoard) {
       lastFrameResultsRef.current = null;
+      return;
+    }
+    if (!effectivePolygonFrameBorder) {
+      // Manual frame: SlabFrameCalculator modal sets frameResults
       return;
     }
     let pts: Point[];
@@ -702,7 +717,7 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
       lastFrameResultsRef.current = { totalFrameSlabs: nextResults.totalFrameSlabs, totalHours: nextResults.totalHours, totalFrameAreaM2: nextResults.totalFrameAreaM2 };
       setFrameResults(nextResults);
     }
-  }, [isInProjectCreating, addFrameBoard, shape, frameSidesEnabled, frameBorderMaterial, frameJointType, shape?.calculatorInputs?.vizGroutWidthMm, shape?.calculatorInputs?.vizGroutWidth, shape?.calculatorInputs?.jointGapMm, frameBorderRowCount, framePieceLengthCm, framePieceWidthCm, frameTaskTemplates, cuttingTasks, taskTemplates, slabTypeOptions, selectedSlabId, frameRecalcTick]);
+  }, [isInProjectCreating, addFrameBoard, effectivePolygonFrameBorder, shape, frameSidesEnabled, frameBorderMaterial, frameJointType, shape?.calculatorInputs?.vizGroutWidthMm, shape?.calculatorInputs?.vizGroutWidth, shape?.calculatorInputs?.jointGapMm, frameBorderRowCount, framePieceLengthCm, framePieceWidthCm, frameTaskTemplates, cuttingTasks, taskTemplates, slabTypeOptions, selectedSlabId, frameRecalcTick]);
 
   const [calculateDigging, setCalculateDigging] = useState<boolean>(false);
   const [selectedExcavator, setSelectedExcavator] = useState<DiggingEquipment | null>(null);
@@ -1898,14 +1913,31 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
                   <option value="miter45">{t("calculator:frame_joint_miter45")}</option>
                 </select>
               </div>
-              {shape && (() => {
-                if (isPathElement(shape)) {
-                  const pts = getPathPolygon(shape);
+              {effectivePolygonFrameBorder &&
+                shape &&
+                (() => {
+                  if (isPathElement(shape)) {
+                    const pts = getPathPolygon(shape);
+                    if (!pts || pts.length < 3) return null;
+                    return (
+                      <div style={{ marginTop: 12 }}>
+                        <FrameSidesSelector
+                          points={pts}
+                          frameSidesEnabled={frameSidesEnabled}
+                          onChange={setFrameSidesEnabled}
+                          width={280}
+                          height={180}
+                        />
+                      </div>
+                    );
+                  }
+                  const { points: pts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
                   if (!pts || pts.length < 3) return null;
                   return (
                     <div style={{ marginTop: 12 }}>
                       <FrameSidesSelector
                         points={pts}
+                        edgeIndices={edgeIndices}
                         frameSidesEnabled={frameSidesEnabled}
                         onChange={setFrameSidesEnabled}
                         width={280}
@@ -1913,71 +1945,63 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
                       />
                     </div>
                   );
-                }
-                const { points: pts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
-                if (!pts || pts.length < 3) return null;
-                return (
-                  <div style={{ marginTop: 12 }}>
-                    <FrameSidesSelector
-                      points={pts}
-                      edgeIndices={edgeIndices}
-                      frameSidesEnabled={frameSidesEnabled}
-                      onChange={setFrameSidesEnabled}
-                      width={280}
-                      height={180}
-                    />
-                  </div>
-                );
-              })()}
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: spacing.sm,
-                  marginTop: spacing.md,
-                  alignItems: "stretch",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setFrameRecalcTick((x) => x + 1)}
+                })()}
+              {!effectivePolygonFrameBorder && frameBorderMaterial === "cobble" && (
+                <div style={{ marginTop: spacing.md }}>
+                  <HelperText>{t("calculator:frame_border_cobble_needs_polygon")}</HelperText>
+                </div>
+              )}
+              {effectivePolygonFrameBorder && (
+                <div
                   style={{
-                    flex: "1 1 160px",
-                    minWidth: 120,
-                    padding: `${spacing.sm}px ${spacing.xl}px`,
-                    borderRadius: radii.md,
-                    border: "none",
-                    background: colors.green,
-                    color: colors.textOnAccent,
-                    fontWeight: fontWeights.medium,
-                    fontSize: fontSizes.sm,
-                    cursor: "pointer",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: spacing.sm,
+                    marginTop: spacing.md,
+                    alignItems: "stretch",
                   }}
                 >
-                  {t("calculator:calculate_frame_slabs_button")}
-                </button>
-                <button
-                  type="button"
-                  onClick={clearFrameConfigInline}
-                  style={{
-                    flex: "1 1 160px",
-                    minWidth: 120,
-                    padding: `${spacing.sm}px ${spacing.xl}px`,
-                    borderRadius: radii.md,
-                    border: `1px solid ${colors.borderDefault}`,
-                    background: colors.bgElevated,
-                    color: colors.textPrimary,
-                    fontWeight: fontWeights.medium,
-                    fontSize: fontSizes.sm,
-                    cursor: "pointer",
-                  }}
-                >
-                  {t("calculator:clear_all_button")}
-                </button>
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => setFrameRecalcTick((x) => x + 1)}
+                    style={{
+                      flex: "1 1 160px",
+                      minWidth: 120,
+                      padding: `${spacing.sm}px ${spacing.xl}px`,
+                      borderRadius: radii.md,
+                      border: "none",
+                      background: colors.green,
+                      color: colors.textOnAccent,
+                      fontWeight: fontWeights.medium,
+                      fontSize: fontSizes.sm,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {t("calculator:calculate_frame_slabs_button")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearFrameConfigInline}
+                    style={{
+                      flex: "1 1 160px",
+                      minWidth: 120,
+                      padding: `${spacing.sm}px ${spacing.xl}px`,
+                      borderRadius: radii.md,
+                      border: `1px solid ${colors.borderDefault}`,
+                      background: colors.bgElevated,
+                      color: colors.textPrimary,
+                      fontWeight: fontWeights.medium,
+                      fontSize: fontSizes.sm,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {t("calculator:clear_all_button")}
+                  </button>
+                </div>
+              )}
             </div>
           )}
-          {addFrameBoard && !isInProjectCreating && (
+          {addFrameBoard && (!isInProjectCreating || !effectivePolygonFrameBorder) && frameBorderMaterial === "slab" && (
             <Button onClick={() => setIsFrameModalOpen(true)} variant="primary" fullWidth style={{ marginTop: spacing.lg, fontSize: fontSizes.md }}>
               {t('calculator:configure_frame_slabs_button')}
             </Button>
@@ -2240,6 +2264,8 @@ const SlabCalculator: React.FC<SlabCalculatorProps> = ({
         onResultsChange={(results) => setFrameResults(results)}
         selectedSlabType={selectedSlabTypeForFrame}
         cuttingTasks={cuttingTasks as any}
+        initialPieceLengthCm={framePieceLengthCm}
+        initialPieceWidthCm={framePieceWidthCm}
       />
     </div>
   );

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { colors } from '../themes/designTokens';
+import { colors, gradients, shadows, fontWeights } from '../themes/designTokens';
 import { X } from 'lucide-react';
 
 interface UnspecifiedCalendarMaterialModalProps {
@@ -142,7 +142,14 @@ const UnspecifiedCalendarMaterialModal: React.FC<UnspecifiedCalendarMaterialModa
             <button
               type="submit"
               className="px-4 py-2 rounded-md"
-              style={{ backgroundColor: colors.accentBlue, color: colors.textOnAccent }}
+              style={{
+                background: gradients.bluePrimary,
+                color: colors.textOnAccent,
+                fontWeight: fontWeights.semibold,
+                boxShadow: shadows.blue,
+                border: 'none',
+                cursor: 'pointer',
+              }}
             >
               {t('event:add_material')}
             </button>

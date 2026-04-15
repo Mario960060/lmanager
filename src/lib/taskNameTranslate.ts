@@ -17,6 +17,31 @@ const DYNAMIC_TASK_PATTERNS: Array<{
     extractParams: (m) => ({ width: m[1], height: m[2] }),
   },
   {
+    regex: /^Tile Installation (\d+) x (\d+)$/i,
+    key: 'calculator:task_tile_installation_dimensions',
+    extractParams: (m) => ({ width: m[1], height: m[2] }),
+  },
+  {
+    regex: /^Tier Panel Installation (0\.1|0\.2|0\.3)m2$/i,
+    key: 'calculator:task_tier_panel_installation_bucket_m2',
+    extractParams: (m) => ({ area: m[1] }),
+  },
+  {
+    regex: /^Tier panel Installation (\d+) × (\d+)$/i,
+    key: 'calculator:task_tier_panel_installation_dimensions',
+    extractParams: (m) => ({ width: m[1], height: m[2] }),
+  },
+  {
+    regex: /^Tier panel Installation (\d+) x (\d+)$/i,
+    key: 'calculator:task_tier_panel_installation_dimensions',
+    extractParams: (m) => ({ width: m[1], height: m[2] }),
+  },
+  {
+    regex: /^cutting (\d+)cm tier panel$/i,
+    key: 'calculator:task_cutting_tier_panel_cm',
+    extractParams: (m) => ({ cm: m[1] }),
+  },
+  {
     regex: /^Excavation soil with (.+?) \((\d+(?:\.\d+)?)t\)$/,
     key: 'calculator:task_excavation_soil_with_excavator',
     extractParams: (m) => ({ excavatorName: m[1], size: m[2] }),

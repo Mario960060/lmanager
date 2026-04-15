@@ -11,14 +11,21 @@ import {
   distance,
   toPixels,
   toMeters,
-  formatLength,
+  formatDimensionCm,
   midpoint,
   angleDeg,
   centroid,
   polylineLengthMeters,
   readableTextAngle,
   C,
+  EDGE_LENGTH_LABEL_PERP_OFFSET_M,
+  EDGE_LENGTH_LABEL_FONT_PX,
+  EDGE_LENGTH_LABEL_FONT_ABBREV_PX,
 } from "./geometry";
+import {
+  drawEdgeHybridAt,
+  type EdgeDimHybridState,
+} from "./visualization/hybridEdgeDimensions";
 import { drawAlternatingLinkedHalf } from "./linkedEdgeDrawing";
 import {
   sampleArcEdge,
@@ -29,6 +36,24 @@ import {
 } from "./arcMath";
 
 // ── Helpers ───────────────────────────────────────────────────
+
+export type LinearElementLabelPalette = {
+  text: string;
+  textDim: string;
+  accent: string;
+  angleText: string;
+  badge: string;
+};
+
+function defaultLinearLabelPalette(): LinearElementLabelPalette {
+  return {
+    text: C.text,
+    textDim: C.textDim,
+    accent: C.accent,
+    angleText: C.angleText,
+    badge: C.badge,
+  };
+}
 
 export function isLinearElement(shape: Shape): boolean {
   return shape.elementType !== "polygon" && shape.elementType !== "pathSlabs" && shape.elementType !== "pathConcreteSlabs" && shape.elementType !== "pathMonoblock";
@@ -2506,6 +2531,27 @@ function expandClosedStripOutlineWithArcs(shape: Shape): Point[] {
   return result;
 }
 
+function filterFinitePoints(points: Point[]): Point[] {
+  return points.filter(p => p != null && Number.isFinite(p.x) && Number.isFinite(p.y));
+}
+
+/**
+ * Ribbon outline from centerline; guards against empty / invalid {@link computeThickPolyline} output (degenerate segments, bad data).
+ */
+function computeLinearRibbonOutlineSafe(shape: Shape, pathPts: Point[]): Point[] {
+  if (pathPts.length < 2) return [];
+  const pathClean = filterFinitePoints(pathPts);
+  if (pathClean.length < 2) return [];
+  const thicknessM = getLinearElementThicknessM(shape);
+  const thicknessPx = Math.max(4, toPixels(thicknessM));
+  let outline = filterFinitePoints(computeThickPolyline(pathClean, thicknessPx));
+  if (outline.length >= 2) return outline;
+  const a = pathClean[0];
+  const b = pathClean[pathClean.length - 1];
+  outline = filterFinitePoints(computeThickPolyline([a, b], thicknessPx));
+  return outline.length >= 2 ? outline : [];
+}
+
 /**
  * Same closed polygon as drawLinearElement uses for fill/stroke (single-band path from centerline + thickness).
  * Matches curved strip walls (getLinearElementPath + computeThickPolyline*) — use for Layer 5 adjustment booleans.
@@ -2558,10 +2604,15 @@ export function computeLinearElementFillOutline(shape: Shape): Point[] {
     }
     return pts;
   }
-  const pathPts = getLinearElementPath(shape);
-  const thicknessM = getLinearElementThicknessM(shape);
-  const thicknessPx = Math.max(4, toPixels(thicknessM));
-  return computeThickPolyline(pathPts, thicknessPx);
+  const ptsValid = filterFinitePoints(pts);
+  if (ptsValid.length < 2) return [];
+  const shapeForPath = ptsValid.length === pts.length ? shape : { ...shape, points: ptsValid };
+  const pathPts = getLinearElementPath(shapeForPath);
+  if (pathPts.length >= 2) {
+    const ribbon = computeLinearRibbonOutlineSafe(shape, pathPts);
+    if (ribbon.length >= 2) return ribbon;
+  }
+  return computeLinearRibbonOutlineSafe(shape, ptsValid);
 }
 
 /**
@@ -2924,7 +2975,8 @@ function stripEdgeOutwardNormals(
   return { nLeft, nRight };
 }
 
-/** Screen anchor `offsetPx` along projection of world normal; text rotated parallel to edge. */
+/** Anchor at edge midpoint + fixed world offset along `nWorld`; text rotated parallel to edge.
+ *  Hybrid (L1/L2): inline cm or letter + legend; else legacy monospace cm. */
 function drawWorldEdgeDimensionLabel(
   ctx: CanvasRenderingContext2D,
   worldToScreen: WorldToScreen,
@@ -2932,24 +2984,92 @@ function drawWorldEdgeDimensionLabel(
   B: Point,
   midW: Point,
   nWorld: { nx: number; ny: number },
-  offsetPx: number,
-  lenStr: string,
+  lenMeters: number,
   wallHLabel: string | null,
+  pal: LinearElementLabelPalette,
+  hybrid: { state: EdgeDimHybridState; mmPerLogicalPx: number } | null,
 ): void {
+  const perpOff = toPixels(EDGE_LENGTH_LABEL_PERP_OFFSET_M);
+  const labelW = { x: midW.x + nWorld.nx * perpOff, y: midW.y + nWorld.ny * perpOff };
   const sa = worldToScreen(A.x, A.y);
   const sb = worldToScreen(B.x, B.y);
-  const sm = worldToScreen(midW.x, midW.y);
-  const δ = 0.1;
-  const sp = worldToScreen(midW.x + nWorld.nx * δ, midW.y + nWorld.ny * δ);
-  let vx = sp.x - sm.x;
-  let vy = sp.y - sm.y;
-  const vlen = Math.hypot(vx, vy) || 1;
-  vx = (vx / vlen) * offsetPx;
-  vy = (vy / vlen) * offsetPx;
-  const lx = sm.x + vx;
-  const ly = sm.y + vy;
+  const sl = worldToScreen(labelW.x, labelW.y);
+  const lx = sl.x;
+  const ly = sl.y;
   const rot = readableTextAngle(Math.atan2(sb.y - sa.y, sb.x - sa.x));
   const edgeLenPx = Math.hypot(sb.x - sa.x, sb.y - sa.y);
+  const lenStr = formatDimensionCm(lenMeters);
+
+  if (hybrid) {
+    if (!wallHLabel) {
+      drawEdgeHybridAt(
+        ctx,
+        hybrid.state,
+        edgeLenPx,
+        lenMeters,
+        lx,
+        ly,
+        rot,
+        hybrid.mmPerLogicalPx,
+        pal.text,
+        pal.textDim,
+      );
+      return;
+    }
+    drawEdgeHybridAt(
+      ctx,
+      hybrid.state,
+      edgeLenPx,
+      lenMeters,
+      lx,
+      ly,
+      rot,
+      hybrid.mmPerLogicalPx,
+      pal.text,
+      pal.textDim,
+    );
+    ctx.save();
+    ctx.translate(lx, ly);
+    ctx.rotate(rot);
+    ctx.font = `${EDGE_LENGTH_LABEL_FONT_PX}px 'JetBrains Mono',monospace`;
+    ctx.fillStyle = pal.accent;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(wallHLabel, 0, 12);
+    ctx.restore();
+    return;
+  }
+
+  // Legacy: monospace cm (no unit suffix in lenStr)
+  const DIM_MIN_MARGIN = 14;
+  const DIM_FONT_PX = EDGE_LENGTH_LABEL_FONT_PX;
+  const DIM_FONT_ABBREV_PX = EDGE_LENGTH_LABEL_FONT_ABBREV_PX;
+  ctx.font = `${DIM_FONT_PX}px 'JetBrains Mono',monospace`;
+  const textW = ctx.measureText(lenStr).width;
+  if (textW + DIM_MIN_MARGIN * 2 > edgeLenPx) {
+    if (edgeLenPx > 30) {
+      const abbrev = lenStr;
+      ctx.font = `${DIM_FONT_ABBREV_PX}px 'JetBrains Mono',monospace`;
+      const abbrevW = ctx.measureText(abbrev).width;
+      if (abbrevW + 10 <= edgeLenPx) {
+        ctx.save();
+        ctx.translate(lx, ly);
+        ctx.rotate(rot);
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "center";
+        ctx.fillStyle = pal.textDim;
+        ctx.fillText(abbrev, 0, 0);
+        ctx.restore();
+        return;
+      }
+      ctx.beginPath();
+      ctx.arc(lx, ly, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffd700";
+      ctx.fill();
+      return;
+    }
+    if (edgeLenPx < 15) return;
+  }
 
   ctx.save();
   ctx.translate(lx, ly);
@@ -2957,34 +3077,34 @@ function drawWorldEdgeDimensionLabel(
   ctx.textBaseline = "middle";
 
   if (wallHLabel) {
-    ctx.font = "11px 'JetBrains Mono',monospace";
+    ctx.font = `${DIM_FONT_PX}px 'JetBrains Mono',monospace`;
     const wLen = ctx.measureText(lenStr).width;
     const midGap = ctx.measureText("  ").width;
-    ctx.font = "10px 'JetBrains Mono',monospace";
+    ctx.font = `${EDGE_LENGTH_LABEL_FONT_PX}px 'JetBrains Mono',monospace`;
     const wH = ctx.measureText(wallHLabel).width;
     const total = wLen + midGap + wH;
     if (total < Math.max(40, edgeLenPx * 0.82)) {
       ctx.textAlign = "left";
       const x0 = -total / 2;
-      ctx.font = "11px 'JetBrains Mono',monospace";
-      ctx.fillStyle = C.text;
+      ctx.font = `${DIM_FONT_PX}px 'JetBrains Mono',monospace`;
+      ctx.fillStyle = pal.text;
       ctx.fillText(lenStr, x0, 0);
-      ctx.font = "10px 'JetBrains Mono',monospace";
-      ctx.fillStyle = C.accent;
+      ctx.font = `${EDGE_LENGTH_LABEL_FONT_PX}px 'JetBrains Mono',monospace`;
+      ctx.fillStyle = pal.accent;
       ctx.fillText("  " + wallHLabel, x0 + wLen, 0);
     } else {
       ctx.textAlign = "center";
-      ctx.font = "11px 'JetBrains Mono',monospace";
-      ctx.fillStyle = C.text;
+      ctx.font = `${DIM_FONT_PX}px 'JetBrains Mono',monospace`;
+      ctx.fillStyle = pal.text;
       ctx.fillText(lenStr, 0, -6);
-      ctx.font = "10px 'JetBrains Mono',monospace";
-      ctx.fillStyle = C.accent;
+      ctx.font = `${EDGE_LENGTH_LABEL_FONT_PX}px 'JetBrains Mono',monospace`;
+      ctx.fillStyle = pal.accent;
       ctx.fillText(wallHLabel, 0, 7);
     }
   } else {
     ctx.textAlign = "center";
-    ctx.font = "11px 'JetBrains Mono',monospace";
-    ctx.fillStyle = C.text;
+    ctx.font = `${DIM_FONT_PX}px 'JetBrains Mono',monospace`;
+    ctx.fillStyle = pal.text;
     ctx.fillText(lenStr, 0, 0);
   }
   ctx.restore();
@@ -3113,8 +3233,16 @@ export function drawLinearElement(
   _zoom: number,
   isSelected: boolean,
   isHovered: boolean,
-  isPointLinked?: (pointIdx: number) => boolean
+  isPointLinked?: (pointIdx: number) => boolean,
+  /** Wykop / Przygotowanie (L4/L5): bez etykiet kątowych przy narożnikach */
+  hideCornerAngleLabels = false,
+  labelPalette?: LinearElementLabelPalette,
+  hybridEdgeDims?: { state: EdgeDimHybridState; mmPerLogicalPx: number } | null,
+  /** Tryb geodezji: tylko punkty wysokości — bez długości odcinków na obrysie. */
+  hideEdgeLengthDimensions = false,
 ): void {
+  const pal = labelPalette ?? defaultLinearLabelPalette();
+  const hybrid = hybridEdgeDims ?? null;
   const pts = shape.points;
   if (pts.length < 2) return;
 
@@ -3123,6 +3251,7 @@ export function drawLinearElement(
     shape.elementType === "wall" && shouldUseDoubleWallPerEdgeThickness(shape);
 
   const outline = computeLinearElementFillOutline(shape);
+  if (outline.length < 2 || !outline[0] || !Number.isFinite(outline[0].x) || !Number.isFinite(outline[0].y)) return;
 
   const fillColor = linearElementColor(shape.elementType);
   const strokeColor = isSelected ? C.accent : isHovered ? C.edgeHover : fillColor;
@@ -3164,45 +3293,56 @@ export function drawLinearElement(
   const centroidSc = worldToScreen(ctrPoly.x, ctrPoly.y);
 
   // Segment length labels (strip: parallel edges; else centerline segments)
-  if (isPolygonLinearStripOutline(shape)) {
-    for (let i = 0; ; i++) {
-      const e = stripOutlineParallelEdges(pts, i);
-      if (!e) break;
-      const { nLeft, nRight } = stripEdgeOutwardNormals(
-        e.leftA,
-        e.leftB,
-        e.rightA,
-        e.rightB,
-        ctrPoly,
-      );
-      const midL = midpoint(e.leftA, e.leftB);
-      const midR = midpoint(e.rightA, e.rightB);
-      const arcSeg = shape.edgeArcs?.[i];
-      const lenL = formatLength(
-        arcSeg && arcSeg.length > 0 ? calcEdgeLengthWithArcs(e.leftA, e.leftB, arcSeg) : distance(e.leftA, e.leftB)
-      );
-      const lenR = formatLength(
-        arcSeg && arcSeg.length > 0 ? calcEdgeLengthWithArcs(e.leftA, e.leftB, arcSeg) : distance(e.rightA, e.rightB)
-      );
-      const hWall = shape.elementType === "wall" ? wallSegmentHeightLabel(shape, i) : null;
-      drawWorldEdgeDimensionLabel(ctx, worldToScreen, e.leftA, e.leftB, midL, nLeft, 16, lenL, hWall);
-      drawWorldEdgeDimensionLabel(ctx, worldToScreen, e.rightA, e.rightB, midR, nRight, 16, lenR, hWall);
-    }
-  } else if (!outlineStored) {
-    const nEdge = shape.closed && pts.length >= 3 ? pts.length : pts.length - 1;
-    for (let i = 0; i < nEdge; i++) {
-      const A = pts[i];
-      const B = shape.closed && pts.length >= 3 ? pts[(i + 1) % pts.length] : pts[i + 1];
-      const len = calcEdgeLengthWithArcs(A, B, shape.edgeArcs?.[i]);
-      const nW = worldOutwardUnitFromCentroid(A, B, ctrPoly);
-      const midW = midpoint(A, B);
-      const hWall = shape.elementType === "wall" ? wallSegmentHeightLabel(shape, i) : null;
-      drawWorldEdgeDimensionLabel(ctx, worldToScreen, A, B, midW, nW, 16, formatLength(len), hWall);
+  if (!hideEdgeLengthDimensions) {
+    if (isPolygonLinearStripOutline(shape)) {
+      for (let i = 0; ; i++) {
+        const e = stripOutlineParallelEdges(pts, i);
+        if (!e) break;
+        const { nLeft, nRight } = stripEdgeOutwardNormals(
+          e.leftA,
+          e.leftB,
+          e.rightA,
+          e.rightB,
+          ctrPoly,
+        );
+        const midL = midpoint(e.leftA, e.leftB);
+        const midR = midpoint(e.rightA, e.rightB);
+        const arcSeg = shape.edgeArcs?.[i];
+        const lenLpx =
+          arcSeg && arcSeg.length > 0 ? calcEdgeLengthWithArcs(e.leftA, e.leftB, arcSeg) : distance(e.leftA, e.leftB);
+        const lenRpx =
+          arcSeg && arcSeg.length > 0 ? calcEdgeLengthWithArcs(e.rightA, e.rightB, arcSeg) : distance(e.rightA, e.rightB);
+        const lenLm = toMeters(lenLpx);
+        const lenRm = toMeters(lenRpx);
+        const hWall = shape.elementType === "wall" ? wallSegmentHeightLabel(shape, i) : null;
+        const smL = worldToScreen(midL.x, midL.y);
+        const smR = worldToScreen(midR.x, midR.y);
+        const stripMidScreen = Math.hypot(smR.x - smL.x, smR.y - smL.y);
+        if (stripMidScreen < 38) {
+          const midStrip = { x: (midL.x + midR.x) * 0.5, y: (midL.y + midR.y) * 0.5 };
+          drawWorldEdgeDimensionLabel(ctx, worldToScreen, e.leftA, e.leftB, midStrip, nLeft, lenLm, hWall, pal, hybrid);
+        } else {
+          drawWorldEdgeDimensionLabel(ctx, worldToScreen, e.leftA, e.leftB, midL, nLeft, lenLm, hWall, pal, hybrid);
+          drawWorldEdgeDimensionLabel(ctx, worldToScreen, e.rightA, e.rightB, midR, nRight, lenRm, hWall, pal, hybrid);
+        }
+      }
+    } else if (!outlineStored) {
+      const nEdge = shape.closed && pts.length >= 3 ? pts.length : pts.length - 1;
+      for (let i = 0; i < nEdge; i++) {
+        const A = pts[i];
+        const B = shape.closed && pts.length >= 3 ? pts[(i + 1) % pts.length] : pts[i + 1];
+        const len = calcEdgeLengthWithArcs(A, B, shape.edgeArcs?.[i]);
+        const lenM = toMeters(len);
+        const nW = worldOutwardUnitFromCentroid(A, B, ctrPoly);
+        const midW = midpoint(A, B);
+        const hWall = shape.elementType === "wall" ? wallSegmentHeightLabel(shape, i) : null;
+        drawWorldEdgeDimensionLabel(ctx, worldToScreen, A, B, midW, nW, lenM, hWall, pal, hybrid);
+      }
     }
   }
 
   // Corner angle labels
-  if (!outlineStored) {
+  if (!hideCornerAngleLabels && !outlineStored) {
     for (let i = 1; i < pts.length - 1; i++) {
       const prev = pts[i - 1];
       const curr = pts[i];
@@ -3210,12 +3350,12 @@ export function drawLinearElement(
       const angle = angleDeg(prev, curr, next);
       const sc = worldToScreen(curr.x, curr.y);
       ctx.font = "10px 'JetBrains Mono',monospace";
-      ctx.fillStyle = C.angleText;
+      ctx.fillStyle = pal.angleText;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(angle.toFixed(1) + "°", sc.x, sc.y - 12);
     }
-  } else if (isClosedStripPolygonOutline(pts)) {
+  } else if (!hideCornerAngleLabels && isClosedStripPolygonOutline(pts)) {
     const segCount = (pts.length - 2) / 2;
     for (let i = 0; i < segCount; i++) {
       const prev = pts[(i - 1 + segCount) % segCount];
@@ -3236,7 +3376,7 @@ export function drawLinearElement(
       ctx.textBaseline = "middle";
       ctx.fillText(angle.toFixed(1) + "°", sMid.x + ox * 20, sMid.y + oy * 20);
     }
-  } else if (isOpenStripPolygonOutline(pts)) {
+  } else if (!hideCornerAngleLabels && isOpenStripPolygonOutline(pts)) {
     const V = pts.length / 2;
     for (let i = 1; i <= V - 2; i++) {
       const prev = pts[i - 1];
@@ -3252,71 +3392,57 @@ export function drawLinearElement(
       ox /= olen;
       oy /= olen;
       ctx.font = "10px 'JetBrains Mono',monospace";
-      ctx.fillStyle = C.angleText;
+      ctx.fillStyle = pal.angleText;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(angle.toFixed(1) + "°", sMid.x + ox * 20, sMid.y + oy * 20);
     }
   }
 
-  // Total length label (strip: sum of mean(left,right) per segment; matches run length)
-  let totalLenM = 0;
-  if (isPolygonLinearStripOutline(shape)) {
-    for (let i = 0; ; i++) {
-      const m = stripOutlineSegmentLengthMeanM(pts, i, shape.edgeArcs?.[i]);
-      if (m == null) break;
-      totalLenM += m;
+  // Total length + type badge: only when selected (avoids clutter; edge dims remain)
+  if (isSelected) {
+    let totalLenM = 0;
+    if (isPolygonLinearStripOutline(shape)) {
+      for (let i = 0; ; i++) {
+        const m = stripOutlineSegmentLengthMeanM(pts, i, shape.edgeArcs?.[i]);
+        if (m == null) break;
+        totalLenM += m;
+      }
+    } else if (outlineStored) {
+      totalLenM = polygonToSegmentLengths(pts).reduce((a, b) => a + b, 0);
+    } else {
+      totalLenM = polylineLengthMeters(pts);
     }
-  } else if (outlineStored) {
-    totalLenM = polygonToSegmentLengths(pts).reduce((a, b) => a + b, 0);
-  } else {
-    totalLenM = polylineLengthMeters(pts);
-  }
-  const sc = worldToScreen(ctrPoly.x, ctrPoly.y);
-  ctx.font = "bold 12px 'JetBrains Mono',monospace";
-  ctx.fillStyle = C.text;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(totalLenM.toFixed(3) + " m", sc.x, sc.y);
+    const sc = worldToScreen(ctrPoly.x, ctrPoly.y);
+    ctx.font = "bold 12px 'JetBrains Mono',monospace";
+    ctx.fillStyle = pal.text;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(formatDimensionCm(totalLenM), sc.x, sc.y);
 
-  // Type badge (F/W/K/Fd or groundwork: Dr/Ca/Wa/Cb)
-  const badgeText = shape.elementType === "fence" ? "F" : shape.elementType === "wall" ? "W" : shape.elementType === "kerb" ? "K" : shape.elementType === "foundation" ? "Fd" : shape.elementType === "drainage" ? "Dr" : shape.elementType === "canalPipe" ? "Ca" : shape.elementType === "waterPipe" ? "Wa" : shape.elementType === "cable" ? "Cb" : "?";
-  ctx.font = "bold 10px 'JetBrains Mono',monospace";
-  ctx.fillStyle = C.badge;
-  ctx.fillRect(sc.x - 14, sc.y - 22, 28, 14);
-  ctx.strokeStyle = strokeColor;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(sc.x - 14, sc.y - 22, 28, 14);
-  ctx.fillStyle = strokeColor;
-  ctx.fillText(badgeText, sc.x, sc.y - 15);
+    const badgeText = shape.elementType === "fence" ? "F" : shape.elementType === "wall" ? "W" : shape.elementType === "kerb" ? "K" : shape.elementType === "foundation" ? "Fd" : shape.elementType === "drainage" ? "Dr" : shape.elementType === "canalPipe" ? "Ca" : shape.elementType === "waterPipe" ? "Wa" : shape.elementType === "cable" ? "Cb" : "?";
+    ctx.font = "bold 10px 'JetBrains Mono',monospace";
+    ctx.fillStyle = C.badge;
+    ctx.fillRect(sc.x - 14, sc.y - 22, 28, 14);
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sc.x - 14, sc.y - 22, 28, 14);
+    ctx.fillStyle = strokeColor;
+    ctx.fillText(badgeText, sc.x, sc.y - 15);
+  }
 }
 
 export function drawLinearElementInactive(
   ctx: CanvasRenderingContext2D,
   shape: Shape,
   worldToScreen: WorldToScreen,
-  _zoom: number
+  _zoom: number,
 ): void {
   const pts = shape.points;
   if (pts.length < 2) return;
 
-  const outlineStored = isPolygonLinearOutlineStored(shape);
   const usePerEdgeDoubleWall =
     shape.elementType === "wall" && shouldUseDoubleWallPerEdgeThickness(shape);
-
-  let totalLenM: number;
-  if (isPolygonLinearStripOutline(shape)) {
-    totalLenM = 0;
-    for (let i = 0; ; i++) {
-      const m = stripOutlineSegmentLengthMeanM(pts, i, shape.edgeArcs?.[i]);
-      if (m == null) break;
-      totalLenM += m;
-    }
-  } else if (outlineStored) {
-    totalLenM = polygonToSegmentLengths(pts).reduce((a, b) => a + b, 0);
-  } else {
-    totalLenM = polylineLengthMeters(pts);
-  }
 
   const outline = computeLinearElementFillOutline(shape);
 
@@ -3334,12 +3460,4 @@ export function drawLinearElementInactive(
     ctx.lineWidth = 1.2;
     ctx.stroke();
   }
-
-  const ctr = usePerEdgeDoubleWall ? centroid(getLinearElementPath(shape)) : centroid(outline);
-  const sc = worldToScreen(ctr.x, ctr.y);
-  ctx.font = "11px 'JetBrains Mono',monospace";
-  ctx.fillStyle = C.inactiveEdge;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(totalLenM.toFixed(3) + " m", sc.x, sc.y);
 }

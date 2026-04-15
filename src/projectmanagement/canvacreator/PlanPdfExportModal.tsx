@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { FileDown } from "lucide-react";
 import { colors, shadows } from "../../themes/designTokens";
@@ -15,8 +16,14 @@ const LAYERS = [
   { id: 1, key: "garden_label" },
   { id: 2, key: "elements_label" },
   { id: 3, key: "pattern_label" },
-  { id: 4, key: "preparation_label" },
+  { id: 4, key: "wykop_label" },
+  { id: 5, key: "preparation_label" },
+  { id: 101, key: "pdf_geodesy_layer1_label" },
+  { id: 102, key: "pdf_geodesy_layer2_label" },
 ] as const;
+
+/** Portal to body: main content stacks below sidebar (z-50); fixed modals inside main stay under aside otherwise. */
+const PLAN_PDF_MODAL_Z = 50000;
 
 export default function PlanPdfExportModal({
   isOpen,
@@ -25,7 +32,7 @@ export default function PlanPdfExportModal({
   isExporting,
 }: PlanPdfExportModalProps) {
   const { t } = useTranslation("project");
-  const [selected, setSelected] = React.useState<Set<number>>(new Set([1, 2, 3, 4]));
+  const [selected, setSelected] = React.useState<Set<number>>(new Set([1, 2, 3, 4, 5, 101, 102]));
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -54,7 +61,7 @@ export default function PlanPdfExportModal({
 
   if (!isOpen) return null;
 
-  return (
+  const content = (
     <div
       ref={backdropDismiss.backdropRef}
       className="canvas-modal-backdrop"
@@ -65,7 +72,7 @@ export default function PlanPdfExportModal({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 1000,
+        zIndex: PLAN_PDF_MODAL_Z,
         backdropFilter: "blur(4px)",
       }}
       onPointerDown={!isExporting ? backdropDismiss.onBackdropPointerDown : undefined}
@@ -153,4 +160,7 @@ export default function PlanPdfExportModal({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(content, document.body);
 }

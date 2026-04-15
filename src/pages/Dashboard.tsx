@@ -3,11 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { format, addDays, parseISO, isWithinInterval } from 'date-fns';
+import { format, addDays, parseISO } from 'date-fns';
 import { enUS, pl } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useSidebarSectionReset } from '../hooks/useSidebarSectionReset';
-import { AlertCircle, ChevronDown, ChevronUp, Wrench, Package, ClipboardList } from 'lucide-react';
+import { toolDisplayName } from '../lib/toolDisplay';
+import { AlertCircle, ChevronDown, ChevronUp, Wrench, ClipboardList, Hammer } from 'lucide-react';
 import PageInfoModal from '../components/PageInfoModal';
 import DatePicker from '../components/DatePicker';
 import {
@@ -71,6 +72,28 @@ function sortDashboardPlannedFolderKeys(
     return (fa?.name || a).localeCompare(fb?.name || b);
   });
   return hasNone ? [...real, '__none__'] : real;
+}
+
+/** Local calendar day for event range — matches Calendar (all statuses except finished) per-day logic. */
+function eventBoundaryYmd(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const d = parseISO(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return format(d, 'yyyy-MM-dd');
+  } catch {
+    return null;
+  }
+}
+
+function eventCoversDashboardDay(
+  event: { start_date?: string | null; end_date?: string | null },
+  dayYmd: string
+): boolean {
+  const s = eventBoundaryYmd(event.start_date);
+  const e = eventBoundaryYmd(event.end_date);
+  if (!s || !e) return false;
+  return dayYmd >= s && dayYmd <= e;
 }
 
 function DashboardPlannedTasksGrouped({
@@ -208,15 +231,19 @@ const Dashboard = () => {
     return Array.from({ length: DASHBOARD_SCROLL_DAYS }, (_, i) => format(addDays(base, i), 'yyyy-MM-dd'));
   }, [todayYmd]);
 
-  const [expandedSections, setExpandedSections] = useState<Record<string, Record<string, boolean>>>({});
+  type DashPanel = 'planned_tasks' | 'materials' | 'equipment' | 'tools' | null;
+  const [expandedPanelByKey, setExpandedPanelByKey] = useState<Record<string, DashPanel>>({});
   const [showAddMaterialModal, setShowAddMaterialModal] = useState(false);
   const [materialDate, setMaterialDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
+  const [showPlanDayModal, setShowPlanDayModal] = useState(false);
+  const [planDayDate, setPlanDayDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
 
   const daysScrollIdleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [daysScrollInteracting, setDaysScrollInteracting] = useState(false);
 
   useSidebarSectionReset('/', () => {
     setShowAddMaterialModal(false);
+    setShowPlanDayModal(false);
   });
 
   const handleDaysScroll = useCallback(() => {
@@ -249,7 +276,7 @@ const Dashboard = () => {
           has_materials
         `)
         .eq('company_id', companyId)
-        .or(`status.eq.scheduled,status.eq.in_progress`)
+        .neq('status', 'finished')
         .order('start_date', { ascending: true });
 
       if (error) throw error;
@@ -258,9 +285,11 @@ const Dashboard = () => {
     enabled: !!companyId
   });
 
-  // Fetch calendar materials
+  const eventIdSetForFilter = useMemo(() => new Set(events.map((e) => e.id).filter(Boolean) as string[]), [events]);
+
+  // Fetch calendar materials (include legacy rows with null company_id)
   const { data: calendarMaterials = [] } = useQuery({
-    queryKey: ['dashboard_calendar_materials', companyId, dashboardPlanDates.join(',')],
+    queryKey: ['dashboard_calendar_materials', companyId, dashboardPlanDates.join(','), events.map((e) => e.id).join(',')],
     queryFn: async () => {
       if (!companyId) return [];
       const { data, error } = await supabase
@@ -275,19 +304,21 @@ const Dashboard = () => {
             full_name
           )
         `)
-        .eq('company_id', companyId)
         .in('date', dashboardPlanDates)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data;
+      return (data || []).filter((m: { company_id?: string | null; event_id?: string | null }) => {
+        if (m.company_id === companyId) return true;
+        if (m.company_id == null && (!m.event_id || eventIdSetForFilter.has(m.event_id))) return true;
+        return false;
+      });
     },
     enabled: !!companyId
   });
 
-  // Fetch calendar equipment
   const { data: calendarEquipment = [] } = useQuery({
-    queryKey: ['dashboard_calendar_equipment', companyId, dashboardPlanDates.join(',')],
+    queryKey: ['dashboard_calendar_equipment', companyId, dashboardPlanDates.join(','), events.map((e) => e.id).join(',')],
     queryFn: async () => {
       if (!companyId) return [];
       const { data, error } = await supabase
@@ -306,12 +337,38 @@ const Dashboard = () => {
             full_name
           )
         `)
-        .eq('company_id', companyId)
         .in('date', dashboardPlanDates)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data;
+      return (data || []).filter((row: { company_id?: string | null; event_id?: string | null }) => {
+        if (row.company_id === companyId) return true;
+        if (row.company_id == null && (!row.event_id || eventIdSetForFilter.has(row.event_id))) return true;
+        return false;
+      });
+    },
+    enabled: !!companyId
+  });
+
+  const { data: calendarTools = [] } = useQuery({
+    queryKey: ['dashboard_calendar_tools', companyId, dashboardPlanDates.join(','), events.map((e) => e.id).join(',')],
+    queryFn: async () => {
+      if (!companyId) return [];
+      const { data, error } = await supabase
+        .from('calendar_tools')
+        .select(`
+          *,
+          events (id, title),
+          tools (id, name_en, name_pl, unit)
+        `)
+        .in('date', dashboardPlanDates)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data || []).filter((row: { company_id?: string | null; event_id?: string | null }) => {
+        if (row.company_id === companyId) return true;
+        if (row.company_id == null && (!row.event_id || eventIdSetForFilter.has(row.event_id))) return true;
+        return false;
+      });
     },
     enabled: !!companyId
   });
@@ -450,25 +507,6 @@ const Dashboard = () => {
     enabled: events.length > 0 && !!companyId,
   });
 
-  const plannedTaskCountByEventAndDate = useMemo(() => {
-    const m: Record<string, Set<string>> = {};
-    for (const row of dashboardPlannedBlocks as Array<{
-      event_id?: string | null;
-      plan_date?: string | null;
-      calendar_day_plan_block_tasks?: Array<{ tasks_done_id?: string | null }> | null;
-    }>) {
-      if (!row.event_id || !row.plan_date) continue;
-      const key = `${row.event_id}__${row.plan_date}`;
-      if (!m[key]) m[key] = new Set();
-      for (const t of row.calendar_day_plan_block_tasks || []) {
-        if (t.tasks_done_id) m[key].add(t.tasks_done_id);
-      }
-    }
-    const out: Record<string, number> = {};
-    for (const [k, set] of Object.entries(m)) out[k] = set.size;
-    return out;
-  }, [dashboardPlannedBlocks]);
-
   const plannedTaskRowsByEventDate = useMemo(() => {
     type BlockRow = {
       id: string;
@@ -559,14 +597,19 @@ const Dashboard = () => {
     return translated;
   };
 
-  const DayView = ({ date, dayEvents }: { date: Date; dayEvents: typeof events }) => {
-    const dayMaterials = calendarMaterials.filter(m =>
-      format(parseISO(m.date), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
-    );
+  const cellYmd = (v: unknown) => {
+    if (v == null) return '';
+    if (typeof v === 'string') return v.length >= 10 ? v.slice(0, 10) : format(parseISO(v), 'yyyy-MM-dd');
+    return format(parseISO(String(v)), 'yyyy-MM-dd');
+  };
 
-    const dayEquipment = calendarEquipment.filter(e =>
-      format(parseISO(e.date), 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
-    );
+  const DayView = ({ date, dayEvents }: { date: Date; dayEvents: typeof events }) => {
+    const dayYmdKey = format(date, 'yyyy-MM-dd');
+    const dayMaterials = calendarMaterials.filter((m) => cellYmd((m as { date?: unknown }).date) === dayYmdKey);
+
+    const dayEquipment = calendarEquipment.filter((e) => cellYmd((e as { date?: unknown }).date) === dayYmdKey);
+
+    const dayTools = calendarTools.filter((r) => cellYmd((r as { date?: unknown }).date) === dayYmdKey);
 
     const dayNotesForDate = dayNotes.filter(n =>
       n.date === format(date, 'yyyy-MM-dd')
@@ -586,18 +629,26 @@ const Dashboard = () => {
       return acc;
     }, {});
 
-    const toggleSection = (eventId: string, section: 'planned_tasks' | 'materials' | 'equipment') => {
-      setExpandedSections(prev => ({
-        ...prev,
-        [format(date, 'yyyy-MM-dd')]: {
-          ...prev[format(date, 'yyyy-MM-dd')],
-          [`${eventId}-${section}`]: !prev[format(date, 'yyyy-MM-dd')]?.[`${eventId}-${section}`]
-        }
-      }));
+    const toolsByProject = dayTools.reduce((acc: Record<string, any[]>, row) => {
+      const eventId = row.event_id ?? 'unknown';
+      if (!acc[eventId]) acc[eventId] = [];
+      acc[eventId].push(row);
+      return acc;
+    }, {});
+
+    const panelKey = (eventId: string) => `${dayYmdKey}__${eventId}`;
+
+    const toggleSection = (eventId: string, section: 'planned_tasks' | 'materials' | 'equipment' | 'tools') => {
+      const k = panelKey(eventId);
+      setExpandedPanelByKey((prev) => {
+        const cur = prev[k];
+        const next = cur === section ? null : section;
+        return { ...prev, [k]: next };
+      });
     };
 
-    const isExpanded = (eventId: string, section: 'planned_tasks' | 'materials' | 'equipment') => {
-      return expandedSections[format(date, 'yyyy-MM-dd')]?.[`${eventId}-${section}`] || false;
+    const isExpanded = (eventId: string, section: 'planned_tasks' | 'materials' | 'equipment' | 'tools') => {
+      return expandedPanelByKey[panelKey(eventId)] === section;
     };
 
     const isToday = format(date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
@@ -628,26 +679,27 @@ const Dashboard = () => {
             {dayEvents.filter(e => e.id).map(event => {
               const eventId = event.id!;
               const dateKey = format(date, 'yyyy-MM-dd');
-              const plannedTaskCount = plannedTaskCountByEventAndDate[`${eventId}__${dateKey}`] ?? 0;
               const plannedTaskRows = plannedTaskRowsByEventDate[`${eventId}__${dateKey}`] ?? [];
               const eventTaskFolders = dashboardTaskFolders.filter((f) => f.event_id === eventId);
               const eventMaterials = materialsByProject[eventId] || [];
               const eventEquipment = equipmentByProject[eventId] || [];
+              const eventTools = toolsByProject[eventId] || [];
 
               return (
                 <DashboardEventCard
                   key={eventId}
                   event={event}
-                  plannedTaskCount={plannedTaskCount}
                   plannedTaskRows={plannedTaskRows}
                   taskFolders={eventTaskFolders}
                   eventMaterials={eventMaterials}
                   eventEquipment={eventEquipment}
+                  eventTools={eventTools}
                   formatStatus={formatStatus}
                   getEventAccentColor={getEventAccentColor}
                   toggleSection={(s) => toggleSection(eventId, s)}
                   isExpanded={(s) => isExpanded(eventId, s)}
                   t={t}
+                  lang={i18n.language}
                   navigate={navigate}
                 />
               );
@@ -709,29 +761,31 @@ const Dashboard = () => {
 
   const DashboardEventCard = ({
     event,
-    plannedTaskCount,
     plannedTaskRows = [],
     taskFolders = [],
     eventMaterials = [],
     eventEquipment = [],
+    eventTools = [],
     formatStatus,
     getEventAccentColor,
     toggleSection,
     isExpanded,
     t,
+    lang,
     navigate,
   }: {
     event: any;
-    plannedTaskCount: number;
     plannedTaskRows?: DashboardPlannedRow[];
     taskFolders?: DashboardTaskFolderLite[];
     eventMaterials?: any[];
     eventEquipment?: any[];
+    eventTools?: any[];
     formatStatus: (s: string) => string;
     getEventAccentColor: (s: string) => string;
-    toggleSection: (s: 'planned_tasks' | 'materials' | 'equipment') => void;
-    isExpanded: (s: 'planned_tasks' | 'materials' | 'equipment') => boolean;
+    toggleSection: (s: 'planned_tasks' | 'materials' | 'equipment' | 'tools') => void;
+    isExpanded: (s: 'planned_tasks' | 'materials' | 'equipment' | 'tools') => boolean;
     t: any;
+    lang: string;
     navigate: (p: string) => void;
   }) => (
     <EventCard
@@ -752,105 +806,96 @@ const Dashboard = () => {
         </span>
       )}
 
-      <div style={{
-        marginTop: spacing["5xl"],
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: spacing["5xl"],
-        fontSize: fontSizes.base,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', color: colors.textDim }}>
-          <ClipboardList style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.sm }} />
-          <span>
-            {plannedTaskCount} {t('dashboard:planned_tasks_label')}
-          </span>
-        </div>
-        {eventMaterials.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', color: colors.textDim }}>
-            <Package style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.sm }} />
-            <span>{eventMaterials.length} {t('dashboard:materials')}</span>
+      <div style={{ marginTop: spacing["5xl"], borderTop: `1px solid ${colors.borderLight}` }}>
+        <button
+          type="button"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxSizing: 'border-box',
+            margin: 0,
+            padding: `${spacing["5xl"]}px ${spacing.sm}px`,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            borderRadius: radii.md,
+            fontSize: fontSizes.base,
+            color: colors.accentBlue,
+            fontFamily: fonts.body,
+            transition: transitions.fast,
+            textAlign: 'left',
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleSection('planned_tasks');
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <ClipboardList style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.xs }} />
+            <span>{t('dashboard:day_plan_section_scheduled_tasks', { count: plannedTaskRows.length })}</span>
           </div>
-        )}
-        {eventEquipment.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', color: colors.textDim }}>
-            <Wrench style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.sm }} />
-            <span>{eventEquipment.length} {t('dashboard:equipment')}</span>
+          {isExpanded('planned_tasks') ? (
+            <ChevronUp style={{ width: spacing["3xl"], height: spacing["3xl"], flexShrink: 0 }} />
+          ) : (
+            <ChevronDown style={{ width: spacing["3xl"], height: spacing["3xl"], flexShrink: 0 }} />
+          )}
+        </button>
+        {isExpanded('planned_tasks') && (
+          <div style={{ padding: `0 ${spacing.sm}px ${spacing.sm}px` }}>
+            {plannedTaskRows.length === 0 ? (
+              <span style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>{t('event:none_for_day')}</span>
+            ) : (
+              <DashboardPlannedTasksGrouped rows={plannedTaskRows} folders={taskFolders} t={t} />
+            )}
           </div>
         )}
       </div>
 
-      {plannedTaskRows.length > 0 && (
-        <div style={{ marginTop: spacing["5xl"], paddingTop: spacing["5xl"], borderTop: `1px solid ${colors.borderLight}` }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: fontSizes.base,
-              color: colors.accentBlue,
-              marginBottom: spacing.sm,
-              cursor: 'pointer',
-              borderRadius: radii.md,
-              padding: spacing.sm,
-              transition: transitions.fast,
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleSection('planned_tasks');
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-              <ClipboardList style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.xs }} />
-              <span>{t('dashboard:day_plan_section_scheduled_tasks', { count: plannedTaskRows.length })}</span>
-            </div>
-            {isExpanded('planned_tasks') ? (
-              <ChevronUp style={{ width: spacing["3xl"], height: spacing["3xl"] }} />
-            ) : (
-              <ChevronDown style={{ width: spacing["3xl"], height: spacing["3xl"] }} />
-            )}
+      <div style={{ borderTop: `1px solid ${colors.borderLight}` }}>
+        <button
+          type="button"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxSizing: 'border-box',
+            margin: 0,
+            padding: `${spacing["5xl"]}px ${spacing.sm}px`,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            borderRadius: radii.md,
+            fontSize: fontSizes.base,
+            color: colors.red,
+            fontFamily: fonts.body,
+            transition: transitions.fast,
+            textAlign: 'left',
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleSection('materials');
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <AlertCircle style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.xs }} />
+            <span>{t('dashboard:required_materials')}</span>
+            <span style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.bold }}>{eventMaterials.length}</span>
           </div>
-          {isExpanded('planned_tasks') && (
-            <div style={{ padding: `0 ${spacing.sm}px ${spacing.sm}px` }}>
-              <DashboardPlannedTasksGrouped rows={plannedTaskRows} folders={taskFolders} t={t} />
-            </div>
+          {isExpanded('materials') ? (
+            <ChevronUp style={{ width: spacing["3xl"], height: spacing["3xl"], flexShrink: 0 }} />
+          ) : (
+            <ChevronDown style={{ width: spacing["3xl"], height: spacing["3xl"], flexShrink: 0 }} />
           )}
-        </div>
-      )}
-
-      {eventMaterials.length > 0 && (
-        <div style={{ marginTop: spacing["5xl"], paddingTop: spacing["5xl"], borderTop: `1px solid ${colors.borderLight}` }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: fontSizes.base,
-              color: colors.red,
-              marginBottom: spacing.sm,
-              cursor: 'pointer',
-              borderRadius: radii.md,
-              padding: spacing.sm,
-              transition: transitions.fast,
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleSection('materials');
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-              <AlertCircle style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.xs }} />
-              <span>{t('dashboard:required_materials')}</span>
-              <span style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.bold }}>{eventMaterials.length}</span>
-            </div>
-            {isExpanded('materials') ? (
-              <ChevronUp style={{ width: spacing["3xl"], height: spacing["3xl"] }} />
+        </button>
+        {isExpanded('materials') && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+            {eventMaterials.length === 0 ? (
+              <span style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>{t('event:none_for_day')}</span>
             ) : (
-              <ChevronDown style={{ width: spacing["3xl"], height: spacing["3xl"] }} />
-            )}
-          </div>
-          {isExpanded('materials') && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
-              {eventMaterials.map((material: any) => (
+              eventMaterials.map((material: any) => (
                 <div key={material.id} style={{
                   background: colors.bgCard,
                   padding: spacing.sm,
@@ -868,46 +913,55 @@ const Dashboard = () => {
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {eventEquipment.length > 0 && (
-        <div style={{ marginTop: spacing["5xl"], paddingTop: spacing["5xl"], borderTop: `1px solid ${colors.borderLight}` }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontSize: fontSizes.base,
-              color: colors.orange,
-              marginBottom: spacing.sm,
-              cursor: 'pointer',
-              borderRadius: radii.md,
-              padding: spacing.sm,
-              transition: transitions.fast,
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleSection('equipment');
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
-              <Wrench style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.xs }} />
-              <span>{t('dashboard:required_equipment')}</span>
-              <span style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.bold }}>{eventEquipment.length}</span>
-            </div>
-            {isExpanded('equipment') ? (
-              <ChevronUp style={{ width: spacing["3xl"], height: spacing["3xl"] }} />
-            ) : (
-              <ChevronDown style={{ width: spacing["3xl"], height: spacing["3xl"] }} />
+              ))
             )}
           </div>
-          {isExpanded('equipment') && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
-              {eventEquipment.map((equipment: any) => (
+        )}
+      </div>
+
+      <div style={{ borderTop: `1px solid ${colors.borderLight}` }}>
+        <button
+          type="button"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxSizing: 'border-box',
+            margin: 0,
+            padding: `${spacing["5xl"]}px ${spacing.sm}px`,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            borderRadius: radii.md,
+            fontSize: fontSizes.base,
+            color: colors.orange,
+            fontFamily: fonts.body,
+            transition: transitions.fast,
+            textAlign: 'left',
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleSection('equipment');
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <Wrench style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.xs }} />
+            <span>{t('dashboard:required_equipment')}</span>
+            <span style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.bold }}>{eventEquipment.length}</span>
+          </div>
+          {isExpanded('equipment') ? (
+            <ChevronUp style={{ width: spacing["3xl"], height: spacing["3xl"], flexShrink: 0 }} />
+          ) : (
+            <ChevronDown style={{ width: spacing["3xl"], height: spacing["3xl"], flexShrink: 0 }} />
+          )}
+        </button>
+        {isExpanded('equipment') && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+            {eventEquipment.length === 0 ? (
+              <span style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>{t('event:none_for_day')}</span>
+            ) : (
+              eventEquipment.map((equipment: any) => (
                 <div key={equipment.id} style={{
                   background: colors.bgCard,
                   padding: spacing.sm,
@@ -925,11 +979,74 @@ const Dashboard = () => {
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+
+      <div style={{ borderTop: `1px solid ${colors.borderLight}` }}>
+        <button
+          type="button"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            boxSizing: 'border-box',
+            margin: 0,
+            padding: `${spacing["5xl"]}px ${spacing.sm}px`,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            borderRadius: radii.md,
+            fontSize: fontSizes.base,
+            color: colors.purple,
+            fontFamily: fonts.body,
+            transition: transitions.fast,
+            textAlign: 'left',
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleSection('tools');
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: spacing.sm }}>
+            <Hammer style={{ width: spacing["3xl"], height: spacing["3xl"], marginRight: spacing.xs }} />
+            <span>{t('event:required_tools')}</span>
+            <span style={{ fontSize: fontSizes.xl, fontWeight: fontWeights.bold }}>{eventTools.length}</span>
+          </div>
+          {isExpanded('tools') ? (
+            <ChevronUp style={{ width: spacing["3xl"], height: spacing["3xl"], flexShrink: 0 }} />
+          ) : (
+            <ChevronDown style={{ width: spacing["3xl"], height: spacing["3xl"], flexShrink: 0 }} />
           )}
-        </div>
-      )}
+        </button>
+        {isExpanded('tools') && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: spacing.sm }}>
+            {eventTools.length === 0 ? (
+              <span style={{ fontSize: fontSizes.sm, color: colors.textDim, fontFamily: fonts.body }}>{t('event:none_for_day')}</span>
+            ) : (
+              eventTools.map((row: any) => {
+                const tr = row.tools as { name_en?: string; name_pl?: string } | null;
+                const name = tr ? toolDisplayName({ name_en: tr.name_en || '', name_pl: tr.name_pl || '' }, lang) : '';
+                return (
+                  <div key={row.id} style={{
+                    background: colors.bgCard,
+                    padding: spacing.sm,
+                    borderRadius: radii.md,
+                    fontSize: fontSizes.base,
+                  }}>
+                    <span style={{ fontWeight: fontWeights.medium, fontFamily: fonts.body }}>
+                      {name} - {row.quantity} {row.quantity > 1 ? t('dashboard:units') : t('dashboard:unit')}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
     </EventCard>
   );
 
@@ -1008,11 +1125,7 @@ const Dashboard = () => {
             <DayView
               key={ymd}
               date={dayDate}
-              dayEvents={events.filter((event) => {
-                const eventStart = parseISO(event.start_date);
-                const eventEnd = parseISO(event.end_date);
-                return isWithinInterval(dayDate, { start: eventStart, end: eventEnd });
-              })}
+              dayEvents={events.filter((event) => eventCoversDashboardDay(event, ymd))}
             />
           );
         })}
@@ -1047,6 +1160,34 @@ const Dashboard = () => {
             value={materialDate}
             onChange={setMaterialDate}
           />
+        </div>
+      </Modal>
+
+      <Modal
+        open={showPlanDayModal}
+        onClose={() => setShowPlanDayModal(false)}
+        title={t('dashboard:plan_day_modal_title')}
+        width={448}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: spacing.lg, paddingTop: spacing["5xl"] }}>
+            <Button variant="secondary" onClick={() => setShowPlanDayModal(false)}>
+              {t('dashboard:cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                navigate(`/calendar?date=${planDayDate}`);
+                setShowPlanDayModal(false);
+              }}
+            >
+              {t('dashboard:go_to_day')}
+            </Button>
+          </div>
+        }
+      >
+        <div>
+          <Label>{t('dashboard:select_date')}</Label>
+          <DatePicker value={planDayDate} onChange={setPlanDayDate} />
         </div>
       </Modal>
     </div>

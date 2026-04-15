@@ -651,7 +651,7 @@ const AdditionalFeatures: React.FC<Props> = ({ eventId }) => {
         <div style={{ fontSize: 14, fontWeight: 700, color: colors.textPrimary, marginBottom: 14 }}>
           {t('event:additional_materials_title')}
         </div>
-        <AddButtonStyle label={t('event:add_material_button')} color={colors.green} onClick={() => setShowMaterialModal(true)} />
+        <AddButtonStyle label={t('event:add_material_button')} color={colors.accentBlue} onClick={() => setShowMaterialModal(true)} />
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
           {additionalMaterials.map(material => (
             <div key={material.id} style={{

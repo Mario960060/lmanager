@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { translateTaskName, translateTaskDescription } from '../lib/translationMap';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
-import { X, Wrench, Package, Pencil, Info, Trash2 } from 'lucide-react';
+import { X, Wrench, Package, Pencil, Info, Trash2, ArrowLeft } from 'lucide-react';
 import { useSidebarSectionReset } from '../hooks/useSidebarSectionReset';
 import PageInfoModal from '../components/PageInfoModal';
-import BackButton from '../components/BackButton';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
 import { Button, Card, Modal, TextInput, Label, Spinner } from '../themes/uiComponents';
 
@@ -21,6 +21,7 @@ interface Task {
 
 const TaskRequirements = () => {
   const { t } = useTranslation(['common', 'form', 'utilities']);
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const companyId = useAuthStore(state => state.getCompanyId());
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -248,21 +249,39 @@ const TaskRequirements = () => {
   }
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["6xl"], fontFamily: fonts.body, position: 'relative' }}>
-      <BackButton />
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: spacing["6xl"], display: 'flex', flexDirection: 'column', gap: spacing["6xl"], fontFamily: fonts.body }}>
       <div
-        className="max-md:pt-14 md:pt-0 flex flex-col md:flex-row md:items-center md:justify-between"
+        className="flex flex-col lg:flex-row lg:items-center lg:justify-between"
         style={{ gap: spacing["5xl"] }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm }}>
-          <h1 style={{ fontSize: fontSizes["3xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('utilities:task_requirements_title')}</h1>
-          <PageInfoModal
-            description={t('form:task_requirements_info_description')}
-            title={t('form:task_requirements_info_title')}
-            quickTips={[]}
-          />
+        <div
+          className="flex flex-col sm:flex-row sm:items-center sm:flex-wrap"
+          style={{ gap: spacing["5xl"], flex: 1, minWidth: 0 }}
+        >
+          <Button
+            variant="secondary"
+            onClick={() => navigate(-1)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: spacing.sm, flexShrink: 0 }}
+            className="self-start sm:self-center"
+          >
+            <ArrowLeft style={{ width: 16, height: 16 }} />
+            {t('common:back')}
+          </Button>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, minWidth: 0 }}>
+            <h1 style={{ fontSize: fontSizes["3xl"], fontWeight: fontWeights.bold, color: colors.textPrimary, fontFamily: fonts.display, margin: 0 }}>{t('utilities:task_requirements_title')}</h1>
+            <PageInfoModal
+              description={t('form:task_requirements_info_description')}
+              title={t('form:task_requirements_info_title')}
+              quickTips={[]}
+            />
+          </div>
         </div>
-        <Button variant="accent" color={colors.accentBlue} icon="📋" onClick={() => setShowAddModal(true)} style={{ alignSelf: 'stretch' }} className="md:shrink-0 md:self-center md:w-auto w-full">
+        <Button
+          variant="primary"
+          onClick={() => setShowAddModal(true)}
+          style={{ alignSelf: 'stretch' }}
+          className="w-full shrink-0 lg:w-auto lg:self-center"
+        >
           {t('utilities:add_task_requirements')}
         </Button>
       </div>

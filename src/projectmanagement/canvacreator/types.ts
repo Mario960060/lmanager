@@ -51,6 +51,8 @@ export interface ProjectSettings {
   foundationDiggingMethod: "" | "shovel" | "small" | "medium" | "large";
   /** Material for pre-preparation leveling when terrain is too low */
   levelingMaterial: "" | "tape1" | "soil";
+  /** 2 = layers 4/5/6 (wykop / przygotowanie / korekta); older drafts omit → migrate activeLayer on load */
+  canvasLayerRevision?: number;
 }
 
 export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
@@ -68,4 +70,5 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   soilType: "",
   foundationDiggingMethod: "",
   levelingMaterial: "",
+  canvasLayerRevision: 2,
 };

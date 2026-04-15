@@ -15,6 +15,8 @@ export interface CanvasPayload {
   zoom: number;
   activeLayer: number;
   linkedGroups?: unknown[][];
+  /** Punkty spadku projektowego (L2), kotwiczone na obrysie L1 */
+  designSlopePoints?: unknown[];
   savedAt?: string;
 }
 

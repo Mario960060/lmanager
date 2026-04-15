@@ -2,12 +2,12 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, typ
 import { flushSync } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  Point, Shape, CollinearSnapHit, LayerID, ArcPoint, DragInfo, MultiDragVertexStart, MultiShapeDragStart, ShapeDragInfo, RotateInfo, ScaleCornerInfo, ScaleEdgeInfo,
+  Point, Shape, DesignSlopePoint, CollinearSnapHit, LayerID, ArcPoint, DragInfo, MultiDragVertexStart, MultiShapeDragStart, ShapeDragInfo, RotateInfo, ScaleCornerInfo, ScaleEdgeInfo,
   HitResult, EdgeHitResult, OpenEndHit,
   SelectionRect, DimEdit, ContextMenuInfo, LinkedEntry, isArcEntry,
-  PIXELS_PER_METER, GRID_SPACING, POINT_RADIUS, EDGE_HIT_THRESHOLD, GRASS_EDGE_HIT_PX,
+  PIXELS_PER_METER, GRID_SPACING, POINT_RADIUS, GEODESY_CANVAS_VERTEX_DOT_R, GEODESY_CANVAS_HEIGHT_DOT_R, EDGE_HIT_THRESHOLD, GRASS_EDGE_HIT_PX,
   SNAP_TO_START_RADIUS, SNAP_TO_LAST_RADIUS, MIN_ZOOM, MAX_ZOOM, SNAP_MAGNET_PX, PATTERN_SNAP_PX,
-  distance, toMeters, toPixels, formatLength, midpoint, angleDeg, areaM2, polylineLengthMeters, rotatePointAround,
+  distance, toMeters, toPixels, formatDimensionCm, formatDimensionCmFromPx, midpoint, angleDeg, areaM2, polylineLengthMeters, rotatePointAround,
   projectOntoSegment, bestCollinearVertexSnap, edgeNormalAngle, readableTextAngle, snapTo45, snapShiftSmart, interiorAngleDir, centroid, labelAnchorInsidePolygon, shoelaceArea,
   snapPatternDirectionToBoundaryAngles,
   constrainLockedEdges,
@@ -15,7 +15,11 @@ import {
   findAllSharedFrameEdgePartners,
   makeSquare, makeRectangle, makeTriangle, makeTrapezoid, makeRegularPolygon, makeCircle, migrateLegacyCirclePolygon, isCircleArcHandlesOnlyShape, C, C_LIGHT,
   edgeOutwardRadForL1Edge,
+  edgeOutwardRadForClosedPoly,
   outwardUnitNormalForPolygonEdge,
+  EDGE_LENGTH_LABEL_PERP_OFFSET_M,
+  EDGE_LENGTH_LABEL_FONT_STACK,
+  EDGE_LENGTH_LABEL_FONT_PX,
 } from "./geometry";
 import {
   drawExteriorAlignedDimension,
@@ -24,14 +28,33 @@ import {
   GARDEN_EXTERIOR_DIM_LINE_COLOR,
   GARDEN_EXTERIOR_DIM_TEXT_COLOR,
 } from "./boundaryDimensionDraw";
-import { calcEdgeSlopes, calcShapeGradient, formatSlope, slopeColor, interpolateHeightAtPoint, fillShapeHeightHeatmap, computeGlobalHeightRange } from "./geodesy";
+import { calcEdgeSlopes, calcShapeGradient, formatSlope, slopeColor, interpolateHeightAtPoint, fillShapeHeightHeatmap, computeGlobalHeightRange, propagateDesignSlopesToLayer2, resolveDesignSlopeWorldPosition } from "./geodesy";
+import { computeGlobalCmRange, getExcavationCmAtVertex, getPreparationCmAtVertex } from "./excavation";
+import { fillShapeExcavationPrepHeatmap, shapeHasExcavationOrPrepData } from "./excavationRenderer";
 import { isLinearElement, isGroundworkLinear, isPathElement, isPolygonLinearElement, groundworkLabel, drawLinearElement, drawLinearElementInactive, hitTestLinearElement, hitTestPathElement, computeThickPolyline, computeThickPolylineClosed, getPathPolygon, getPathRibbonDerivedCenterline, getLinearElementPath, getPolygonThicknessM, polygonToSegmentLengths, polygonToCenterline, polygonEdgeToSegmentIndex, removeSegmentFromPolygonOutline, removeOpenStripSegmentAndRebuild, openStripEdgeToCenterSegment, extractCenterlineFromOpenStripOutline, extractPathRibbonCenterlineFromOutline, recoverCenterlineQuadFromPairFourRibbonOutline, rebuildRectangularPathRibbonFromOutlineDrag, rebuildRectangularPathRibbonLengthAnchorsFixed, pathRibbonLengthAnchorPairsFromOutlineSnap, resolvePathRibbonRectCenterline4, mapPairFourToRectRibbonOutlineVertex, computePathOutlineFromSegmentSides, PATH_CLOSED_RIBBON_RECT_CORNER_OUTLINE_INDICES, pointSideOfLine, rebuildClosedStripOutlineFromVertexTarget, rebuildClosedStripOutlineAfterEdgeTranslate, rebuildOpenStripOutlineAfterEdgeTranslate, rebuildPathClosedRibbonFromVertexTarget, rebuildOpenStripOutlineFromVertexTarget, isOpenStripPolygonOutline, isClosedStripPolygonOutline, isPolygonLinearStripOutline, rebuildPathRibbonSingleSegmentDrag, rebuildPathRibbonGeneralDrag, baselineFacePolylineToCenterline, stripOutlineParallelEdges, stripPolygonEdgeToSegmentIndex, stripOppositePolygonEdgeIndex, applyStripParallelEdgeArcSync, stripOppositeVertexIndex, computeLinearElementFillOutline, getLinearElementVertexGripWorld } from "./linearElements";
-import { drawShapeObjectLabel, drawExcavationLayers, getPathLabel, drawPathRibbonMetrics } from "./canvasRenderers";
+import { computePdfImagePlacement } from "./pdfImagePlacement";
+import {
+  getMmPerLogicalPxForDimensions,
+} from "./visualization/hybridEdgeDimensions";
+import { drawShapeObjectLabel, getPathLabel } from "./canvasRenderers";
 import { drawDeckPattern } from "./visualization/deckBoards";
 import { drawSlabPattern, drawPathSlabPattern, drawPathSlabLabel, drawPathCobblePattern, drawPathCobbleLabel, drawSlabFrame, computePatternSnap, getPolygonForPatternSnapOutline, computeSlabCuts, computePathSlabCuts, computePathCobbleCuts, getTotalFrameInsetWidthCm, shouldDrawSlabFrameViz } from "./visualization/slabPattern";
 import { drawCobblestonePattern, drawMonoblockFrame, computeCobblestoneCuts } from "./visualization/cobblestonePattern";
 import { drawFencePostMarkers, drawWallSlopeIndicators } from "./visualization/linearMarkers";
-import { drawGeodesyLabels, getGeodesyCardsInfo, hitTestGeodesyCard, findCardForPoint, type GeodesyCardInfo, GEODESY_CARD_PAD, GEODESY_CARD_ROW_H } from "./visualization/geodesyLabels";
+import {
+  hitTestGeodesyCard,
+  hitTestGeodesyCardEntryAtScreen,
+  findCardForPoint,
+  findGeodesyVertexPointFromHit,
+  findGeodesyHeightPointFromHit,
+  hitTestNearestGeodesyPointAtScreen,
+  geoEntryKey,
+  formatGeodesyHeightEditCm,
+  type GeodesyCardEntry,
+  type GeodesyCardInfo,
+} from "./visualization/geodesyLabels";
+import { SmartGeodesyLabels } from "./visualization/smartGeodesyLabels";
+import { drawExcavationPrepCmLabels, drawGroundworkBurialLabels } from "./visualization/excavationPrepLabels";
 import { drawGrassPieces, hitTestGrassPiece, hitTestGrassPieceEdge, hitTestGrassJoinEdge, snapGrassPieceEdge, snapGrassPieceToPolygon, getJoinedGroup, rotateGrassGroup90, validateCoverage, getEffectiveTotalArea, getEffectivePieceDimensionsForInput, type GrassPiece } from "./visualization/grassRolls";
 import { drawGravelPattern } from "./visualization/gravelPattern";
 import { computeAutoFill } from "./objectCard/autoFill";
@@ -40,15 +63,16 @@ import ObjectCardModal from "./objectCard/ObjectCardModal";
 import StairsCreationModal from "./objectCard/StairsCreationModal";
 import PathCreationModal, { type PathConfig } from "./objectCard/PathCreationModal";
 import ResultsModal from "./objectCard/ResultsModal";
-import ProjectSummaryPanel from "./ProjectSummaryPanel";
+import ProjectSummaryPanel, { PreparationSidebarContent } from "./ProjectSummaryPanel";
 import ProjectCardModal from "./ProjectCardModal";
-import { computePreparation } from "./preparationLogic";
 import { computeEmptyAreas, computeOverflowAreas, computeOverlaps, clipShapeToGarden, removeOverlapFromShape, findTouchingElementsForEmptyArea, extendShapeToCoverEmptyArea, extendShapeToGardenEdge, clipSurfaceToOutsideLinear, findSurfacesOverlappingLinear, fitUnionResultToShape } from "./adjustmentLogic";
 import { computeGroundworkLinearResults, isManualExcavation, getFoundationDiggingMethodFromExcavator } from "./GroundworkLinearCalculator";
 import { drawAlternatingLinkedHalf } from "./linkedEdgeDrawing";
 import { drawCurvedEdge, calcEdgeLengthWithArcs, getEffectivePolygon, getEffectivePolygonWithEdgeIndices, drawSmoothPolygonPath, drawSmoothPolygonStroke, projectOntoArcEdge, drawArcHandles, hitTestArcPoint, snapArcPoint, buildArcPointPositionCache, arcPointToWorldOnCurve, worldToArcPoint, worldToArcPointOnCurve, mirrorArcPointsToOppositeChord, collectShapeBoundaryDirectionAnglesDeg, type ArcPointCacheEntry } from "./arcMath";
 import CreatePreviewModal from "./CreatePreviewModal";
 import PlanPdfExportModal from "./PlanPdfExportModal";
+import GeodesyPrintPreviewModal from "./GeodesyPrintPreviewModal";
+import { GeodesyHeightsBulkModal, GeodesyPointModal, roundCmToOneMm } from "./GeodesyPointModal";
 import { submitProject } from "./projectSubmit";
 import { ensureCanvasElementIds } from "./canvasElementIds";
 import { syncCanvasToEvent } from "./projectSync";
@@ -70,6 +94,14 @@ const DRAFT_STORAGE_KEY = "landscapeManager_canvasDraft";
 const DRAFT_DEBOUNCE_MS = 1500;
 const PLAN_SAVE_DEBOUNCE_MS = 4000;
 
+function geodesyEntryPointDisplayId(entry: GeodesyCardEntry): number {
+  const p = entry.points[0];
+  if (!p) return 1;
+  if (p.isVertex && p.pointIdx != null) return p.pointIdx + 1;
+  if (p.heightPointIdx != null) return p.heightPointIdx + 1;
+  return 1;
+}
+
 /** Wheel delta → ~pixels for pan (respects line/page deltaMode). */
 function wheelDeltaToPixels(delta: number, deltaMode: number): number {
   if (deltaMode === 1) return delta * 16;
@@ -79,6 +111,34 @@ function wheelDeltaToPixels(delta: number, deltaMode: number): number {
 
 const WHEEL_PAN_SENSITIVITY = 1;
 const ARROW_PAN_STEP_PX = 48;
+
+/** Match drawn path/outline vertex world position to shape.points index (geodesy keys use shape.points). */
+const GEO_EXPORT_HIDE_VERTEX_EPS_M = 1e-4;
+
+function isVertexHiddenForGeodesyExportPreview(
+  wx: number,
+  wy: number,
+  shapeIdx: number,
+  shapePoints: Point[],
+  hiddenKeys: ReadonlySet<string> | null | undefined,
+): boolean {
+  if (!hiddenKeys || hiddenKeys.size === 0) return false;
+  for (let pj = 0; pj < shapePoints.length; pj++) {
+    if (distance({ x: wx, y: wy }, shapePoints[pj]) < GEO_EXPORT_HIDE_VERTEX_EPS_M && hiddenKeys.has(`v|${shapeIdx}|${pj}`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Etykieta nazwy na L2: ścieżki — tylko war. 3 (wzory); mury itp. — war. 2/3; patio/powierzchnie — bez nazwy na canvasie. */
+function shouldDrawL2ShapeObjectName(shape: Shape, layerForRender: number): boolean {
+  if (shape.layer !== 2) return false;
+  if (isGroundworkLinear(shape)) return layerForRender === 4 || layerForRender === 5;
+  if (isPathElement(shape)) return layerForRender === 3;
+  if (isLinearElement(shape)) return layerForRender === 2 || layerForRender === 3;
+  return false;
+}
 
 type Mode = "select" | "freeDraw" | "scale" | "move" | "drawFence" | "drawWall" | "drawKerb" | "drawFoundation" | "drawPathSlabs" | "drawPathConcreteSlabs" | "drawPathMonoblock" | "drawDrainage" | "drawCanalPipe" | "drawWaterPipe" | "drawCable";
 type PrimaryToolbarMode = "select" | "scale" | "move";
@@ -219,8 +279,13 @@ function useToolbarDropdownPanelStyle(
   return { position: "fixed", top: pos.top, left: pos.left, marginTop: 0, zIndex: 200, minWidth: pos.mw };
 }
 
-type ActiveLayer = 1 | 2 | 3 | 4 | 5;
+type ActiveLayer = 1 | 2 | 3 | 4 | 5 | 6;
 type ViewFilter = "all" | "linear" | "surface";
+
+/** Geodezja (klik w punkty / karty) tylko na L1, L2, L3, L6 — na L4/L5 musi być wyłączona, inaczej przejmuje hit-testy pod wykop/przygotowanie. */
+function isGeodesyInteractionLayer(L: ActiveLayer): boolean {
+  return L === 1 || L === 2 || L === 3 || L === 6;
+}
 
 const SURFACE_CALC_TYPES = ["slab", "deck", "grass", "turf", "paving", "decorativeStones"] as const;
 /** View filter applies only to layer 2 elements. Stairs visible only on layer 2 & viewFilter "all". */
@@ -235,6 +300,204 @@ function passesViewFilter(shape: Shape, viewFilter: ViewFilter, activeLayer: Act
     return shape.elementType === "polygon" && SURFACE_CALC_TYPES.includes((shape.calculatorType ?? "") as any);
   }
   return false;
+}
+
+/**
+ * Wykop / Przygotowanie: roboty ziemne liniowe muszą przechodzić filtr niezależnie od widoku L2 (np. „tylko powierzchnie”),
+ * bo inaczej nie da się trafić w węzły (`hitTestPoint`) ani edytować głębokości — `passesViewFilter` wyklucza `isLinearElement` przy filtrze surface.
+ */
+function passesViewFilterWithGroundworkOnExcavationLayers(
+  shape: Shape,
+  viewFilter: ViewFilter,
+  activeLayer: ActiveLayer,
+): boolean {
+  if ((activeLayer === 4 || activeLayer === 5) && shape.layer === 2 && isGroundworkLinear(shape)) return true;
+  return passesViewFilter(shape, viewFilter, activeLayer);
+}
+
+function pdfExportMapRenderLayer(pdfLayer: number): ActiveLayer {
+  if (pdfLayer === 101) return 1;
+  if (pdfLayer === 102) return 2;
+  return pdfLayer as ActiveLayer;
+}
+
+/** Which shapes contribute to the PDF page bounding box (matches typical dimmed+active composition per sheet). */
+function pdfExportShapeContributesToBounds(shape: Shape, pdfLayer: number, viewFilter: ViewFilter): boolean {
+  if (shape.removedFromCanvas) return false;
+  const L = pdfExportMapRenderLayer(pdfLayer);
+  if (shape.layer === 1) {
+    return L === 1 || L === 2 || L === 3 || L === 4 || L === 5 || L === 6;
+  }
+  if (shape.layer !== 2) return false;
+  if (L === 1 || L === 3) return true;
+  if (L === 2 || L === 6) return passesViewFilter(shape, viewFilter, L);
+  if (L === 4 || L === 5) return isGroundworkLinear(shape) && passesViewFilterWithGroundworkOnExcavationLayers(shape, viewFilter, L);
+  return false;
+}
+
+function pdfExportCollectWorldPoints(shape: Shape): Point[] {
+  const out: Point[] = [];
+  const pushPts = (arr: Point[] | undefined) => {
+    if (!arr) return;
+    for (const p of arr) {
+      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) out.push(p);
+    }
+  };
+  if (isPathElement(shape) && shape.closed) {
+    const outline = getPathPolygon(shape);
+    if (outline.length >= 3) pushPts(outline);
+    else pushPts(shape.points);
+  } else if (isLinearElement(shape)) {
+    if (shape.closed && shape.points.length >= 2) {
+      const outline = computeLinearElementFillOutline(shape);
+      if (outline.length >= 2) pushPts(outline);
+      else pushPts(shape.points);
+    } else {
+      pushPts(shape.points);
+    }
+  } else if (shape.closed && shape.points.length >= 3) {
+    pushPts(getEffectivePolygon(shape));
+  } else {
+    pushPts(shape.points);
+  }
+  const hps = shape.heightPoints;
+  if (hps?.length) {
+    for (const hp of hps) {
+      if (hp && typeof hp.x === "number" && typeof hp.y === "number") out.push({ x: hp.x, y: hp.y });
+    }
+  }
+  return out;
+}
+
+/** Pan/zoom so all relevant geometry fits in the canvas with margin (PDF / print snapshot). */
+function computePdfFitCamera(
+  shapes: Shape[],
+  designSlopePoints: DesignSlopePoint[],
+  pdfLayer: number,
+  viewFilter: ViewFilter,
+  canvasW: number,
+  canvasH: number,
+): { pan: Point; zoom: number } | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let any = false;
+  const expand = (p: Point) => {
+    any = true;
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  };
+
+  for (const shape of shapes) {
+    if (!pdfExportShapeContributesToBounds(shape, pdfLayer, viewFilter)) continue;
+    for (const p of pdfExportCollectWorldPoints(shape)) expand(p);
+  }
+
+  const L = pdfExportMapRenderLayer(pdfLayer);
+  if ((L === 2 || L === 3 || L === 6) && designSlopePoints.length > 0) {
+    for (const dsp of designSlopePoints) {
+      const w = resolveDesignSlopeWorldPosition(dsp, shapes);
+      if (w && Number.isFinite(w.x) && Number.isFinite(w.y)) expand(w);
+    }
+  }
+
+  if (!any) return null;
+
+  const geoPage = pdfLayer === 101 || pdfLayer === 102;
+  const padPx = toPixels(geoPage ? 3.5 : 1.6);
+  minX -= padPx;
+  maxX += padPx;
+  minY -= padPx;
+  maxY += padPx;
+
+  let bw = maxX - minX;
+  let bh = maxY - minY;
+  if (bw < 8) bw = 8;
+  if (bh < 8) bh = 8;
+
+  const screenPad = 32;
+  const availW = Math.max(48, canvasW - 2 * screenPad);
+  const availH = Math.max(48, canvasH - 2 * screenPad);
+
+  const z = Math.min(availW / bw, availH / bh);
+  const zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  return {
+    pan: { x: canvasW / 2 - cx * zoom, y: canvasH / 2 - cy * zoom },
+    zoom,
+  };
+}
+
+/**
+ * Pan/zoom so all geometry that can appear on geodesy PDF sheets (101 L1 + 102 L2) fits — union of bounds from both pages.
+ * Used for geodesy print preview and for PDF pages 101/102 so nothing from layer 1 or 2 is clipped.
+ */
+function computeGeodesyPdfFitCamera(
+  shapes: Shape[],
+  designSlopePoints: DesignSlopePoint[],
+  viewFilter: ViewFilter,
+  canvasW: number,
+  canvasH: number,
+): { pan: Point; zoom: number } | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let any = false;
+  const expand = (p: Point) => {
+    any = true;
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  };
+
+  for (const shape of shapes) {
+    if (
+      !pdfExportShapeContributesToBounds(shape, 101, viewFilter) &&
+      !pdfExportShapeContributesToBounds(shape, 102, viewFilter)
+    ) {
+      continue;
+    }
+    for (const p of pdfExportCollectWorldPoints(shape)) expand(p);
+  }
+
+  if (designSlopePoints.length > 0) {
+    for (const dsp of designSlopePoints) {
+      const w = resolveDesignSlopeWorldPosition(dsp, shapes);
+      if (w && Number.isFinite(w.x) && Number.isFinite(w.y)) expand(w);
+    }
+  }
+
+  if (!any) return null;
+
+  const padPx = toPixels(3.5);
+  minX -= padPx;
+  maxX += padPx;
+  minY -= padPx;
+  maxY += padPx;
+
+  let bw = maxX - minX;
+  let bh = maxY - minY;
+  if (bw < 8) bw = 8;
+  if (bh < 8) bh = 8;
+
+  const screenPad = 40;
+  const availW = Math.max(48, canvasW - 2 * screenPad);
+  const availH = Math.max(48, canvasH - 2 * screenPad);
+
+  const z = Math.min(availW / bw, availH / bh);
+  const zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  return {
+    pan: { x: canvasW / 2 - cx * zoom, y: canvasH / 2 - cy * zoom },
+    zoom,
+  };
 }
 
 /** While drawing, no shape is excluded yet (first click) — same as {@link snapMagnet} but with L1/L2 + view filter. */
@@ -1824,6 +2087,10 @@ function mergeOneVertexToArcPointState(
   };
   const nh = (s.heights || pts.map(() => 0)).filter((_, i) => i !== pi);
   sh.heights = nh;
+  if (isGroundworkLinear(sh)) {
+    const gb = (s.groundworkBurialDepthM || pts.map(() => 0)).filter((_, i) => i !== pi);
+    sh.groundworkBurialDepthM = gb.length ? gb : undefined;
+  }
   if (sh.elementType === "wall" && sh.calculatorInputs?.segmentHeights) {
     const inputs = { ...sh.calculatorInputs };
     const segHeights = [...(inputs.segmentHeights as Array<{ startH: number; endH: number }>)];
@@ -1874,7 +2141,7 @@ export default function MasterProject() {
   /** Keep receiving pointer/mouse up after cursor leaves canvas (selection drag, pan, etc.). */
   const canvasPointerCaptureIdRef = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const mouseRafRef = useRef<number>(0);
+  const mouseRafRef = useRef<number | null>(null);
   /** Centerline (4 corners) at mousedown — secondary ribbon solvers use frozen outline anchors from snap. */
   const pathRibbonDragStartClRef = useRef<Point[] | null>(null);
   /** Outline points at mousedown (same length as shape.points) — length-neighbor anchor positions. */
@@ -1936,7 +2203,18 @@ export default function MasterProject() {
   const [contextMenuDisplayPos, setContextMenuDisplayPos] = useState<{ x: number; y: number } | null>(null);
   const [activeLayer, setActiveLayer] = useState<ActiveLayer>(1);
   const [selectedPattern, setSelectedPattern] = useState<{ shapeIdx: number; type: "slab" | "grass" | "cobblestone" } | null>(null);
-  const [editingGeodesyCard, setEditingGeodesyCard] = useState<{ cardInfo: GeodesyCardInfo } | null>(null);
+  /** focusGeodesyKey: geoEntryKey punktu klikniętego na planie — zapis tylko tego wiersza/vertexu; null = edycja zbiorcza (klik w kartę). */
+  const [editingGeodesyCard, setEditingGeodesyCard] = useState<{
+    cardInfo: GeodesyCardInfo;
+    focusGeodesyKey: string | null;
+    screenPos: { x: number; y: number };
+  } | null>(null);
+  const [cmEditDialog, setCmEditDialog] = useState<{
+    shapeIdx: number;
+    pointIdx: number;
+    mode: "excavation" | "preparation" | "groundworkBurial";
+    screenPos: { x: number; y: number };
+  } | null>(null);
   const [heightValues, setHeightValues] = useState<string[]>([]);
   const [hoveredHeightPoint, setHoveredHeightPoint] = useState<{ shapeIdx: number; heightPointIdx: number } | null>(null);
   const [clickedHeightTooltip, setClickedHeightTooltip] = useState<{ world: Point; shapeIdx: number; height: number } | null>(null);
@@ -2025,6 +2303,14 @@ export default function MasterProject() {
   const [showCreatePreview, setShowCreatePreview] = useState(false);
   const [recalculateTrigger, setRecalculateTrigger] = useState(0);
   const [geodesyEnabled, setGeodesyEnabled] = useState(false);
+  /** Punkty spadku projektowego (kotwica L1, styczniki L2/L3) — domyślne wysokości elementów L2. */
+  const [designSlopePoints, setDesignSlopePoints] = useState<DesignSlopePoint[]>([]);
+  const [designSlopeHeightModal, setDesignSlopeHeightModal] = useState<{ id: string; value: string } | null>(null);
+  const smartGeodesyLabelsRef = useRef(new SmartGeodesyLabels());
+  const [clusterTooltip, setClusterTooltip] = useState<{ x: number; y: number; labels: { text: string }[] } | null>(null);
+  /** PDF export: render geodesy overlay for L1 or L2 without toggling the geodesy toolbar. */
+  const [pdfGeodesyExportLayer, setPdfGeodesyExportLayer] = useState<null | 1 | 2>(null);
+  const smartLabelLayoutKeyRef = useRef("");
   const [showAllArcPoints, setShowAllArcPoints] = useState(false);
 
   const isMobile = useMemo(() => typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0), []);
@@ -2067,8 +2353,8 @@ export default function MasterProject() {
 
   const isOnActiveLayer = useCallback((si: number): boolean => {
     if (activeLayer === 3) return shapes[si]?.layer === 2; // Layer 3: treat Layer 2 shapes as active (same menu, points visibility)
-    if (activeLayer === 4) return false; // Preparation is read-only
-    if (activeLayer === 5) return shapes[si]?.layer === 1 || shapes[si]?.layer === 2; // Adjustment: L1 + L2
+    if (activeLayer === 4 || activeLayer === 5) return shapes[si]?.layer === 2; // Wykop / Przygotowanie — L2 only (edit values, not garden geometry)
+    if (activeLayer === 6) return shapes[si]?.layer === 1 || shapes[si]?.layer === 2; // Adjustment: L1 + L2
     return shapes[si]?.layer === activeLayer;
   }, [shapes, activeLayer]);
 
@@ -2090,18 +2376,36 @@ export default function MasterProject() {
   /** For right-click scale: Layer 2 shapes when activeLayer=3, else normal active layer */
   const isOnActiveLayerForScale = useCallback((si: number): boolean => {
     if (activeLayer === 3) return shapes[si]?.layer === 2;
-    if (activeLayer === 4) return false;
-    if (activeLayer === 5) return shapes[si]?.layer === 1 || shapes[si]?.layer === 2;
+    if (activeLayer === 4 || activeLayer === 5) return false;
+    if (activeLayer === 6) return shapes[si]?.layer === 1 || shapes[si]?.layer === 2;
     return shapes[si]?.layer === activeLayer;
   }, [shapes, activeLayer]);
 
   /** For linking / snap-to-neighbor: map canvas toolbar layer to shape.layer (L3 edits L2; L5 uses L1+L2). */
   const shapeLayerMatchesActiveCanvasLayer = useCallback((layer: LayerID): boolean => {
     if (activeLayer === 3) return layer === 2;
-    if (activeLayer === 5) return layer === 1 || layer === 2;
-    if (activeLayer === 4) return layer === 2;
+    if (activeLayer === 6) return layer === 1 || layer === 2;
+    if (activeLayer === 4 || activeLayer === 5) return layer === 2;
     return layer === activeLayer;
   }, [activeLayer]);
+
+  const l1GeometrySignature = useMemo(
+    () =>
+      shapes
+        .map((s, i) => (s.layer === 1 && !s.removedFromCanvas ? `${i}:${JSON.stringify(s.points)}` : ""))
+        .join("|"),
+    [shapes],
+  );
+
+  useEffect(() => {
+    let dspPatch: DesignSlopePoint[] | null = null;
+    setShapes(prev => {
+      const { nextShapes, nextDesignSlopePoints } = propagateDesignSlopesToLayer2(prev, designSlopePoints);
+      if (nextDesignSlopePoints) dspPatch = nextDesignSlopePoints;
+      return nextShapes ?? prev;
+    });
+    if (dspPatch) setDesignSlopePoints(dspPatch);
+  }, [designSlopePoints, l1GeometrySignature]);
 
   useEffect(() => {
     if (!pointOffsetAlongLinePick) return;
@@ -2209,8 +2513,144 @@ export default function MasterProject() {
   const planSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const planSavePendingRef = useRef(false);
   const isExportingRef = useRef(false);
+  /** Set during PDF export before paint — mm per logical px for L1/L2 hybrid dimensions + legend column. */
+  const pdfExportLayoutRef = useRef<{ mmPerLogicalPx: number; legendX_mm: number; legendW_mm: number } | null>(null);
   const [showPdfExportModal, setShowPdfExportModal] = useState(false);
+  const [showGeodesyPrintPreview, setShowGeodesyPrintPreview] = useState(false);
+  /** While geodesy PDF preview is open, keep canvas W×H as at open time so ResizeObserver cannot shrink the bitmap (avoids clipped plan). */
+  const [geodesyPreviewCanvasLock, setGeodesyPreviewCanvasLock] = useState<{ w: number; h: number } | null>(null);
+  const [pendingPdfLayers, setPendingPdfLayers] = useState<number[]>([]);
+  const [hiddenGeodesyEntries, setHiddenGeodesyEntries] = useState<Set<string>>(() => new Set());
+  const [geodesyPreviewDataUrl, setGeodesyPreviewDataUrl] = useState("");
+  const [geodesyPrintPreviewTargetLayer, setGeodesyPrintPreviewTargetLayer] = useState<1 | 2>(1);
+  const [geodesyPreviewListHighlightKey, setGeodesyPreviewListHighlightKey] = useState<string | null>(null);
+  const prevLayerBeforeGeodesyPreviewRef = useRef<ActiveLayer | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [geodesyPrintPreviewCards, setGeodesyPrintPreviewCards] = useState<GeodesyCardInfo[]>([]);
+
+  useEffect(() => {
+    if (!showGeodesyPrintPreview) {
+      setGeodesyPrintPreviewCards([]);
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const ctx = canvasRef.current?.getContext("2d");
+        if (!ctx) return;
+        /** During PDF generation the loop sets {@link activeLayer} per page; do not fall back to preview L1/L2 here. */
+        const layerForCards: ActiveLayer =
+          showGeodesyPrintPreview && !isExportingPdf
+            ? ((pdfGeodesyExportLayer ?? geodesyPrintPreviewTargetLayer) as ActiveLayer)
+            : activeLayer;
+        const gLf = (s: Shape) => {
+          if (s.layer === 1) return layerForCards === 1;
+          return layerForCards === 2 || layerForCards === 3 || layerForCards === 6;
+        };
+        const geodesyFilter = (s: Shape) => {
+          if (!gLf(s)) return false;
+          if (!passesViewFilter(s, viewFilter, layerForCards)) return false;
+          if (layerForCards === 6) return s.layer === 1 || s.layer === 2;
+          return s.layer === layerForCards;
+        };
+        const geodesyHiddenActive =
+          showGeodesyPrintPreview || (isExportingPdf && pdfGeodesyExportLayer != null);
+        const geodesyHiddenKeysForDraw = geodesyHiddenActive ? hiddenGeodesyEntries : null;
+        const smartLabels = smartGeodesyLabelsRef.current;
+        const geodesyPdfPrintLabels =
+          (isExportingRef.current || showGeodesyPrintPreview) && pdfGeodesyExportLayer != null;
+        smartLabels.update(
+          shapes,
+          worldToScreen,
+          pan,
+          zoom,
+          canvasSize.w,
+          canvasSize.h,
+          geodesyFilter,
+          ctx,
+          editingGeodesyCard?.cardInfo.group ?? null,
+          geodesyHiddenKeysForDraw,
+          layerForCards,
+          currentTheme?.id === "light",
+          geodesyPdfPrintLabels,
+          getMmPerLogicalPxForDimensions(
+            !!(isExportingPdf && pdfGeodesyExportLayer != null),
+            pdfExportLayoutRef.current,
+          ),
+        );
+        setGeodesyPrintPreviewCards(smartLabels.getCardsInfo());
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [
+    showGeodesyPrintPreview,
+    shapes,
+    worldToScreen,
+    activeLayer,
+    viewFilter,
+    hiddenGeodesyEntries,
+    pan,
+    zoom,
+    canvasSize.w,
+    canvasSize.h,
+    isExportingPdf,
+    pdfGeodesyExportLayer,
+    geodesyPrintPreviewTargetLayer,
+    editingGeodesyCard,
+    currentTheme?.id,
+  ]);
+
+  useEffect(() => {
+    if (!showGeodesyPrintPreview) return;
+    setPdfGeodesyExportLayer(geodesyPrintPreviewTargetLayer);
+    setActiveLayer(geodesyPrintPreviewTargetLayer);
+  }, [showGeodesyPrintPreview, geodesyPrintPreviewTargetLayer]);
+
+  const cmEditInitialCm = useMemo(() => {
+    if (!cmEditDialog) return 0;
+    const sh = shapes[cmEditDialog.shapeIdx];
+    if (!sh) return 0;
+    const { pointIdx, mode } = cmEditDialog;
+    if (mode === "groundworkBurial") {
+      const m = sh.groundworkBurialDepthM?.[pointIdx];
+      const cm = m != null && !Number.isNaN(m) ? m * 100 : 0;
+      return roundCmToOneMm(cm);
+    }
+    const v =
+      mode === "excavation" ? getExcavationCmAtVertex(sh, pointIdx) : getPreparationCmAtVertex(sh, pointIdx);
+    return roundCmToOneMm(v != null ? v : 0);
+  }, [cmEditDialog, shapes]);
+
+  const confirmCmEditDialog = useCallback(
+    (parsed: number) => {
+      if (!cmEditDialog || Number.isNaN(parsed)) {
+        setCmEditDialog(null);
+        return;
+      }
+      const { shapeIdx, pointIdx, mode } = cmEditDialog;
+      saveHistory();
+      setShapes(prev => {
+        const n = [...prev];
+        const sh0 = n[shapeIdx];
+        if (!sh0) return prev;
+        const sh = { ...sh0 };
+        if (mode === "groundworkBurial") {
+          const depthM = parsed / 100;
+          const arr = sh.groundworkBurialDepthM ? [...sh.groundworkBurialDepthM] : sh.points.map(() => 0);
+          while (arr.length < sh.points.length) arr.push(0);
+          arr[pointIdx] = depthM;
+          n[shapeIdx] = { ...sh, groundworkBurialDepthM: arr };
+          return n;
+        }
+        const field = mode === "excavation" ? "excavationCm" : "preparationCm";
+        const arr = sh[field] ? [...sh[field]!] : [];
+        arr[pointIdx] = parsed;
+        n[shapeIdx] = { ...sh, [field]: arr };
+        return n;
+      });
+      setCmEditDialog(null);
+    },
+    [cmEditDialog, saveHistory],
+  );
 
   useEffect(() => {
     const el = containerRef.current;
@@ -2227,7 +2667,7 @@ export default function MasterProject() {
         try {
           const payload = await loadPlan(supabase, urlPlanId);
           currentPlanIdRef.current = urlPlanId;
-          applyPayload(payload as { shapes?: Shape[]; projectSettings?: ProjectSettings; pan?: Point; zoom?: number; activeLayer?: ActiveLayer; linkedGroups?: LinkedEntry[][] });
+          applyPayload(payload as { shapes?: Shape[]; projectSettings?: ProjectSettings; pan?: Point; zoom?: number; activeLayer?: ActiveLayer; linkedGroups?: LinkedEntry[][]; designSlopePoints?: DesignSlopePoint[] });
           restoredFromDraftRef.current = true;
           setShowRestoredToast(true);
           setTimeout(() => setShowRestoredToast(false), 3500);
@@ -2246,7 +2686,7 @@ export default function MasterProject() {
           setInitialLoadDone(true);
           return;
         }
-        const draft = JSON.parse(raw) as { shapes?: Shape[]; projectSettings?: ProjectSettings; pan?: Point; zoom?: number; activeLayer?: ActiveLayer; linkedGroups?: LinkedEntry[][]; savedAt?: string };
+        const draft = JSON.parse(raw) as { shapes?: Shape[]; projectSettings?: ProjectSettings; pan?: Point; zoom?: number; activeLayer?: ActiveLayer; linkedGroups?: LinkedEntry[][]; designSlopePoints?: DesignSlopePoint[]; savedAt?: string };
         if (!draft?.shapes?.length && !draft?.projectSettings) {
           setInitialLoadDone(true);
           return;
@@ -2261,7 +2701,7 @@ export default function MasterProject() {
         setInitialLoadDone(true);
       }
     };
-    function applyPayload(d: { shapes?: Shape[]; projectSettings?: ProjectSettings; pan?: Point; zoom?: number; activeLayer?: ActiveLayer; linkedGroups?: LinkedEntry[][] }) {
+    function applyPayload(d: { shapes?: Shape[]; projectSettings?: ProjectSettings; pan?: Point; zoom?: number; activeLayer?: ActiveLayer; linkedGroups?: LinkedEntry[][]; designSlopePoints?: DesignSlopePoint[] }) {
       if (d.shapes?.length) {
         const migrated = ensureCanvasElementIds(
           d.shapes.map(s => {
@@ -2274,11 +2714,21 @@ export default function MasterProject() {
         historyRef.current = [];
         setHistory([]);
       }
+      if (Array.isArray(d.designSlopePoints)) setDesignSlopePoints(d.designSlopePoints as DesignSlopePoint[]);
+      else if (d.shapes?.length) setDesignSlopePoints([]);
       if (d.projectSettings) setProjectSettings({ ...DEFAULT_PROJECT_SETTINGS, ...d.projectSettings });
       if (d.pan) setPan(d.pan);
       if (typeof d.zoom === "number" && d.zoom >= MIN_ZOOM && d.zoom <= MAX_ZOOM) setZoom(d.zoom);
-      if (d.activeLayer === 1 || d.activeLayer === 2 || d.activeLayer === 3 || d.activeLayer === 4 || d.activeLayer === 5) setActiveLayer(d.activeLayer);
-      else if ((d as { activeLayer?: number }).activeLayer === 0) setActiveLayer(1);
+      if (typeof d.activeLayer === "number") {
+        const rev = d.projectSettings?.canvasLayerRevision ?? 0;
+        let al = d.activeLayer;
+        if (rev < 2) {
+          if (al === 4) al = 5;
+          else if (al === 5) al = 6;
+        }
+        if (al === 1 || al === 2 || al === 3 || al === 4 || al === 5 || al === 6) setActiveLayer(al as ActiveLayer);
+        else if (al === 0) setActiveLayer(1);
+      }
       if (Array.isArray(d.linkedGroups)) setLinkedGroups(d.linkedGroups);
     }
     load();
@@ -2315,7 +2765,7 @@ export default function MasterProject() {
     const companyId = useAuthStore.getState().getCompanyId();
     if (!companyId || !projectSettings.title?.trim()) return;
     try {
-      const payload: CanvasPayload = { shapes, projectSettings, pan, zoom, activeLayer, linkedGroups, savedAt: new Date().toISOString() };
+      const payload: CanvasPayload = { shapes, projectSettings, pan, zoom, activeLayer, linkedGroups, designSlopePoints, savedAt: new Date().toISOString() };
       const id = await savePlan(supabase, {
         planId: currentPlanIdRef.current,
         companyId,
@@ -2330,7 +2780,7 @@ export default function MasterProject() {
       console.error("Plan save failed:", e);
       planSavePendingRef.current = false;
     }
-  }, [shapes, projectSettings, pan, zoom, activeLayer, linkedGroups, user?.id, urlPlanId, navigate]);
+  }, [shapes, projectSettings, pan, zoom, activeLayer, linkedGroups, designSlopePoints, user?.id, urlPlanId, navigate]);
 
   useEffect(() => {
     const title = projectSettings.title?.trim();
@@ -2351,7 +2801,7 @@ export default function MasterProject() {
         try {
           const companyId = useAuthStore.getState().getCompanyId();
           const key = companyId ? `${DRAFT_STORAGE_KEY}_${companyId}` : DRAFT_STORAGE_KEY;
-          const payload = { shapes, projectSettings, pan, zoom, activeLayer, linkedGroups, savedAt: new Date().toISOString() };
+          const payload = { shapes, projectSettings, pan, zoom, activeLayer, linkedGroups, designSlopePoints, savedAt: new Date().toISOString() };
           localStorage.setItem(key, JSON.stringify(payload));
         } catch {
           // ignore
@@ -2361,7 +2811,7 @@ export default function MasterProject() {
         if (draftSaveTimerRef.current) clearTimeout(draftSaveTimerRef.current);
       };
     }
-  }, [shapes, projectSettings, pan, zoom, activeLayer, linkedGroups, projectSettings.title, doSavePlan]);
+  }, [shapes, projectSettings, pan, zoom, activeLayer, linkedGroups, designSlopePoints, projectSettings.title, doSavePlan]);
 
   // beforeunload: warn user if leaving with unsaved plan (debounce may not have fired yet)
   // Disabled in development to avoid HMR triggering the dialog repeatedly
@@ -2540,6 +2990,30 @@ export default function MasterProject() {
     canvas.height = H * devicePixelRatio;
     ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
 
+    /**
+     * Geodesy print preview: draw as target L1/L2 so adjustment/editor toolbar layer does not leak into the thumbnail.
+     * PDF export loop: {@link activeLayer} is set per page (1–6, 101→1, 102→2); while {@link isExportingPdf}, must use that —
+     * otherwise `pdfGeodesyExportLayer` is null for non-geodesy pages and `?? geodesyPrintPreviewTargetLayer` forces L1/L2 on every sheet.
+     */
+    const layerForRender: ActiveLayer =
+      showGeodesyPrintPreview && !isExportingPdf
+        ? ((pdfGeodesyExportLayer ?? geodesyPrintPreviewTargetLayer) as ActiveLayer)
+        : activeLayer;
+    /** Wymiary vs geodezja — zanim zdefiniowany zostanie geodesyLayerFilter w pętli głównej (ciemny L1 na L2). */
+    const showGeodesyForDims = geodesyEnabled || pdfGeodesyExportLayer != null;
+
+    const isLightCanvas = currentTheme?.id === "light";
+    const canvasPrimLabelFill = isLightCanvas ? CC.text : "#ffffff";
+    const extDimLine = isLightCanvas ? CC.textDim : GARDEN_EXTERIOR_DIM_LINE_COLOR;
+    const extDimText = isLightCanvas ? CC.text : GARDEN_EXTERIOR_DIM_TEXT_COLOR;
+    const linearDimPalette = {
+      text: CC.text,
+      textDim: CC.textDim,
+      accent: CC.accent,
+      angleText: CC.angleText,
+      badge: CC.badge,
+    };
+
     const _polyCache = new Map<number, Point[]>();
     const getCachedPoly = (si: number): Point[] => {
       if (_polyCache.has(si)) return _polyCache.get(si)!;
@@ -2548,10 +3022,21 @@ export default function MasterProject() {
       return poly;
     };
 
+    /** PDF export + geodesy print preview: same as printed PDF (micro-dots, no HUD). */
+    const printPdf = isExportingRef.current || showGeodesyPrintPreview;
+    const hideEdgeDimsGeoPdf = printPdf && pdfGeodesyExportLayer != null;
+    const mmPerPxGeo = getMmPerLogicalPxForDimensions(
+      !!(isExportingPdf && pdfGeodesyExportLayer != null),
+      pdfExportLayoutRef.current,
+    );
+    /** Geodesy PDF: ~2 mm diameter vertex dots on paper; L1/L2 PDF: legacy micro-dots. */
+    const PDF_VERTEX_DOT_R = hideEdgeDimsGeoPdf ? Math.max(0.9, 1 / mmPerPxGeo) : 1.15;
+    const pdfOrEditorR = (r: number) => (printPdf ? PDF_VERTEX_DOT_R : r);
+
     ctx.fillStyle = CC.bg;
     ctx.fillRect(0, 0, W, H);
 
-    if (pointOffsetAlongLinePick && !isExportingRef.current) {
+    if (pointOffsetAlongLinePick && !printPdf) {
       ctx.save();
       ctx.font = "600 13px system-ui,sans-serif";
       ctx.fillStyle = "#27ae60";
@@ -2577,8 +3062,8 @@ export default function MasterProject() {
       }
     }
 
-    // Origin (hidden during PDF export)
-    if (!isExportingRef.current) {
+    // Origin (hidden during PDF export / geodesy preview)
+    if (!printPdf) {
       const o = worldToScreen(0, 0);
       ctx.strokeStyle = CC.textDim; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.moveTo(o.x, 0); ctx.lineTo(o.x, H); ctx.moveTo(0, o.y); ctx.lineTo(W, o.y); ctx.stroke();
@@ -2731,13 +3216,16 @@ export default function MasterProject() {
     // ── Draw inactive layer shapes first (dimmed) ─────────
     shapes.forEach((shape, si) => {
       if (shape.removedFromCanvas) return;
-      if (activeLayer === 1 || activeLayer === 2) {
-        if (shape.layer === activeLayer) return;
+      if (layerForRender === 1 || layerForRender === 2) {
+        if (shape.layer === layerForRender) return;
       }
-      // Foundation visible only in Layer 4; hide in L2 (main loop) and L3 (here)
-      if (shape.elementType === "foundation" && (activeLayer === 3 || activeLayer === 4)) return;
-      // Groundwork linear visible only on Layer 4; hide on Layer 3
-      if (isGroundworkLinear(shape) && activeLayer === 3) return;
+      if (layerForRender === 4 || layerForRender === 5) {
+        if (shape.layer === 2) return;
+      }
+      // Foundation: hide in L2 main and L3; show on wykop/prep
+      if (shape.elementType === "foundation" && (layerForRender === 3 || layerForRender === 4 || layerForRender === 5)) return;
+      // Groundwork linear: tylko Widok Wykop / Przygotowanie
+      if (isGroundworkLinear(shape) && layerForRender !== 4 && layerForRender !== 5) return;
       const pts = shape.points;
       if (pts.length < 1) return;
 
@@ -2802,8 +3290,10 @@ export default function MasterProject() {
         }
       }
 
-      if (activeLayer === 2 && shape.layer === 1 && shape.closed && pts.length >= 3) {
-        const edgeLabelOffset = 28;
+      if (!hideEdgeDimsGeoPdf && !showGeodesyForDims && layerForRender === 2 && shape.layer === 1 && shape.closed && pts.length >= 3) {
+        const geoCompactDimL1 = showGeodesyForDims;
+        const edgeLabelOffset = geoCompactDimL1 ? 26 : 42;
+        const edgeFontPxInactive = geoCompactDimL1 ? 7 : 12;
         for (let i = 0; i < edgeCount; i++) {
           const j = (i + 1) % pts.length;
           const sa = worldToScreen(pts[i].x, pts[i].y);
@@ -2812,20 +3302,23 @@ export default function MasterProject() {
           const norm = edgeNormalAngle(sa, sb);
           const arcs = shape.edgeArcs?.[i];
           const len = calcEdgeLengthWithArcs(pts[i], pts[j], arcs);
+          const lenM = toMeters(len);
           const edgeAngle = Math.atan2(sb.y - sa.y, sb.x - sa.x);
           const textAngle = readableTextAngle(edgeAngle);
           if (!arcs?.length) {
             const out = edgeOutwardRadForL1Edge(shapes, si, i);
             if (out != null) {
+              const dimLabel = formatDimensionCm(lenM);
               drawExteriorAlignedDimension(
                 ctx,
                 sa,
                 sb,
                 out,
                 boundaryDimL1ExteriorOffsetScreenPx(zoom),
-                formatLength(len),
+                dimLabel,
                 GARDEN_EXTERIOR_DIM_LINE_COLOR,
-                GARDEN_EXTERIOR_DIM_TEXT_COLOR
+                GARDEN_EXTERIOR_DIM_TEXT_COLOR,
+                edgeFontPxInactive,
               );
               continue;
             }
@@ -2835,10 +3328,10 @@ export default function MasterProject() {
           ctx.save();
           ctx.translate(lx, ly);
           ctx.rotate(textAngle);
-          ctx.font = "12px 'JetBrains Mono','Fira Code',monospace";
-          ctx.fillStyle = "#ffffff";
+          ctx.font = `${edgeFontPxInactive}px 'JetBrains Mono','Fira Code',monospace`;
+          ctx.fillStyle = canvasPrimLabelFill;
           ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillText(formatLength(len), 0, 0);
+          ctx.fillText(formatDimensionCm(lenM), 0, 0);
           ctx.restore();
         }
       }
@@ -2847,10 +3340,10 @@ export default function MasterProject() {
     });
 
     // ── Layer 3: draw patterns on top of grey Layer 2 shapes (hidden in geodesy mode) ──
-    if (activeLayer === 3 && !geodesyEnabled) {
+    if (layerForRender === 3 && !geodesyEnabled) {
       shapes.forEach((shape, si) => {
         if (shape.removedFromCanvas) return;
-        if (!passesViewFilter(shape, viewFilter, activeLayer)) return;
+        if (!passesViewFilter(shape, viewFilter, layerForRender)) return;
         if (shape.layer !== 2) return;
         if (isPathElement(shape)) {
           if (!shape.closed) return;
@@ -2858,8 +3351,6 @@ export default function MasterProject() {
           if (outline.length < 3) return;
           const pathShape = { ...shape, points: outline, closed: true } as Shape;
           const isSel = shapeSelectionSet.has(si);
-          let pathSlabDrawn = false;
-          let pathCobbleDrawn = false;
           ctx.beginPath();
           const s0 = worldToScreen(outline[0].x, outline[0].y);
           ctx.moveTo(s0.x, s0.y);
@@ -2874,9 +3365,9 @@ export default function MasterProject() {
             const pathOffsetBySegOverride = (patternDragInfo?.shapeIdx === si && patternDragInfo?.isPath && pathPatternLongOffsetPreview != null)
               ? { [pathPatternLongOffsetPreview.segmentIdx]: pathPatternLongOffsetPreview.value }
               : undefined;
-            pathSlabDrawn = drawPathSlabPattern(ctx, pathShape, worldToScreen, zoom, true, !isSel, pathOffsetBySegOverride, shapes);
+            const pathSlabDrawn = drawPathSlabPattern(ctx, pathShape, worldToScreen, zoom, true, !isSel, pathOffsetBySegOverride, shapes);
             if (!pathSlabDrawn) {
-              drawSlabPattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel);
+              drawSlabPattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel, canvasPrimLabelFill);
             }
             if (shouldDrawSlabFrameViz(shape.calculatorInputs)) {
               drawSlabFrame(ctx, pathShape, worldToScreen, zoom, shapes);
@@ -2885,12 +3376,12 @@ export default function MasterProject() {
             const pathOffsetBySegOverride = (patternDragInfo?.shapeIdx === si && patternDragInfo?.isPath && pathPatternLongOffsetPreview != null)
               ? { [pathPatternLongOffsetPreview.segmentIdx]: pathPatternLongOffsetPreview.value }
               : undefined;
-            pathCobbleDrawn = drawPathCobblePattern(ctx, pathShape, worldToScreen, zoom, true, !isSel, pathOffsetBySegOverride, shapes);
+            const pathCobbleDrawn = drawPathCobblePattern(ctx, pathShape, worldToScreen, zoom, true, !isSel, pathOffsetBySegOverride, shapes);
             if (!pathCobbleDrawn) {
               const pathOffsetOverride = (patternDragInfo?.shapeIdx === si && patternDragInfo?.isPath && pathPatternLongOffsetPreview != null && pathPatternLongOffsetPreview.segmentIdx === 0)
                 ? pathPatternLongOffsetPreview.value
                 : undefined;
-              drawCobblestonePattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel, pathOffsetOverride);
+              drawCobblestonePattern(ctx, pathShape, worldToScreen, zoom, true, undefined, undefined, !isSel, pathOffsetOverride, canvasPrimLabelFill);
             }
             if (shape.calculatorInputs?.addFrameToMonoblock && shape.calculatorInputs?.framePieceWidthCm) {
               drawMonoblockFrame(ctx, pathShape, worldToScreen, zoom);
@@ -2907,35 +3398,38 @@ export default function MasterProject() {
           }
           ctx.closePath();
           ctx.stroke();
-          if (
-            shape.calculatorInputs?.pathIsOutline &&
-            outline.length >= 3 &&
-            (shapeSelectionSet.has(si) || si === objectCardShapeIdx || selectedPattern?.shapeIdx === si)
-          ) {
-            const vtxR = POINT_RADIUS + 4;
-            for (let vi = 0; vi < outline.length; vi++) {
-              const sp = worldToScreen(outline[vi].x, outline[vi].y);
-              ctx.beginPath();
-              ctx.arc(sp.x, sp.y, vtxR + 3, 0, Math.PI * 2);
-              ctx.fillStyle = "rgba(255,255,255,0.95)";
-              ctx.fill();
-              ctx.strokeStyle = "#1a2538";
-              ctx.lineWidth = 2;
-              ctx.stroke();
-              ctx.beginPath();
-              ctx.arc(sp.x, sp.y, vtxR, 0, Math.PI * 2);
-              ctx.fillStyle = CC.accent;
-              ctx.fill();
-              ctx.strokeStyle = CC.point;
-              ctx.lineWidth = 2;
-              ctx.stroke();
+          if (shape.calculatorInputs?.pathIsOutline && outline.length >= 3) {
+            if (printPdf) {
+              for (let vi = 0; vi < outline.length; vi++) {
+                const sp = worldToScreen(outline[vi].x, outline[vi].y);
+                ctx.beginPath();
+                ctx.arc(sp.x, sp.y, PDF_VERTEX_DOT_R, 0, Math.PI * 2);
+                ctx.fillStyle = CC.layer2Edge;
+                ctx.fill();
+                ctx.strokeStyle = "rgba(255,255,255,0.4)";
+                ctx.lineWidth = 0.75;
+                ctx.stroke();
+              }
+            } else if (shapeSelectionSet.has(si) || si === objectCardShapeIdx || selectedPattern?.shapeIdx === si) {
+              const vtxR = POINT_RADIUS + 4;
+              for (let vi = 0; vi < outline.length; vi++) {
+                const sp = worldToScreen(outline[vi].x, outline[vi].y);
+                ctx.beginPath();
+                ctx.arc(sp.x, sp.y, vtxR + 3, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255,255,255,0.95)";
+                ctx.fill();
+                ctx.strokeStyle = "#1a2538";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(sp.x, sp.y, vtxR, 0, Math.PI * 2);
+                ctx.fillStyle = CC.accent;
+                ctx.fill();
+                ctx.strokeStyle = CC.point;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+              }
             }
-          }
-          if ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth && pathSlabDrawn) {
-            drawPathSlabLabel(ctx, pathShape, worldToScreen, zoom);
-          }
-          if (shape.calculatorType === "paving" && shape.calculatorInputs && pathCobbleDrawn) {
-            drawPathCobbleLabel(ctx, pathShape, worldToScreen, zoom);
           }
           return;
         }
@@ -2950,7 +3444,7 @@ export default function MasterProject() {
           drawDeckPattern(ctx, shape, worldToScreen, zoom, !isSel);
         }
         if ((shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") && shape.calculatorInputs?.vizSlabWidth) {
-          drawSlabPattern(ctx, shape, worldToScreen, zoom, true, slabOffset, slabDir, !isSel);
+          drawSlabPattern(ctx, shape, worldToScreen, zoom, true, slabOffset, slabDir, !isSel, canvasPrimLabelFill);
           if (shouldDrawSlabFrameViz(shape.calculatorInputs)) {
             drawSlabFrame(ctx, shape, worldToScreen, zoom, shapes);
           }
@@ -2966,7 +3460,7 @@ export default function MasterProject() {
             drawSlabFrame(ctx, shape, worldToScreen, zoom, shapes);
           }
           if ((shape.calculatorInputs?.vizPieces?.length ?? 0) > 0) {
-            drawGrassPieces(ctx, shape, worldToScreen, zoom, isSel, grassScaleInfo, si, isExportingRef.current, grassDir);
+            drawGrassPieces(ctx, shape, worldToScreen, zoom, isSel, grassScaleInfo, si, printPdf, grassDir, canvasPrimLabelFill, isLightCanvas);
           }
         }
         if (shape.calculatorType === "decorativeStones") {
@@ -3039,64 +3533,70 @@ export default function MasterProject() {
           }
         }
       }
-      shapes.forEach((shape, si) => {
-        if (shape.removedFromCanvas) return;
-        if (!passesViewFilter(shape, viewFilter, activeLayer)) return;
-        if (shape.layer !== 2 || !shape.closed || shape.points.length < 3) return;
-        if (selectedPattern?.shapeIdx !== si || (selectedPattern?.type !== "slab" && selectedPattern?.type !== "cobblestone" && selectedPattern?.type !== "grass")) return;
-        if (selectedPattern?.type === "grass" && (shape.calculatorInputs?.vizPieces?.length ?? 0) === 0) return;
-        if (patternDragInfo?.shapeIdx === si || patternRotateInfo?.shapeIdx === si) return;
-        const pts = shape.points;
-        let minY = Infinity;
-        pts.forEach((p: Point) => { const sp = worldToScreen(p.x, p.y); if (sp.y < minY) minY = sp.y; });
-        const ctr = centroid(pts);
-        const sc = worldToScreen(ctr.x, ctr.y);
-        const handleY = minY - 35;
-        ctx.strokeStyle = CC.accent;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([3, 3]);
-        ctx.beginPath();
-        ctx.moveTo(sc.x, minY - 5);
-        ctx.lineTo(sc.x, handleY + 8);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.arc(sc.x, handleY, 8, 0, Math.PI * 2);
-        ctx.fillStyle = CC.button;
-        ctx.fill();
-        ctx.strokeStyle = CC.accent;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      });
+      if (!printPdf) {
+        shapes.forEach((shape, si) => {
+          if (shape.removedFromCanvas) return;
+          if (!passesViewFilter(shape, viewFilter, layerForRender)) return;
+          if (shape.layer !== 2 || !shape.closed || shape.points.length < 3) return;
+          if (selectedPattern?.shapeIdx !== si || (selectedPattern?.type !== "slab" && selectedPattern?.type !== "cobblestone" && selectedPattern?.type !== "grass")) return;
+          if (selectedPattern?.type === "grass" && (shape.calculatorInputs?.vizPieces?.length ?? 0) === 0) return;
+          if (patternDragInfo?.shapeIdx === si || patternRotateInfo?.shapeIdx === si) return;
+          const pts = shape.points;
+          let minY = Infinity;
+          pts.forEach((p: Point) => { const sp = worldToScreen(p.x, p.y); if (sp.y < minY) minY = sp.y; });
+          const ctr = centroid(pts);
+          const sc = worldToScreen(ctr.x, ctr.y);
+          const handleY = minY - 35;
+          ctx.strokeStyle = CC.accent;
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(sc.x, minY - 5);
+          ctx.lineTo(sc.x, handleY + 8);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.arc(sc.x, handleY, 8, 0, Math.PI * 2);
+          ctx.fillStyle = CC.button;
+          ctx.fill();
+          ctx.strokeStyle = CC.accent;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        });
+      }
     }
 
-    // ── Layer 4: Preparation — excavation breakdown on L2 elements ──
-    const PREPARATION_CALC_TYPES = ["slab", "paving", "grass", "turf", "decorativeStones", "foundation"];
-    if (activeLayer === 4) {
-      shapes.forEach((shape) => {
-        if (shape.removedFromCanvas) return;
-        if (shape.layer !== 2) return;
-        if (!PREPARATION_CALC_TYPES.includes(shape.calculatorType ?? "")) return;
-        drawExcavationLayers(ctx, shape, worldToScreen);
-      });
-      // Groundwork linear elements drawn on top of excavation
+    // ── Layer 4/5: Wykop / Przygotowanie — roboty ziemne liniowe (drenaż, rury, kabel)
+    if (layerForRender === 4 || layerForRender === 5) {
+      // Groundwork linear elements
       shapes.forEach((shape, si) => {
         if (shape.removedFromCanvas) return;
         if (shape.layer !== 2 || !isGroundworkLinear(shape)) return;
-        if (!passesViewFilter(shape, viewFilter, activeLayer)) return;
+        if (!passesViewFilterWithGroundworkOnExcavationLayers(shape, viewFilter, layerForRender)) return;
         const pts = shape.points;
         if (pts.length < 1) return;
         if (pts.length >= 2) {
-          drawLinearElement(ctx, shape, worldToScreen, zoom, shapeSelectionSet.has(si), false, undefined);
+          drawLinearElement(
+          ctx,
+          shape,
+          worldToScreen,
+          zoom,
+          shapeSelectionSet.has(si),
+          false,
+          undefined,
+          true,
+          linearDimPalette,
+          null,
+        );
         }
         pts.forEach((p, pi) => {
           const sp = worldToScreen(p.x, p.y);
           const isFirstOnly = si === drawingShapeIdx && pts.length === 1 && pi === 0;
-          const r = isFirstOnly ? POINT_RADIUS + 2 : POINT_RADIUS * 0.8;
+          const r = pdfOrEditorR(isFirstOnly ? POINT_RADIUS + 2 : POINT_RADIUS * 0.8);
           ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
           ctx.fillStyle = CC.layer2Edge; ctx.fill();
-          ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
-          if (isFirstOnly) {
+          ctx.strokeStyle = CC.point; ctx.lineWidth = printPdf ? 0.85 : 2; ctx.stroke();
+          if (isFirstOnly && !printPdf) {
             const animT = (Date.now() % 1500) / 1500;
             const pulse = r + 4 + Math.sin(animT * Math.PI * 2) * 3;
             ctx.beginPath(); ctx.arc(sp.x, sp.y, pulse, 0, Math.PI * 2);
@@ -3114,35 +3614,97 @@ export default function MasterProject() {
           ctx.beginPath(); ctx.moveTo(sl.x, sl.y); ctx.lineTo(sm.x, sm.y); ctx.stroke();
           ctx.setLineDash([]);
         }
-        if (pts.length >= 2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || groundworkLabel(shape), zoom);
+        if (pts.length >= 2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || groundworkLabel(shape), zoom, canvasPrimLabelFill);
       });
     }
 
     // ── Draw active layer shapes ──────────────────────────
-    const showGeodesy = geodesyEnabled;
-    // Geodesy only for layer 1 when viewing layer 1; for layer 2 when viewing 2/3/5
+    const showGeodesy = geodesyEnabled || pdfGeodesyExportLayer != null;
+    // Geodesy only for layer 1 when viewing layer 1; for layer 2 when viewing 2/3/6 (not wykop/prep 4–5)
     const geodesyLayerFilter = (s: Shape) => {
-      if (s.layer === 1) return activeLayer === 1;
-      return activeLayer === 2 || activeLayer === 3 || activeLayer === 5;
+      if (s.layer === 1) return layerForRender === 1;
+      return layerForRender === 2 || layerForRender === 3 || layerForRender === 6;
     };
     const geodesyGlobalRange = showGeodesy ? computeGlobalHeightRange(shapes, s =>
-      geodesyLayerFilter(s) && (!(activeLayer === 3 || activeLayer === 5) ? s.layer === activeLayer : (s.layer === 1 || s.layer === 2))
+      geodesyLayerFilter(s) && (!(layerForRender === 3 || layerForRender === 6) ? s.layer === layerForRender : (s.layer === 1 || s.layer === 2))
     ) : undefined;
+
+    const excavationGlobalRange =
+      layerForRender === 4
+        ? computeGlobalCmRange(shapes, "excavation", s => s.layer === 2 && passesViewFilter(s, viewFilter, layerForRender))
+        : { min: 0, max: 0 };
+    const preparationGlobalRange =
+      layerForRender === 5
+        ? computeGlobalCmRange(shapes, "preparation", s => s.layer === 2 && passesViewFilter(s, viewFilter, layerForRender))
+        : { min: 0, max: 0 };
+
+    const geodesyHiddenActive =
+      showGeodesyPrintPreview || (isExportingPdf && pdfGeodesyExportLayer != null);
+    const geodesyHiddenKeysForDraw = geodesyHiddenActive ? hiddenGeodesyEntries : null;
+
+    /** Geodezja: layout etykiet przed kropkami — kolory kropek = {@link SmartGeodesyLabels.getGeodesyPointCanvasFill}. */
+    if (showGeodesy) {
+      const geodesyFilterPreDraw = (s: Shape) => {
+        if (!geodesyLayerFilter(s)) return false;
+        if (!passesViewFilter(s, viewFilter, layerForRender)) return false;
+        if (layerForRender === 6) return s.layer === 1 || s.layer === 2;
+        return s.layer === layerForRender;
+      };
+      const smartLabelsPre = smartGeodesyLabelsRef.current;
+      const hiddenPrintKeyPre = geodesyHiddenActive ? [...hiddenGeodesyEntries].sort().join(";") : "";
+      const slKeyPre = `${layerForRender}|${showGeodesy}|${pdfGeodesyExportLayer ?? ""}|${hiddenPrintKeyPre}|${hideEdgeDimsGeoPdf ? 1 : 0}`;
+      if (smartLabelLayoutKeyRef.current !== slKeyPre) {
+        smartLabelLayoutKeyRef.current = slKeyPre;
+        smartLabelsPre.markDirty();
+      }
+      smartLabelsPre.update(
+        shapes,
+        worldToScreen,
+        pan,
+        zoom,
+        canvasSize.w,
+        canvasSize.h,
+        geodesyFilterPreDraw,
+        ctx,
+        editingGeodesyCard?.cardInfo.group ?? null,
+        geodesyHiddenKeysForDraw,
+        layerForRender,
+        currentTheme?.id === "light",
+        hideEdgeDimsGeoPdf,
+        getMmPerLogicalPxForDimensions(
+          !!(isExportingPdf && pdfGeodesyExportLayer != null),
+          pdfExportLayoutRef.current,
+        ),
+      );
+    }
+
+    const geoVertexDotFill = (si: number, pi: number) =>
+      smartGeodesyLabelsRef.current.getGeodesyPointCanvasFill(`v|${si}|${pi}`) ??
+      (isLightCanvas ? CC.text : "#ffffff");
+    const geoHeightDotFill = (si: number, hpi: number) =>
+      smartGeodesyLabelsRef.current.getGeodesyPointCanvasFill(`h|${si}|${hpi}`) ?? canvasPrimLabelFill;
 
     shapes.forEach((shape, si) => {
       if (shape.removedFromCanvas) return;
-      if (!passesViewFilter(shape, viewFilter, activeLayer)) return;
-      if (activeLayer === 5) { if (shape.layer !== 1 && shape.layer !== 2) return; }
-      else if (activeLayer === 3) { if (shape.layer !== 2) return; }
-      else if (shape.layer !== activeLayer) return;
+      if (!passesViewFilter(shape, viewFilter, layerForRender)) return;
+      if (isGroundworkLinear(shape)) return;
+      if (layerForRender === 6) { if (shape.layer !== 1 && shape.layer !== 2) return; }
+      else if (layerForRender === 4 || layerForRender === 5) { if (shape.layer !== 2) return; }
+      else if (layerForRender === 3) { if (shape.layer !== 2) return; }
+      else if (shape.layer !== layerForRender) return;
       // Foundation visible only in Layer 4, hidden in Layer 2
-      if (activeLayer === 2 && shape.elementType === "foundation") return;
+      if (layerForRender === 2 && shape.elementType === "foundation") return;
       const pts = shape.points;
       if (pts.length < 1) return;
       const isSel = shapeSelectionSet.has(si);
       const isDraw = si === drawingShapeIdx;
       const isOpen = !shape.closed;
       const isL2 = shape.layer === 2;
+      const geoDimCompact = showGeodesy && geodesyLayerFilter(shape);
+      const edgeDimFont = EDGE_LENGTH_LABEL_FONT_STACK;
+      const edgeLabelOffsetDim = geoDimCompact ? 30 : 44;
+      const slopeLabelOffsetDim = geoDimCompact ? 28 : 52;
+      const edgeFontPxExterior = EDGE_LENGTH_LABEL_FONT_PX;
       const edgeColor = isOpen ? CC.open : isL2 ? CC.layer2Edge : CC.edge;
       const edgeHovColor = isOpen ? CC.openHover : isL2 ? CC.layer2 : CC.edgeHover;
 
@@ -3274,11 +3836,28 @@ export default function MasterProject() {
               }
               ctx.closePath();
             }
-            if (activeLayer !== 3) {
-              ctx.fillStyle = isSel ? "rgba(108,92,231,0.15)" : CC.layer2Dim;
-              ctx.fill();
+            if (layerForRender !== 3) {
+              if (layerForRender === 4 && isL2 && shapeHasExcavationOrPrepData(shape, "excavation")) {
+                fillShapeExcavationPrepHeatmap(ctx, shape, worldToScreen, "excavation", excavationGlobalRange);
+              } else if (layerForRender === 5 && isL2 && shapeHasExcavationOrPrepData(shape, "preparation")) {
+                fillShapeExcavationPrepHeatmap(ctx, shape, worldToScreen, "preparation", preparationGlobalRange);
+              } else if ((layerForRender === 4 || layerForRender === 5) && isL2) {
+                ctx.fillStyle = "rgba(138, 143, 168, 0.15)";
+                ctx.fill();
+              } else if (showGeodesy && geodesyLayerFilter(shape) && layerForRender !== 4 && layerForRender !== 5) {
+                const interiorForHeatmap =
+                  pathHasArcs && outlineShape.points.length >= 3
+                    ? getEffectivePolygon(outlineShape)
+                    : outline;
+                fillShapeHeightHeatmap(ctx, shape, worldToScreen, geodesyGlobalRange, {
+                  interiorPolygon: interiorForHeatmap.length >= 3 ? interiorForHeatmap : undefined,
+                });
+              } else {
+                ctx.fillStyle = isSel ? "rgba(108,92,231,0.15)" : CC.layer2Dim;
+                ctx.fill();
+              }
             }
-            if (activeLayer !== 3) {
+            if (layerForRender !== 3) {
               ctx.strokeStyle = isSel ? edgeHovColor : edgeColor;
               ctx.lineWidth = isSel ? 2.5 : 1.8;
               if (pathHasArcs) {
@@ -3302,16 +3881,50 @@ export default function MasterProject() {
           }
         }
         pointsToShow.forEach((p, pi) => {
+          if (isVertexHiddenForGeodesyExportPreview(p.x, p.y, si, shape.points, geodesyHiddenKeysForDraw)) return;
           const sp = worldToScreen(p.x, p.y);
           const isH = hoveredPoint && hoveredPoint.shapeIdx === si && hoveredPoint.pointIdx === pi;
           const isD = dragInfo && dragInfo.shapeIdx === si && dragInfo.pointIdx === pi;
-          const r = (isH || isD ? POINT_RADIUS + 2 : POINT_RADIUS) * (isSel || isDraw ? 1 : 0.8);
+          if (showGeodesy && geodesyLayerFilter(shape)) {
+            if (printPdf) {
+              const rGeo = pdfOrEditorR(GEODESY_CANVAS_VERTEX_DOT_R);
+              ctx.beginPath();
+              ctx.arc(sp.x, sp.y, rGeo, 0, Math.PI * 2);
+              ctx.fillStyle = geoVertexDotFill(si, pi);
+              ctx.fill();
+              ctx.strokeStyle = isLightCanvas ? "rgba(15,23,42,0.55)" : "rgba(15,23,42,0.78)";
+              ctx.lineWidth = hideEdgeDimsGeoPdf ? Math.max(0.35, 0.4 * mmPerPxGeo) : 1;
+              ctx.stroke();
+              return;
+            }
+            const rGeo = GEODESY_CANVAS_VERTEX_DOT_R * (isH || isD ? 1.45 : 1);
+            if (isH || isD) {
+              ctx.beginPath(); ctx.arc(sp.x, sp.y, rGeo + 4, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(108,92,231,0.35)"; ctx.fill();
+            }
+            ctx.beginPath(); ctx.arc(sp.x, sp.y, rGeo, 0, Math.PI * 2);
+            ctx.fillStyle = geoVertexDotFill(si, pi);
+            ctx.fill();
+            ctx.strokeStyle = "rgba(15,23,42,0.78)"; ctx.lineWidth = 1; ctx.stroke();
+            if (!printPdf && isPointLinked(si, pi)) {
+              ctx.beginPath(); ctx.arc(sp.x, sp.y, rGeo + 3, 0, Math.PI * 2);
+              ctx.strokeStyle = CC.accent; ctx.lineWidth = 1; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
+            }
+            return;
+          }
+          let r = pdfOrEditorR(GEODESY_CANVAS_VERTEX_DOT_R * (isH || isD ? 1.45 : 1));
+          const fc = CC.layer2Edge;
+          const hc = CC.layer2;
+          if (!printPdf && (isH || isD)) {
+            ctx.beginPath(); ctx.arc(sp.x, sp.y, r + 5, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(108,92,231,0.4)"; ctx.fill();
+          }
           ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
-          ctx.fillStyle = isH || isD ? CC.layer2 : CC.layer2Edge; ctx.fill();
-          ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
+          ctx.fillStyle = isH || isD ? hc : fc; ctx.fill();
+          ctx.strokeStyle = CC.point; ctx.lineWidth = printPdf ? 0.85 : 2; ctx.stroke();
         });
         if (
-          (isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5) &&
+          (isSel || showAllArcPoints || layerForRender === 1 || layerForRender === 2 || layerForRender === 3 || layerForRender === 6) &&
           shape.edgeArcs &&
           pts.length >= 2
         ) {
@@ -3323,14 +3936,14 @@ export default function MasterProject() {
               const j = (i + 1) % no;
               const arcs = shape.edgeArcs[i];
               if (arcs && arcs.length > 0) {
-                drawArcHandles(ctx, outline[i], outline[j], arcs, (wx, wy) => worldToScreen(wx, wy), hoveredArcPoint?.arcPoint?.id ?? null, linkedArcIdsForShape);
+                drawArcHandles(ctx, outline[i], outline[j], arcs, (wx, wy) => worldToScreen(wx, wy), hoveredArcPoint?.arcPoint?.id ?? null, linkedArcIdsForShape, printPdf);
               }
             }
           } else {
             for (let i = 0; i < pts.length - 1; i++) {
               const arcs = shape.edgeArcs[i];
               if (arcs && arcs.length > 0) {
-                drawArcHandles(ctx, pts[i], pts[i + 1], arcs, (wx, wy) => worldToScreen(wx, wy), hoveredArcPoint?.arcPoint?.id ?? null, linkedArcIdsForShape);
+                drawArcHandles(ctx, pts[i], pts[i + 1], arcs, (wx, wy) => worldToScreen(wx, wy), hoveredArcPoint?.arcPoint?.id ?? null, linkedArcIdsForShape, printPdf);
               }
             }
           }
@@ -3371,14 +3984,14 @@ export default function MasterProject() {
             const lp = screenPosForSmartGuideDistanceLabel(guide, eMouse, worldToScreen, gi);
             ctx.font = "11px 'JetBrains Mono',monospace";
             ctx.fillStyle = "#27ae60"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-            ctx.fillText(formatLength(distance(gPt, eMouse)), lp.x, lp.y);
+            ctx.fillText(formatDimensionCmFromPx(distance(gPt, eMouse)), lp.x, lp.y);
           }
           ctx.textBaseline = "alphabetic";
           const liveLen = distance(last, eMouse);
           const lmMid = midpoint(sl, sm);
           ctx.font = "12px 'JetBrains Mono',monospace";
           ctx.fillStyle = CC.text; ctx.textAlign = "center";
-          ctx.fillText(formatLength(liveLen), lmMid.x, lmMid.y - 12);
+          ctx.fillText(formatDimensionCmFromPx(liveLen), lmMid.x, lmMid.y - 12);
           if (shiftHeld) {
             const snapped = snapTo45(last, mouseWorld);
             const dir = { x: snapped.x - last.x, y: snapped.y - last.y };
@@ -3410,51 +4023,163 @@ export default function MasterProject() {
             }
           }
         }
-        if (isL2 && !inSegmentSideSelection) {
-          drawShapeObjectLabel(ctx, shape, worldToScreen, getPathLabel(shape), zoom);
-          drawPathRibbonMetrics(ctx, shape, worldToScreen, zoom);
+        if (isL2 && !inSegmentSideSelection && layerForRender === 3) {
+          if (shape.closed && outline.length >= 3) {
+            const pathShapeForLabel = { ...shape, points: outline, closed: true } as Shape;
+            const hasSlabViz =
+              (shape.calculatorType === "slab" || shape.calculatorType === "concreteSlabs") &&
+              shape.calculatorInputs?.vizSlabWidth &&
+              shape.calculatorInputs?.vizSlabLength;
+            const hasPavingViz = shape.calculatorType === "paving" && shape.calculatorInputs;
+            if (hasSlabViz) {
+              drawPathSlabLabel(ctx, pathShapeForLabel, worldToScreen, zoom, canvasPrimLabelFill, true);
+            } else if (hasPavingViz) {
+              drawPathCobbleLabel(ctx, pathShapeForLabel, worldToScreen, zoom, canvasPrimLabelFill, true);
+            } else {
+              drawShapeObjectLabel(ctx, shape, worldToScreen, getPathLabel(shape), zoom, canvasPrimLabelFill);
+            }
+          } else {
+            drawShapeObjectLabel(ctx, shape, worldToScreen, getPathLabel(shape), zoom, canvasPrimLabelFill);
+          }
+        }
+        // Długości segmentów linii środkowej — główna pętla wymiarów jest po `return` dla path; bez tego brak etykiet na ścieżkach.
+        if (
+          layerForRender !== 3 &&
+          !inSegmentSideSelection &&
+          !hideEdgeDimsGeoPdf &&
+          !(showGeodesy && geodesyLayerFilter(shape)) &&
+          pts.length >= 2 &&
+          (shape.closed ? pts.length >= 3 : true)
+        ) {
+          const pathEdgeCount = shape.closed ? pts.length : pts.length - 1;
+          for (let i = 0; i < pathEdgeCount; i++) {
+            const j = shape.closed ? (i + 1) % pts.length : i + 1;
+            const arcs = shape.edgeArcs?.[i];
+            const len = calcEdgeLengthWithArcs(pts[i]!, pts[j]!, arcs);
+            const sa = worldToScreen(pts[i]!.x, pts[i]!.y);
+            const sb = worldToScreen(pts[j]!.x, pts[j]!.y);
+            const mid = midpoint(sa, sb);
+            const norm = edgeNormalAngle(sa, sb);
+            const edgeAngle = Math.atan2(sb.y - sa.y, sb.x - sa.x);
+            const textAngle = readableTextAngle(edgeAngle);
+            const hideDimInAdjustment = layerForRender === 6 && shape.layer === 1;
+            const showEdgeLabel =
+              !hideDimInAdjustment && !(editingDim && editingDim.shapeIdx === si && editingDim.edgeIdx === i);
+            if (!showEdgeLabel) continue;
+            const lenM = toMeters(len);
+            let lx: number, ly: number;
+            if (isL2 && shape.closed) {
+              const edgeMidWorld = midpoint(pts[i]!, pts[j]!);
+              const outRad = edgeOutwardRadForClosedPoly(pts, i);
+              const off = toPixels(EDGE_LENGTH_LABEL_PERP_OFFSET_M);
+              if (outRad != null) {
+                const labelWorld = {
+                  x: edgeMidWorld.x - Math.cos(outRad) * off,
+                  y: edgeMidWorld.y - Math.sin(outRad) * off,
+                };
+                const sl = worldToScreen(labelWorld.x, labelWorld.y);
+                lx = sl.x;
+                ly = sl.y;
+              } else {
+                const ctr = pts.length >= 3 ? labelAnchorInsidePolygon(pts) : midpoint(pts[0]!, pts[1]!);
+                const frac = 0.92;
+                const labelWorld = { x: ctr.x + frac * (edgeMidWorld.x - ctr.x), y: ctr.y + frac * (edgeMidWorld.y - ctr.y) };
+                const sl = worldToScreen(labelWorld.x, labelWorld.y);
+                lx = sl.x;
+                ly = sl.y;
+              }
+            } else {
+              lx = mid.x - Math.cos(norm) * edgeLabelOffsetDim;
+              ly = mid.y - Math.sin(norm) * edgeLabelOffsetDim;
+            }
+            ctx.save();
+            ctx.translate(lx, ly);
+            ctx.rotate(textAngle);
+            ctx.font = edgeDimFont;
+            ctx.fillStyle = isL2 ? canvasPrimLabelFill : CC.text;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(formatDimensionCm(lenM), 0, 0);
+            ctx.restore();
+          }
         }
         return;
       }
 
       if (isLinearElement(shape)) {
-        drawLinearElement(ctx, shape, worldToScreen, zoom, isSel, hoveredEdge?.shapeIdx === si, isL2 ? (pi: number) => isPointLinked(si, pi) : undefined);
+        drawLinearElement(
+          ctx,
+          shape,
+          worldToScreen,
+          zoom,
+          isSel,
+          hoveredEdge?.shapeIdx === si,
+          isL2 ? (pi: number) => isPointLinked(si, pi) : undefined,
+          layerForRender === 4 ||
+            layerForRender === 3 ||
+            ((layerForRender === 2 || layerForRender === 5) && !isSel),
+          linearDimPalette,
+          null,
+          showGeodesy && geodesyLayerFilter(shape),
+        );
         if (shape.elementType === "fence" && shape.calculatorResults) {
           drawFencePostMarkers(ctx, shape, worldToScreen, zoom);
         }
-        if (showGeodesy && geodesyLayerFilter(shape) && shape.elementType === "wall" && (shape.heights?.some((h: number) => Math.abs(h) > 0.0001))) {
-          drawWallSlopeIndicators(ctx, shape, worldToScreen);
+        if (
+          showGeodesy &&
+          geodesyLayerFilter(shape) &&
+          shape.layer !== 2 &&
+          shape.elementType === "wall" &&
+          (shape.heights?.some((h: number) => Math.abs(h) > 0.0001))
+        ) {
+          drawWallSlopeIndicators(ctx, shape, worldToScreen, isLightCanvas);
         }
         const gripDenseL2 =
           isPolygonLinearStripOutline(shape) && shape.linearOpenStripOutline ? computeLinearElementFillOutline(shape) : undefined;
         pts.forEach((_, pi) => {
           const p = getLinearElementVertexGripWorld(shape, pi, gripDenseL2);
+          if (isVertexHiddenForGeodesyExportPreview(p.x, p.y, si, shape.points, geodesyHiddenKeysForDraw)) return;
           const sp = worldToScreen(p.x, p.y);
           const isH = hoveredPoint && hoveredPoint.shapeIdx === si && hoveredPoint.pointIdx === pi;
           const isD = dragInfo && dragInfo.shapeIdx === si && dragInfo.pointIdx === pi;
-          const r = (isH || isD ? POINT_RADIUS + 2 : POINT_RADIUS) * (isSel || isDraw ? 1 : 0.8);
-          const fc = CC.layer2Edge;
-          const hc = CC.layer2;
-          if (isH || isD) {
+          if (showGeodesy && geodesyLayerFilter(shape)) {
+            if (printPdf) return;
+            const rGeo = GEODESY_CANVAS_VERTEX_DOT_R * (isH || isD ? 1.45 : 1);
+            if (isH || isD) {
+              ctx.beginPath(); ctx.arc(sp.x, sp.y, rGeo + 4, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(108,92,231,0.35)"; ctx.fill();
+            }
+            ctx.beginPath(); ctx.arc(sp.x, sp.y, rGeo, 0, Math.PI * 2);
+            ctx.fillStyle = geoVertexDotFill(si, pi);
+            ctx.fill();
+            ctx.strokeStyle = "rgba(15,23,42,0.78)"; ctx.lineWidth = 1; ctx.stroke();
+            return;
+          }
+          let r = pdfOrEditorR(GEODESY_CANVAS_VERTEX_DOT_R * (isH || isD ? 1.45 : 1));
+          let fc = CC.layer2Edge;
+          let hc = CC.layer2;
+          if (!printPdf && (isH || isD)) {
             ctx.beginPath(); ctx.arc(sp.x, sp.y, r + 5, 0, Math.PI * 2);
             ctx.fillStyle = "rgba(108,92,231,0.4)"; ctx.fill();
           }
           ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
           ctx.fillStyle = isH || isD ? hc : fc; ctx.fill();
-          ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
+          ctx.strokeStyle = CC.point; ctx.lineWidth = printPdf ? 0.85 : 2; ctx.stroke();
         });
-        if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5) && shape.edgeArcs) {
+        if ((isSel || showAllArcPoints || layerForRender === 1 || layerForRender === 2 || layerForRender === 3 || layerForRender === 6) && shape.edgeArcs) {
           const linkedArcIdsForShape = new Set<string>();
           for (const g of linkedGroups) for (const p of g) { if (isArcEntry(p) && p.si === si && g.length >= 2) linkedArcIdsForShape.add(p.arcId); }
           const leEdgeCount = pts.length - 1;
           for (let i = 0; i < leEdgeCount; i++) {
             const arcs = shape.edgeArcs[i];
             if (arcs && arcs.length > 0) {
-              drawArcHandles(ctx, pts[i], pts[i + 1], arcs, (wx, wy) => worldToScreen(wx, wy), hoveredArcPoint?.arcPoint?.id ?? null, linkedArcIdsForShape);
+              drawArcHandles(ctx, pts[i], pts[i + 1], arcs, (wx, wy) => worldToScreen(wx, wy), hoveredArcPoint?.arcPoint?.id ?? null, linkedArcIdsForShape, printPdf);
             }
           }
         }
-        if (isL2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || "Element", zoom);
+        if (isL2 && shouldDrawL2ShapeObjectName(shape, layerForRender)) {
+          drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || "Element", zoom, canvasPrimLabelFill);
+        }
         if (isDraw && pts.length > 0) {
           const guideChain = wallBaselineChainForDrawing(shape, pts);
           const last = guideChain.length > 0 ? guideChain[guideChain.length - 1]! : pts[pts.length - 1];
@@ -3486,14 +4211,14 @@ export default function MasterProject() {
             const lp = screenPosForSmartGuideDistanceLabel(guide, eMouse, worldToScreen, gi);
             ctx.font = "11px 'JetBrains Mono',monospace";
             ctx.fillStyle = "#27ae60"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-            ctx.fillText(formatLength(distM), lp.x, lp.y);
+            ctx.fillText(formatDimensionCmFromPx(distM), lp.x, lp.y);
           }
           ctx.textBaseline = "alphabetic";
           const liveLen = distance(last, eMouse);
           const lm = midpoint(sl, sm);
           ctx.font = "12px 'JetBrains Mono',monospace";
           ctx.fillStyle = CC.text; ctx.textAlign = "center";
-          ctx.fillText(formatLength(liveLen), lm.x, lm.y - 12);
+          ctx.fillText(formatDimensionCmFromPx(liveLen), lm.x, lm.y - 12);
           const wblDraw = shape.calculatorInputs?.wallBaselinePolyline as Point[] | undefined;
           if (shape.elementType === "wall" && wblDraw && wblDraw.length >= 2 && guideChain.length >= 2) {
             const prev = guideChain[guideChain.length - 2]!;
@@ -3536,8 +4261,15 @@ export default function MasterProject() {
           }
         }
         ctx.closePath();
-        if (activeLayer !== 3) {
-          if (showGeodesy && geodesyLayerFilter(shape)) {
+        if (layerForRender !== 3) {
+          if (layerForRender === 4 && isL2 && shapeHasExcavationOrPrepData(shape, "excavation")) {
+            fillShapeExcavationPrepHeatmap(ctx, shape, worldToScreen, "excavation", excavationGlobalRange);
+          } else if (layerForRender === 5 && isL2 && shapeHasExcavationOrPrepData(shape, "preparation")) {
+            fillShapeExcavationPrepHeatmap(ctx, shape, worldToScreen, "preparation", preparationGlobalRange);
+          } else if ((layerForRender === 4 || layerForRender === 5) && isL2) {
+            ctx.fillStyle = "rgba(138, 143, 168, 0.15)";
+            ctx.fill();
+          } else if (showGeodesy && geodesyLayerFilter(shape) && layerForRender !== 4 && layerForRender !== 5) {
             fillShapeHeightHeatmap(ctx, shape, worldToScreen, geodesyGlobalRange);
           } else {
             ctx.fillStyle = isSel ? (isL2 ? "rgba(108,92,231,0.15)" : CC.selectedFill) : (isL2 ? CC.layer2Dim : CC.shapeFill);
@@ -3550,7 +4282,7 @@ export default function MasterProject() {
       const vizAlignedEdges = (shape.calculatorInputs?.vizAlignedEdges as number[] | undefined) ?? [];
       const edgeCount = shape.closed ? pts.length : pts.length - 1;
       const hasArcsForStroke = !!(shape.edgeArcs?.some(a => a && a.length > 0));
-      if (activeLayer !== 3) {
+      if (layerForRender !== 3) {
       if (hasArcsForStroke) {
         const { points: effPts, edgeIndices } = getEffectivePolygonWithEdgeIndices(shape);
         drawSmoothPolygonStroke(ctx, effPts, edgeIndices, (wx, wy) => worldToScreen(wx, wy), (edgeIdx) => {
@@ -3605,58 +4337,82 @@ export default function MasterProject() {
         const norm = edgeNormalAngle(sa, sb);
         const edgeAngle = Math.atan2(sb.y - sa.y, sb.x - sa.x);
         const textAngle = readableTextAngle(edgeAngle);
-        const edgeLabelOffset = 28;
-        const slopeLabelOffset = 42;
-        const hideDimInAdjustment = activeLayer === 5 && shape.layer === 1;
-        const showEdgeLabel = !hideDimInAdjustment && !(editingDim && editingDim.shapeIdx === si && editingDim.edgeIdx === i);
+        const hideDimInAdjustment = layerForRender === 6 && shape.layer === 1;
+        const showEdgeLabel =
+          !hideDimInAdjustment &&
+          !hideEdgeDimsGeoPdf &&
+          !(showGeodesy && geodesyLayerFilter(shape)) &&
+          !(editingDim && editingDim.shapeIdx === si && editingDim.edgeIdx === i);
         const isL1StraightGardenDim =
           !isL2 && shape.layer === 1 && shape.closed && !(arcs && arcs.length > 0);
+        const lenM = toMeters(len);
         if (showEdgeLabel && isL1StraightGardenDim) {
           const out = edgeOutwardRadForL1Edge(shapes, si, i);
           if (out != null) {
-            const lineC = isLockedEdge ? CC.locked : isHov ? "#ffffff" : GARDEN_EXTERIOR_DIM_LINE_COLOR;
-            const textC = isLockedEdge ? CC.locked : isHov ? "#ffffff" : GARDEN_EXTERIOR_DIM_TEXT_COLOR;
-            drawExteriorAlignedDimension(ctx, sa, sb, out, boundaryDimL1ExteriorOffsetScreenPx(zoom), formatLength(len), lineC, textC);
+            const lineC = isLockedEdge ? CC.locked : isHov ? (isLightCanvas ? CC.accent : "#ffffff") : extDimLine;
+            const textC = isLockedEdge ? CC.locked : isHov ? (isLightCanvas ? CC.accent : "#ffffff") : extDimText;
+            const dimLabel = formatDimensionCm(lenM);
+            drawExteriorAlignedDimension(ctx, sa, sb, out, boundaryDimL1ExteriorOffsetScreenPx(zoom), dimLabel, lineC, textC, edgeFontPxExterior);
           } else {
-            const lx = mid.x - Math.cos(norm) * edgeLabelOffset;
-            const ly = mid.y - Math.sin(norm) * edgeLabelOffset;
+            const lx = mid.x - Math.cos(norm) * edgeLabelOffsetDim;
+            const ly = mid.y - Math.sin(norm) * edgeLabelOffsetDim;
             ctx.save();
             ctx.translate(lx, ly);
             ctx.rotate(textAngle);
-            ctx.font = "12px 'JetBrains Mono','Fira Code',monospace";
+            ctx.font = edgeDimFont;
             ctx.fillStyle = isLockedEdge ? CC.locked : isHov ? edgeHovColor : CC.text;
             ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            ctx.fillText(formatLength(len), 0, 0);
+            ctx.fillText(formatDimensionCm(lenM), 0, 0);
             ctx.restore();
           }
         } else if (showEdgeLabel) {
           let lx: number, ly: number;
           if (isL2 && shape.closed) {
-            const effPts = hasArcsForStroke ? getEffectivePolygon(shape) : pts;
-            const ctr = effPts.length >= 3 ? labelAnchorInsidePolygon(effPts) : midpoint(pts[0], pts[1] ?? pts[0]);
             const edgeMidWorld = midpoint(pts[i], pts[j]);
-            const frac = 0.92;
-            const labelWorld = { x: ctr.x + frac * (edgeMidWorld.x - ctr.x), y: ctr.y + frac * (edgeMidWorld.y - ctr.y) };
-            const sl = worldToScreen(labelWorld.x, labelWorld.y);
-            lx = sl.x;
-            ly = sl.y;
+            const outRad = edgeOutwardRadForClosedPoly(pts, i);
+            const off = toPixels(EDGE_LENGTH_LABEL_PERP_OFFSET_M);
+            if (outRad != null) {
+              const labelWorld = {
+                x: edgeMidWorld.x - Math.cos(outRad) * off,
+                y: edgeMidWorld.y - Math.sin(outRad) * off,
+              };
+              const sl = worldToScreen(labelWorld.x, labelWorld.y);
+              lx = sl.x;
+              ly = sl.y;
+            } else {
+              const effPts = hasArcsForStroke ? getEffectivePolygon(shape) : pts;
+              const ctr = effPts.length >= 3 ? labelAnchorInsidePolygon(effPts) : midpoint(pts[0], pts[1] ?? pts[0]);
+              const frac = 0.92;
+              const labelWorld = { x: ctr.x + frac * (edgeMidWorld.x - ctr.x), y: ctr.y + frac * (edgeMidWorld.y - ctr.y) };
+              const sl = worldToScreen(labelWorld.x, labelWorld.y);
+              lx = sl.x;
+              ly = sl.y;
+            }
           } else {
-            lx = mid.x - Math.cos(norm) * edgeLabelOffset;
-            ly = mid.y - Math.sin(norm) * edgeLabelOffset;
+            lx = mid.x - Math.cos(norm) * edgeLabelOffsetDim;
+            ly = mid.y - Math.sin(norm) * edgeLabelOffsetDim;
           }
           ctx.save();
           ctx.translate(lx, ly);
           ctx.rotate(textAngle);
-          ctx.font = "12px 'JetBrains Mono','Fira Code',monospace";
-          ctx.fillStyle = isL2 ? "#ffffff" : (isLockedEdge ? CC.locked : isHov ? edgeHovColor : CC.text);
+          ctx.font = edgeDimFont;
+          ctx.fillStyle = isL2 ? canvasPrimLabelFill : (isLockedEdge ? CC.locked : isHov ? edgeHovColor : CC.text);
           ctx.textAlign = "center"; ctx.textBaseline = "middle";
-          ctx.fillText(formatLength(len), 0, 0);
+          ctx.fillText(formatDimensionCm(lenM), 0, 0);
           ctx.restore();
         }
 
         // Slope label in geodesy mode — arrow along edge, pointing downhill (high → low)
         // Slopes outside element, lengths inside (opposite sides to avoid overlap)
-        if (!hideDimInAdjustment && showGeodesy && geodesyLayerFilter(shape) && shape.closed) {
+        // Layer 2: no slope overlays (same plan as L1 geodesy without % spadków)
+        if (
+          !hideDimInAdjustment &&
+          showGeodesy &&
+          geodesyLayerFilter(shape) &&
+          shape.closed &&
+          shape.layer !== 2 &&
+          !(printPdf && pdfGeodesyExportLayer != null)
+        ) {
           const slopes = calcEdgeSlopes(shape);
           const sl = slopes.find(s => s.edgeIdx === i);
           if (sl && sl.direction !== "flat") {
@@ -3680,23 +4436,23 @@ export default function MasterProject() {
             ctx.lineTo(ax, ay);
             ctx.lineTo(ax + Math.cos(Math.atan2(uy, ux) - Math.PI * 0.8) * headLen, ay + Math.sin(Math.atan2(uy, ux) - Math.PI * 0.8) * headLen);
             ctx.stroke();
-            const stx = mid.x + Math.cos(norm) * slopeLabelOffset;
-            const sty = mid.y + Math.sin(norm) * slopeLabelOffset;
+            const stx = mid.x + Math.cos(norm) * slopeLabelOffsetDim;
+            const sty = mid.y + Math.sin(norm) * slopeLabelOffsetDim;
             ctx.save();
             ctx.translate(stx, sty);
             ctx.rotate(textAngle);
-            ctx.font = "bold 20px 'JetBrains Mono',monospace";
+            ctx.font = geoDimCompact ? "bold 11px 'JetBrains Mono',monospace" : "bold 20px 'JetBrains Mono',monospace";
             ctx.fillStyle = slopeColor(sl.severity);
             ctx.textAlign = "center"; ctx.textBaseline = "middle";
             ctx.fillText(formatSlope(sl), 0, 0);
             ctx.restore();
           } else if (sl) {
-            const stx = mid.x + Math.cos(norm) * slopeLabelOffset;
-            const sty = mid.y + Math.sin(norm) * slopeLabelOffset;
+            const stx = mid.x + Math.cos(norm) * slopeLabelOffsetDim;
+            const sty = mid.y + Math.sin(norm) * slopeLabelOffsetDim;
             ctx.save();
             ctx.translate(stx, sty);
             ctx.rotate(textAngle);
-            ctx.font = "bold 20px 'JetBrains Mono',monospace";
+            ctx.font = geoDimCompact ? "bold 11px 'JetBrains Mono',monospace" : "bold 20px 'JetBrains Mono',monospace";
             ctx.fillStyle = slopeColor(sl.severity);
             ctx.textAlign = "center"; ctx.textBaseline = "middle";
             ctx.fillText(formatSlope(sl), 0, 0);
@@ -3707,20 +4463,20 @@ export default function MasterProject() {
       }
 
       // Arc point handles (when selected, showAllArcPoints, or in L1/L2/L5 — same visibility as square points)
-      if ((isSel || showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5) && shape.edgeArcs && !showGeodesy) {
+      if ((isSel || showAllArcPoints || layerForRender === 1 || layerForRender === 2 || layerForRender === 3 || layerForRender === 6) && shape.edgeArcs && !showGeodesy) {
         const linkedArcIdsForShape = new Set<string>();
         for (const g of linkedGroups) for (const p of g) { if (isArcEntry(p) && p.si === si && g.length >= 2) linkedArcIdsForShape.add(p.arcId); }
         for (let i = 0; i < edgeCount; i++) {
           const arcs = shape.edgeArcs[i];
           if (arcs && arcs.length > 0) {
             const j = (i + 1) % pts.length;
-            drawArcHandles(ctx, pts[i], pts[j], arcs, (wx, wy) => worldToScreen(wx, wy), hoveredArcPoint?.arcPoint?.id ?? null, linkedArcIdsForShape);
+            drawArcHandles(ctx, pts[i], pts[j], arcs, (wx, wy) => worldToScreen(wx, wy), hoveredArcPoint?.arcPoint?.id ?? null, linkedArcIdsForShape, printPdf);
           }
         }
       }
 
-      // Angles (interior, labels inside shape) — hidden in geodesy mode; hidden for circle (arc-only handles)
-      if (shape.closed && pts.length >= 3 && isSel && !showGeodesy && !isCircleArcHandlesOnlyShape(shape)) {
+      // Angles (interior) — wyłączone w geodezji, Wykop/Przygotowanie oraz na widoku warstwy 3 (kompozycja); na warstwie 2 widoczne przy zaznaczeniu
+      if (shape.closed && pts.length >= 3 && isSel && !showGeodesy && !isCircleArcHandlesOnlyShape(shape) && layerForRender !== 3 && layerForRender !== 4 && layerForRender !== 5) {
         for (let i = 0; i < pts.length; i++) {
           const prev = pts[(i - 1 + pts.length) % pts.length], curr = pts[i], next = pts[(i + 1) % pts.length];
           const angle = angleDeg(prev, curr, next);
@@ -3749,30 +4505,59 @@ export default function MasterProject() {
           : undefined;
       if (!isCircleArcHandlesOnlyShape(shape)) pts.forEach((_, pi) => {
         const p = getLinearElementVertexGripWorld(shape, pi, gripDense);
+        if (isVertexHiddenForGeodesyExportPreview(p.x, p.y, si, shape.points, geodesyHiddenKeysForDraw)) return;
         const sp = worldToScreen(p.x, p.y);
         const isH = hoveredPoint && hoveredPoint.shapeIdx === si && hoveredPoint.pointIdx === pi;
         const isD = dragInfo && dragInfo.shapeIdx === si && dragInfo.pointIdx === pi;
-        const r = (isH || isD ? POINT_RADIUS + 2 : POINT_RADIUS) * (isSel || isDraw ? 1 : 0.8);
-        const fc = isOpen ? CC.open : isL2 ? CC.layer2Edge : CC.pointFill;
-        const hc = isOpen ? CC.openHover : isL2 ? CC.layer2 : CC.pointHover;
+        if (showGeodesy && geodesyLayerFilter(shape)) {
+          if (printPdf) {
+            const rGeo = pdfOrEditorR(GEODESY_CANVAS_VERTEX_DOT_R);
+            ctx.beginPath();
+            ctx.arc(sp.x, sp.y, rGeo, 0, Math.PI * 2);
+            ctx.fillStyle = geoVertexDotFill(si, pi);
+            ctx.fill();
+            ctx.strokeStyle = isLightCanvas ? "rgba(15,23,42,0.55)" : "rgba(15,23,42,0.78)";
+            ctx.lineWidth = hideEdgeDimsGeoPdf ? Math.max(0.35, 0.4 * mmPerPxGeo) : 1;
+            ctx.stroke();
+            return;
+          }
+          const rGeo = GEODESY_CANVAS_VERTEX_DOT_R * (isH || isD ? 1.45 : 1);
+          if (!printPdf && (isH || isD)) {
+            ctx.beginPath(); ctx.arc(sp.x, sp.y, rGeo + 4, 0, Math.PI * 2);
+            ctx.fillStyle = isOpen ? CC.openGlow : isL2 ? "rgba(108,92,231,0.35)" : "rgba(147,197,253,0.35)"; ctx.fill();
+          }
+          ctx.beginPath(); ctx.arc(sp.x, sp.y, rGeo, 0, Math.PI * 2);
+          ctx.fillStyle = geoVertexDotFill(si, pi);
+          ctx.fill();
+          ctx.strokeStyle = "rgba(15,23,42,0.78)"; ctx.lineWidth = 1; ctx.stroke();
+          if (!printPdf && isPointLinked(si, pi)) {
+            ctx.beginPath(); ctx.arc(sp.x, sp.y, rGeo + 3, 0, Math.PI * 2);
+            ctx.strokeStyle = CC.accent; ctx.lineWidth = 1; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
+          }
+          return;
+        }
+        let r = (isH || isD ? POINT_RADIUS + 2 : POINT_RADIUS) * (isSel || isDraw ? 1 : 0.8);
+        let fc = isOpen ? CC.open : isL2 ? CC.layer2Edge : CC.pointFill;
+        let hc = isOpen ? CC.openHover : isL2 ? CC.layer2 : CC.pointHover;
+        r = pdfOrEditorR(r);
 
-        if (isH || isD) {
+        if (!printPdf && (isH || isD)) {
           ctx.beginPath(); ctx.arc(sp.x, sp.y, r + 5, 0, Math.PI * 2);
           ctx.fillStyle = isOpen ? CC.openGlow : isL2 ? "rgba(108,92,231,0.4)" : CC.accentGlow; ctx.fill();
         }
         ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
         ctx.fillStyle = isH || isD ? hc : fc; ctx.fill();
-        ctx.strokeStyle = CC.point; ctx.lineWidth = 2; ctx.stroke();
+        ctx.strokeStyle = CC.point; ctx.lineWidth = printPdf ? 0.85 : 2; ctx.stroke();
 
         // Linked point indicator
-        if (isPointLinked(si, pi)) {
+        if (!printPdf && isPointLinked(si, pi)) {
           ctx.beginPath(); ctx.arc(sp.x, sp.y, r + 4, 0, Math.PI * 2);
           ctx.strokeStyle = CC.accent; ctx.lineWidth = 1.5; ctx.setLineDash([3, 2]); ctx.stroke(); ctx.setLineDash([]);
         }
       });
 
       // Rotation handle
-      if (isSel && shape.closed && pts.length >= 3 && !isDraw) {
+      if (!printPdf && isSel && shape.closed && pts.length >= 3 && !isDraw) {
         let minY = Infinity;
         pts.forEach(p => { const sp = worldToScreen(p.x, p.y); if (sp.y < minY) minY = sp.y; });
         const ctr = centroid(pts);
@@ -3807,7 +4592,7 @@ export default function MasterProject() {
           const effPts = getCachedPoly(si);
           const area = areaM2(effPts);
           ctx.font = "bold 16px 'JetBrains Mono',monospace";
-          ctx.fillStyle = "#ffffff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillStyle = canvasPrimLabelFill; ctx.textAlign = "center"; ctx.textBaseline = "middle";
           ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y);
         }
 
@@ -3821,13 +4606,18 @@ export default function MasterProject() {
           if (frame) parts.push(`${frame.quantity ?? frame.amount ?? 0} frame`);
           if (parts.length > 0) {
             ctx.font = "bold 12px 'JetBrains Mono',monospace";
-            ctx.fillStyle = "#ffffff";
+            ctx.fillStyle = canvasPrimLabelFill;
             ctx.fillText(parts.join(" · "), sc.x, sc.y + 22);
           }
         }
 
         // Gradient arrow in geodesy mode — text placed opposite to arrow so it never overlaps
-        if (showGeodesy && geodesyLayerFilter(shape)) {
+        if (
+          showGeodesy &&
+          geodesyLayerFilter(shape) &&
+          shape.layer !== 2 &&
+          !(printPdf && pdfGeodesyExportLayer != null)
+        ) {
           const grad = calcShapeGradient(shape);
           if (grad && grad.magnitude > 0.05) {
             const gradBaseY = sc.y + 58;
@@ -3848,15 +4638,17 @@ export default function MasterProject() {
             const textOffset = 22;
             const tx = sc.x - Math.cos(grad.angle) * textOffset;
             const ty = gradBaseY - Math.sin(grad.angle) * textOffset;
-            ctx.font = "bold 20px 'JetBrains Mono',monospace";
-            ctx.fillStyle = slopeColor(grad.severity);
+            ctx.font = geoDimCompact ? "bold 11px 'JetBrains Mono',monospace" : "bold 20px 'JetBrains Mono',monospace";
+            ctx.fillStyle = isLightCanvas ? CC.text : slopeColor(grad.severity);
             ctx.textAlign = "center"; ctx.textBaseline = "middle";
             ctx.fillText(grad.magnitude.toFixed(1) + " cm/m", tx, ty);
           }
         }
       }
 
-      if (isL2) drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || "Element", zoom);
+      if (isL2 && shouldDrawL2ShapeObjectName(shape, layerForRender)) {
+        drawShapeObjectLabel(ctx, shape, worldToScreen, shape.label || "Element", zoom, canvasPrimLabelFill);
+      }
 
       // Open shape label
       if (isOpen && pts.length >= 3) {
@@ -3867,27 +4659,65 @@ export default function MasterProject() {
         ctx.fillText(t("project:canvas_unclosed_no_area"), sc.x, sc.y);
       }
 
-      // Height labels (geodesy mode) — drawn via drawGeodesyLabels below (avoids overlap at junctions)
+      // Height labels (geodesy mode) — drawn via SmartGeodesyLabels below (avoids overlap at junctions)
       // Vertex height labels skipped here when showGeodesy
 
       // Punkty wysokościowe (Layer 1) — widoczne tylko w layer 1
-      if (shape.layer === 1 && activeLayer === 1 && (shape.heightPoints?.length ?? 0) > 0) {
+      if (shape.layer === 1 && layerForRender === 1 && (shape.heightPoints?.length ?? 0) > 0) {
         const hpList = shape.heightPoints!;
         const isGeodesy = showGeodesy;
-        const r = (POINT_RADIUS * 0.9) * (isGeodesy ? 1 : 0.7);
+        if (isGeodesy && geodesyLayerFilter(shape)) {
+          hpList.forEach((hp, hpi) => {
+            if (geodesyHiddenKeysForDraw?.has(`h|${si}|${hpi}`)) return;
+            const sp = worldToScreen(hp.x, hp.y);
+            const isH = !printPdf && hoveredHeightPoint?.shapeIdx === si && hoveredHeightPoint?.heightPointIdx === hpi;
+            const isEdit =
+              !printPdf &&
+              editingGeodesyCard?.cardInfo?.group?.some(
+                p => !p.isVertex && p.shapeIdx === si && p.heightPointIdx === hpi,
+              );
+            const r = printPdf
+              ? pdfOrEditorR(GEODESY_CANVAS_HEIGHT_DOT_R)
+              : GEODESY_CANVAS_HEIGHT_DOT_R * (isH || isEdit ? 1.4 : 1);
+            ctx.beginPath();
+            ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+            ctx.fillStyle = geoHeightDotFill(si, hpi);
+            ctx.fill();
+            ctx.strokeStyle = isH || isEdit
+              ? "#93c5fd"
+              : printPdf
+                ? isLightCanvas
+                  ? "rgba(15,23,42,0.55)"
+                  : "rgba(15,23,42,0.78)"
+                : "rgba(15,23,42,0.78)";
+            ctx.lineWidth = printPdf
+              ? Math.max(0.35, 0.4 * mmPerPxGeo)
+              : isH || isEdit
+                ? 1.5
+                : 1;
+            ctx.stroke();
+          });
+        } else {
         hpList.forEach((hp, hpi) => {
+          if (geodesyHiddenKeysForDraw?.has(`h|${si}|${hpi}`)) return;
           const sp = worldToScreen(hp.x, hp.y);
           const isH = hoveredHeightPoint?.shapeIdx === si && hoveredHeightPoint?.heightPointIdx === hpi;
           const isEdit = editingGeodesyCard?.cardInfo?.group?.some(p => !p.isVertex && p.shapeIdx === si && p.heightPointIdx === hpi);
+          const r = printPdf ? PDF_VERTEX_DOT_R : GEODESY_CANVAS_HEIGHT_DOT_R * (isH || isEdit ? 1.4 : 1);
           ctx.beginPath();
-          ctx.rect(sp.x - r, sp.y - r, r * 2, r * 2);
-          ctx.fillStyle = isH || isEdit ? CC.geo : (isGeodesy ? CC.geo : CC.textDim);
+          if (printPdf) {
+            ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+          } else {
+            ctx.rect(sp.x - r, sp.y - r, r * 2, r * 2);
+          }
+          ctx.fillStyle = isGeodesy ? canvasPrimLabelFill : isH || isEdit ? CC.geo : CC.textDim;
           ctx.fill();
-          ctx.strokeStyle = isH || isEdit ? "#fff" : CC.point;
-          ctx.lineWidth = isH || isEdit ? 2 : 1;
+          ctx.strokeStyle = isGeodesy ? (isH || isEdit ? "#93c5fd" : "rgba(15,23,42,0.78)") : isH || isEdit ? "#fff" : CC.point;
+          ctx.lineWidth = printPdf ? 0.85 : isH || isEdit ? 2 : 1;
           ctx.stroke();
-          // Height label drawn via drawGeodesyLabels (avoids overlap at junctions)
+          // Height label drawn via SmartGeodesyLabels (avoids overlap at junctions)
         });
+        }
       }
 
       // Rubber band
@@ -3934,7 +4764,7 @@ export default function MasterProject() {
           const lp = screenPosForSmartGuideDistanceLabel(guide, eMouse, worldToScreen, gi);
           ctx.font = "11px 'JetBrains Mono',monospace";
           ctx.fillStyle = "#27ae60"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
-          ctx.fillText(formatLength(distM), lp.x, lp.y);
+          ctx.fillText(formatDimensionCmFromPx(distM), lp.x, lp.y);
         }
         ctx.textBaseline = "alphabetic";
 
@@ -3956,7 +4786,7 @@ export default function MasterProject() {
         const lm = midpoint(sl, sm);
         ctx.font = "12px 'JetBrains Mono',monospace";
         ctx.fillStyle = CC.text; ctx.textAlign = "center";
-        ctx.fillText(formatLength(liveLen), lm.x, lm.y - 12);
+        ctx.fillText(formatDimensionCmFromPx(liveLen), lm.x, lm.y - 12);
 
         if (pts.length >= 2) {
           const prev = pts[pts.length - 2];
@@ -4006,7 +4836,7 @@ export default function MasterProject() {
           const lm = midpoint(sg, sd);
           ctx.font = "11px 'JetBrains Mono',monospace";
           ctx.fillStyle = "#27ae60"; ctx.textAlign = "center";
-          ctx.fillText(formatLength(distM), lm.x, lm.y - 6);
+          ctx.fillText(formatDimensionCmFromPx(distM), lm.x, lm.y - 6);
         }
       }
     }
@@ -4035,19 +4865,91 @@ export default function MasterProject() {
       }
     }
 
-    // Geodesy labels with leader lines — avoids overlap when multiple points share position
-    if (showGeodesy) {
-      const geodesyFilter = (s: Shape) => {
-        if (!geodesyLayerFilter(s)) return false;
-        if (!passesViewFilter(s, viewFilter, activeLayer)) return false;
-        if (activeLayer === 5) return s.layer === 1 || s.layer === 2;
-        return s.layer === activeLayer;
-      };
-      drawGeodesyLabels(ctx, shapes, worldToScreen, geodesyFilter, hoveredPoint, hoveredHeightPoint, editingGeodesyCard?.cardInfo.group ?? null);
+    // Project design slope points (purple diamonds, L1 outline anchors) — visible on L2 / L3 / adjustment
+    if (
+      designSlopePoints.length > 0 &&
+      (layerForRender === 2 || layerForRender === 3 || layerForRender === 6)
+    ) {
+      const r = printPdf ? PDF_VERTEX_DOT_R * 1.05 : GEODESY_CANVAS_VERTEX_DOT_R;
+      ctx.textBaseline = "top";
+      ctx.textAlign = "center";
+      for (const dsp of designSlopePoints) {
+        const w = resolveDesignSlopeWorldPosition(dsp, shapes);
+        const sp = worldToScreen(w.x, w.y);
+        if (printPdf) {
+          ctx.beginPath();
+          ctx.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = "#9b59b6";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(255,255,255,0.45)";
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(sp.x, sp.y - r);
+          ctx.lineTo(sp.x + r, sp.y);
+          ctx.lineTo(sp.x, sp.y + r);
+          ctx.lineTo(sp.x - r, sp.y);
+          ctx.closePath();
+          ctx.fillStyle = "#9b59b6";
+          ctx.fill();
+          ctx.strokeStyle = isLightCanvas ? "rgba(30,41,59,0.88)" : "rgba(255,255,255,0.92)";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+        const hCm = dsp.height * 100;
+        const label = `${hCm >= 0 ? "+" : ""}${hCm.toFixed(1)} cm`;
+        ctx.font = "11px 'JetBrains Mono',monospace";
+        ctx.fillStyle = canvasPrimLabelFill;
+        ctx.fillText(label, sp.x, sp.y + (printPdf ? PDF_VERTEX_DOT_R * 1.05 : r) + 4);
+      }
     }
 
-    // ── Layer 5: Adjustment — empty areas (red), overflow (red), overlaps (orange) ──
-    if (activeLayer === 5) {
+    // Geodesy labels (smart layout: zoom-aware clustering, leaders) — overlap-safe; update() runs przed kropkami
+    if (showGeodesy) {
+      smartGeodesyLabelsRef.current.render(
+        ctx,
+        worldToScreen,
+        hoveredPoint,
+        hoveredHeightPoint,
+        editingGeodesyCard?.cardInfo.group ?? null,
+      );
+    }
+
+    // Wykop / Przygotowanie — cm labels (singletons: short text; clusters: named cards + leaders, jak geodezja)
+    if (layerForRender === 4 || layerForRender === 5) {
+      const mode = layerForRender === 4 ? "excavation" : "preparation";
+      drawExcavationPrepCmLabels(
+        ctx,
+        shapes,
+        worldToScreen,
+        mode,
+        sh => sh.layer === 2 && passesViewFilterWithGroundworkOnExcavationLayers(sh, viewFilter, layerForRender),
+        hoveredPoint,
+        (si, pi) =>
+          cmEditDialog != null &&
+          cmEditDialog.shapeIdx === si &&
+          cmEditDialog.pointIdx === pi &&
+          cmEditDialog.mode === mode,
+        isLightCanvas,
+      );
+      drawGroundworkBurialLabels(
+        ctx,
+        shapes,
+        worldToScreen,
+        sh => sh.layer === 2 && passesViewFilterWithGroundworkOnExcavationLayers(sh, viewFilter, layerForRender),
+        hoveredPoint,
+        (si, pi) =>
+          cmEditDialog != null &&
+          cmEditDialog.shapeIdx === si &&
+          cmEditDialog.pointIdx === pi &&
+          cmEditDialog.mode === "groundworkBurial",
+        isLightCanvas,
+      );
+    }
+
+    // ── Layer 6: Adjustment — empty areas (red), overflow (red), overlaps (orange) ──
+    if (layerForRender === 6) {
       const drawPolygon = (pts: Point[]) => {
         if (pts.length < 3) return;
         const s0 = worldToScreen(pts[0].x, pts[0].y);
@@ -4093,24 +4995,26 @@ export default function MasterProject() {
     }
 
     // Selected points highlight
-    selectedPoints.forEach(({ shapeIdx: si, pointIdx: pi }) => {
-      const shSel = shapes[si];
-      if (shSel && shSel.points[pi]) {
-        const denseSel =
-          isLinearElement(shSel) && isPolygonLinearStripOutline(shSel) && shSel.linearOpenStripOutline
-            ? computeLinearElementFillOutline(shSel)
-            : undefined;
-        const p = getLinearElementVertexGripWorld(shSel, pi, denseSel);
-        const sp = worldToScreen(p.x, p.y);
-        ctx.beginPath(); ctx.arc(sp.x, sp.y, POINT_RADIUS + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = CC.danger; ctx.lineWidth = 2.5; ctx.stroke();
-        ctx.beginPath(); ctx.arc(sp.x, sp.y, POINT_RADIUS + 8, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(255,71,87,0.15)"; ctx.fill();
-      }
-    });
+    if (!printPdf) {
+      selectedPoints.forEach(({ shapeIdx: si, pointIdx: pi }) => {
+        const shSel = shapes[si];
+        if (shSel && shSel.points[pi]) {
+          const denseSel =
+            isLinearElement(shSel) && isPolygonLinearStripOutline(shSel) && shSel.linearOpenStripOutline
+              ? computeLinearElementFillOutline(shSel)
+              : undefined;
+          const p = getLinearElementVertexGripWorld(shSel, pi, denseSel);
+          const sp = worldToScreen(p.x, p.y);
+          ctx.beginPath(); ctx.arc(sp.x, sp.y, POINT_RADIUS + 4, 0, Math.PI * 2);
+          ctx.strokeStyle = CC.danger; ctx.lineWidth = 2.5; ctx.stroke();
+          ctx.beginPath(); ctx.arc(sp.x, sp.y, POINT_RADIUS + 8, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(255,71,87,0.15)"; ctx.fill();
+        }
+      });
+    }
 
     // Offset-along-line: anchors — orange halos; moving vertex — same size, full green glow
-    if (pointOffsetAlongLinePick && !isExportingRef.current) {
+    if (pointOffsetAlongLinePick && !printPdf) {
       const pick = pointOffsetAlongLinePick;
       const phase = offsetAlongLinePickPulse * 0.09;
       const pulse = 0.88 + 0.12 * Math.sin(phase);
@@ -4187,7 +5091,7 @@ export default function MasterProject() {
         }
       };
       for (let si = 0; si < shapes.length; si++) {
-        if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
+        if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, layerForRender)) continue;
         const pts = shapes[si].points;
         for (let pi = 0; pi < pts.length; pi++) {
           if (si === pick.moveShapeIdx && pi === pick.movePointIdx) continue;
@@ -4213,7 +5117,7 @@ export default function MasterProject() {
     // HUD
     ctx.font = "11px 'JetBrains Mono',monospace";
     ctx.fillStyle = CC.textDim; ctx.textAlign = "left"; ctx.textBaseline = "bottom";
-    let hud = `${toMeters(mouseWorld.x).toFixed(2)}, ${toMeters(mouseWorld.y).toFixed(2)} m  |  zoom: ${(zoom * 100).toFixed(0)}%  |  Layer ${activeLayer}`;
+    let hud = `${toMeters(mouseWorld.x).toFixed(2)}, ${toMeters(mouseWorld.y).toFixed(2)} m  |  zoom: ${(zoom * 100).toFixed(0)}%  |  Layer ${layerForRender}`;
     if (shiftHeld) hud += "  |  SNAP 45°";
     if (drawingShapeIdx !== null && mode === "freeDraw") hud += "  |  Drawing (Esc = cancel)";
     if (mode === "drawFence") hud += "  |  FENCE: click to place points, Esc to finish";
@@ -4226,14 +5130,14 @@ export default function MasterProject() {
     if (mode === "scale") hud += "  |  SCALE: corner = proportional, edge = move";
     if (mode === "move") hud += "  |  MOVE: left click anywhere to pan";
     const canStartMeasure = selectedShapeIdx === null && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
-    const measureAllowed = activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5;
+    const measureAllowed = layerForRender === 1 || layerForRender === 2 || layerForRender === 3 || layerForRender === 6;
     if (measureStart !== null) hud += "  |  MEASURE: click point 2; click again to clear";
     else if (shiftHeld && canStartMeasure && measureAllowed) hud += "  |  SHIFT + click to start measure";
     if (geodesyEnabled) hud += "  |  GEODESY: click point → set height, click area → show height";
-    ctx.fillText(hud, 10, H - 10);
+    if (!printPdf) ctx.fillText(hud, 10, H - 10);
 
     // Height tooltip (geodesy mode): click on L1 shape interior — only show in layer 1
-    if (geodesyEnabled && activeLayer === 1 && clickedHeightTooltip) {
+    if (geodesyEnabled && layerForRender === 1 && clickedHeightTooltip) {
       const sp = worldToScreen(clickedHeightTooltip.world.x, clickedHeightTooltip.world.y);
       const hCm = clickedHeightTooltip.height * 100;
       const text = (hCm >= 0 ? "+" : "") + hCm.toFixed(1) + " cm";
@@ -4244,14 +5148,14 @@ export default function MasterProject() {
       const boxH = 22;
       ctx.fillStyle = "rgba(0,0,0,0.8)";
       ctx.fillRect(sp.x - boxW / 2, sp.y - boxH - 12, boxW, boxH);
-      ctx.fillStyle = CC.geo;
+      ctx.fillStyle = "#ffffff";
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
       ctx.fillText(text, sp.x, sp.y - 14);
     }
 
     // Measure (Shift-based): line + distance label
-    if (measureStart) {
+    if (measureStart && !printPdf) {
       const endPt = measureEnd ?? mouseWorld;
       const sA = worldToScreen(measureStart.x, measureStart.y);
       const sB = worldToScreen(endPt.x, endPt.y);
@@ -4273,7 +5177,7 @@ export default function MasterProject() {
     }
 
     // Edge hover: distance labels on line (A→cursor, cursor→B)
-    if (hoveredEdge) {
+    if (hoveredEdge && !printPdf) {
       const s = shapes[hoveredEdge.shapeIdx];
       const pts = s?.points;
       if (pts && pts.length >= 2) {
@@ -4300,22 +5204,22 @@ export default function MasterProject() {
         const ly2 = mid2.y - Math.sin(norm) * labelOffset;
         const textAngle = readableTextAngle(Math.atan2(sB.y - sA.y, sB.x - sA.x));
         ctx.font = "bold 11px 'JetBrains Mono','Fira Code',monospace";
-        ctx.fillStyle = GARDEN_EXTERIOR_DIM_TEXT_COLOR;
+        ctx.fillStyle = extDimText;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.save();
         ctx.translate(lx1, ly1);
         ctx.rotate(textAngle);
-        ctx.fillText(formatLength(distToA), 0, 0);
+        ctx.fillText(formatDimensionCmFromPx(distToA), 0, 0);
         ctx.restore();
         ctx.save();
         ctx.translate(lx2, ly2);
         ctx.rotate(textAngle);
-        ctx.fillText(formatLength(distToB), 0, 0);
+        ctx.fillText(formatDimensionCmFromPx(distToB), 0, 0);
         ctx.restore();
         }
         // Layer 1 garden as reference in Layer 2: show small gray vertices while hovering an edge (snap targets)
-        if (activeLayer === 2 && s.layer === 1 && pts.length >= 2) {
+        if (layerForRender === 2 && s.layer === 1 && pts.length >= 2) {
           const dotR = Math.max(2.2, (POINT_RADIUS * 0.45) * (zoom > 0.5 ? 1 : 0.85));
           for (let vi = 0; vi < pts.length; vi++) {
             const sv = worldToScreen(pts[vi].x, pts[vi].y);
@@ -4424,12 +5328,64 @@ export default function MasterProject() {
         ctx.fillText(t("project:dim_edit_point_b"), offBx, offBy);
       }
     }
-  }, [shapes, selectedShapeIdx, selectedShapeIndices, shapeSelectionSet, selectedPattern, objectCardShapeIdx, patternDragInfo, patternDragPreview, pathPatternLongOffsetPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id, measureStart, measureEnd, pathSegmentSideSelection, shapeDragInfo, edgeDragInfo, pointOffsetAlongLinePick, offsetAlongLinePickPulse, isOnActiveLayer]);
+  }, [shapes, designSlopePoints, selectedShapeIdx, selectedShapeIndices, shapeSelectionSet, selectedPattern, objectCardShapeIdx, patternDragInfo, patternDragPreview, pathPatternLongOffsetPreview, patternAlignedEdges, patternRotateInfo, patternRotatePreview, mode, drawingShapeIdx, mouseWorld, pan, zoom, canvasSize, geodesyPreviewCanvasLock, hoveredPoint, hoveredEdge, hoveredHeightPoint, dragInfo, editingDim, editingGeodesyCard, cmEditDialog, worldToScreen, shiftHeld, selectedPoints, selectionRect, rotateInfo, activeLayer, geodesyPrintPreviewTargetLayer, draggingGrassPiece, grassAlignedPolyEdges, clickedHeightTooltip, geodesyEnabled, showAllArcPoints, linkedGroups, viewFilter, adjustmentData, t, setAngleModal, currentTheme?.id, measureStart, measureEnd, pathSegmentSideSelection, shapeDragInfo, edgeDragInfo, pointOffsetAlongLinePick, offsetAlongLinePickPulse, isOnActiveLayer, pdfGeodesyExportLayer, showGeodesyPrintPreview, hiddenGeodesyEntries, isExportingPdf]);
+
+  /** Geodesy PDF preview: fit camera so all L1+L2 geometry (same union as PDF pages 101+102) stays inside the canvas. */
+  useLayoutEffect(() => {
+    if (!showGeodesyPrintPreview) return;
+    const w = geodesyPreviewCanvasLock?.w ?? canvasSize.w;
+    const h = geodesyPreviewCanvasLock?.h ?? canvasSize.h;
+    const fit = computeGeodesyPdfFitCamera(shapes, designSlopePoints, viewFilter, w, h);
+    if (!fit) return;
+    const epsP = 0.5;
+    const epsZ = 1e-5;
+    setPan(prev =>
+      Math.abs(prev.x - fit.pan.x) < epsP && Math.abs(prev.y - fit.pan.y) < epsP ? prev : fit.pan,
+    );
+    setZoom(prev => (Math.abs(prev - fit.zoom) < epsZ ? prev : fit.zoom));
+  }, [showGeodesyPrintPreview, shapes, designSlopePoints, viewFilter, geodesyPreviewCanvasLock, canvasSize.w, canvasSize.h]);
+
+  /** Snapshot for geodesy print-preview modal — runs after canvas draw effect so toDataURL matches the latest layerForRender paint. */
+  useEffect(() => {
+    if (!showGeodesyPrintPreview) {
+      setGeodesyPreviewDataUrl("");
+      return;
+    }
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const c = canvasRef.current;
+        if (c) setGeodesyPreviewDataUrl(c.toDataURL("image/png"));
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [
+    showGeodesyPrintPreview,
+    hiddenGeodesyEntries,
+    shapes,
+    activeLayer,
+    pdfGeodesyExportLayer,
+    geodesyPrintPreviewTargetLayer,
+    geodesyEnabled,
+    pan,
+    zoom,
+    canvasSize,
+    isExportingPdf,
+  ]);
 
   // Clear height tooltip when disabling geodesy or switching away from layer 1
   useEffect(() => {
     if (!geodesyEnabled || activeLayer !== 1) setClickedHeightTooltip(null);
   }, [geodesyEnabled, activeLayer]);
+
+  // Wykop / Przygotowanie: geodezja nie ma tu zastosowania; pozostawiona włączona z L2 przejmuje kliknięcia (cm wykopu nie działa).
+  useEffect(() => {
+    if (activeLayer === 4 || activeLayer === 5) {
+      setGeodesyEnabled(false);
+      setEditingGeodesyCard(null);
+      setClickedHeightTooltip(null);
+      setClusterTooltip(null);
+    }
+  }, [activeLayer]);
 
   // Pulse animation
   useEffect(() => {
@@ -4443,7 +5399,11 @@ export default function MasterProject() {
   const hitTestPoint = useCallback((wp: Point): HitResult | null => {
     const th = pointRadiusEffective / zoom + 4;
     const r = th * (PIXELS_PER_METER / 80);
-    if (selectedShapeIdx !== null && isOnActiveLayer(selectedShapeIdx) && passesViewFilter(shapes[selectedShapeIdx], viewFilter, activeLayer)) {
+    if (
+      selectedShapeIdx !== null &&
+      isOnActiveLayer(selectedShapeIdx) &&
+      passesViewFilterWithGroundworkOnExcavationLayers(shapes[selectedShapeIdx], viewFilter, activeLayer)
+    ) {
       const s = shapes[selectedShapeIdx];
       if (!isCircleArcHandlesOnlyShape(s)) {
         const denseCache =
@@ -4455,7 +5415,7 @@ export default function MasterProject() {
       }
     }
     for (let si = shapes.length - 1; si >= 0; si--) {
-      if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
+      if (!isOnActiveLayer(si) || !passesViewFilterWithGroundworkOnExcavationLayers(shapes[si], viewFilter, activeLayer)) continue;
       const s = shapes[si];
       if (isCircleArcHandlesOnlyShape(s)) continue;
       const denseCache =
@@ -4493,6 +5453,41 @@ export default function MasterProject() {
     return null;
   }, [shapes, zoom, isOnActiveLayer, selectedShapeIdx, pointRadiusEffective, activeLayer]);
 
+  const hitTestDesignSlopePoint = useCallback(
+    (wp: Point): DesignSlopePoint | null => {
+      if (activeLayer !== 2 && activeLayer !== 3) return null;
+      if (designSlopePoints.length === 0) return null;
+      const th = (pointRadiusEffective * 1.15) / zoom + 4;
+      const r = th * (PIXELS_PER_METER / 80);
+      for (let i = designSlopePoints.length - 1; i >= 0; i--) {
+        const d = designSlopePoints[i]!;
+        const w = resolveDesignSlopeWorldPosition(d, shapes);
+        if (distance(wp, w) < r) return d;
+      }
+      return null;
+    },
+    [shapes, zoom, pointRadiusEffective, activeLayer, designSlopePoints],
+  );
+
+  /** Wierzchołek obrysu L1 (referencja przy edycji L2/L3), gdy nie ma tu punktu aktywnej warstwy. */
+  const hitTestLayer1BoundaryVertex = useCallback(
+    (wp: Point): HitResult | null => {
+      if (activeLayer !== 2 && activeLayer !== 3) return null;
+      const th = pointRadiusEffective / zoom + 4;
+      const r = th * (PIXELS_PER_METER / 80);
+      for (let si = shapes.length - 1; si >= 0; si--) {
+        const sh = shapes[si];
+        if (sh.removedFromCanvas || sh.layer !== 1 || !sh.closed || sh.points.length < 3) continue;
+        if (!passesViewFilter(sh, viewFilter, activeLayer)) continue;
+        for (let pi = sh.points.length - 1; pi >= 0; pi--) {
+          if (distance(wp, sh.points[pi]!) < r) return { shapeIdx: si, pointIdx: pi };
+        }
+      }
+      return null;
+    },
+    [shapes, zoom, pointRadiusEffective, activeLayer, viewFilter],
+  );
+
   const hitTestEdge = useCallback((wp: Point): EdgeHitResult | null => {
     const th = edgeHitThresholdEffective / zoom + 2;
     const r = th * (PIXELS_PER_METER / 80);
@@ -4522,7 +5517,11 @@ export default function MasterProject() {
       if (!interior && !nearA && !nearB) return null;
       return { shapeIdx: si, edgeIdx: i, pos: pr.proj, t: pr.t };
     };
-    if (selectedShapeIdx !== null && isOnActiveLayer(selectedShapeIdx) && passesViewFilter(shapes[selectedShapeIdx], viewFilter, activeLayer)) {
+    if (
+      selectedShapeIdx !== null &&
+      isOnActiveLayer(selectedShapeIdx) &&
+      passesViewFilterWithGroundworkOnExcavationLayers(shapes[selectedShapeIdx], viewFilter, activeLayer)
+    ) {
       const ec = shapes[selectedShapeIdx].closed ? shapes[selectedShapeIdx].points.length : shapes[selectedShapeIdx].points.length - 1;
       for (let i = 0; i < ec; i++) {
         const result = testEdge(selectedShapeIdx, i);
@@ -4530,14 +5529,14 @@ export default function MasterProject() {
       }
     }
     for (let si = shapes.length - 1; si >= 0; si--) {
-      if (!isOnActiveLayer(si) || !passesViewFilter(shapes[si], viewFilter, activeLayer)) continue;
+      if (!isOnActiveLayer(si) || !passesViewFilterWithGroundworkOnExcavationLayers(shapes[si], viewFilter, activeLayer)) continue;
       const ec = shapes[si].closed ? shapes[si].points.length : shapes[si].points.length - 1;
       for (let i = 0; i < ec; i++) {
         const result = testEdge(si, i);
         if (result) return result;
       }
     }
-    if (activeLayer === 2) {
+    if (activeLayer === 2 || activeLayer === 3) {
       for (let si = shapes.length - 1; si >= 0; si--) {
         const sh = shapes[si];
         if (sh.removedFromCanvas || sh.layer !== 1 || !passesViewFilter(sh, viewFilter, activeLayer)) continue;
@@ -4734,7 +5733,7 @@ export default function MasterProject() {
       if (hit) return hit;
     }
     // In L1/L2/L5 arcpoints are visible on all shapes — allow hit test on non-selected shapes too
-    if (showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5) {
+    if (showAllArcPoints || activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 6) {
       for (let si = shapes.length - 1; si >= 0; si--) {
         if (arcPriSet.has(si)) continue;
         const hit = testShape(si);
@@ -4751,9 +5750,6 @@ export default function MasterProject() {
 
   // ── Mouse Handlers ─────────────────────────────────────
   const skipBlurRef = useRef(false);
-  const applyHeightEditRef = useRef<((fromBlur?: boolean) => void) | null>(null);
-  const heightInputSelectOnceRef = useRef(false);
-  const geodesyCardRef = useRef<HTMLDivElement | null>(null);
   const rightClickScaleTriggeredRef = useRef(false);
   /** Pending right-click scale: activate only on drag (not on single click). Single click = context menu. */
   const RIGHT_CLICK_SCALE_DRAG_THRESHOLD_PX = 5;
@@ -4893,7 +5889,7 @@ export default function MasterProject() {
     // Działa przy kliknięciu na punkt, linię lub pustą przestrzeń — getPointFromClick() zwraca punkt/rzut na krawędź
     // Działa w Layer 1, 2, 3, 5 (Preparation/Layer 4 jest read-only)
     const canStartMeasure = selectedShapeIdx === null && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
-    const measureAllowed = activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5;
+    const measureAllowed = activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 6;
     if (drawingShapeIdx === null && measureAllowed) {
       const getPointFromClick = (): Point => {
         const pt = hitTestPoint(world);
@@ -5125,6 +6121,9 @@ export default function MasterProject() {
         const sh = { ...n[drawingShapeIdx] };
         const inputs = { ...(sh.calculatorInputs ?? {}) };
         sh.heights = [...(sh.heights || []), 0];
+        if (isGroundworkLinear(sh)) {
+          sh.groundworkBurialDepthM = [...(sh.groundworkBurialDepthM || sh.points.map(() => 0)), 0];
+        }
         if (wallFaceHintFromSnap && sh.elementType === "wall") {
           inputs.wallDrawFace = wallFaceHintFromSnap;
         }
@@ -5171,7 +6170,7 @@ export default function MasterProject() {
       mode === "select" &&
       drawingShapeIdx === null &&
       e.button === 0 &&
-      (activeLayer === 1 || activeLayer === 2 || activeLayer === 5)
+      (activeLayer === 1 || activeLayer === 2 || activeLayer === 6)
     ) {
       const ptHit = hitTestPoint(world);
       if (ptHit) {
@@ -5202,11 +6201,11 @@ export default function MasterProject() {
     }
 
     // Geodesy (toggle): click card or point → edit heights in card; click L1 interior → show interpolated height.
-    if (geodesyEnabled) {
+    if (geodesyEnabled && isGeodesyInteractionLayer(activeLayer)) {
       const geodesyFilter = (s: Shape) => {
-        if (s.layer === 1 && activeLayer !== 1) return false; // Layer 1 geodesy only in layer 1
+        if (s.layer === 1 && activeLayer !== 1) return false;
         if (!passesViewFilter(s, viewFilter, activeLayer)) return false;
-        if (activeLayer === 5) return s.layer === 1 || s.layer === 2;
+        if (activeLayer === 6) return s.layer === 1 || s.layer === 2;
         return s.layer === activeLayer;
       };
       const rect = canvasRef.current?.getBoundingClientRect();
@@ -5214,15 +6213,24 @@ export default function MasterProject() {
       if (rect && ctx) {
         const canvasX = e.clientX - rect.left;
         const canvasY = e.clientY - rect.top;
-        const cardsInfo = getGeodesyCardsInfo(ctx, shapes, worldToScreen, geodesyFilter);
+
+        const smartLabelsHit = smartGeodesyLabelsRef.current;
+        const badgeHit = smartLabelsHit.hitTestBadgeOrDot(canvasX, canvasY, worldToScreen);
+        if (badgeHit?.type === "badge") {
+          const labelTexts = badgeHit.cluster.labels.map(l => ({ text: l.text }));
+          setClusterTooltip({ x: e.clientX, y: e.clientY, labels: labelTexts });
+          return;
+        }
+        setClusterTooltip(null);
+
+        const cardsInfo = smartGeodesyLabelsRef.current.getCardsInfo();
         const cardHit = hitTestGeodesyCard(canvasX, canvasY, cardsInfo);
         if (cardHit) {
           setClickedHeightTooltip(null);
-          if (editingGeodesyCard) applyHeightEditRef.current?.();
           skipBlurRef.current = true;
           const card = cardsInfo[cardHit.cardIdx];
-          setEditingGeodesyCard({ cardInfo: card });
-          setHeightValues(card.entries.map(ent => (ent.height * 100).toFixed(1)));
+          setEditingGeodesyCard({ cardInfo: card, focusGeodesyKey: null, screenPos: { x: e.clientX, y: e.clientY } });
+          setHeightValues(card.entries.map(ent => formatGeodesyHeightEditCm(ent.height)));
           setSelectedShapeIdx(card.group[0]?.shapeIdx ?? null);
           requestAnimationFrame(() => { skipBlurRef.current = false; });
           return;
@@ -5231,13 +6239,17 @@ export default function MasterProject() {
       const hpHit = hitTestHeightPoint(world);
       if (hpHit) {
         setClickedHeightTooltip(null);
-        if (editingGeodesyCard) applyHeightEditRef.current?.();
         skipBlurRef.current = true;
         if (rect && ctx) {
-          const cardsInfo = getGeodesyCardsInfo(ctx, shapes, worldToScreen, geodesyFilter);
+          const cardsInfo = smartGeodesyLabelsRef.current.getCardsInfo();
           const card = findCardForPoint(cardsInfo, { shapeIdx: hpHit.shapeIdx, heightPointIdx: hpHit.heightPointIdx });
           if (card) {
-            setEditingGeodesyCard({ cardInfo: card });
+            const gp = findGeodesyHeightPointFromHit(shapes, geodesyFilter, hpHit);
+            setEditingGeodesyCard({
+              cardInfo: card,
+              focusGeodesyKey: gp ? geoEntryKey(gp) : null,
+              screenPos: { x: e.clientX, y: e.clientY },
+            });
             setHeightValues(card.entries.map(ent => (ent.height * 100).toFixed(1)));
             setSelectedShapeIdx(hpHit.shapeIdx);
           }
@@ -5248,23 +6260,27 @@ export default function MasterProject() {
       const ptHit = hitTestPoint(world);
       if (ptHit) {
         setClickedHeightTooltip(null);
-        if (editingGeodesyCard) applyHeightEditRef.current?.();
         skipBlurRef.current = true;
         if (rect && ctx) {
-          const cardsInfo = getGeodesyCardsInfo(ctx, shapes, worldToScreen, geodesyFilter);
+          const cardsInfo = smartGeodesyLabelsRef.current.getCardsInfo();
           const card = findCardForPoint(cardsInfo, { shapeIdx: ptHit.shapeIdx, pointIdx: ptHit.pointIdx });
           if (card) {
-            setEditingGeodesyCard({ cardInfo: card });
-            setHeightValues(card.entries.map(ent => (ent.height * 100).toFixed(1)));
+            const gp = findGeodesyVertexPointFromHit(shapes, geodesyFilter, ptHit);
+            setEditingGeodesyCard({
+              cardInfo: card,
+              focusGeodesyKey: gp ? geoEntryKey(gp) : null,
+              screenPos: { x: e.clientX, y: e.clientY },
+            });
+            setHeightValues(card.entries.map(ent => formatGeodesyHeightEditCm(ent.height)));
             setSelectedShapeIdx(ptHit.shapeIdx);
           }
         }
         requestAnimationFrame(() => { skipBlurRef.current = false; });
         return;
       }
-      applyHeightEditRef.current?.();
       setEditingGeodesyCard(null);
       setSelectedShapeIdx(null);
+      setClusterTooltip(null);
       // Click on L1 shape interior (not on vertex) → show interpolated height (only in layer 1)
       if (activeLayer === 1) {
         for (let si = shapes.length - 1; si >= 0; si--) {
@@ -5704,6 +6720,27 @@ export default function MasterProject() {
 
       const ptHit = hitTestPoint(world);
       if (ptHit && !skipVertexForWholeShapeMulti) {
+        if ((activeLayer === 4 || activeLayer === 5) && e.button === 0) {
+          const shHit = shapes[ptHit.shapeIdx];
+          if (shHit?.layer === 2 && passesViewFilterWithGroundworkOnExcavationLayers(shHit, viewFilter, activeLayer)) {
+            if (isGroundworkLinear(shHit)) {
+              setCmEditDialog({
+                shapeIdx: ptHit.shapeIdx,
+                pointIdx: ptHit.pointIdx,
+                mode: "groundworkBurial",
+                screenPos: { x: e.clientX, y: e.clientY },
+              });
+            } else {
+              setCmEditDialog({
+                shapeIdx: ptHit.shapeIdx,
+                pointIdx: ptHit.pointIdx,
+                mode: activeLayer === 4 ? "excavation" : "preparation",
+                screenPos: { x: e.clientX, y: e.clientY },
+              });
+            }
+            return;
+          }
+        }
         saveHistory();
         const hitShape = shapes[ptHit.shapeIdx];
         if (hitShape.closed && isPathElement(hitShape) && hitShape.calculatorInputs?.pathIsOutline) {
@@ -5939,7 +6976,7 @@ export default function MasterProject() {
         activeLayer,
       });
       const newIdx = shapes.length;
-      setShapes(p => [...p, { points: [{ ...w0 }], closed: false, label: "Free Draw", layer: (activeLayer === 3 || activeLayer === 4 ? 2 : activeLayer) as LayerID, lockedEdges: [], lockedAngles: [], heights: [0], elementType: "polygon", thickness: 0 }]);
+      setShapes(p => [...p, { points: [{ ...w0 }], closed: false, label: "Free Draw", layer: (activeLayer === 3 || activeLayer === 4 || activeLayer === 5 ? 2 : activeLayer) as LayerID, lockedEdges: [], lockedAngles: [], heights: [0], elementType: "polygon", thickness: 0 }]);
       setDrawingShapeIdx(newIdx); setSelectedShapeIdx(newIdx);
     }
 
@@ -6019,8 +7056,9 @@ export default function MasterProject() {
       setDrawingShapeIdx(newIdx); setSelectedShapeIdx(newIdx);
     }
 
-    // Groundwork linear drawing modes (Drainage, Canal pipe, Water pipe, Cable)
+    // Groundwork linear drawing modes (Drainage, Canal pipe, Water pipe, Cable) — tylko Wykop / Przygotowanie
     if ((mode === "drawDrainage" || mode === "drawCanalPipe" || mode === "drawWaterPipe" || mode === "drawCable") && drawingShapeIdx === null) {
+      if (activeLayer !== 4 && activeLayer !== 5) return;
       const elementType = mode === "drawDrainage" ? "drainage" : mode === "drawCanalPipe" ? "canalPipe" : mode === "drawWaterPipe" ? "waterPipe" : "cable";
       const label = mode === "drawDrainage" ? "Drainage" : mode === "drawCanalPipe" ? "Canal pipe" : mode === "drawWaterPipe" ? "Water pipe" : "Cable";
       const th = SNAP_TO_LAST_RADIUS / zoom * (PIXELS_PER_METER / 80);
@@ -6037,7 +7075,16 @@ export default function MasterProject() {
         const { shapeIdx: si, end } = openEnd;
         if (isGroundworkLinear(shapes[si]) && shapes[si].elementType === elementType) {
           if (end === "first") {
-            setShapes(p => { const n = [...p]; const s = { ...n[si] }; s.points = [...s.points].reverse(); n[si] = s; return n; });
+            setShapes(p => {
+            const n = [...p];
+            const s = { ...n[si] };
+            s.points = [...s.points].reverse();
+            if (s.groundworkBurialDepthM && s.groundworkBurialDepthM.length === s.points.length) {
+              s.groundworkBurialDepthM = [...s.groundworkBurialDepthM].reverse();
+            }
+            n[si] = s;
+            return n;
+          });
           }
           setDrawingShapeIdx(si); setSelectedShapeIdx(si); return;
         }
@@ -6056,6 +7103,7 @@ export default function MasterProject() {
         label,
         layer: 2 as LayerID,
         lockedEdges: [], lockedAngles: [], heights: [0],
+        groundworkBurialDepthM: [0],
         elementType: elementType as "drainage" | "canalPipe" | "waterPipe" | "cable",
         thickness: 0.10,
       }]);
@@ -6130,11 +7178,11 @@ export default function MasterProject() {
 
     const hasActiveCanvasDrag = !!(dragInfo || shapeDragInfo || edgeDragInfo);
     if (hasActiveCanvasDrag) {
-      cancelAnimationFrame(mouseRafRef.current);
+      if (mouseRafRef.current != null) cancelAnimationFrame(mouseRafRef.current);
       mouseRafRef.current = null;
       setMouseWorld(world);
     } else {
-      cancelAnimationFrame(mouseRafRef.current);
+      if (mouseRafRef.current != null) cancelAnimationFrame(mouseRafRef.current);
       mouseRafRef.current = requestAnimationFrame(() => {
         setMouseWorld(world);
       });
@@ -7200,7 +8248,10 @@ export default function MasterProject() {
       return;
     }
 
-    if ((mode === "select" || mode === "scale" || geodesyEnabled) && drawingShapeIdx === null) {
+    if (
+      (mode === "select" || mode === "scale" || (geodesyEnabled && isGeodesyInteractionLayer(activeLayer))) &&
+      drawingShapeIdx === null
+    ) {
       const hpHit = hitTestHeightPoint(world);
       setHoveredHeightPoint(hpHit);
       const pt = hitTestPoint(world); setHoveredPoint(pt);
@@ -7215,7 +8266,7 @@ export default function MasterProject() {
       setHoveredArcPoint(null);
       setHoveredEdge(pt || arcHit ? null : hitTestEdge(world));
     }
-  }, [isPanning, panStart, dragInfo, arcDragInfo, draggingGrassPiece, grassScaleInfo, patternDragInfo, patternRotateInfo, mode, shapes, shiftHeld, drawingShapeIdx, selectionRect, shapeDragInfo, edgeDragInfo, rotateInfo, scaleCorner, scaleEdge, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestArcPointGlobal, zoom, pan, canvasSize.w, canvasSize.h, geodesyEnabled, saveHistory, arcPointPositionCache, linkedGroups, isOnActiveLayer]);
+  }, [isPanning, panStart, dragInfo, arcDragInfo, draggingGrassPiece, grassScaleInfo, patternDragInfo, patternRotateInfo, mode, shapes, shiftHeld, drawingShapeIdx, selectionRect, shapeDragInfo, edgeDragInfo, rotateInfo, scaleCorner, scaleEdge, getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestEdge, hitTestArcPointGlobal, zoom, pan, canvasSize.w, canvasSize.h, geodesyEnabled, activeLayer, saveHistory, arcPointPositionCache, linkedGroups, isOnActiveLayer]);
 
   const handleMouseUp = useCallback(() => {
     const capId = canvasPointerCaptureIdRef.current;
@@ -7718,7 +8769,21 @@ export default function MasterProject() {
       setDrawingShapeIdx(null); setMode("select"); return;
     }
     const w = getWorldPos(e);
-    if (activeLayer === 5) {
+    if (activeLayer === 2 || activeLayer === 3) {
+      const dspHit = hitTestDesignSlopePoint(w);
+      if (dspHit) {
+        setContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          shapeIdx: -1,
+          pointIdx: -1,
+          edgeIdx: -1,
+          designSlopePointId: dspHit.id,
+        });
+        return;
+      }
+    }
+    if (activeLayer === 6) {
       // Hit test adjustment areas (empty, overflow, overlap) — widened tolerance for easier clicking
       const adjHitTol = toPixels(0.15);
       for (let i = 0; i < adjustmentData.emptyAreas.length; i++) {
@@ -7744,7 +8809,7 @@ export default function MasterProject() {
       }
       // Fall through to normal shape/point/edge hit if not on adjustment area
     }
-    if (activeLayer === 4) {
+    if (activeLayer === 4 || activeLayer === 5) {
       // Larger hit radius for groundwork so PPM on segment reliably gives edge menu (Usuń segment)
       const th = grassEdgeHitPxEffective / zoom + 4;
       const r = th * (PIXELS_PER_METER / 80);
@@ -7800,6 +8865,11 @@ export default function MasterProject() {
       const pt = hitTestPoint(w);
       if (pt) {
         setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: pt.shapeIdx, pointIdx: pt.pointIdx, edgeIdx: -1 });
+        return;
+      }
+      const l1vL3 = hitTestLayer1BoundaryVertex(w);
+      if (l1vL3) {
+        setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: l1vL3.shapeIdx, pointIdx: l1vL3.pointIdx, edgeIdx: -1 });
         return;
       }
       const edgeForPoly = hitTestEdge(w);
@@ -7920,6 +8990,13 @@ export default function MasterProject() {
       setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: pt.shapeIdx, pointIdx: pt.pointIdx, edgeIdx: -1 });
       return;
     }
+    if (activeLayer === 2) {
+      const l1v = hitTestLayer1BoundaryVertex(w);
+      if (l1v) {
+        setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: l1v.shapeIdx, pointIdx: l1v.pointIdx, edgeIdx: -1 });
+        return;
+      }
+    }
     const edge = hitTestEdge(w);
     if (edge) {
       const s = shapes[edge.shapeIdx];
@@ -7962,7 +9039,7 @@ export default function MasterProject() {
         setContextMenu({ x: e.clientX, y: e.clientY, shapeIdx: shapeHit, pointIdx: -1, edgeIdx: -1, interiorWorldPos: w });
       }
     }
-  }, [getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestArcPointGlobal, hitTestEdge, hitTestShape, hitTestPattern, shapes, drawingShapeIdx, activeLayer, zoom, viewFilter, pathSegmentSideSelection, worldToScreen]);
+  }, [getWorldPos, hitTestPoint, hitTestHeightPoint, hitTestDesignSlopePoint, hitTestLayer1BoundaryVertex, hitTestArcPointGlobal, hitTestEdge, hitTestShape, hitTestPattern, shapes, drawingShapeIdx, activeLayer, zoom, viewFilter, pathSegmentSideSelection, worldToScreen]);
 
   useEffect(() => { contextMenuHandlerRef.current = handleContextMenu; }, [handleContextMenu]);
 
@@ -8029,7 +9106,7 @@ export default function MasterProject() {
         continue;
       }
       // Regular shapes: label at mid - norm * 28 (L2 closed: inward toward centroid, same as render ~L1477)
-      const edgeLabelOffset = 28;
+      const edgeLabelOffset = 42;
       const hasArcsForDimHit = !!(shape.edgeArcs?.some(a => a && a.length > 0));
       const ec = shape.closed ? pts.length : pts.length - 1;
       for (let i = 0; i < ec; i++) {
@@ -8103,8 +9180,8 @@ export default function MasterProject() {
         else setPan(p => ({ ...p, y: p.y - step }));
         return;
       }
-      // Layer shortcuts: 1–5 → switch layer
-      if (["1", "2", "3", "4", "5"].includes(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Layer shortcuts: 1–6 → switch layer
+      if (["1", "2", "3", "4", "5", "6"].includes(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
         const layer = parseInt(e.key, 10) as ActiveLayer;
         if (layer !== activeLayer) switchLayerRef.current(layer);
         e.preventDefault();
@@ -8241,7 +9318,7 @@ export default function MasterProject() {
   const addShape = (factory: (cx: number, cy: number, layer: LayerID) => Shape) => {
     saveHistory();
     const cx = (canvasSize.w / 2 - pan.x) / zoom, cy = (canvasSize.h / 2 - pan.y) / zoom;
-    setShapes(p => [...p, factory(cx, cy, (activeLayer === 3 || activeLayer === 4 ? 2 : activeLayer) as LayerID)]);
+    setShapes(p => [...p, factory(cx, cy, (activeLayer === 3 || activeLayer === 4 || activeLayer === 5 ? 2 : activeLayer) as LayerID)]);
     setSelectedShapeIdx(shapes.length); setMode("select"); setDrawingShapeIdx(null);
   };
 
@@ -8490,6 +9567,9 @@ export default function MasterProject() {
         if (newPts.length < 2) return p;
         sh.points = newPts;
         sh.heights = (sh.heights || []).filter((_, i) => i !== 1);
+        if (isGroundworkLinear(sh) && sh.groundworkBurialDepthM && sh.groundworkBurialDepthM.length === pts.length) {
+          sh.groundworkBurialDepthM = sh.groundworkBurialDepthM.filter((_, i) => i !== 1);
+        }
         sh.lockedEdges = sh.lockedEdges.filter(e => e.idx !== 0).map(e => e.idx > 0 ? { ...e, idx: e.idx - 1 } : e);
         sh.lockedAngles = sh.lockedAngles.filter(a => a !== 1).map(a => a > 1 ? a - 1 : a);
         if (sh.elementType === "wall" && sh.calculatorInputs?.segmentHeights) {
@@ -8512,6 +9592,9 @@ export default function MasterProject() {
         if (newPts.length < 2) return p;
         sh.points = newPts;
         sh.heights = (sh.heights || []).slice(0, -1);
+        if (isGroundworkLinear(sh) && sh.groundworkBurialDepthM && sh.groundworkBurialDepthM.length === pts.length) {
+          sh.groundworkBurialDepthM = sh.groundworkBurialDepthM.slice(0, -1);
+        }
         sh.lockedEdges = sh.lockedEdges.filter(e => e.idx !== edgeIdx).map(e => e.idx > edgeIdx ? e : e);
         sh.lockedAngles = sh.lockedAngles.filter(a => a !== nPts - 1);
         if (sh.elementType === "wall" && sh.calculatorInputs?.segmentHeights) {
@@ -8530,12 +9613,14 @@ export default function MasterProject() {
       // Middle segment: split into two shapes
       const pts1 = pts.slice(0, edgeIdx + 1);
       const pts2 = pts.slice(edgeIdx + 1);
+      const gbFull = isGroundworkLinear(s) ? (s.groundworkBurialDepthM || pts.map(() => 0)) : null;
       const baseLabel = s.label || (s.elementType === "fence" ? "Fence" : s.elementType === "wall" ? "Wall" : s.elementType === "kerb" ? "Kerb" : "Foundation");
       const shape2: Shape = {
         ...s,
         points: pts2,
         label: `${baseLabel} 2`,
         heights: (s.heights || []).slice(edgeIdx + 1),
+        ...(gbFull ? { groundworkBurialDepthM: gbFull.slice(edgeIdx + 1) } : {}),
         lockedEdges: (s.lockedEdges || []).filter(e => e.idx > edgeIdx).map(e => ({ ...e, idx: e.idx - edgeIdx - 1 })),
         lockedAngles: (s.lockedAngles || []).filter(a => a > edgeIdx).map(a => a - edgeIdx - 1),
         calculatorInputs: { ...s.calculatorInputs },
@@ -8554,6 +9639,7 @@ export default function MasterProject() {
         const sh1 = { ...n[si] };
         sh1.points = pts1;
         sh1.heights = (sh1.heights || []).slice(0, edgeIdx + 1);
+        if (gbFull) sh1.groundworkBurialDepthM = gbFull.slice(0, edgeIdx + 1);
         sh1.lockedEdges = (sh1.lockedEdges || []).filter(e => e.idx <= edgeIdx);
         sh1.lockedAngles = (sh1.lockedAngles || []).filter(a => a <= edgeIdx);
         if (sh1.elementType === "wall" && sh1.calculatorInputs?.segmentHeights) {
@@ -8873,6 +9959,11 @@ export default function MasterProject() {
           const hNew = (heights[e.edgeIdx] ?? 0) * (1 - e.t) + (heights[j] ?? 0) * e.t;
           const newHeights = [...heights.slice(0, insertIdx), hNew, ...heights.slice(insertIdx)];
           const updates: Partial<Shape> = { points: newPts, heights: newHeights };
+          if (isGroundworkLinear(s)) {
+            const g0 = s.groundworkBurialDepthM || pts.map(() => 0);
+            const gNew = (g0[e.edgeIdx] ?? 0) * (1 - e.t) + (g0[j] ?? 0) * e.t;
+            updates.groundworkBurialDepthM = [...g0.slice(0, insertIdx), gNew, ...g0.slice(insertIdx)];
+          }
           // Split edgeArcs: arcs on the split edge get distributed between the two new edges
           const oldArcs = s.edgeArcs?.[e.edgeIdx];
           if (oldArcs && oldArcs.length > 0) {
@@ -9165,40 +10256,40 @@ export default function MasterProject() {
     setPointOffsetAlongLineModal(null);
   };
 
-  const applyHeightEdit = (fromBlur = false) => {
+  const applyHeightEdit = (fromBlur = false, overrideHeights?: string[]) => {
     if (fromBlur && skipBlurRef.current) return;
     if (!editingGeodesyCard) return;
-    const { cardInfo } = editingGeodesyCard;
+    const { cardInfo, focusGeodesyKey } = editingGeodesyCard;
+    const vals = overrideHeights ?? heightValues;
     saveHistory();
     setShapes(p => {
       let n = [...p];
       for (let rowIdx = 0; rowIdx < cardInfo.entries.length; rowIdx++) {
-        const valCm = parseFloat(heightValues[rowIdx] ?? "");
+        const entry = cardInfo.entries[rowIdx];
+        if (
+          focusGeodesyKey != null &&
+          !entry.points.some(p => geoEntryKey(p) === focusGeodesyKey)
+        ) {
+          continue;
+        }
+        const valCm = parseFloat(vals[rowIdx] ?? "");
         if (isNaN(valCm)) continue;
         const val = valCm / 100;
-        const entry = cardInfo.entries[rowIdx];
         for (const pt of entry.points) {
+          if (focusGeodesyKey != null && geoEntryKey(pt) !== focusGeodesyKey) continue;
           if (pt.isVertex && pt.pointIdx != null) {
             const s = { ...n[pt.shapeIdx] };
             const nh = [...(s.heights || s.points.map(() => 0))];
             while (nh.length < s.points.length) nh.push(0);
             nh[pt.pointIdx] = val;
             s.heights = nh;
-            n[pt.shapeIdx] = s;
-            const group = linkedGroups.find(g => g.some(lp => lp.si === pt.shapeIdx && lp.pi === pt.pointIdx));
-            if (group) {
-              for (const lp of group) {
-                if (lp.si === pt.shapeIdx && lp.pi === pt.pointIdx) continue;
-                if (n[lp.si]?.layer === 1) {
-                  const ls = { ...n[lp.si] };
-                  const lh = [...(ls.heights || ls.points.map(() => 0))];
-                  while (lh.length < ls.points.length) lh.push(0);
-                  lh[lp.pi] = val;
-                  ls.heights = lh;
-                  n[lp.si] = ls;
-                }
-              }
+            if (s.layer === 2) {
+              const ov = [...(s.heightManualOverride ?? s.points.map(() => false))];
+              while (ov.length < s.points.length) ov.push(false);
+              ov[pt.pointIdx] = true;
+              s.heightManualOverride = ov;
             }
+            n[pt.shapeIdx] = s;
           } else if (!pt.isVertex && pt.heightPointIdx != null) {
             const s = { ...n[pt.shapeIdx] };
             const hpList = [...(s.heightPoints ?? [])];
@@ -9214,8 +10305,6 @@ export default function MasterProject() {
     });
     setEditingGeodesyCard(null);
   };
-  applyHeightEditRef.current = applyHeightEdit;
-
   const switchLayer = (layer: ActiveLayer) => {
     setActiveLayer(layer);
     setSelectedShapeIdx(null);
@@ -9314,12 +10403,29 @@ export default function MasterProject() {
     }
   };
 
-  const LAYER_KEYS: Record<number, string> = { 1: "garden_label", 2: "elements_label", 3: "pattern_label", 4: "preparation_label", 5: "adjustment_label" };
+  const LAYER_KEYS: Record<number, string> = {
+    1: "garden_label",
+    2: "elements_label",
+    3: "pattern_label",
+    4: "wykop_label",
+    5: "preparation_label",
+    6: "adjustment_label",
+  };
+  const PDF_PAGE_LABEL_KEYS: Record<number, string> = {
+    ...LAYER_KEYS,
+    101: "pdf_geodesy_layer1_label",
+    102: "pdf_geodesy_layer2_label",
+  };
 
   const handleExportPdf = async (layers: number[]) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const prevLayer = activeLayer;
+    const restoreLayer = prevLayerBeforeGeodesyPreviewRef.current ?? activeLayer;
+    prevLayerBeforeGeodesyPreviewRef.current = null;
+    const restorePan = { ...pan };
+    const restoreZoom = zoom;
+    const canvasLogicalW = geodesyPreviewCanvasLock?.w ?? canvasSize.w;
+    const canvasLogicalH = geodesyPreviewCanvasLock?.h ?? canvasSize.h;
     isExportingRef.current = true;
     setIsExportingPdf(true);
     const pdf = new jsPDF("l", "mm", "a4");
@@ -9334,21 +10440,55 @@ export default function MasterProject() {
 
     try {
       for (let i = 0; i < layers.length; i++) {
-        const layer = layers[i] as ActiveLayer;
-        setActiveLayer(layer);
+        const layer = layers[i];
+        if (layer === 101) {
+          setPdfGeodesyExportLayer(1);
+          setActiveLayer(1);
+        } else if (layer === 102) {
+          setPdfGeodesyExportLayer(2);
+          setActiveLayer(2);
+        } else {
+          setPdfGeodesyExportLayer(null);
+          setActiveLayer(layer as ActiveLayer);
+        }
+        const fit =
+          layer === 101 || layer === 102
+            ? computeGeodesyPdfFitCamera(shapes, designSlopePoints, viewFilter, canvasLogicalW, canvasLogicalH)
+            : computePdfFitCamera(shapes, designSlopePoints, layer, viewFilter, canvasLogicalW, canvasLogicalH);
+        if (fit) {
+          flushSync(() => {
+            setPan(fit.pan);
+            setZoom(fit.zoom);
+          });
+        } else {
+          flushSync(() => {
+            setPan({ x: canvasLogicalW / 2, y: canvasLogicalH / 2 });
+            setZoom(1);
+          });
+        }
+        const placement = computePdfImagePlacement({
+          pdfWidthMm: pdfWidth,
+          pdfHeightMm: pdfHeight,
+          marginMm: margin,
+          headerHmm: headerH,
+          canvasBufferW: canvas.width,
+          canvasBufferH: canvas.height,
+          canvasLogicalW: canvasLogicalW,
+          contentWidthFraction: 1,
+        });
+        pdfExportLayoutRef.current = {
+          mmPerLogicalPx: placement.mmPerLogicalPx,
+          legendX_mm: placement.legendX_mm,
+          legendW_mm: placement.legendW_mm,
+        };
         await waitPaint();
         const imgData = canvas.toDataURL("image/png");
-        const imgW = canvas.width;
-        const imgH = canvas.height;
-        const drawH = (imgH * imgAreaW) / imgW;
-        const drawHClamped = Math.min(drawH, imgAreaH);
-        const drawWClamped = drawH > imgAreaH ? (imgW * imgAreaH) / imgH : imgAreaW;
-        const x = margin + (imgAreaW - drawWClamped) / 2;
-        const y = margin + headerH + (imgAreaH - drawHClamped) / 2;
         if (i > 0) pdf.addPage();
         pdf.setFontSize(11);
-        pdf.text(t(`project:${LAYER_KEYS[layer]}`), margin, margin + 8);
-        pdf.addImage(imgData, "PNG", x, y, drawWClamped, drawHClamped);
+        const isLightPdf = currentTheme?.id === "light";
+        pdf.setTextColor(isLightPdf ? 30 : 240, isLightPdf ? 41 : 240, isLightPdf ? 59 : 250);
+        pdf.text(t(`project:${PDF_PAGE_LABEL_KEYS[layer] ?? "garden_label"}`), margin, margin + 8);
+        pdf.addImage(imgData, "PNG", placement.imageX_mm, placement.imageY_mm, placement.drawW_mm, placement.drawH_mm);
       }
       const title = projectSettings.title?.trim() || "plan";
       pdf.save(`plan_${title.replace(/[^a-zA-Z0-9-_]/g, "_")}.pdf`);
@@ -9356,14 +10496,124 @@ export default function MasterProject() {
     } finally {
       isExportingRef.current = false;
       setIsExportingPdf(false);
-      setActiveLayer(prevLayer);
+      pdfExportLayoutRef.current = null;
+      setPdfGeodesyExportLayer(null);
+      setActiveLayer(restoreLayer);
+      setPan(restorePan);
+      setZoom(restoreZoom);
+      setShowGeodesyPrintPreview(false);
+      setGeodesyPreviewCanvasLock(null);
+      setHiddenGeodesyEntries(new Set());
+      setPendingPdfLayers([]);
+      setGeodesyPreviewListHighlightKey(null);
     }
+  };
+
+  const handlePlanPdfLayersConfirm = (layers: number[]) => {
+    const exportLayers = layers.filter((l) => l !== 6);
+    if (exportLayers.length === 0) return;
+    const hasGeo = exportLayers.some((l) => l === 101 || l === 102);
+    if (hasGeo) {
+      prevLayerBeforeGeodesyPreviewRef.current = activeLayer;
+      setPendingPdfLayers(exportLayers);
+      setHiddenGeodesyEntries(new Set());
+      setGeodesyPreviewListHighlightKey(null);
+      setGeodesyPreviewCanvasLock({ w: canvasSize.w, h: canvasSize.h });
+      if (exportLayers.includes(101)) {
+        setGeodesyPrintPreviewTargetLayer(1);
+        setPdfGeodesyExportLayer(1);
+        setActiveLayer(1);
+      } else {
+        setGeodesyPrintPreviewTargetLayer(2);
+        setPdfGeodesyExportLayer(2);
+        setActiveLayer(2);
+      }
+      setShowPdfExportModal(false);
+      setShowGeodesyPrintPreview(true);
+    } else {
+      void handleExportPdf(exportLayers);
+    }
+  };
+
+  const closeGeodesyPrintPreview = () => {
+    setShowGeodesyPrintPreview(false);
+    setGeodesyPreviewCanvasLock(null);
+    setPdfGeodesyExportLayer(null);
+    setPendingPdfLayers([]);
+    setHiddenGeodesyEntries(new Set());
+    setGeodesyPreviewListHighlightKey(null);
+    const back = prevLayerBeforeGeodesyPreviewRef.current;
+    prevLayerBeforeGeodesyPreviewRef.current = null;
+    if (back != null) setActiveLayer(back);
+  };
+
+  const toggleGeodesyPreviewHiddenKeys = (keys: string[]) => {
+    setHiddenGeodesyEntries(prev => {
+      const next = new Set(prev);
+      const allHidden = keys.length > 0 && keys.every(k => next.has(k));
+      for (const k of keys) {
+        if (allHidden) next.delete(k);
+        else next.add(k);
+      }
+      return next;
+    });
+    if (keys.length > 0) setGeodesyPreviewListHighlightKey(keys[0]);
+  };
+
+  const handleGeodesyPreviewImageLogicalClick = (logicalX: number, logicalY: number) => {
+    const layerForHit: ActiveLayer =
+      showGeodesyPrintPreview && !isExportingPdf
+        ? ((pdfGeodesyExportLayer ?? geodesyPrintPreviewTargetLayer) as ActiveLayer)
+        : activeLayer;
+    const gLf = (s: Shape) => {
+      if (s.layer === 1) return layerForHit === 1;
+      return layerForHit === 2 || layerForHit === 3 || layerForHit === 6;
+    };
+    const geodesyFilter = (s: Shape) => {
+      if (!gLf(s)) return false;
+      if (!passesViewFilter(s, viewFilter, layerForHit)) return false;
+      if (layerForHit === 6) return s.layer === 1 || s.layer === 2;
+      return s.layer === layerForHit;
+    };
+    const geodesyHiddenActive =
+      showGeodesyPrintPreview || (isExportingPdf && pdfGeodesyExportLayer != null);
+    const geodesyHiddenKeysForDraw = geodesyHiddenActive ? hiddenGeodesyEntries : null;
+
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+
+    const smartLabelsForPreview = smartGeodesyLabelsRef.current;
+    smartLabelsForPreview.update(
+      shapes,
+      worldToScreen,
+      pan,
+      zoom,
+      canvasSize.w,
+      canvasSize.h,
+      geodesyFilter,
+      ctx,
+      editingGeodesyCard?.cardInfo.group ?? null,
+      geodesyHiddenKeysForDraw,
+      layerForHit,
+      currentTheme?.id === "light",
+    );
+    const cardsInfo = smartLabelsForPreview.getCardsInfo();
+
+    const entry = hitTestGeodesyCardEntryAtScreen(logicalX, logicalY, cardsInfo);
+    if (entry?.points?.length) {
+      toggleGeodesyPreviewHiddenKeys(entry.points.map(geoEntryKey));
+      return;
+    }
+
+    const hit = hitTestNearestGeodesyPointAtScreen(logicalX, logicalY, shapes, geodesyFilter, worldToScreen, 22);
+    if (!hit) return;
+    toggleGeodesyPreviewHiddenKeys([geoEntryKey(hit)]);
   };
 
   let cursor = "default";
   if (mode === "freeDraw" || drawingShapeIdx !== null) cursor = "crosshair";
   const canStartMeasure = selectedShapeIdx === null && selectedPoints.length === 0 && !selectionRect && !editingDim && !rotateInfo && !patternDragInfo && !patternRotateInfo && !shapeDragInfo && !edgeDragInfo;
-  const measureAllowed = activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 5;
+  const measureAllowed = activeLayer === 1 || activeLayer === 2 || activeLayer === 3 || activeLayer === 6;
   if (((shiftHeld && measureStart === null && canStartMeasure) || (measureStart !== null && drawingShapeIdx === null)) && measureAllowed) cursor = "crosshair";
   else if (mode === "move") cursor = isPanning ? "grabbing" : "grab";
   else if (scaleCorner) {
@@ -9415,7 +10665,16 @@ export default function MasterProject() {
           <div className="tool-group">
             <div ref={layersDropdownRef} style={{ position: "relative" }}>
               <button type="button" className={`dropdown-trigger ${layersDropdownOpen ? "active" : ""}`} onClick={() => setLayersDropdownOpen(v => !v)}>
-                <span className={`layer-dot ${activeLayer === 1 ? "garden" : activeLayer === 2 ? "elements" : activeLayer === 3 ? "pattern" : activeLayer === 4 ? "preparation" : "adjustment"}`} />
+                <span
+                  className={`layer-dot ${
+                    activeLayer === 1 ? "garden"
+                      : activeLayer === 2 ? "elements"
+                      : activeLayer === 3 ? "pattern"
+                      : activeLayer === 4 ? "wykop"
+                      : activeLayer === 5 ? "preparation"
+                      : "adjustment"
+                  }`}
+                />
                 {t(`project:${LAYER_KEYS[activeLayer] ?? "toolbar_layers"}`)}
                 <svg className="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
               </button>
@@ -9425,8 +10684,9 @@ export default function MasterProject() {
                     { layer: 1 as ActiveLayer, key: "garden_label", dotClass: "garden", count: l1Count },
                     { layer: 2 as ActiveLayer, key: "elements_label", dotClass: "elements", count: l2Count },
                     { layer: 3 as ActiveLayer, key: "pattern_label", dotClass: "pattern", count: null },
-                    { layer: 4 as ActiveLayer, key: "preparation_label", dotClass: "preparation", count: null },
-                    { layer: 5 as ActiveLayer, key: "adjustment_label", dotClass: "adjustment", count: null },
+                    { layer: 4 as ActiveLayer, key: "wykop_label", dotClass: "wykop", count: null },
+                    { layer: 5 as ActiveLayer, key: "preparation_label", dotClass: "preparation", count: null },
+                    { layer: 6 as ActiveLayer, key: "adjustment_label", dotClass: "adjustment", count: null },
                   ].map(({ layer: L, key, dotClass, count }) => (
                     <button key={key} type="button"
                       onClick={() => { switchLayer(L); setLayersDropdownOpen(false); }}
@@ -9699,7 +10959,7 @@ export default function MasterProject() {
                 </button>
               </div>
             )}
-            {activeLayer === 4 && (
+            {(activeLayer === 4 || activeLayer === 5) && (
               <div ref={groundworkDropdownRef} style={{ position: "relative" }}>
                 <button type="button" className={`dropdown-trigger ${groundworkDropdownOpen || mode === "drawDrainage" || mode === "drawCanalPipe" || mode === "drawWaterPipe" || mode === "drawCable" ? "active" : ""}`} onClick={() => setGroundworkDropdownOpen(v => !v)}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -9794,9 +11054,9 @@ export default function MasterProject() {
           {selectedShapeIdx !== null && !drawingShapeIdx && <div className="tb-sep" />}
 
           <div className="shape-counter">
-            <span>{activeLayer === 3 || activeLayer === 4 ? shapes.filter(s => s.layer === 1 || s.layer === 2).length : shapes.filter(s => s.layer === activeLayer).length}</span>
+            <span>{activeLayer === 3 || activeLayer === 4 || activeLayer === 5 ? shapes.filter(s => s.layer === 1 || s.layer === 2).length : shapes.filter(s => s.layer === activeLayer).length}</span>
             {" "}{t("project:toolbar_shapes_word")}{" · "}
-            <span>{shapes.filter(s => !s.closed && ((activeLayer === 3 || activeLayer === 4) ? (s.layer === 1 || s.layer === 2) : s.layer === activeLayer)).length}</span>
+            <span>{shapes.filter(s => !s.closed && ((activeLayer === 3 || activeLayer === 4 || activeLayer === 5) ? (s.layer === 1 || s.layer === 2) : s.layer === activeLayer)).length}</span>
             {" "}{t("project:toolbar_open_word")}
           </div>
         </div>
@@ -9805,7 +11065,13 @@ export default function MasterProject() {
       {/* Canvas + Summary */}
       <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", overflow: "hidden" }}>
       <div ref={containerRef} style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden" }}>
-        <canvas ref={canvasRef} style={{ width: canvasSize.w, height: canvasSize.h, cursor, display: "block", touchAction: "none" }}
+        <canvas ref={canvasRef} style={{
+          width: geodesyPreviewCanvasLock?.w ?? canvasSize.w,
+          height: geodesyPreviewCanvasLock?.h ?? canvasSize.h,
+          cursor,
+          display: "block",
+          touchAction: "none",
+        }}
           onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
           onContextMenu={handleContextMenu} onDoubleClick={handleDoubleClick} />
 
@@ -9866,6 +11132,7 @@ export default function MasterProject() {
                 <div>{t("project:canvas_shortcut_layer_3")}</div>
                 <div>{t("project:canvas_shortcut_layer_4")}</div>
                 <div>{t("project:canvas_shortcut_layer_5")}</div>
+                <div>{t("project:canvas_shortcut_layer_6")}</div>
                 <div>{t("project:canvas_shortcut_geodesy")}</div>
                 <div>{t("project:canvas_shortcut_left_object")}</div>
                 <div>{t("project:canvas_shortcut_left_empty_ctrl")}</div>
@@ -9914,7 +11181,34 @@ export default function MasterProject() {
             )}
           </div>
         )}
-        {contextMenu && !contextMenu.patternRotationHandle && (
+        {contextMenu && contextMenu.designSlopePointId && (
+          <div ref={contextMenuRef} style={{ position: "fixed", left: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).x, top: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: shadows.xl, minWidth: 180 }}>
+            <div style={{ fontSize: 11, color: CC.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${CC.panelBorder}`, marginBottom: 4 }}>
+              {t("project:design_slope_point_menu_title")}
+            </div>
+            <CtxItem
+              label={t("project:design_slope_edit_height")}
+              color={CC.geo}
+              onClick={() => {
+                const id = contextMenu.designSlopePointId!;
+                const p = designSlopePoints.find(x => x.id === id);
+                setDesignSlopeHeightModal({ id, value: p != null ? (p.height * 100).toFixed(2) : "0" });
+                setContextMenu(null);
+              }}
+            />
+            <CtxItem
+              label={t("project:design_slope_remove")}
+              color={CC.danger}
+              onClick={() => {
+                saveHistory();
+                const id = contextMenu.designSlopePointId!;
+                setDesignSlopePoints(prev => prev.filter(x => x.id !== id));
+                setContextMenu(null);
+              }}
+            />
+          </div>
+        )}
+        {contextMenu && !contextMenu.patternRotationHandle && !contextMenu.designSlopePointId && (
           <div ref={contextMenuRef} style={{ position: "fixed", left: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).x, top: (contextMenuDisplayPos ?? { x: contextMenu.x, y: contextMenu.y }).y, background: CC.panel, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, padding: 4, zIndex: 100, boxShadow: shadows.xl, minWidth: 160 }}>
             <div style={{ fontSize: 11, color: CC.text, opacity: 0.9, padding: "4px 8px 6px", borderBottom: `1px solid ${CC.panelBorder}`, marginBottom: 4 }}>
               {contextMenu.adjustmentEmpty && t("project:adjustment_empty_area")}
@@ -10321,6 +11615,32 @@ export default function MasterProject() {
                   }}
                 />
               )}
+              {(activeLayer === 2 || activeLayer === 3) &&
+                shapes[contextMenu.shapeIdx]?.layer === 1 &&
+                shapes[contextMenu.shapeIdx]?.closed &&
+                contextMenu.pointIdx >= 0 && (
+                  <CtxItem
+                    label={t("project:ctx_add_design_slope_point")}
+                    color="#9b59b6"
+                    onClick={() => {
+                      saveHistory();
+                      const si = contextMenu.shapeIdx;
+                      const pi = contextMenu.pointIdx;
+                      const sh = shapes[si];
+                      if (!sh || pi < 0 || pi >= sh.points.length) {
+                        setContextMenu(null);
+                        return;
+                      }
+                      const vtx = sh.points[pi]!;
+                      const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `dsp-${Date.now()}-${Math.random()}`;
+                      setDesignSlopePoints(prev => {
+                        const rest = prev.filter(x => !(x.sourceShapeIdx === si && x.pointIdx === pi));
+                        return [...rest, { id, x: vtx.x, y: vtx.y, height: 0, sourceShapeIdx: si, pointIdx: pi }];
+                      });
+                      setContextMenu(null);
+                    }}
+                  />
+                )}
               {shapes[contextMenu.shapeIdx] && (shapes[contextMenu.shapeIdx].layer === 1 || shapes[contextMenu.shapeIdx].layer === 2) && shapes[contextMenu.shapeIdx].points.length > 3 && (
                 <CtxItem label="〰 Zmiana na arc point" color={CC.accent} onClick={() => {
                   saveHistory();
@@ -10426,6 +11746,10 @@ export default function MasterProject() {
                     sh.edgeArcs = newEdgeArcs.some(a => a && a.length > 0) ? newEdgeArcs : undefined;
                     const nh = (sh.heights || pts.map(() => 0)).filter((_, i) => i !== pi);
                     sh.heights = nh;
+                    if (isGroundworkLinear(sh)) {
+                      const gb = (sh.groundworkBurialDepthM || pts.map(() => 0)).filter((_, i) => i !== pi);
+                      sh.groundworkBurialDepthM = gb.length ? gb : undefined;
+                    }
                     if (sh.elementType === "wall" && sh.calculatorInputs?.segmentHeights) {
                       const inputs = { ...sh.calculatorInputs };
                       const segHeights = [...(inputs.segmentHeights as Array<{ startH: number; endH: number }>)];
@@ -10704,6 +12028,34 @@ export default function MasterProject() {
                 color={shapes[contextMenu.shapeIdx]?.lockedEdges.some(e => e.idx === contextMenu.edgeIdx) ? CC.locked : CC.text}
                 onClick={() => { toggleLockEdge(contextMenu.shapeIdx, contextMenu.edgeIdx); setContextMenu(null); }}
               />
+              {(activeLayer === 2 || activeLayer === 3) &&
+                shapes[contextMenu.shapeIdx]?.layer === 1 &&
+                shapes[contextMenu.shapeIdx]?.closed &&
+                contextMenu.edgeIdx >= 0 &&
+                contextMenu.edgePos !== undefined &&
+                contextMenu.edgeT !== undefined &&
+                contextMenu.edgeT > 0.02 &&
+                contextMenu.edgeT < 0.98 && (
+                  <CtxItem
+                    label={t("project:ctx_add_design_slope_point_edge")}
+                    color="#9b59b6"
+                    onClick={() => {
+                      saveHistory();
+                      const si = contextMenu.shapeIdx;
+                      const ei = contextMenu.edgeIdx;
+                      const tEdge = contextMenu.edgeT!;
+                      const wp = contextMenu.edgePos!;
+                      const id = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `dsp-${Date.now()}`;
+                      setDesignSlopePoints(prev => {
+                        const rest = prev.filter(
+                          x => !(x.sourceShapeIdx === si && x.edgeIdx === ei && Math.abs((x.edgeT ?? 0) - tEdge) < 0.04),
+                        );
+                        return [...rest, { id, x: wp.x, y: wp.y, height: 0, sourceShapeIdx: si, edgeIdx: ei, edgeT: tEdge }];
+                      });
+                      setContextMenu(null);
+                    }}
+                  />
+                )}
               {contextMenu.pathCenterlineEdgeIdx !== undefined && contextMenu.edgePos !== undefined && (
                 <CtxItem label={t("project:ctx_arc_point")} color={CC.accent} onClick={() => {
                   saveHistory();
@@ -11090,66 +12442,142 @@ export default function MasterProject() {
           );
         })()}
 
-        {editingGeodesyCard ? (() => {
-          const rect = canvasRef.current?.getBoundingClientRect();
-          if (!rect) return null;
-          const { cardInfo } = editingGeodesyCard;
-          const { left, top } = cardInfo.cardBounds;
-          const fixedLeft = rect.left + left;
-          const fixedTop = rect.top + top;
-          const cardW = cardInfo.cardBounds.right - cardInfo.cardBounds.left;
-          const cardH = cardInfo.cardBounds.bottom - cardInfo.cardBounds.top;
+        {designSlopeHeightModal && (() => {
+          const m = designSlopeHeightModal;
+          const pad = 12;
+          const { left: dialogLeft, top: dialogTop } = clampCenteredFixedDialog(
+            typeof window !== "undefined" ? window.innerWidth / 2 : 400,
+            typeof window !== "undefined" ? window.innerHeight / 2 : 300,
+            320,
+            168,
+            pad
+          );
+          const applyDesignSlopeHeight = () => {
+            const v = parseFloat(m.value.replace(",", "."));
+            if (Number.isNaN(v)) {
+              setDesignSlopeHeightModal(null);
+              return;
+            }
+            saveHistory();
+            const valM = v / 100;
+            setDesignSlopePoints(prev => prev.map(x => (x.id === m.id ? { ...x, height: valM } : x)));
+            setDesignSlopeHeightModal(null);
+          };
           return (
             <div
               style={{
                 position: "fixed",
-                left: fixedLeft,
-                top: fixedTop,
-                width: cardW,
-                minHeight: cardH,
-                zIndex: 100,
-                background: "rgba(26,26,46,0.95)",
-                border: `1px solid ${CC.geo}`,
-                borderRadius: 4,
-                padding: GEODESY_CARD_PAD,
-                font: "10px 'JetBrains Mono',monospace",
+                left: dialogLeft,
+                top: dialogTop,
+                zIndex: 200,
+                background: CC.panel,
+                border: `1px solid ${CC.panelBorder}`,
+                borderRadius: 8,
+                padding: 20,
+                boxShadow: shadows.modal,
+                width: 320,
+                boxSizing: "border-box",
               }}
-              ref={geodesyCardRef}
-              onBlur={e => {
-                if (e.relatedTarget && geodesyCardRef.current?.contains(e.relatedTarget as Node)) return;
-                applyHeightEdit(true);
+              onClick={e => e.stopPropagation()}
+              onKeyDown={e => {
+                if (e.key === "Enter") applyDesignSlopeHeight();
+                if (e.key === "Escape") setDesignSlopeHeightModal(null);
               }}
-              onKeyDown={e => { if (e.key === "Escape") { skipBlurRef.current = true; applyHeightEdit(); requestAnimationFrame(() => { skipBlurRef.current = false; }); } }}
             >
-              {cardInfo.entries.map((entry, rowIdx) => (
-                <div key={rowIdx} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: rowIdx < cardInfo.entries.length - 1 ? 4 : 0, height: GEODESY_CARD_ROW_H }}>
-                  <span style={{ color: "#fff", minWidth: 80 }}>{entry.label}</span>
-                  <input
-                    autoFocus={rowIdx === 0}
-                    value={heightValues[rowIdx] ?? ""}
-                    onChange={e => {
-                      const v = [...heightValues];
-                      v[rowIdx] = e.target.value;
-                      setHeightValues(v);
-                    }}
-                    onFocus={e => {
-                      if (!heightInputSelectOnceRef.current && rowIdx === 0) {
-                        heightInputSelectOnceRef.current = true;
-                        e.target.select();
-                      }
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === "Enter") { skipBlurRef.current = true; applyHeightEdit(); requestAnimationFrame(() => { skipBlurRef.current = false; }); }
-                    }}
-                    style={{ flex: 1, padding: "2px 6px", background: CC.panel, border: `2px solid ${CC.geo}`, borderRadius: 4, color: CC.geo, fontFamily: "inherit", fontSize: 12, outline: "none", textAlign: "right" }}
-                    placeholder="cm"
-                  />
-                  <span style={{ color: CC.geo, fontSize: 11 }}>cm</span>
-                </div>
-              ))}
+              <div style={{ fontWeight: 600, marginBottom: 12, color: CC.text }}>{t("project:design_slope_height_modal_title")}</div>
+              <div style={{ fontSize: 12, color: CC.textDim, marginBottom: 12 }}>{t("project:design_slope_height_modal_hint")}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                <input
+                  autoFocus
+                  type="number"
+                  step={0.1}
+                  value={m.value}
+                  onChange={e => setDesignSlopeHeightModal({ id: m.id, value: e.target.value })}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") applyDesignSlopeHeight();
+                    if (e.key === "Escape") setDesignSlopeHeightModal(null);
+                  }}
+                  style={{ flex: 1, padding: "6px 10px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, fontSize: 13 }}
+                />
+                <span style={{ color: CC.textDim }}>cm</span>
+              </div>
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button type="button" onClick={() => setDesignSlopeHeightModal(null)} style={{ padding: "8px 16px", background: CC.button, border: `1px solid ${CC.panelBorder}`, borderRadius: 6, color: CC.text, cursor: "pointer", fontSize: 13 }}>{t("project:set_angle_cancel")}</button>
+                <button type="button" onClick={applyDesignSlopeHeight} style={{ padding: "8px 16px", background: CC.accent, border: "none", borderRadius: 6, color: CC.bg, cursor: "pointer", fontSize: 13 }}>{t("project:set_angle_apply")}</button>
+              </div>
             </div>
           );
+        })()}
+
+        {editingGeodesyCard ? (() => {
+          const { cardInfo, focusGeodesyKey, screenPos } = editingGeodesyCard;
+          const rowsToRender =
+            focusGeodesyKey != null
+              ? cardInfo.entries
+                  .map((entry, rowIdx) => ({ entry, rowIdx }))
+                  .filter(({ entry }) => entry.points.some(p => geoEntryKey(p) === focusGeodesyKey))
+              : cardInfo.entries.map((entry, rowIdx) => ({ entry, rowIdx }));
+          if (rowsToRender.length === 0) return null;
+          if (rowsToRender.length > 1) {
+            return (
+              <GeodesyHeightsBulkModal
+                rows={rowsToRender.map(({ entry, rowIdx }) => ({
+                  rowIdx,
+                  label: entry.label,
+                  initialCm: entry.height * 100,
+                }))}
+                baselineHeightValues={heightValues}
+                position={screenPos}
+                onConfirm={next => applyHeightEdit(false, next)}
+                onCancel={() => setEditingGeodesyCard(null)}
+              />
+            );
+          }
+          const { entry, rowIdx } = rowsToRender[0];
+          const parsedInitial = parseFloat(heightValues[rowIdx] ?? "");
+          const initialCm = Number.isFinite(parsedInitial) ? parsedInitial : entry.height * 100;
+          return (
+            <GeodesyPointModal
+              mode="height"
+              pointId={geodesyEntryPointDisplayId(entry)}
+              initialValue={initialCm}
+              position={screenPos}
+              onConfirm={val => {
+                const merged = [...heightValues];
+                merged[rowIdx] = String(val);
+                applyHeightEdit(false, merged);
+              }}
+              onCancel={() => setEditingGeodesyCard(null)}
+            />
+          );
         })() : null}
+
+        {clusterTooltip && (
+          <div
+            style={{
+              position: "fixed",
+              left: clusterTooltip.x + 12,
+              top: clusterTooltip.y + 12,
+              zIndex: 110,
+              background: "rgba(26,26,46,0.96)",
+              border: "1px solid rgba(74,158,255,0.6)",
+              borderRadius: 6,
+              padding: "6px 10px",
+              font: "10px 'JetBrains Mono',monospace",
+              color: "#e8eaf0",
+              maxHeight: 200,
+              overflowY: "auto",
+              pointerEvents: "none",
+              boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+            }}
+          >
+            {clusterTooltip.labels.map((l, i) => (
+              <div key={i} style={{ padding: "2px 0", borderBottom: i < clusterTooltip.labels.length - 1 ? "1px solid rgba(255,255,255,0.08)" : "none" }}>
+                {l.text}
+              </div>
+            ))}
+          </div>
+        )}
 
         {shapeCreationModal && (
           <div ref={shapeCreationBackdropDismiss.backdropRef} className="canvas-modal-backdrop" style={{ position: "fixed", inset: 0, background: colors.bgModalBackdrop, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 200 }} onPointerDown={shapeCreationBackdropDismiss.onBackdropPointerDown}>
@@ -11274,7 +12702,7 @@ export default function MasterProject() {
             recalculateTrigger={recalculateTrigger}
             centerX={(canvasSize.w / 2 - pan.x) / zoom}
             centerY={(canvasSize.h / 2 - pan.y) / zoom}
-            layer={(activeLayer === 3 || activeLayer === 4 ? 2 : activeLayer) as LayerID}
+            layer={(activeLayer === 3 || activeLayer === 4 || activeLayer === 5 ? 2 : activeLayer) as LayerID}
           />
         )}
 
@@ -11800,28 +13228,29 @@ export default function MasterProject() {
         )}
       </div>
 
-      {activeLayer === 4 ? (
-        <PreparationPanel
-          shapes={shapes}
-          soilType={(projectSettings.soilType || "clay") as "clay" | "sand" | "rock"}
-          levelingMaterial={(projectSettings.levelingMaterial || "tape1") as "tape1" | "soil"}
-          onGroundworkClick={(si) => shapes[si]?.calculatorResults && setResultsModalShapeIdx(si)}
-        />
-      ) : (
-        <ProjectSummaryPanel
-          shapes={shapes}
-          onCreateProject={() => setShowCreatePreview(true)}
-          onDownloadPDF={() => setShowPdfExportModal(true)}
-          isSubmitting={isSubmitting}
-          onShapeClick={(shapeIdx) => {
-            if (shapes[shapeIdx]?.calculatorResults) setResultsModalShapeIdx(shapeIdx);
-            else setObjectCardShapeIdx(shapeIdx);
-          }}
-          onShapeContextMenu={(shapeIdx, e) => {
-            setProjectSummaryContextMenu({ shapeIdx, x: e.clientX, y: e.clientY });
-          }}
-        />
-      )}
+      <ProjectSummaryPanel
+        shapes={shapes}
+        onCreateProject={() => setShowCreatePreview(true)}
+        onDownloadPDF={() => setShowPdfExportModal(true)}
+        isSubmitting={isSubmitting}
+        onShapeClick={(shapeIdx) => {
+          if (shapes[shapeIdx]?.calculatorResults) setResultsModalShapeIdx(shapeIdx);
+          else setObjectCardShapeIdx(shapeIdx);
+        }}
+        onShapeContextMenu={(shapeIdx, e) => {
+          setProjectSummaryContextMenu({ shapeIdx, x: e.clientX, y: e.clientY });
+        }}
+        preparationSection={
+          activeLayer === 5 ? (
+            <PreparationSidebarContent
+              shapes={shapes}
+              soilType={(projectSettings.soilType || "clay") as "clay" | "sand" | "rock"}
+              levelingMaterial={(projectSettings.levelingMaterial || "tape1") as "tape1" | "soil"}
+              onGroundworkClick={(si) => shapes[si]?.calculatorResults && setResultsModalShapeIdx(si)}
+            />
+          ) : undefined
+        }
+      />
       </div>
 
       <ProjectCardModal
@@ -11838,8 +13267,39 @@ export default function MasterProject() {
         <PlanPdfExportModal
           isOpen={showPdfExportModal}
           onClose={() => setShowPdfExportModal(false)}
-          onExport={(layers) => handleExportPdf(layers)}
+          onExport={handlePlanPdfLayersConfirm}
           isExporting={isExportingPdf}
+        />
+      )}
+
+      {cmEditDialog && (
+        <GeodesyPointModal
+          key={`${cmEditDialog.shapeIdx}-${cmEditDialog.pointIdx}-${cmEditDialog.mode}`}
+          mode={cmEditDialog.mode === "preparation" ? "preparation" : "depth"}
+          pointId={cmEditDialog.pointIdx + 1}
+          initialValue={cmEditInitialCm}
+          position={cmEditDialog.screenPos}
+          onConfirm={confirmCmEditDialog}
+          onCancel={() => setCmEditDialog(null)}
+        />
+      )}
+
+      {showGeodesyPrintPreview && (
+        <GeodesyPrintPreviewModal
+          isOpen={showGeodesyPrintPreview}
+          onClose={closeGeodesyPrintPreview}
+          onConfirmExport={() => void handleExportPdf(pendingPdfLayers)}
+          isExporting={isExportingPdf}
+          cardsInfo={geodesyPrintPreviewCards}
+          hiddenEntries={hiddenGeodesyEntries}
+          onToggleEntryKeys={toggleGeodesyPreviewHiddenKeys}
+          previewDataUrl={geodesyPreviewDataUrl}
+          onPreviewImageLogicalClick={handleGeodesyPreviewImageLogicalClick}
+          devicePixelRatio={typeof window !== "undefined" ? window.devicePixelRatio : 1}
+          highlightRowKey={geodesyPreviewListHighlightKey}
+          showGeodesyLayerTabs={pendingPdfLayers.includes(101) && pendingPdfLayers.includes(102)}
+          previewGeodesyLayer={geodesyPrintPreviewTargetLayer}
+          onPreviewGeodesyLayerChange={setGeodesyPrintPreviewTargetLayer}
         />
       )}
 
@@ -11858,139 +13318,6 @@ export default function MasterProject() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-// ── PreparationPanel (Layer 4) ────────────────────────────────────
-
-function PreparationPanel({
-  shapes,
-  soilType,
-  levelingMaterial,
-  onGroundworkClick,
-}: {
-  shapes: Shape[];
-  soilType: "clay" | "sand" | "rock";
-  levelingMaterial: "tape1" | "soil";
-  onGroundworkClick?: (shapeIdx: number) => void;
-}) {
-  const { t } = useTranslation(["project"]);
-  const { currentTheme } = useTheme();
-  const CC = currentTheme?.id === "light" ? C_LIGHT : C;
-  const result = computePreparation(shapes, soilType, levelingMaterial);
-  const groundworkShapes = shapes
-    .map((s, i) => ({ s, i }))
-    .filter(({ s }) => s.layer === 2 && isGroundworkLinear(s) && s.points.length >= 2);
-
-  return (
-    <div style={{
-      width: 280,
-      background: CC.panel,
-      borderLeft: `1px solid ${CC.panelBorder}`,
-      display: "flex",
-      flexDirection: "column",
-      flexShrink: 0,
-      overflow: "hidden",
-    }}>
-      <div style={{
-        padding: "12px 16px",
-        borderBottom: `1px solid ${CC.panelBorder}`,
-        fontSize: 14,
-        fontWeight: 600,
-        color: CC.foundation,
-      }}>
-        {t("project:preparation_label")}
-      </div>
-      <div style={{ flex: 1, overflow: "auto", padding: 12 }}>
-        {groundworkShapes.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: CC.textDim, marginBottom: 8, textTransform: "uppercase" }}>{t("project:groundwork_linear_label")}</div>
-            {groundworkShapes.map(({ s, i }) => {
-              const lenM = polylineLengthMeters(s.points);
-              return (
-                <div
-                  key={i}
-                  onClick={() => onGroundworkClick?.(i)}
-                  style={{
-                    padding: "10px 12px",
-                    marginBottom: 8,
-                    background: CC.bg,
-                    borderRadius: 8,
-                    border: `1px solid ${CC.panelBorder}`,
-                    fontSize: 12,
-                    cursor: s.calculatorResults ? "pointer" : "default",
-                  }}
-                >
-                  <div style={{ fontWeight: 600, color: CC.text, marginBottom: 4 }}>{s.label || groundworkLabel(s)}</div>
-                  <div style={{ color: CC.textDim, fontSize: 11 }}>{t("project:total_length")}: {lenM.toFixed(2)} m</div>
-                  {s.calculatorResults && <div style={{ fontSize: 10, color: CC.accent, marginTop: 4 }}>{t("project:click_view_results")}</div>}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {!result.validation.ok ? (
-          <div style={{ fontSize: 12, color: CC.danger }}>
-            {result.validation.elementsWithoutHeights && result.validation.elementsWithoutHeights.length > 0 && (
-              <div>{t("project:elements_without_heights")}: {result.validation.elementsWithoutHeights.join(", ")}. {t("project:add_heights_geodesy")}</div>
-            )}
-          </div>
-        ) : result.elements.length === 0 && groundworkShapes.length === 0 ? (
-          <div style={{ fontSize: 13, color: CC.textDim, textAlign: "center", padding: 24 }}>
-            {t("project:no_preparation_elements")}
-          </div>
-        ) : result.elements.length > 0 ? (
-          <>
-            {result.elements.map((el) => (
-              <div
-                key={el.shapeIdx}
-                style={{
-                  padding: "10px 12px",
-                  marginBottom: 8,
-                  background: CC.bg,
-                  borderRadius: 8,
-                  border: `1px solid ${CC.panelBorder}`,
-                  fontSize: 12,
-                }}
-              >
-                <div style={{ fontWeight: 600, color: CC.text, marginBottom: 6 }}>{el.label}</div>
-                <div style={{ color: CC.textDim, fontSize: 11 }}>
-                  {el.areaM2} m² · {t("project:excavation_label")}: {el.excavationM3} m³ ({el.excavationTonnes} t)
-                </div>
-                <div style={{ color: CC.textDim, fontSize: 11 }}>
-                  {t("project:fill_label")}: {el.fillM3} m³ ({el.fillTonnes} t) · {el.pctAreaNeedingFill}% {t("project:area_low")}
-                </div>
-              </div>
-            ))}
-            <div style={{
-              marginTop: 12,
-              padding: "12px",
-              background: CC.bg,
-              borderRadius: 8,
-              border: `1px solid ${CC.panelBorder}`,
-              fontSize: 13,
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: CC.textDim }}>{t("project:total_excavation")}</span>
-                <span style={{ color: CC.text, fontWeight: 600 }}>{result.totalExcavationM3} m³</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: CC.textDim }}>{t("project:total_fill")}</span>
-                <span style={{ color: CC.text, fontWeight: 600 }}>{result.totalFillM3} m³</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ color: CC.textDim }}>{t("project:excavation_tonnes")}</span>
-                <span style={{ color: CC.text, fontWeight: 600 }}>{result.totalExcavationTonnes} t</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ color: CC.textDim }}>{t("project:fill_tonnes")}</span>
-                <span style={{ color: CC.text, fontWeight: 600 }}>{result.totalFillTonnes} t</span>
-              </div>
-            </div>
-          </>
-        ) : null}
-      </div>
     </div>
   );
 }

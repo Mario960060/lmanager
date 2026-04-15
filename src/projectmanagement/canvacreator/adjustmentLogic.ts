@@ -24,6 +24,21 @@ function isLinearPolygonShape(shape: Shape): boolean {
   return LINEAR_POLYGON_TYPES.includes(shape.elementType as any);
 }
 
+/** Drafts / sync may store layer loosely — strict === misses L2 and breaks korekta. */
+function normalizeLayer(s: Shape): 1 | 2 | null {
+  const L = Number((s as { layer?: unknown }).layer);
+  if (L === 1 || L === 2) return L as 1 | 2;
+  return null;
+}
+
+function totalRingArea(polys: Point[][]): number {
+  let sum = 0;
+  for (const p of polys) {
+    if (p.length >= 3) sum += Math.abs(shoelaceArea(p));
+  }
+  return sum;
+}
+
 /** Get polygon for shape. Returns empty array if shape has no valid polygon. */
 export function getShapePolygonForAdjustment(shape: Shape): Point[] {
   if (shape.elementType === "wall" || shape.elementType === "kerb" || shape.elementType === "foundation") {
@@ -31,10 +46,17 @@ export function getShapePolygonForAdjustment(shape: Shape): Point[] {
     if (outline.length >= 3) return outline;
   }
   if (shape.elementType === "pathSlabs" || shape.elementType === "pathConcreteSlabs" || shape.elementType === "pathMonoblock") {
-    return getPathPolygon(shape);
+    const outline = getPathPolygon(shape);
+    if (outline.length >= 3) return outline;
+    if (shape.closed && shape.points.length >= 3) return shape.points;
+    return outline;
   }
   const hasArcs = shape.closed && shape.edgeArcs?.some(a => a && a.length > 0);
   const pts = hasArcs ? getEffectivePolygon(shape) : shape.points;
+  if (pts.length >= 3) return pts;
+  if (shape.elementType === "polygon" && shape.closed && shape.points.length >= 3) {
+    return shape.points;
+  }
   return pts;
 }
 
@@ -42,6 +64,11 @@ export function getShapePolygonForAdjustment(shape: Shape): Point[] {
 function toGeoJSONPolygon(pts: Point[]): Polygon | null {
   if (pts.length < 3) return null;
   const ring: [number, number][] = pts.map(p => [p.x, p.y]);
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) {
+    ring.push([first[0], first[1]]);
+  }
   return [ring];
 }
 
@@ -57,10 +84,42 @@ function fromGeoJSONMulti(multi: MultiPolygon): Point[][] {
   return result;
 }
 
+/**
+ * garden \ (L2 coverage). Prefer union(L2) then difference (fast); if union fails (invalid
+ * self-intersecting geometry, etc.), subtract each L2 polygon sequentially — same result when
+ * all polygons are valid, but avoids treating the whole plot as "empty" when one bad polygon
+ * breaks union(). If nothing could be subtracted, returns [] so we do not flash full-garden red.
+ */
+function subtractLayer2CoverageFromGarden(gardenUnion: MultiPolygon, layer2Polys: Polygon[]): MultiPolygon {
+  if (layer2Polys.length === 0) return gardenUnion;
+
+  try {
+    const layer2Union =
+      layer2Polys.length === 1 ? [layer2Polys[0]] : polygonClipping.union(layer2Polys[0], ...layer2Polys.slice(1));
+    return polygonClipping.difference(gardenUnion, layer2Union);
+  } catch {
+    // fall through — robust path
+  }
+
+  let result: MultiPolygon = gardenUnion;
+  let anySuccess = false;
+  for (const poly of layer2Polys) {
+    try {
+      result = polygonClipping.difference(result, [poly]);
+      anySuccess = true;
+    } catch {
+      // skip polygon that breaks polygon-clipping
+    }
+  }
+  return anySuccess ? result : [];
+}
+
 /** Areas in Layer 1 (garden) without coverage from Layer 2. */
 export function computeEmptyAreas(shapes: Shape[]): Point[][] {
-  const layer1 = shapes.filter(s => s.layer === 1 && s.closed && s.points.length >= 3);
-  const layer2 = shapes.filter(s => s.layer === 2);
+  const layer1 = shapes.filter(
+    s => !s.removedFromCanvas && normalizeLayer(s) === 1 && s.closed && s.points.length >= 3,
+  );
+  const layer2 = shapes.filter(s => !s.removedFromCanvas && normalizeLayer(s) === 2);
   if (layer1.length === 0) return [];
 
   const gardenPolys: Polygon[] = [];
@@ -91,18 +150,14 @@ export function computeEmptyAreas(shapes: Shape[]): Point[][] {
   }
 
   if (layer2Polys.length === 0) {
-    return fromGeoJSONMulti(gardenUnion);
-  }
-
-  let layer2Union: MultiPolygon;
-  try {
-    layer2Union = layer2Polys.length === 1 ? [layer2Polys[0]] : polygonClipping.union(layer2Polys[0], ...layer2Polys.slice(1));
-  } catch {
+    if (layer2.length > 0) {
+      return [];
+    }
     return fromGeoJSONMulti(gardenUnion);
   }
 
   try {
-    const empty = polygonClipping.difference(gardenUnion, layer2Union);
+    const empty = subtractLayer2CoverageFromGarden(gardenUnion, layer2Polys);
     return fromGeoJSONMulti(empty);
   } catch {
     return [];
@@ -116,10 +171,15 @@ export interface OverflowResult {
 
 /** Parts of Layer 2 elements (except grass) that extend outside Layer 1. */
 export function computeOverflowAreas(shapes: Shape[]): OverflowResult[] {
-  const layer1 = shapes.filter(s => s.layer === 1 && s.closed && s.points.length >= 3);
+  const layer1 = shapes.filter(
+    s => !s.removedFromCanvas && normalizeLayer(s) === 1 && s.closed && s.points.length >= 3,
+  );
   const layer2Indices = shapes
     .map((s, i) => ({ s, i }))
-    .filter(({ s }) => s.layer === 2 && s.calculatorType !== "grass");
+    .filter(
+      ({ s }) =>
+        !s.removedFromCanvas && normalizeLayer(s) === 2 && s.calculatorType !== "grass",
+    );
 
   if (layer1.length === 0) return [];
 
@@ -144,7 +204,19 @@ export function computeOverflowAreas(shapes: Shape[]): OverflowResult[] {
     if (pts.length < 3) continue;
     const poly = toGeoJSONPolygon(pts);
     if (!poly) continue;
+    const polyArea = Math.abs(shoelaceArea(pts));
+    if (polyArea < 1e-12) continue;
     try {
+      let skipOverflow = false;
+      try {
+        const inter = polygonClipping.intersection([poly], gardenUnion);
+        const interArea = totalRingArea(fromGeoJSONMulti(inter));
+        if (interArea >= polyArea * 0.999) skipOverflow = true;
+      } catch {
+        // intersection failed — still try difference below
+      }
+      if (skipOverflow) continue;
+
       const overflow = polygonClipping.difference([poly], gardenUnion);
       const polys = fromGeoJSONMulti(overflow);
       if (polys.length > 0) {
@@ -169,7 +241,7 @@ export function computeOverlaps(shapes: Shape[]): OverlapResult[] {
   const linearShapes: { shape: Shape; idx: number }[] = [];
   for (let i = 0; i < shapes.length; i++) {
     const s = shapes[i];
-    if (s.layer !== 2) continue;
+    if (s.removedFromCanvas || normalizeLayer(s) !== 2) continue;
     if (isSurfaceShape(s)) surfaceShapes.push({ shape: s, idx: i });
     if (isLinearPolygonShape(s)) linearShapes.push({ shape: s, idx: i });
   }
@@ -225,7 +297,9 @@ export function computeOverlaps(shapes: Shape[]): OverlapResult[] {
 
 /** Clip shape polygon to garden boundary. Returns new points or null. */
 export function clipShapeToGarden(shapes: Shape[], shapeIdx: number): Point[] | null {
-  const layer1 = shapes.filter(s => s.layer === 1 && s.closed && s.points.length >= 3);
+  const layer1 = shapes.filter(
+    s => !s.removedFromCanvas && normalizeLayer(s) === 1 && s.closed && s.points.length >= 3,
+  );
   if (layer1.length === 0) return null;
   const shape = shapes[shapeIdx];
   if (!shape) return null;
@@ -299,7 +373,10 @@ export function removeOverlapFromShape(shapes: Shape[], shapeIdx: number, overla
 export function findTouchingElementsForEmptyArea(shapes: Shape[], emptyAreaPolygon: Point[]): number[] {
   const layer2 = shapes
     .map((s, i) => ({ s, i }))
-    .filter(({ s }) => s.layer === 2 && s.calculatorType !== "grass");
+    .filter(
+      ({ s }) =>
+        !s.removedFromCanvas && normalizeLayer(s) === 2 && s.calculatorType !== "grass",
+    );
   const emptyPoly = toGeoJSONPolygon(emptyAreaPolygon);
   if (!emptyPoly) return [];
 
@@ -362,7 +439,7 @@ export function findSurfacesOverlappingLinear(shapes: Shape[], linearIdx: number
   const surfaceShapes: { shape: Shape; idx: number }[] = [];
   for (let i = 0; i < shapes.length; i++) {
     const s = shapes[i];
-    if (s.layer !== 2) continue;
+    if (s.removedFromCanvas || normalizeLayer(s) !== 2) continue;
     if (isSurfaceShape(s)) surfaceShapes.push({ shape: s, idx: i });
   }
 

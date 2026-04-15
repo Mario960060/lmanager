@@ -9,7 +9,34 @@ import {
 /** Joint 2 mm → 0.2 cm (same as selectedGap 2 / 10 in TileInstallationCalculator). */
 const GAP_CM = 0.2;
 
+/** Tier panels: no joint — same formulas as tiles with gap 0 (TileInstallationCalculator tier_panels). */
+const GAP_ZERO = 0;
+
 describe("tileWallSlabCount", () => {
+  describe("gap = 0 (tier panels — same grid math as tiles, zero joint)", () => {
+    it("rectangular: 1 m × 1 m, 52×17 cm panels → ceil(100/52)×ceil(100/17)=2×6=12", () => {
+      const n = countSlabsRectangularSegment(100, 100, 52, 17, GAP_ZERO);
+      expect(n).toBe(12);
+    });
+
+    it("trapezoid with h0===h1 matches rectangular count (gap 0)", () => {
+      const lenCm = 300;
+      const hCm = 200;
+      const rect = countSlabsRectangularSegment(lenCm, hCm, 44, 22, GAP_ZERO);
+      const trap = countSlabsTrapezoidColumnwise(lenCm, hCm, hCm, 44, 22, GAP_ZERO);
+      expect(trap).toBe(rect);
+    });
+
+    it("whole/cut split equals trapezoid total when gap 0", () => {
+      const lenCm = 100;
+      const h0 = 100;
+      const h1 = 200;
+      const total = countSlabsTrapezoidColumnwise(lenCm, h0, h1, 52, 17, GAP_ZERO);
+      const split = countTrapezoidWholeVsCut(lenCm, h0, h1, 52, 17, GAP_ZERO);
+      expect(split.total).toBe(total);
+    });
+  });
+
   describe("countSlabsRectangularSegment", () => {
     it("1 m × 1 m wall, 60×60 cm slabs, 2 mm gap → 2×2 = 4 slabs", () => {
       const lenCm = 100;

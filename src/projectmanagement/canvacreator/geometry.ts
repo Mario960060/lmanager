@@ -23,6 +23,24 @@ export interface HeightPoint {
   height: number;  // meters
 }
 
+/**
+ * Punkt spadku projektowego (warstwa robocza 2): wysokość docelowa terenu PO realizacji.
+ * Kotwiczy się na obrysie Layer 1; widoczny / edytowalny przy L2 (i trybie wzorca L3).
+ */
+export interface DesignSlopePoint {
+  id: string;
+  /** Ostatnia znana pozycja świata (aktualizowana przy propagacji z obrysu L1) */
+  x: number;
+  y: number;
+  height: number; // meters
+  sourceShapeIdx: number;
+  /** Wierzchołek wielokąta L1 — pozycja śledzi shape.points[pointIdx] */
+  pointIdx?: number;
+  /** Środek krawędzi (chord) L1 — interpolacja liniowa po krawędzi */
+  edgeIdx?: number;
+  edgeT?: number;
+}
+
 /** Arc point on an edge — bends the edge into a smooth curve. */
 export interface ArcPoint {
   id: string;
@@ -38,6 +56,8 @@ export interface Shape {
   lockedEdges: { idx: number; len: number }[];  // edges with locked length (original length stored)
   lockedAngles: number[];  // indices of points with locked angle
   heights: number[];       // height at each point (meters), default 0
+  /** Layer 2: true = wysokość ustawiona ręcznie, nie nadpisywać z punktów spadku projektowego */
+  heightManualOverride?: boolean[];
   /** Layer 1 only: points for height only — do not affect polygon geometry */
   heightPoints?: HeightPoint[];
   elementType: ElementType;
@@ -59,6 +79,12 @@ export interface Shape {
   namePromptShown?: boolean;
   /** Arc points per edge. Index = edge index. null/undefined = straight line. */
   edgeArcs?: (ArcPoint[] | null)[];
+  /** Layer 4 WYKOP: optional per-vertex override (cm from datum); unset indices use calculator default + geodesy height */
+  excavationCm?: number[];
+  /** Layer 5 PRZYGOTOWANIE: optional per-vertex override (cm from datum); unset indices use calculator default + geodesy height */
+  preparationCm?: number[];
+  /** Groundwork linear (drenaż / rury / kabel): głębokość zakopania w m na węzeł — tylko Widok Wykop/Przygotowanie, bez powiązania z geodezją */
+  groundworkBurialDepthM?: number[];
 }
 
 export interface MultiDragVertexStart {
@@ -207,6 +233,8 @@ export interface ContextMenuInfo {
   adjustmentOverlap?: { shapeIdxA: number; shapeIdxB: number; overlapIdx: number };
   /** Layer 3: right-click on pattern rotation handle (slab / cobble / grass) */
   patternRotationHandle?: { patternType: "slab" | "cobblestone" | "grass" };
+  /** Punkt spadku projektowego — menu usunięcia / edycji wysokości */
+  designSlopePointId?: string;
 }
 
 export interface SnapResult {
@@ -232,7 +260,14 @@ export interface Projection {
 
 export const PIXELS_PER_METER = 80;
 export const GRID_SPACING = 0.5;
-export const POINT_RADIUS = 7;
+/**
+ * Bazowy promień uchwytu wierzchołka na kanwie (px) — ten sam we wszystkich warstwach i w geodezji.
+ * Hover/drag: MasterProject mnoży przez 1.45 jak w trybie geodezji.
+ */
+export const GEODESY_CANVAS_VERTEX_DOT_R = 2.75;
+export const POINT_RADIUS = GEODESY_CANVAS_VERTEX_DOT_R;
+/** Punkty wysokości L1 w geodezji na kanwie (px). */
+export const GEODESY_CANVAS_HEIGHT_DOT_R = 2.5;
 export const EDGE_HIT_THRESHOLD = 10;
 export const GRASS_EDGE_HIT_PX = 24;  // Hit area for grass length resize handles (screen px)
 export const SNAP_TO_START_RADIUS = 18;
@@ -263,6 +298,59 @@ export function toPixels(m: number): number {
 export function formatLength(px: number): string {
   return Math.abs(toMeters(px)).toFixed(3) + "m";
 }
+
+/**
+ * Length dimensions on canvas and prints: value in centimeters, no unit suffix.
+ * Max one decimal; omit ".0" for whole numbers. (Spec: round(m*100, 1) then format.)
+ */
+export function formatDimensionCm(meters: number): string {
+  const cm = Math.round(meters * 1000) / 10;
+  if (!Number.isFinite(cm)) return "0";
+  const rounded = Math.round(cm);
+  if (Math.abs(cm - rounded) < 1e-9) return String(rounded);
+  return cm.toFixed(1);
+}
+
+/** World distance in px → dimension label in cm (no unit). */
+export function formatDimensionCmFromPx(pxLen: number): string {
+  return formatDimensionCm(toMeters(Math.abs(pxLen)));
+}
+
+/** Geodesy height display: round to 0.1 cm in meters (0.001 m). */
+export function roundHeightMToTenthCm(heightM: number): number {
+  const cm = heightM * 100;
+  return Math.round(cm * 10) / 1000;
+}
+
+/**
+ * Elevation label for geodesy: `+34.5` / `-2.3` (cm, no unit); uses {@link formatDimensionCm} after rounding to 0.1 cm.
+ */
+export function formatGeodesySignedCm(heightM: number): string {
+  const m = roundHeightMToTenthCm(heightM);
+  const s = formatDimensionCm(Math.abs(m));
+  return (m >= 0 ? "+" : "-") + s;
+}
+
+/** CSS px → mm at 96 DPI — screen dimension thresholds when not exporting PDF. */
+export const MM_PER_CSS_PX = 25.4 / 96;
+
+/** Perpendicular offset from edge for length labels (m) — `toPixels` gives canvas units; same order as path ribbon labels. */
+export const EDGE_LENGTH_LABEL_PERP_OFFSET_M = 0.22;
+
+/**
+ * Rozmiar czcionki dla etykiet **długości odcinka** (L2/L3/L4/L5/L6 na planie, ścieżki, mury/obrysy liniowe) —
+ * ten sam co karty wysokości w geodezji (`geodesyLabels` / `smartGeodesyLabels`).
+ */
+export const EDGE_LENGTH_LABEL_FONT_PX = 12;
+
+/** Przy zbyt krótkiej krawędzi — nieco mniejszy skrót liczby. */
+export const EDGE_LENGTH_LABEL_FONT_ABBREV_PX = 11;
+
+/** `ctx.font` — monospace jak w geodezji (bez Fira). */
+export const EDGE_LENGTH_LABEL_FONT = `${EDGE_LENGTH_LABEL_FONT_PX}px 'JetBrains Mono',monospace`;
+
+/** Wariant z Fira Code (pętla główna canvas / trawa). */
+export const EDGE_LENGTH_LABEL_FONT_STACK = `${EDGE_LENGTH_LABEL_FONT_PX}px 'JetBrains Mono','Fira Code',monospace`;
 
 export function midpoint(a: Point, b: Point): Point {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
@@ -411,11 +499,13 @@ export function outwardPerpendicularRad(a: Point, b: Point, interiorRef: Point):
   return nx * vx + ny * vy > 0 ? norm + Math.PI : norm;
 }
 
-export function edgeOutwardRadForL1Edge(shapes: readonly Shape[], l1Si: number, edgeIdx: number): number | null {
-  const s = shapes[l1Si];
-  if (!s || s.layer !== 1 || !s.closed || s.points.length < 3) return null;
-  const pts = s.points;
+/**
+ * Outward-pointing normal angle (radians) for `edgeIdx` on closed `pts` (CCW/CW via signed area).
+ * Same rule as legacy L1 garden dims — shared with L2 edge length labels in geodesy.
+ */
+export function edgeOutwardRadForClosedPoly(pts: Point[], edgeIdx: number): number | null {
   const n = pts.length;
+  if (n < 3 || edgeIdx < 0 || edgeIdx >= n) return null;
   const a = pts[edgeIdx];
   const b = pts[(edgeIdx + 1) % n];
   const dx = b.x - a.x;
@@ -423,12 +513,15 @@ export function edgeOutwardRadForL1Edge(shapes: readonly Shape[], l1Si: number, 
   if (Math.hypot(dx, dy) < 1e-9) return null;
   const sa = signedArea(pts);
   if (Math.abs(sa) < 1e-20) return null;
-  // CCW: interior is to the left of each directed edge → outward = right normal (dy, -dx).
-  // CW: flip. Avoids mis-placing both parallel edge dims on one side when labelAnchorInsidePolygon
-  // or centroid lies outside a thin/concave region (dot test with interior ref becomes unreliable).
   let rad = Math.atan2(-dx, dy);
   if (sa < 0) rad += Math.PI;
   return rad;
+}
+
+export function edgeOutwardRadForL1Edge(shapes: readonly Shape[], l1Si: number, edgeIdx: number): number | null {
+  const s = shapes[l1Si];
+  if (!s || s.layer !== 1 || !s.closed || s.points.length < 3) return null;
+  return edgeOutwardRadForClosedPoly(s.points, edgeIdx);
 }
 
 export function edgeNormalAngle(a: Point, b: Point): number {
@@ -558,36 +651,47 @@ export function snapShiftSmart(prev: Point, _curr: Point, next: Point, target: P
 }
 
 // Calculate interior angle direction for proper label placement inside shape
-// Uses winding order (signed area) to determine interior side reliably
+// Uses winding order (signed area) to determine interior side reliably.
+// Edge vectors are normalized to unit length before summing so the bisector
+// reflects the true angle regardless of edge lengths.
 export function interiorAngleDir(pts: Point[], idx: number): number {
   const n = pts.length;
   const prev = pts[(idx - 1 + n) % n];
   const curr = pts[idx];
   const next = pts[(idx + 1) % n];
 
-  // Bisector of the two edge vectors (points outward from the angle)
-  const bisX = (prev.x - curr.x) + (next.x - curr.x);
-  const bisY = (prev.y - curr.y) + (next.y - curr.y);
-  const bisLen = Math.sqrt(bisX * bisX + bisY * bisY);
+  const toPrevX = prev.x - curr.x;
+  const toPrevY = prev.y - curr.y;
+  const toPrevLen = Math.hypot(toPrevX, toPrevY);
+  const toNextX = next.x - curr.x;
+  const toNextY = next.y - curr.y;
+  const toNextLen = Math.hypot(toNextX, toNextY);
 
-  if (bisLen < 0.001) {
-    // Degenerate: edges are collinear, use normal to the edge
+  if (toPrevLen < 1e-12 || toNextLen < 1e-12) {
     const dx = next.x - prev.x, dy = next.y - prev.y;
-    const nLen = Math.sqrt(dx * dx + dy * dy);
+    const nLen = Math.hypot(dx, dy);
     if (nLen < 0.001) return 0;
-    // Pick normal direction pointing inward based on winding
     const sa = signedArea(pts);
     const nx = -dy / nLen, ny = dx / nLen;
     return sa > 0 ? Math.atan2(ny, nx) : Math.atan2(-ny, -nx);
   }
 
-  // Cross product tells us if this vertex is convex or reflex relative to winding
-  const cross = (prev.x - curr.x) * (next.y - curr.y) - (prev.y - curr.y) * (next.x - curr.x);
-  const sa = signedArea(pts); // positive = CCW, negative = CW
+  const bisX = toPrevX / toPrevLen + toNextX / toNextLen;
+  const bisY = toPrevY / toPrevLen + toNextY / toNextLen;
+  const bisLen = Math.hypot(bisX, bisY);
 
-  // If shape is CW (sa < 0): interior is to the right of edges
-  // Convex vertex (cross < 0 for CW): bisector points outward → flip it
-  // Reflex vertex (cross > 0 for CW): bisector points inward → keep it
+  if (bisLen < 0.001) {
+    const dx = next.x - prev.x, dy = next.y - prev.y;
+    const nLen = Math.hypot(dx, dy);
+    if (nLen < 0.001) return 0;
+    const sa = signedArea(pts);
+    const nx = -dy / nLen, ny = dx / nLen;
+    return sa > 0 ? Math.atan2(ny, nx) : Math.atan2(-ny, -nx);
+  }
+
+  const cross = toPrevX * toNextY - toPrevY * toNextX;
+  const sa = signedArea(pts);
+
   const bisectorPointsInward = (sa > 0) ? (cross < 0) : (cross > 0);
 
   if (bisectorPointsInward) {

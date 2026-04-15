@@ -4,14 +4,15 @@ import { format } from 'date-fns';
 import { pl } from 'date-fns/locale';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Search, X, Save, Clock, Package, Wrench, Folder, ChevronDown } from 'lucide-react';
+import { Search, X, Save, Clock, Package, Wrench, Hammer, Folder, ChevronDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../lib/store';
 import { translateTaskName, translateUnit } from '../lib/translationMap';
+import { toolDisplayName } from '../lib/toolDisplay';
 import { colors, fonts, fontSizes, fontWeights, spacing, radii } from '../themes/designTokens';
 import { Button } from '../themes/uiComponents';
 
-export type UnifiedDayTab = 'plan' | 'materials' | 'equipment';
+export type UnifiedDayTab = 'plan' | 'materials' | 'equipment' | 'tools';
 
 type EventLite = { id: string; title: string; description?: string | null };
 
@@ -180,6 +181,7 @@ const UnifiedEventDayModal: React.FC<Props> = ({ event, date, initialTab = 'plan
   const [dirtyPlan, setDirtyPlan] = useState(false);
   const [dirtyMaterials, setDirtyMaterials] = useState(false);
   const [dirtyEquipment, setDirtyEquipment] = useState(false);
+  const [dirtyTools, setDirtyTools] = useState(false);
 
   const [plannedTasks, setPlannedTasks] = useState<PlanTaskLocal[]>([]);
   const [planHydrated, setPlanHydrated] = useState(false);
@@ -192,6 +194,9 @@ const UnifiedEventDayModal: React.FC<Props> = ({ event, date, initialTab = 'plan
   const [equipmentPick, setEquipmentPick] = useState<
     Record<string, { selected: boolean; qty: string; calendarRowIds: string[] }>
   >({});
+
+  const [toolSearch, setToolSearch] = useState('');
+  const [toolPick, setToolPick] = useState<Record<string, { selected: boolean; qty: string }>>({});
 
   const { data: tasksDoneList = [] } = useQuery({
     queryKey: ['tasks_done_event_day_modal', event.id, companyId],
@@ -366,6 +371,35 @@ const UnifiedEventDayModal: React.FC<Props> = ({ event, date, initialTab = 'plan
     enabled: !!companyId && !!event.id,
   });
 
+  const { data: toolsCatalog = [] } = useQuery({
+    queryKey: ['tools_catalog_unified', companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tools')
+        .select('id, name_en, name_pl, unit')
+        .eq('company_id', companyId!)
+        .order('name_en');
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!companyId,
+  });
+
+  const { data: calendarToolsRows = [] } = useQuery({
+    queryKey: ['calendar_tools_unified', event.id, dateStr, companyId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('calendar_tools')
+        .select('id, tool_id, quantity')
+        .eq('event_id', event.id)
+        .eq('date', dateStr)
+        .eq('company_id', companyId!);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!companyId && !!event.id,
+  });
+
   useEffect(() => {
     if (activeTab !== 'materials') return;
     const next: Record<string, { selected: boolean; qty: string }> = {};
@@ -418,6 +452,23 @@ const UnifiedEventDayModal: React.FC<Props> = ({ event, date, initialTab = 'plan
     setEquipmentPick(byEq);
     setDirtyEquipment(false);
   }, [activeTab, equipmentList, calendarEquipmentRows]);
+
+  useEffect(() => {
+    if (activeTab !== 'tools') return;
+    const next: Record<string, { selected: boolean; qty: string }> = {};
+    for (const tool of toolsCatalog as Array<{ id: string }>) {
+      const rows = (calendarToolsRows as Array<{ tool_id: string | null; quantity: number | null }>).filter(
+        (r) => r.tool_id === tool.id
+      );
+      const qtySum = rows.reduce((s, r) => s + (r.quantity || 0), 0);
+      next[tool.id] = {
+        selected: rows.length > 0,
+        qty: rows.length ? String(qtySum || 1) : '1',
+      };
+    }
+    setToolPick(next);
+    setDirtyTools(false);
+  }, [activeTab, toolsCatalog, calendarToolsRows]);
 
   const savePlanMutation = useMutation({
     mutationFn: async (tasksArg: PlanTaskLocal[]) => {
@@ -637,6 +688,57 @@ const UnifiedEventDayModal: React.FC<Props> = ({ event, date, initialTab = 'plan
     },
   });
 
+  const saveToolsMutation = useMutation({
+    mutationFn: async (args: {
+      pick: Record<string, { selected: boolean; qty: string }>;
+      catalog: Array<{ id: string; name_en: string; name_pl: string; unit: string }>;
+    }) => {
+      if (!companyId || !canEditMaterialsEquipment) return;
+      const { error: delErr } = await supabase
+        .from('calendar_tools')
+        .delete()
+        .eq('event_id', event.id)
+        .eq('date', dateStr)
+        .eq('company_id', companyId);
+      if (delErr) throw delErr;
+
+      const inserts: Array<{
+        event_id: string;
+        user_id: string | undefined;
+        tool_id: string;
+        quantity: number;
+        date: string;
+        company_id: string;
+      }> = [];
+
+      for (const trow of args.catalog) {
+        const st = args.pick[trow.id];
+        if (!st?.selected) continue;
+        const qty = Math.max(1, parseInt(st.qty || '1', 10));
+        if (Number.isNaN(qty)) continue;
+        inserts.push({
+          event_id: event.id,
+          user_id: user?.id,
+          tool_id: trow.id,
+          quantity: qty,
+          date: dateStr,
+          company_id: companyId,
+        });
+      }
+      if (inserts.length) {
+        const { error } = await supabase.from('calendar_tools').insert(inserts);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      setDirtyTools(false);
+      queryClient.invalidateQueries({ queryKey: ['calendar_tools'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard_calendar_tools'] });
+      queryClient.invalidateQueries({ queryKey: ['calendar_tools_unified'] });
+      queryClient.invalidateQueries({ queryKey: ['calendar_tools_week'] });
+    },
+  });
+
   const handleClose = async () => {
     try {
       if (dirtyPlan && canEditPlan) await savePlanMutation.mutateAsync(plannedTasks);
@@ -648,6 +750,8 @@ const UnifiedEventDayModal: React.FC<Props> = ({ event, date, initialTab = 'plan
         });
       if (dirtyEquipment && canEditMaterialsEquipment)
         await saveEquipmentMutation.mutateAsync({ pick: equipmentPick, equipmentRecords: equipmentList });
+      if (dirtyTools && canEditMaterialsEquipment)
+        await saveToolsMutation.mutateAsync({ pick: toolPick, catalog: toolsCatalog });
     } catch (e) {
       console.error(e);
     }
@@ -665,6 +769,8 @@ const UnifiedEventDayModal: React.FC<Props> = ({ event, date, initialTab = 'plan
         });
       if (activeTab === 'equipment' && dirtyEquipment && canEditMaterialsEquipment)
         await saveEquipmentMutation.mutateAsync({ pick: equipmentPick, equipmentRecords: equipmentList });
+      if (activeTab === 'tools' && dirtyTools && canEditMaterialsEquipment)
+        await saveToolsMutation.mutateAsync({ pick: toolPick, catalog: toolsCatalog });
     } catch (e) {
       console.error(e);
     }
@@ -718,14 +824,24 @@ const UnifiedEventDayModal: React.FC<Props> = ({ event, date, initialTab = 'plan
     return equipmentList;
   }, [equipmentList]);
 
+  const filteredTools = useMemo(() => {
+    const q = toolSearch.trim().toLowerCase();
+    return (toolsCatalog as Array<{ id: string; name_en: string; name_pl: string; unit: string }>).filter((row) => {
+      if (!q) return true;
+      return row.name_en.toLowerCase().includes(q) || row.name_pl.toLowerCase().includes(q);
+    });
+  }, [toolsCatalog, toolSearch]);
+
   const tabs: { key: UnifiedDayTab; label: string; icon: React.ReactNode; color: string }[] = [
     { key: 'plan', label: t('dashboard:day_plan_tab_plan'), icon: <Clock size={16} />, color: colors.accentBlue },
     { key: 'materials', label: t('dashboard:day_plan_tab_materials'), icon: <Package size={16} />, color: colors.green },
     { key: 'equipment', label: t('dashboard:day_plan_tab_equipment'), icon: <Wrench size={16} />, color: colors.amber },
+    { key: 'tools', label: t('dashboard:day_plan_tab_tools'), icon: <Hammer size={16} />, color: colors.purple },
   ];
 
   const materialSelectedCount = Object.values(materialPick).filter((x) => x.selected).length;
   const equipmentSelectedCount = Object.values(equipmentPick).filter((x) => x.selected).length;
+  const toolSelectedCount = Object.values(toolPick).filter((x) => x.selected).length;
 
   const backdropDismiss = useBackdropPointerDismiss(() => {
     void handleClose();
@@ -1279,6 +1395,98 @@ const UnifiedEventDayModal: React.FC<Props> = ({ event, date, initialTab = 'plan
               </p>
             </div>
           )}
+
+          {activeTab === 'tools' && (
+            <div>
+              <div style={{ position: 'relative' }}>
+                <Search size={16} style={{ position: 'absolute', left: 12, top: 14, color: colors.textFaint }} />
+                <input
+                  value={toolSearch}
+                  onChange={(e) => setToolSearch(e.target.value)}
+                  placeholder={t('dashboard:day_plan_search_tools_placeholder')}
+                  style={{
+                    width: '100%',
+                    minHeight: 48,
+                    padding: '12px 12px 12px 40px',
+                    borderRadius: radii.md,
+                    border: `1px solid ${colors.borderDefault}`,
+                    background: colors.bgInput,
+                    color: colors.textPrimary,
+                    fontSize: fontSizes.base,
+                  }}
+                />
+              </div>
+              <div style={{ marginTop: spacing['5xl'], display: 'flex', flexDirection: 'column', gap: spacing.sm, maxHeight: 360, overflowY: 'auto' }}>
+                {filteredTools.map((m: { id: string; name_en: string; name_pl: string; unit: string }) => {
+                  const st = toolPick[m.id] || { selected: false, qty: '' };
+                  return (
+                    <div
+                      key={m.id}
+                      style={{
+                        padding: spacing['5xl'],
+                        borderRadius: radii.md,
+                        border: `1px solid ${st.selected ? 'rgba(168,85,247,0.45)' : colors.borderDefault}`,
+                        background: st.selected ? 'rgba(168,85,247,0.08)' : colors.bgSubtle,
+                      }}
+                    >
+                      <label style={{ display: 'flex', alignItems: 'center', gap: spacing.md, cursor: canEditMaterialsEquipment ? 'pointer' : 'default' }}>
+                        <input
+                          type="checkbox"
+                          disabled={!canEditMaterialsEquipment}
+                          checked={st.selected}
+                          onChange={(e) => {
+                            setToolPick((p) => ({
+                              ...p,
+                              [m.id]: { selected: e.target.checked, qty: p[m.id]?.qty || '1' },
+                            }));
+                            setDirtyTools(true);
+                          }}
+                          style={{ width: 22, height: 22 }}
+                        />
+                        <span style={{ fontWeight: fontWeights.semibold, color: colors.textSecondary, fontFamily: fonts.display }}>
+                          {toolDisplayName(m, i18n.language)}
+                        </span>
+                        <span style={{ fontSize: fontSizes.sm, color: colors.textFaint }}>[{translateUnit(m.unit, t)}]</span>
+                      </label>
+                      {st.selected && (
+                        <div style={{ marginTop: spacing.md, display: 'flex', alignItems: 'center', gap: spacing.md, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: fontSizes.sm, color: colors.textDim }}>{t('event:quantity_label')}</span>
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            disabled={!canEditMaterialsEquipment}
+                            value={st.qty}
+                            onChange={(e) => {
+                              setToolPick((p) => ({ ...p, [m.id]: { ...st, qty: e.target.value } }));
+                              setDirtyTools(true);
+                            }}
+                            style={{
+                              width: 100,
+                              minHeight: 44,
+                              padding: spacing.sm,
+                              borderRadius: radii.md,
+                              border: `1px solid ${colors.borderDefault}`,
+                              background: colors.bgInput,
+                              color: colors.textPrimary,
+                            }}
+                          />
+                          <span style={{ fontSize: fontSizes.sm, color: colors.purple, fontWeight: fontWeights.semibold }}>
+                            {translateUnit(m.unit, t)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <p style={{ marginTop: spacing.md, fontSize: fontSizes.sm, color: colors.textDim }}>
+                {toolSelectedCount > 0
+                  ? t('dashboard:day_plan_tools_selected', { count: toolSelectedCount })
+                  : t('dashboard:day_plan_tools_hint')}
+              </p>
+            </div>
+          )}
         </div>
 
         <div
@@ -1297,10 +1505,16 @@ const UnifiedEventDayModal: React.FC<Props> = ({ event, date, initialTab = 'plan
           </Button>
           {(activeTab === 'plan' && dirtyPlan && canEditPlan) ||
           (activeTab === 'materials' && dirtyMaterials && canEditMaterialsEquipment) ||
-          (activeTab === 'equipment' && dirtyEquipment && canEditMaterialsEquipment) ? (
+          (activeTab === 'equipment' && dirtyEquipment && canEditMaterialsEquipment) ||
+          (activeTab === 'tools' && dirtyTools && canEditMaterialsEquipment) ? (
             <Button
               onClick={() => void handleSaveTab()}
-              disabled={savePlanMutation.isPending || saveMaterialsMutation.isPending || saveEquipmentMutation.isPending}
+              disabled={
+                savePlanMutation.isPending ||
+                saveMaterialsMutation.isPending ||
+                saveEquipmentMutation.isPending ||
+                saveToolsMutation.isPending
+              }
             >
               <Save size={16} style={{ marginRight: 6 }} />
               {t('dashboard:day_plan_save_tab')}

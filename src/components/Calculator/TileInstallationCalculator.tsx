@@ -8,6 +8,7 @@ import { translateTaskName, translateUnit, translateMaterialName } from '../../l
 import { colors, fontSizes, fontWeights, spacing, radii } from '../../themes/designTokens';
 import { Button, Checkbox, TextInput } from '../../themes/uiComponents';
 import { countSlabsTrapezoidColumnwise, countTrapezoidWholeVsCut } from '../../lib/tileWallSlabCount';
+import { getTierPanelInstallationTaskName } from '../../lib/tierPanelInstallationTask';
 
 interface TaskTemplate {
   id: string;
@@ -92,7 +93,16 @@ const SLAB_DIMENSIONS: SlabDimension[] = [
   { width: 30, height: 30, label: '30cm x 30cm' },
 ];
 
+/** Tier panels — vertical self-adhesive; fixed layout (no orientation / no joint). */
+const TIER_PANEL_DIMENSIONS: SlabDimension[] = [
+  { width: 52, height: 17, label: '52cm × 17cm' },
+  { width: 44, height: 22, label: '44cm × 22cm' },
+];
+
 const GAP_OPTIONS = [2, 3, 4, 5, 10, 20];
+
+/** Transport of tier panels vs full slabs: same formula, tier assumed ~6× faster per trip. */
+const TIER_PANEL_TRANSPORT_SPEED_FACTOR = 6;
 
 /** kg/m²; 0.5 cm → 6, 1 cm → 12 (linear in thickness, same as TileInstallationModal) */
 function adhesiveConsumptionKgPerM2(thicknessCm: number): number {
@@ -133,7 +143,10 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
   const [wallConfigMode, setWallConfigMode] = useState<'single' | 'segments'>('single');
   const [segmentLengthsLocal, setSegmentLengthsLocal] = useState<number[]>([]);
   const [segmentHeightsLocal, setSegmentHeightsLocal] = useState<Array<{ startH: number; endH: number }>>([]);
+  const [wallFinishMode, setWallFinishMode] = useState<'tiles' | 'tier_panels' | null>(null);
   const [selectedSlab, setSelectedSlab] = useState<SlabDimension>(SLAB_DIMENSIONS[0]);
+  const [selectedTierPanel, setSelectedTierPanel] = useState<SlabDimension>(TIER_PANEL_DIMENSIONS[0]);
+  const [tierPanelThicknessCm, setTierPanelThicknessCm] = useState<string>('2');
   const [slabOrientation, setSlabOrientation] = useState<'long' | 'side'>('long');
   const [selectedGap, setSelectedGap] = useState<number>(GAP_OPTIONS[0]);
   const [lengthCutType, setLengthCutType] = useState<'1cut' | '2cuts'>('1cut');
@@ -159,6 +172,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
   const [carriersLocal, setCarriersLocal] = useState<DiggingEquipment[]>([]);
   const [bulkSetAllHeightsInput, setBulkSetAllHeightsInput] = useState('');
   const resultsRef = useRef<HTMLDivElement>(null);
+  const prevWallFinishModeRef = useRef<'tiles' | 'tier_panels' | null | undefined>(undefined);
 
   const defH = (() => {
     if (!fromWallSegments && wallConfigMode === 'single') {
@@ -343,6 +357,8 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
   });
 
   const calculateResults = () => {
+    if (!wallFinishMode) return;
+
     let wallLengthCm: number;
     let wallHeightCm: number;
     let wallArea: number;
@@ -395,11 +411,20 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
         wallArea = (wallLengthCm * wallHeightCm) / 10000;
       }
     }
-    const gapCm = selectedGap / 10;
+    const isTierPanels = wallFinishMode === 'tier_panels';
+    const gapCm = isTierPanels ? 0 : selectedGap / 10;
 
-    // Determine slab dimensions based on orientation
-    const slabWidth = slabOrientation === 'long' ? selectedSlab.width : selectedSlab.height;
-    const slabHeight = slabOrientation === 'long' ? selectedSlab.height : selectedSlab.width;
+    // Slab / panel dimensions (tier: fixed 52×17 or 44×22; tiles: orientation)
+    const slabWidth = isTierPanels
+      ? selectedTierPanel.width
+      : slabOrientation === 'long'
+        ? selectedSlab.width
+        : selectedSlab.height;
+    const slabHeight = isTierPanels
+      ? selectedTierPanel.height
+      : slabOrientation === 'long'
+        ? selectedSlab.height
+        : selectedSlab.width;
 
     type SegmentTileDim = { length: number; height: number; startH: number; endH: number };
     const segDimsRaw = segmentDimensionsForCalc ?? initialSegmentDimensions;
@@ -648,14 +673,25 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     }
 
     if (totalFullSlabsNeeded > 0) {
-      const slabMaterialLabel = slabType === 'porcelain' ? 'porcelain' : slabType === 'granite' ? 'granite' : 'sandstone';
-      materials.unshift({
-        name: `${slabMaterialLabel} slabs ${slabWidth}×${slabHeight}`,
-        amount: totalFullSlabsNeeded,
-        unit: 'pieces',
-        price_per_unit: null,
-        total_price: null
-      });
+      if (isTierPanels) {
+        const th = parseFloat(String(tierPanelThicknessCm).replace(',', '.')) || 2;
+        materials.unshift({
+          name: `tier panels ${slabWidth}×${slabHeight} cm, ${th} cm thick`,
+          amount: totalFullSlabsNeeded,
+          unit: 'pieces',
+          price_per_unit: null,
+          total_price: null
+        });
+      } else {
+        const slabMaterialLabel = slabType === 'porcelain' ? 'porcelain' : slabType === 'granite' ? 'granite' : 'sandstone';
+        materials.unshift({
+          name: `${slabMaterialLabel} slabs ${slabWidth}×${slabHeight}`,
+          amount: totalFullSlabsNeeded,
+          unit: 'pieces',
+          price_per_unit: null,
+          total_price: null
+        });
+      }
     }
 
     const cuttingBreakdown: SlabCuttingBreakdown = {
@@ -667,18 +703,20 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       totalFullSlabsNeeded
     };
 
-    // Prepare task breakdown
-    const tileTaskName = `Tile Installation ${selectedSlab.width} × ${selectedSlab.height}`;
+    // Prepare task breakdown — tier: DB tasks by reference panel area bucket (closest m²), not raw cm size
+    const tileTaskName = isTierPanels
+      ? getTierPanelInstallationTaskName(selectedTierPanel.width, selectedTierPanel.height)
+      : `Tile Installation ${selectedSlab.width} × ${selectedSlab.height}`;
 
-    // Find the template for tile installation
+    // Find the template for tile / tier panel installation
     const tileTaskTemplate = taskTemplates.find(
       (t: TaskTemplate) => t.name.toLowerCase() === tileTaskName.toLowerCase()
     );
     const tileTaskTime = tileTaskTemplate?.estimated_hours ?? 0.5;
     const tileTaskTotal = wallArea * tileTaskTime;
 
-    // Cutting tasks by length: available lengths 30, 40, 60, 90, 120 cm
-    const CUT_LENGTHS = [30, 40, 60, 90, 120];
+    // Cutting tasks by length (cm) — includes tier panel stock sizes
+    const CUT_LENGTHS = [17, 22, 30, 40, 44, 52, 60, 90, 120];
     const findClosestCutLength = (actual: number) =>
       CUT_LENGTHS.reduce((prev, curr) =>
         Math.abs(curr - actual) < Math.abs(prev - actual) ? curr : prev
@@ -696,10 +734,16 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
     const cuttingTaskBreakdown: { task: string; hours: number; amount: string; unit: string }[] = [];
     let cuttingTaskTotal = 0;
     for (const [taskLen, count] of taskLengthCounts) {
-      const taskName = `cutting ${taskLen}cm ${slabMaterialForTask} slab`;
+      const taskName = isTierPanels
+        ? `cutting ${taskLen}cm tier panel`
+        : `cutting ${taskLen}cm ${slabMaterialForTask} slab`;
       const cuttingTask = cuttingTasks.find(
         (t: TaskTemplate) => t.name.toLowerCase() === taskName.toLowerCase()
-      );
+      ) ?? (!isTierPanels
+        ? undefined
+        : cuttingTasks.find(
+            (t: TaskTemplate) => t.name.toLowerCase() === `cutting ${taskLen}cm porcelain slab`.toLowerCase()
+          ));
       const hoursPerCut = cuttingTask?.estimated_hours ?? 0.5;
       const hours = count * hoursPerCut;
       cuttingTaskTotal += hours;
@@ -718,9 +762,13 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       stock: totalFullSlabsNeeded,
     });
 
+    const installTaskLabel = isTierPanels
+      ? tileTaskName
+      : `Tile Installation ${selectedSlab.width} x ${selectedSlab.height}`;
+
     const taskBreakdown: { task: string; hours: number; amount?: string; unit?: string }[] = [
       {
-        task: `Tile Installation ${selectedSlab.width} x ${selectedSlab.height}`,
+        task: installTaskLabel,
         hours: tileTaskTotal,
         amount: tileInstallAmount,
         unit: 'pieces'
@@ -728,8 +776,8 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       ...cuttingTaskBreakdown
     ];
 
-    // Add grouting method if selected
-    if (selectedGroutingId) {
+    // Add grouting method if selected (tiles only — tier panels have no grouting)
+    if (!isTierPanels && selectedGroutingId) {
       const groutingTask = groutingMethods.find((g: any) => g.id.toString() === selectedGroutingId);
       if (groutingTask && groutingTask.estimated_hours !== undefined && groutingTask.estimated_hours !== null) {
         let groutingHours = groutingTask.estimated_hours;
@@ -763,8 +811,12 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       const slabsToTransport = totalFullSlabsNeeded;
       if (slabsToTransport > 0) {
         const tileResult = calculateMaterialTransportTime(slabsToTransport, carrierSizeForTransport, 'slabs', parseFloat(effectiveTransportDistance) || 30);
-        tileTransportTime = tileResult.totalTransportTime;
-        normalizedTileTransportTime = tileResult.normalizedTransportTime;
+        tileTransportTime = isTierPanels
+          ? tileResult.totalTransportTime / TIER_PANEL_TRANSPORT_SPEED_FACTOR
+          : tileResult.totalTransportTime;
+        normalizedTileTransportTime = isTierPanels
+          ? tileResult.normalizedTransportTime / TIER_PANEL_TRANSPORT_SPEED_FACTOR
+          : tileResult.normalizedTransportTime;
       }
 
       // Calculate adhesive transport
@@ -833,10 +885,29 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
 
   // Auto-calculate when Wall Calculate is clicked (fromWallSegments + canvas mode)
   useEffect(() => {
-    if (fromWallSegments && (canvasMode || isInProjectCreating) && calculateTrigger > 0 && (initialAreaM2 ?? 0) > 0) {
+    if (
+      wallFinishMode &&
+      fromWallSegments &&
+      (canvasMode || isInProjectCreating) &&
+      calculateTrigger > 0 &&
+      (initialAreaM2 ?? 0) > 0
+    ) {
       calculateResults();
     }
-  }, [calculateTrigger, fromWallSegments, canvasMode, isInProjectCreating, initialAreaM2]);
+  }, [calculateTrigger, fromWallSegments, canvasMode, isInProjectCreating, initialAreaM2, wallFinishMode]);
+
+  useEffect(() => {
+    setResults(null);
+    const prev = prevWallFinishModeRef.current;
+    prevWallFinishModeRef.current = wallFinishMode;
+    if (
+      prev != null &&
+      wallFinishMode != null &&
+      prev !== wallFinishMode
+    ) {
+      onResultsChange?.(null);
+    }
+  }, [wallFinishMode]);
 
   // Scroll to results when they appear
   useEffect(() => {
@@ -1052,6 +1123,38 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
       )}
 
       <div>
+        <label style={{ fontSize: '0.75rem', fontWeight: 600, color: colors.textWarm ?? colors.textLabel, marginBottom: 6, display: 'block' }}>{t('calculator:wall_finish_product_label')}</label>
+        <div style={{ display: 'flex', background: colors.bgDeep ?? '#1a2332', borderRadius: 8, border: `1px solid ${colors.bgDeepBorder ?? 'rgba(255,255,255,0.06)'}`, padding: 3, gap: 3 }}>
+          <button
+            type="button"
+            onClick={() => setWallFinishMode('tiles')}
+            style={{
+              flex: 1, padding: '9px 12px', borderRadius: 6, border: 'none',
+              background: wallFinishMode === 'tiles' ? (colors.greenBg ?? 'rgba(34,197,94,0.1)') : 'transparent',
+              color: wallFinishMode === 'tiles' ? (colors.green ?? '#22c55e') : (colors.textLabel ?? '#94a3b8'), fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer',
+            }}
+          >
+            {t('calculator:wall_finish_option_tiles')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setWallFinishMode('tier_panels')}
+            style={{
+              flex: 1, padding: '9px 12px', borderRadius: 6, border: 'none',
+              background: wallFinishMode === 'tier_panels' ? (colors.greenBg ?? 'rgba(34,197,94,0.1)') : 'transparent',
+              color: wallFinishMode === 'tier_panels' ? (colors.green ?? '#22c55e') : (colors.textLabel ?? '#94a3b8'), fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer',
+            }}
+          >
+            {t('calculator:wall_finish_option_tier_panels')}
+          </button>
+        </div>
+        <div style={{ fontSize: fontSizes?.sm ?? 13, color: colors.textLabel ?? '#94a3b8', marginTop: 6 }}>
+          {t('calculator:wall_finish_product_hint')}
+        </div>
+      </div>
+
+      {wallFinishMode === 'tiles' && (
+      <div>
         <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_tile_slab_dimensions')}</label>
         <select
           value={selectedSlab.label}
@@ -1059,7 +1162,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
             const selected = SLAB_DIMENSIONS.find(dim => dim.label === e.target.value);
             if (selected) setSelectedSlab(selected);
           }}
-          style={{ marginTop: spacing.sm, display: 'block', width: '100%', borderRadius: radii.md, border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: '8px 12px', outline: 'none' }}
+          style={{ marginTop: spacing.sm, display: 'block', width: '100%', borderRadius: radii.md, ...(canvasMode && inputStyle ? inputStyle : { border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: '8px 12px', outline: 'none' }) }}
         >
           {SLAB_DIMENSIONS.map((dim) => (
             <option key={dim.label} value={dim.label}>
@@ -1068,7 +1171,9 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
           ))}
         </select>
       </div>
+      )}
 
+      {wallFinishMode === 'tiles' && (
       <div>
         <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_tile_slab_orientation')}</label>
         <div style={{ marginTop: spacing['2xl'], display: 'grid', gridTemplateColumns: '1fr', gap: spacing['2xl'] }}>
@@ -1082,7 +1187,9 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
           </label>
         </div>
       </div>
+      )}
 
+      {wallFinishMode === 'tiles' && (
       <div>
         <label style={labelStyle ?? { display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:input_tile_gaps')}</label>
         <select
@@ -1097,7 +1204,30 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
           ))}
         </select>
       </div>
+      )}
 
+      {wallFinishMode === 'tier_panels' && (
+      <div>
+        <label style={labelStyle ?? { display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:tier_panel_dimensions_label')}</label>
+        <select
+          value={selectedTierPanel.label}
+          onChange={(e) => {
+            const selected = TIER_PANEL_DIMENSIONS.find(dim => dim.label === e.target.value);
+            if (selected) setSelectedTierPanel(selected);
+          }}
+          style={{ marginTop: canvasMode ? 4 : spacing.sm, display: 'block', width: '100%', borderRadius: radii.md, ...(canvasMode && inputStyle ? inputStyle : { border: `1px solid ${colors.borderDefault}`, background: colors.bgInput, color: colors.textPrimary, padding: '8px 12px', outline: 'none' }) }}
+        >
+          {TIER_PANEL_DIMENSIONS.map((dim) => (
+            <option key={dim.label} value={dim.label}>
+              {dim.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      )}
+
+      {wallFinishMode && (
+      <>
       <div className="space-y-4">
         <div>
           <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing['2xl'] }}>{t('calculator:input_tile_slab_cutting_length')}</label>
@@ -1147,6 +1277,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
         </p>
       </div>
 
+      {wallFinishMode === 'tiles' && (
       <div>
         <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:type_of_slabs')}</label>
         <div style={{ marginTop: spacing['2xl'], display: 'grid', gridTemplateColumns: '1fr', gap: spacing['2xl'] }}>
@@ -1164,7 +1295,9 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
           </label>
         </div>
       </div>
+      )}
 
+      {wallFinishMode === 'tiles' && (
       <div>
         <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:grouting_method')}</label>
         <select
@@ -1181,12 +1314,32 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
         {isLoadingGrouting && <p style={{ fontSize: fontSizes.sm, color: colors.textDim, marginTop: spacing.sm }}>{t('calculator:loading_grouting_methods')}</p>}
         <p style={{ fontSize: fontSizes.xs, color: colors.red, marginTop: spacing.sm }}>{t('calculator:grouting_method_note')}</p>
       </div>
+      )}
 
-      {!isInProjectCreating && (
+      {wallFinishMode === 'tier_panels' && (
+      <div>
+        <label style={labelStyle ?? { display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted }}>{t('calculator:tier_panel_thickness_cm_label')}</label>
+        <input
+          type="number"
+          value={tierPanelThicknessCm}
+          onChange={(e) => setTierPanelThicknessCm(e.target.value)}
+          min={0.1}
+          max={30}
+          step={0.1}
+          style={{ marginTop: canvasMode ? 4 : spacing.sm, ...(inputStyle ?? inputStyleDefault ?? {}) }}
+          placeholder="2"
+        />
+      </div>
+      )}
+
+      </>
+      )}
+
+      {wallFinishMode && !isInProjectCreating && (
         <Checkbox label={t('calculator:calculate_transport_time_label')} checked={calculateTransport} onChange={setCalculateTransport} />
       )}
 
-      {!isInProjectCreating && calculateTransport && (
+      {wallFinishMode && !isInProjectCreating && calculateTransport && (
         <>
           <div>
             <label style={{ display: 'block', fontSize: fontSizes.sm, fontWeight: fontWeights.medium, color: colors.textMuted, marginBottom: spacing.lg }}>{t('calculator:transport_carrier')}</label>
@@ -1228,7 +1381,7 @@ const WallFinishCalculator: React.FC<TileInstallationCalculatorProps> = ({
         </>
       )}
 
-      {!(fromWallSegments && (canvasMode || isInProjectCreating)) && (
+      {wallFinishMode && !(fromWallSegments && (canvasMode || isInProjectCreating)) && (
         <div className="flex justify-center">
           <Button variant="primary" fullWidth onClick={calculateResults}>
             {t('calculator:calculate_button')}

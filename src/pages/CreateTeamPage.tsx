@@ -233,6 +233,34 @@ const CreateTeamPage = () => {
         }
       }
 
+      const { data: templateTools, error: fetchTemplateToolsError } = await supabase.from('tools_template').select('*');
+
+      if (fetchTemplateToolsError) {
+        throw new Error('Failed to fetch tools template: ' + fetchTemplateToolsError.message);
+      }
+
+      if (templateTools && templateTools.length > 0) {
+        const toolsToInsert = (templateTools as Array<{
+          id: string;
+          name_en: string;
+          name_pl: string;
+          unit: string;
+        }>).map((row) => ({
+          name_en: row.name_en,
+          name_pl: row.name_pl,
+          unit: row.unit,
+          is_deletable: true,
+          template_id: row.id,
+          company_id: (company as { id: string }).id,
+        }));
+
+        const { error: insertToolsError } = await supabase.from('tools').insert(toolsToInsert);
+
+        if (insertToolsError) {
+          throw new Error('Failed to copy tools template: ' + insertToolsError.message);
+        }
+      }
+
       // Navigate to company setup wizard
       navigate('/company-setup');
     } catch (err) {

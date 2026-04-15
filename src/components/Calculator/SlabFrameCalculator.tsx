@@ -9,6 +9,9 @@
   interface SlabFrameCalculatorProps {
     isOpen: boolean;
     onClose: () => void;
+    /** Sync from parent slab frame fields when opening (e.g. Project Creation). */
+    initialPieceLengthCm?: string;
+    initialPieceWidthCm?: string;
     selectedSlabType?: {
       id: number;
       name: string;
@@ -39,7 +42,15 @@
     ) => void;
   }
 
-  const SlabFrameCalculator: React.FC<SlabFrameCalculatorProps> = ({ isOpen, onClose, selectedSlabType, cuttingTasks = [], onResultsChange }) => {
+  const SlabFrameCalculator: React.FC<SlabFrameCalculatorProps> = ({
+    isOpen,
+    onClose,
+    initialPieceLengthCm,
+    initialPieceWidthCm,
+    selectedSlabType,
+    cuttingTasks = [],
+    onResultsChange,
+  }) => {
     const { t } = useTranslation(['calculator', 'utilities', 'common']);
     const companyId = useAuthStore(state => state.getCompanyId());
     const [pieceLengthCm, setPieceLengthCm] = useState<string>('');
@@ -74,6 +85,16 @@
         calculate();
       }
     }, [selectedSlabType]);
+
+    useEffect(() => {
+      if (!isOpen) return;
+      if (initialPieceLengthCm != null && initialPieceLengthCm !== "") {
+        setPieceLengthCm(initialPieceLengthCm);
+      }
+      if (initialPieceWidthCm != null && initialPieceWidthCm !== "") {
+        setPieceWidthCm(initialPieceWidthCm);
+      }
+    }, [isOpen, initialPieceLengthCm, initialPieceWidthCm]);
 
     // Scroll to results when they appear
     useEffect(() => {
@@ -194,6 +215,8 @@
         taskName: frameTask?.name || taskName,
         task_id: frameTask?.id,
         sides: [...sides],
+        framePieceLengthCm: pieceLengthCm,
+        framePieceWidthCm: pieceWidthCm,
         frameSlabsName: `Frame slabs ${pieceLengthCm}x${pieceWidthCm}`,
         cuttingHours,
         cuttingTaskName,

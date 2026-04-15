@@ -95,7 +95,7 @@
   "select_equipment_type": "Wybierz typ",
   "equipment_list_title": "Bieżący Sprzęt",
   "no_equipment_found": "Nie znaleziono sprzętu",
-  "add_material": "Dodaj Materiał",
+  "add_material": "Wymagaj Materiał",
   "add_new_material": "Dodaj Nowy Materiał",
   "material_name_label": "Nazwa",
   "enter_material_name": "Wpisz nazwę materiału",
@@ -256,7 +256,7 @@
   "yes_label": "✓ Tak",
   "hours_format": "{{value}} godzin",
   
-  "add_material_button": "Dodaj Materiał",
+  "add_material_button": "Wymagaj Materiał",
   "materials_management_description": "Zarządzaj swoimi materiałami i ich właściwościami",
   "adding_in_progress": "Dodawanie...",
   "material_unit_price_format": "Jednostka: {{unit}} | Cena: {{price}}",

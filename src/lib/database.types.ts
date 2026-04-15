@@ -387,6 +387,71 @@ export type Database = {
           },
         ]
       }
+      calendar_tools: {
+        Row: {
+          company_id: string | null
+          created_at: string
+          date: string
+          event_id: string | null
+          id: string
+          quantity: number
+          tool_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string
+          date: string
+          event_id?: string | null
+          id?: string
+          quantity?: number
+          tool_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string
+          date?: string
+          event_id?: string | null
+          id?: string
+          quantity?: number
+          tool_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_tools_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_tools_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_tools_tool_id_fkey"
+            columns: ["tool_id"]
+            isOneToOne: false
+            referencedRelation: "tools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_tools_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       calendar_day_plan_block_tasks: {
         Row: {
           block_id: string
@@ -1703,6 +1768,87 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      tools: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          is_deletable: boolean
+          name_en: string
+          name_pl: string
+          template_id: string | null
+          unit: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          is_deletable?: boolean
+          name_en: string
+          name_pl: string
+          template_id?: string | null
+          unit: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          is_deletable?: boolean
+          name_en?: string
+          name_pl?: string
+          template_id?: string | null
+          unit?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tools_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tools_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "tools_template"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tools_template: {
+        Row: {
+          created_at: string | null
+          description_en: string | null
+          description_pl: string | null
+          id: string
+          name_en: string
+          name_pl: string
+          sort_order: number
+          unit: string
+        }
+        Insert: {
+          created_at?: string | null
+          description_en?: string | null
+          description_pl?: string | null
+          id?: string
+          name_en: string
+          name_pl: string
+          sort_order?: number
+          unit: string
+        }
+        Update: {
+          created_at?: string | null
+          description_en?: string | null
+          description_pl?: string | null
+          id?: string
+          name_en?: string
+          name_pl?: string
+          sort_order?: number
+          unit?: string
+        }
+        Relationships: []
       }
       tasks_done: {
         Row: {

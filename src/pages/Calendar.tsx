@@ -200,19 +200,6 @@ const Calendar = () => {
     enabled: !!companyId,
   });
 
-  const { data: equipmentUsage = [] } = useQuery({
-    queryKey: ['equipment_usage', companyId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('equipment_usage')
-        .select(`*, equipment (id, name), events (id, status)`)
-        .eq('company_id', companyId);
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!companyId,
-  });
-
   const filteredEvents = events.filter(event => {
     if (!event.start_date || !event.end_date) return false;
     if (selectedStatus && event.status !== selectedStatus) return false;
@@ -310,16 +297,6 @@ const Calendar = () => {
     });
     return e;
   }, [weekEquipment]);
-
-  const filterEquipmentForDay = (date: Date) => {
-    return equipmentUsage.filter(usage => {
-      if (!usage.start_date || !usage.end_date) return false;
-      if (usage.events?.status === 'finished') return false;
-      const start = parseISO(usage.start_date);
-      const end = parseISO(usage.end_date);
-      return date >= start && date <= end;
-    });
-  };
 
   const handleEventClick = (eventId: string) => {
     navigate(`/events/${eventId}`);
@@ -758,7 +735,6 @@ const Calendar = () => {
             const eventEnd = parseISO(event.end_date);
             return selectedDate >= eventStart && selectedDate <= eventEnd;
           })}
-          equipment={filterEquipmentForDay(selectedDate)}
           onClose={() => {
             setSelectedDate(null);
             navigate('/calendar', { replace: true });

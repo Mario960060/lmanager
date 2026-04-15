@@ -3,7 +3,7 @@
 // Artificial grass piece placement and rendering
 // ══════════════════════════════════════════════════════════════
 
-import { Point, Shape, toPixels, toMeters, areaM2, distance, formatLength, midpoint, edgeNormalAngle, labelAnchorInsidePolygon, centroid, readableTextAngle } from "../geometry";
+import { Point, Shape, toPixels, toMeters, areaM2, distance, formatDimensionCm, midpoint, edgeNormalAngle, labelAnchorInsidePolygon, centroid, readableTextAngle, EDGE_LENGTH_LABEL_FONT_STACK } from "../geometry";
 import { scaledFontSize } from "../canvasRenderers";
 import { getEffectivePolygon as getEffectivePolygonWithArcs } from "../arcMath";
 import { getTotalFrameInsetWidthCm, shrinkPolygon } from "./slabPattern";
@@ -790,7 +790,9 @@ export function drawGrassPieces(
   grassScaleInfo?: { shapeIdx: number; pieceIdx: number } | null,
   shapeIdx?: number,
   clipToShape?: boolean,
-  vizDirectionDeg?: number
+  vizDirectionDeg?: number,
+  canvasLabelFill: string = "#ffffff",
+  canvasIsLight: boolean = false,
 ): void {
   const pieces = (shape.calculatorInputs?.vizPieces as GrassPiece[]) ?? [];
   if (pieces.length === 0) return;
@@ -876,16 +878,16 @@ export function drawGrassPieces(
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     let line = 0.5;
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = canvasLabelFill;
     if (shape.layer !== 2) {
       const area = pts.length >= 3 ? areaM2(pts) : 0;
       ctx.fillText(area.toFixed(2) + " m²", sc.x, sc.y + lineHeight * line);
       line += 1;
     }
-    ctx.fillStyle = cov.coveragePercent < 99.99 ? "#e74c3c" : "#ffffff";
+    ctx.fillStyle = cov.coveragePercent < 99.99 ? "#e74c3c" : canvasLabelFill;
     ctx.fillText(`Coverage: ${cov.coveragePercent.toFixed(1)}%`, sc.x, sc.y + lineHeight * line);
     line += 1;
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = canvasLabelFill;
     ctx.fillText(`Waste: ${cov.wastePercent.toFixed(1)}%`, sc.x, sc.y + lineHeight * line);
     line += 1;
     ctx.fillText(`Joins: ${cov.joinLengthM.toFixed(1)}m`, sc.x, sc.y + lineHeight * line);
@@ -1008,11 +1010,11 @@ export function drawGrassPieces(
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         if (lenM >= MIN_LABEL_M) {
-          const label = formatLength(toPixels(lenM));
-          ctx.font = "12px 'JetBrains Mono','Fira Code',monospace";
+          const label = formatDimensionCm(lenM);
+          ctx.font = EDGE_LENGTH_LABEL_FONT_STACK;
           const w = ctx.measureText(label).width;
           if (inside) {
-            ctx.fillStyle = "rgba(0,0,0,0.55)";
+            ctx.fillStyle = canvasIsLight ? "rgba(255,255,255,0.88)" : "rgba(0,0,0,0.55)";
             ctx.save();
             ctx.translate(lx, ly);
             ctx.rotate(textAngle);
@@ -1022,7 +1024,7 @@ export function drawGrassPieces(
           ctx.save();
           ctx.translate(lx, ly);
           ctx.rotate(textAngle);
-          ctx.fillStyle = "rgba(255,255,255,0.95)";
+          ctx.fillStyle = canvasIsLight ? canvasLabelFill : "rgba(255,255,255,0.95)";
           ctx.fillText(label, 0, 0);
           ctx.restore();
         }
@@ -1050,8 +1052,8 @@ export function drawGrassPieces(
         ctx.font = "bold 13px 'JetBrains Mono',monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = "#ffffff";
-        ctx.strokeStyle = "rgba(0,0,0,0.8)";
+        ctx.fillStyle = canvasLabelFill;
+        ctx.strokeStyle = canvasIsLight ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.8)";
         ctx.lineWidth = 2;
         ctx.save();
         ctx.translate(lx, ly);

@@ -95,7 +95,7 @@
   "select_equipment_type": "Select type",
   "equipment_list_title": "Current Equipment",
   "no_equipment_found": "No equipment found",
-  "add_material": "Add Material",
+  "add_material": "Require Material",
   "add_new_material": "Add New Material",
   "material_name_label": "Name",
   "enter_material_name": "Enter material name",
@@ -256,7 +256,7 @@
   "yes_label": "✓ Yes",
   "hours_format": "{{value}} hours",
   
-  "add_material_button": "Add Material",
+  "add_material_button": "Require Material",
   "materials_management_description": "Manage your materials and their properties",
   "adding_in_progress": "Adding...",
   "material_unit_price_format": "Unit: {{unit}} | Price: {{price}}",
